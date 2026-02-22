@@ -8279,26 +8279,35 @@ async def admin_get_subscription(
 ):
     """
     Get subscription details for a user.
-    Returns calculated fields (days_remaining, is_expiring_soon, etc.)
+    Returns calculated fields (daysRemaining, isExpiringSoon, etc.)
+    
+    SSOT: All fields use camelCase.
     """
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    subscription = await get_or_create_subscription(user_id)
-    
-    # CRITICAL: Serialize the entire document to convert all ObjectIds
-    serialized_subscription = serialize_mongo_doc(subscription)
-    
-    return {
-        "subscription": serialized_subscription,
-        "user": {
-            "id": str(user["_id"]),
-            "businessName": user.get("businessName"),
-            "email": user.get("email"),
-            "isSeller": user.get("isSeller", False)
+    try:
+        user_oid = ObjectId(user_id)
+        user = await db.users.find_one({"_id": user_oid})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        subscription = await get_or_create_subscription(user_id)
+        
+        # CRITICAL: Serialize the entire document to convert all ObjectIds
+        serialized_subscription = serialize_mongo_doc(subscription)
+        
+        return {
+            "subscription": serialized_subscription,
+            "user": {
+                "id": str(user["_id"]),
+                "businessName": user.get("profile", {}).get("businessName") or user.get("businessName"),
+                "email": user.get("email"),
+                "isSeller": "seller" in user.get("roles", [])
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION ERROR] {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
 
 
 @api_router.post("/admin/subscriptions/activate/{user_id}")
