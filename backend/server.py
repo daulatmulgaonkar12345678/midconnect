@@ -8063,7 +8063,11 @@ async def admin_list_subscriptions(
     limit: int = Query(20, ge=1, le=100)
 ):
     """List all seller subscriptions (admin only)"""
-    query = {"gstStatus": "verified"}  # Only sellers
+    # SSOT: Use roles array and gst schema
+    query = {
+        "roles": "seller",
+        "gst.status": "verified"
+    }
     
     if status:
         query["subscriptionStatus"] = status
