@@ -450,7 +450,7 @@ export const updateUserProfile = (token: string, data: Partial<UserProfile>) =>
     body: sanitizeObject(data as Record<string, unknown>)
   });
 
-// Register user with backend
+// Register user with backend - LEGACY: Use completeProfile for new registrations
 export const registerUser = (token: string, data: {
   email: string;
   firebaseUid: string;
@@ -471,6 +471,70 @@ export const registerUser = (token: string, data: {
     pincode: data.pincode,
   },
 });
+
+// PHASE 1 - Check if user needs to complete registration
+export interface RegistrationStatus {
+  needsRegistration: boolean;
+  emailVerified: boolean;
+  email?: string;
+  firebaseUid?: string;
+  user?: UserProfile;
+}
+
+export const checkRegistrationStatus = (token: string): Promise<RegistrationStatus> =>
+  fetchWithAuth<RegistrationStatus>('/auth/check-registration', token);
+
+// PHASE 2 - Complete profile after email verification
+export interface ProfileCompleteData {
+  role: 'buyer' | 'seller';
+  businessName: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  gstNumber?: string; // Required only for sellers
+}
+
+export interface ProfileCompleteResponse {
+  message: string;
+  user: UserProfile;
+  isSeller: boolean;
+  gstStatus: string | null;
+}
+
+export const completeProfile = (token: string, data: ProfileCompleteData): Promise<ProfileCompleteResponse> =>
+  fetchWithAuth<ProfileCompleteResponse>('/auth/complete-profile', token, {
+    method: 'POST',
+    body: {
+      role: data.role,
+      businessName: data.businessName,
+      phone: data.phone,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      pincode: data.pincode,
+      gstNumber: data.gstNumber || undefined,
+    },
+  });
+
+// PHASE 7 - Get seller status for dashboard logic
+export interface SellerStatus {
+  isSeller: boolean;
+  gst: {
+    number: string | null;
+    status: string | null;
+    verified: boolean;
+  };
+  permissions: {
+    canCreateDraft: boolean;
+    canPublish: boolean;
+  };
+  message: string;
+}
+
+export const getSellerStatus = (token: string): Promise<SellerStatus> =>
+  fetchWithAuth<SellerStatus>('/seller/status', token);
 
 export const deleteAccount = (token: string, reason: string = '') =>
   fetchWithAuth('/users/me/delete', token, {
