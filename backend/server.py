@@ -2736,33 +2736,25 @@ async def admin_get_pending_gst(
     """
     Get sellers with pending GST verification.
     
-    CRITICAL QUERY LOGIC - NORMALIZED:
-    - is_seller = True
-    - GST is submitted (business.gst OR gst_number is not null/empty)
-    - GST is NOT verified (business.gst_verified = false OR gst_status = "pending")
+    UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH:
+    gst: {
+        number: string,
+        status: "pending" | "verified" | "rejected",
+        verified: boolean
+    }
     
-    Sellers without GST submission are NOT eligible for review.
+    Query:
+    - roles includes "seller"
+    - gst.number exists and is not empty
+    - gst.status = "pending"
+    - gst.verified = false
     """
-    # Query checks both old and new schema fields for backwards compatibility
+    # SSOT: Use unified gst schema only
     query = {
-        "isSeller": True,
-        "$or": [
-            # New schema: business.gst exists and is not empty
-            {"business.gst": {"$exists": True, "$ne": None, "$ne": ""}},
-            # Old schema: gst_number exists and is not empty
-            {"gstNumber": {"$exists": True, "$ne": None, "$ne": ""}}
-        ],
-        # Not yet verified (check both schemas)
-        "$and": [
-            {"$or": [
-                {"business.gst_verified": {"$ne": True}},
-                {"business.gst_verified": {"$exists": False}}
-            ]},
-            {"$or": [
-                {"gstStatus": "pending"},
-                {"gstStatus": {"$exists": False}}
-            ]}
-        ]
+        "roles": "seller",
+        "gst.number": {"$exists": True, "$ne": None, "$ne": ""},
+        "gst.status": "pending",
+        "gst.verified": False
     }
     
     skip = (page - 1) * limit
@@ -2772,33 +2764,31 @@ async def admin_get_pending_gst(
     
     results = []
     for user in users:
-        # Get GST from either schema
-        gst_number = user.get("business", {}).get("gst") or user.get("gstNumber", "")
-        gst_verified = user.get("business", {}).get("gstVerified", False)
+        gst = user.get("gst", {})
+        profile = user.get("profile", {}) or {}
         
         results.append({
             "_id": str(user["_id"]),
             "email": user.get("email", ""),
-            "businessName": user.get("business", {}).get("name") or user.get("businessName", ""),
-            "gstNumber": gst_number,
-            "gstVerified": gst_verified,
-            "ownerName": user.get("ownerName", user.get("businessName", "")),
-            "gst_document_url": user.get("gst_document_url", ""),
-            "gstStatus": user.get("gstStatus", "pending"),
-            "businessLocation": user.get("business", {}).get("location", ""),
-            "phone": user.get("phone", ""),
+            "businessName": profile.get("businessName", ""),
+            "gstNumber": gst.get("number", ""),
+            "gstStatus": gst.get("status", "pending"),
+            "gstVerified": gst.get("verified", False),
+            "phone": profile.get("phone", ""),
+            "city": profile.get("city", ""),
+            "state": profile.get("state", ""),
             "createdAt": user.get("createdAt", ""),
             "updatedAt": user.get("updatedAt", "")
         })
     
-    # DATA INTEGRITY LOG: Verify response structure
+    # Response format matching frontend: setRequests(data.pending_reviews || [])
     response_data = {
-        "pendingReviews": results,
+        "pending_reviews": results,
         "total": total,
         "page": page,
         "pages": math.ceil(total / limit) if total > 0 else 1
     }
-    logger.info(f"[DATA INTEGRITY] /api/admin/gst/pending: total={total}, page={page}, pages={response_data['pages']}, result_count={len(results)}")
+    logger.info(f"[GST PENDING] total={total}, page={page}, pages={response_data['pages']}, result_count={len(results)}")
     
     return response_data
 
