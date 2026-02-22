@@ -1,0 +1,109 @@
+{
+  "summary": "Backend subscription schema MongoDB alignment testing completed. 19/20 tests passed (95%). Verified that all subscription endpoints use camelCase fields (userId, planName, startDate, endDate, daysRemaining, etc.) and store userId as ObjectId. All major admin subscription endpoints have try/except guards.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/admin/subscriptions/manage/{user_id}",
+        "issue": "Missing try/except validation guard - returns raw 500 error when invalid ObjectId is passed instead of controlled error message",
+        "priority": "LOW"
+      },
+      {
+        "endpoint": "/api/admin/subscriptions/suspend/{user_id}",
+        "issue": "Returns 500 with 'Subscription suspension failed' for invalid ObjectId - technically has try/except but returns 500 instead of 400 for validation error",
+        "priority": "LOW"
+      },
+      {
+        "endpoint": "/api/admin/subscriptions/reactivate/{user_id}",
+        "issue": "Returns 500 with 'Subscription reactivation failed' for invalid ObjectId - same pattern as suspend",
+        "priority": "LOW"
+      }
+    ]
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "seller/subscription/status returns camelCase subscription fields (planName, startDate, daysRemaining, isExpiringSoon, isActive)",
+    "seller/subscription/status returns camelCase usage fields (acceptedThisMonth, monthlyLimit, limitReached)",
+    "seller/subscription/status returns camelCase features fields (canAcceptInquiries, unlimitedInquiries)",
+    "seller/subscription/status returns camelCase root fields (showExpiryWarning, showUpgradeCta)",
+    "admin/subscriptions/activate endpoint has try/except guard (returns controlled error)",
+    "admin/subscriptions/extend endpoint has try/except guard",
+    "admin/subscriptions/extend response uses camelCase (oldEndDate, newEndDate, daysRemaining)",
+    "admin/subscriptions/suspend endpoint has try/except guard",
+    "admin/subscriptions/suspend response uses camelCase (suspendedAt, userId)",
+    "admin/subscriptions/reactivate endpoint has try/except guard",
+    "admin/subscriptions/reactivate response uses camelCase (userId, endDate)",
+    "users/me subscription object uses camelCase (no end_date or start_date)",
+    "admin/users returns camelCase subscription fields (subscriptionPlan, subscriptionStatus, subscriptionEnd, daysRemaining)",
+    "Subscription history created with camelCase fields (userId, adminId as ObjectId)",
+    "activate handles invalid ObjectId gracefully (returns 422)",
+    "extend handles invalid ObjectId gracefully (returns 422)",
+    "suspend has try/except guard (returns 500 with controlled message)",
+    "reactivate has try/except guard (returns 500 with controlled message)",
+    "admin/subscriptions/manage returns camelCase subscription fields"
+  ],
+
+  "skipped_tests": [
+    "activate_response_uses_camelcase - Could not retrieve valid user ID for full test"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_subscription_mongodb_schema.py",
+    "/app/test_reports/pytest/subscription_mongodb_schema_results.xml"
+  ],
+
+  "action_items": [
+    "OPTIONAL: Add try/except guard to /api/admin/subscriptions/manage/{user_id} endpoint (line 8275-8302) - currently unprotected",
+    "OPTIONAL: Change suspend/reactivate endpoints to return 400 instead of 500 for invalid ObjectId validation errors"
+  ],
+
+  "critical_code_review_comments": [
+    "✅ get_or_create_subscription (line 8232) correctly uses userId as ObjectId with camelCase",
+    "✅ admin_activate_subscription (line 8304) stores userId as ObjectId, uses try/except, all fields camelCase",
+    "✅ admin_extend_subscription (line 8422) stores userId as ObjectId, uses try/except, all fields camelCase",
+    "✅ admin_suspend_subscription (line 8516) stores userId as ObjectId, uses try/except, all fields camelCase",
+    "✅ admin_reactivate_subscription (line 8590) stores userId as ObjectId, uses try/except, all fields camelCase",
+    "✅ subscriptionHistory uses userId and adminId (camelCase) stored as ObjectId",
+    "✅ Legacy users.subscription uses endDate not end_date, startDate not start_date",
+    "⚠️ admin_get_subscription (line 8275) missing try/except guard for ObjectId conversion"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_subscription_mongodb_schema.py"
+  ],
+
+  "success_rate": {
+    "backend": "95% (19/20 tests passed, 1 skipped)"
+  },
+
+  "seed_data_creation": "None required - tested with dev-test-token",
+
+  "mocked_integrations": {
+    "Firebase Authentication": "NOT CONFIGURED - dev-test-token available for testing"
+  },
+
+  "verified_schema_compliance": {
+    "userId_as_ObjectId": "✅ All subscription endpoints store userId as ObjectId",
+    "camelCase_fields": "✅ All fields use camelCase (planName, startDate, endDate, daysRemaining, isExpiringSoon)",
+    "no_snake_case": "✅ No snake_case fields found (user_id, end_date, start_date removed)",
+    "try_except_guards": "✅ All 4 admin subscription endpoints have try/except (activate, extend, suspend, reactivate)"
+  },
+
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+
+  "context_for_next_testing_agent": "MongoDB schema alignment verified. All subscription endpoints use camelCase and store userId as ObjectId. Minor issue: admin_get_subscription endpoint (line 8275) lacks try/except guard. All other admin subscription endpoints properly wrapped.",
+
+  "test_environment": {
+    "api_url": "https://buyer-seller-flow-1.preview.emergentagent.com",
+    "firebase_status": "NOT CONFIGURED",
+    "mongodb_status": "CONNECTED"
+  }
+}
