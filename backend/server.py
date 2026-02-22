@@ -2192,17 +2192,16 @@ async def complete_profile(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
-    PHASE 1 & 2 - COMPLETE PROFILE AFTER EMAIL VERIFICATION
+    NEW ARCHITECTURE - COMPLETE PROFILE (UPDATE EXISTING USER)
     
     Flow:
-    1. Firebase user created (frontend)
-    2. Email verification sent (frontend)
-    3. User verifies email
-    4. User logs in, email_verified = true
-    5. Frontend redirects to profile completion
-    6. This endpoint creates MongoDB user with role-based fields
+    1. User already exists in MongoDB (created on signup via get_current_user)
+    2. User verifies email (Firebase)
+    3. On login, isEmailVerified syncs to true
+    4. User fills profile form
+    5. This endpoint UPDATES the existing user with profile data
     
-    PHASE 2 - DATABASE INSERT STRUCTURE (STRICTLY ALIGNED):
+    PHASE 2 - DATABASE UPDATE STRUCTURE (STRICTLY ALIGNED):
     - roles: ["buyer"] or ["buyer", "seller"]
     - gst.number: seller only
     - gst.status: "pending" for seller, null for buyer
@@ -2211,9 +2210,6 @@ async def complete_profile(
     - Validate pincode exists in pincodes collection
     - Fetch latitude & longitude
     - Save to profile.latitude, profile.longitude
-    
-    PHASE 9 - ATOMIC REGISTRATION:
-    - If MongoDB insert fails, delete Firebase user
     """
     if credentials is None:
         raise HTTPException(status_code=401, detail="Authorization token required")
@@ -2233,11 +2229,17 @@ async def complete_profile(
                 detail="Email verification required. Please verify your email before completing registration."
             )
         
-        # Check if user already exists
+        # Get existing user (should exist from get_current_user auto-creation)
         existing = await db.users.find_one({"firebaseUid": firebase_uid})
-        if existing:
-            logger.info(f"User already registered, returning existing profile: {email}")
-            return {"message": "User already registered", "user": serialize_doc(existing)}
+        
+        if not existing:
+            # Edge case: user doesn't exist yet - create them
+            logger.warning(f"User not found during profile completion, creating: {email}")
+        
+        # Check if profile is already complete
+        if existing and existing.get("profileComplete"):
+            logger.info(f"User profile already completed: {email}")
+            return {"message": "Profile already completed", "user": serialize_doc(existing)}
         
         # PHASE 6 - PINCODE GEO LOGIC
         latitude = None
@@ -2268,13 +2270,9 @@ async def complete_profile(
             gst_number = None
             gst_status = None
         
-        # PHASE 2 - DATABASE INSERT STRUCTURE (STRICTLY ALIGNED)
-        user_doc = {
-            "_id": ObjectId(),
-            "email": email,
-            "firebaseUid": firebase_uid,
+        # Build update document
+        update_doc = {
             "roles": roles,
-            "isAdmin": False,
             "profile": {
                 "businessName": profile_data.businessName,
                 "phone": profile_data.phone,
@@ -2285,17 +2283,15 @@ async def complete_profile(
                 "latitude": latitude,
                 "longitude": longitude
             },
+            "profileComplete": True,
             "gst": {
                 "number": gst_number,
                 "status": gst_status,
                 "verified": False
             },
-            "emailVerified": True,  # Already verified via Firebase
-            "accountStatus": "active",
-            "canLogin": True,
-            "isActive": True,
-            "deletedAt": None,
-            "deletionReason": None,
+            "isEmailVerified": True,
+            "emailVerified": True,
+            "status": "active",
             "subscription": {
                 "plan": "trial",
                 "status": "trial",
@@ -2306,18 +2302,61 @@ async def complete_profile(
                 "enquiriesThisMonth": 0,
                 "enquiriesResetAt": next_month
             },
-            "favourites": [],
-            "recentSearches": [],
-            "createdAt": now,
             "updatedAt": now
         }
         
-        # Insert user
-        try:
+        if existing:
+            # UPDATE existing user
+            await db.users.update_one(
+                {"_id": existing["_id"]},
+                {
+                    "$set": update_doc,
+                    "$unset": {"verificationDeadline": ""}
+                }
+            )
+            # Get updated user
+            updated_user = await db.users.find_one({"_id": existing["_id"]})
+            logger.info(f"Profile completed for existing user: {email}, role: {profile_data.role}")
+            
+            return {
+                "message": "Profile completed successfully",
+                "user": serialize_doc(updated_user),
+                "isSeller": "seller" in roles,
+                "gstStatus": gst_status
+            }
+        else:
+            # CREATE new user (edge case)
+            user_doc = {
+                "_id": ObjectId(),
+                "email": email,
+                "firebaseUid": firebase_uid,
+                "isAdmin": False,
+                "accountStatus": "active",
+                "canLogin": True,
+                "isActive": True,
+                "deletedAt": None,
+                "deletionReason": None,
+                "favourites": [],
+                "recentSearches": [],
+                "createdAt": now,
+                **update_doc
+            }
+            
             await db.users.insert_one(user_doc)
             logger.info(f"New user registered via profile completion: {email}, role: {profile_data.role}")
             
             return {
+                "message": "Profile completed successfully",
+                "user": serialize_doc(user_doc),
+                "isSeller": "seller" in roles,
+                "gstStatus": gst_status
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Profile completion error: {e}")
+        raise HTTPException(status_code=500, detail="Profile completion failed. Please try again.")
                 "message": "Profile completed successfully",
                 "user": serialize_doc(user_doc),
                 "isSeller": "seller" in roles,
