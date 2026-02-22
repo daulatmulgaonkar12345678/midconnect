@@ -34,6 +34,8 @@ interface AuthContextType extends AuthState {
   isAdmin: boolean;
   isSeller: boolean;
   isGstVerified: boolean;
+  gstStatus: 'none' | 'pending' | 'verified' | 'rejected';
+  sellerStatus: 'active' | 'suspended' | 'banned';
   role: UserRole;
   needsRegistration: boolean;
   needsEmailVerification: boolean;
