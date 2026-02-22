@@ -2804,13 +2804,21 @@ async def admin_verify_gst(
     """
     Admin endpoint to verify/reject a seller's GST.
     
+    UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH:
+    gst: {
+        number: string,
+        status: "pending" | "verified" | "rejected",
+        verified: boolean
+    }
+    
     When GST is verified:
-    - Updates business.gst_verified = true
-    - Updates gst_status = "verified" (for backwards compatibility)
-    - All seller's draft listings become active and public
+    - gst.status = "verified"
+    - gst.verified = true
+    - All seller's draft listings become active
     
     When GST is rejected:
-    - Listings remain private
+    - gst.status = "rejected"
+    - gst.verified = false
     - Seller can re-submit GST
     """
     try:
@@ -2821,22 +2829,23 @@ async def admin_verify_gst(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    if not target_user.get("isSeller"):
+    # Check if user is a seller
+    roles = target_user.get("roles", [])
+    if "seller" not in roles:
         raise HTTPException(status_code=400, detail="User is not a seller")
     
-    # Check GST in either schema
-    gst_number = target_user.get("business", {}).get("gst") or target_user.get("gstNumber")
+    # Check GST number exists
+    gst = target_user.get("gst", {})
+    gst_number = gst.get("number")
     if not gst_number:
         raise HTTPException(status_code=400, detail="User has no GST number to verify")
     
-    # Update GST status - update BOTH schemas for consistency
+    # SSOT: Update only the unified gst schema
     new_status = "verified" if verified else "rejected"
     
     update_data = {
-        # New schema (single source of truth)
-        "business.gst_verified": verified,
-        # Old schema (backwards compatibility)
-        "gstStatus": new_status,
+        "gst.status": new_status,
+        "gst.verified": verified,
         "updatedAt": datetime.now(timezone.utc)
     }
     
@@ -2847,8 +2856,7 @@ async def admin_verify_gst(
     
     listings_published = 0
     
-    # If verified, make all seller's draft listings active and public
-    # SSOT: Use seller_listings with sellerId (ObjectId) and status field
+    # If verified, make all seller's draft listings active
     if verified:
         listings_result = await db.sellerListings.update_many(
             {
@@ -2868,8 +2876,11 @@ async def admin_verify_gst(
     
     return {
         "message": f"GST {'verified' if verified else 'rejected'} successfully",
-        "gstStatus": new_status,
-        "gstVerified": verified,
+        "gst": {
+            "number": gst_number,
+            "status": new_status,
+            "verified": verified
+        },
         "listingsPublished": listings_published
     }
 
