@@ -1778,7 +1778,14 @@ async def verify_firebase_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify Firebase token and get user from MongoDB"""
+    """
+    Verify Firebase token and get user from MongoDB.
+    
+    NEW ARCHITECTURE:
+    - If user doesn't exist in MongoDB, create with pending status
+    - Sync email verification status from Firebase to MongoDB
+    - Return user regardless of email verification status
+    """
     if credentials is None:
         raise HTTPException(status_code=401, detail="Authorization token missing")
 
@@ -1788,6 +1795,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         # Verify Firebase ID token
         decoded_token = await verify_firebase_token(token)
         firebaseUid = decoded_token['uid']
+        email = decoded_token.get('email', '')
         email_verified = decoded_token.get('email_verified', False)
         
         # Log firebaseUid for debugging (masked for privacy)
@@ -1800,51 +1808,99 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         # Get user from MongoDB - SSOT: Use camelCase field name
         user = await db.users.find_one({"firebaseUid": firebaseUid})
         
-        # Log user lookup result
-        if user:
-            logger.info(f"🔐 Auth: User found in DB for firebaseUid={masked_uid}")
-        else:
-            logger.warning(f"🔐 Auth: No user found in DB for firebaseUid={masked_uid}")
-        
-        # DEV MODE: If no user exists for dev token, create a test admin user
-        if not user and firebaseUid == "dev-test-uid-12345" and not firebase_initialized:
-            logger.warning("DEV MODE: Creating test admin user")
-            # SSOT: All fields use camelCase
+        # NEW ARCHITECTURE: Create user immediately if not exists
+        if not user:
+            logger.info(f"🔐 Auth: Creating new user for firebaseUid={masked_uid}")
+            now = datetime.now(timezone.utc)
+            verification_deadline = now + timedelta(hours=24)
+            
             user = {
                 "_id": ObjectId(),
                 "firebaseUid": firebaseUid,
-                "email": "admin@test.com",
-                "roles": ["admin", "seller"],
-                "isAdmin": True,
-                "profile": {
-                    "businessName": "Test Admin",
-                    "phone": "9999999999",
-                    "city": "Test City",
-                    "state": "Test State",
-                    "pincode": "123456"
+                "email": email,
+                "roles": ["buyer"],  # Default role
+                "isAdmin": False,
+                "profile": None,  # Profile completion required
+                "profileComplete": False,
+                "gst": {
+                    "number": None,
+                    "status": None,
+                    "verified": False
                 },
+                "isEmailVerified": email_verified,
+                "status": "active" if email_verified else "pending",
+                "verificationDeadline": verification_deadline,
                 "accountStatus": "active",
-                "emailVerified": True,
                 "canLogin": True,
                 "isActive": True,
-                "createdAt": datetime.now(timezone.utc),
-                "updatedAt": datetime.now(timezone.utc)
+                "deletedAt": None,
+                "deletionReason": None,
+                "subscription": {
+                    "plan": "free",
+                    "status": "free",
+                    "startDate": now,
+                    "endDate": None,
+                    "trialEndsAt": None,
+                    "inquiryLimit": 5,
+                    "enquiriesThisMonth": 0,
+                    "enquiriesResetAt": now + timedelta(days=30)
+                },
+                "favourites": [],
+                "recentSearches": [],
+                "createdAt": now,
+                "updatedAt": now
             }
             await db.users.insert_one(user)
-        if user:
-            # Update email verification status from Firebase - SSOT: camelCase
+            logger.info(f"🔐 Auth: Created pending user: {email}")
+        else:
+            logger.info(f"🔐 Auth: User found in DB for firebaseUid={masked_uid}")
+            
+            # NEW ARCHITECTURE: Sync email verification status from Firebase
+            mongo_verified = user.get("isEmailVerified", False)
+            
+            if email_verified and not mongo_verified:
+                # User verified email in Firebase, update MongoDB
+                await db.users.update_one(
+                    {"_id": user["_id"]},
+                    {
+                        "$set": {
+                            "isEmailVerified": True,
+                            "status": "active",
+                            "emailVerified": True,  # Legacy field for compatibility
+                            "updatedAt": datetime.now(timezone.utc)
+                        },
+                        "$unset": {
+                            "verificationDeadline": ""
+                        }
+                    }
+                )
+                user["isEmailVerified"] = True
+                user["status"] = "active"
+                user["emailVerified"] = True
+                logger.info(f"🔐 Auth: Synced email verification for {email}")
+            
+            # Also sync the legacy emailVerified field
             if user.get("emailVerified") != email_verified:
                 await db.users.update_one(
                     {"_id": user["_id"]},
                     {"$set": {"emailVerified": email_verified, "updatedAt": datetime.now(timezone.utc)}}
                 )
                 user["emailVerified"] = email_verified
-            
-            # Attach Firebase admin claim to user object for require_admin check
-            user["_firebase_admin_claim"] = firebase_admin_claim
-            
-            return serialize_doc(user)
-        return None
+        
+        # DEV MODE: If dev token, ensure admin role
+        if firebaseUid == "dev-test-uid-12345" and not firebase_initialized:
+            if "admin" not in user.get("roles", []):
+                await db.users.update_one(
+                    {"_id": user["_id"]},
+                    {"$set": {"roles": ["admin", "seller", "buyer"], "isAdmin": True}}
+                )
+                user["roles"] = ["admin", "seller", "buyer"]
+                user["isAdmin"] = True
+        
+        # Attach Firebase admin claim to user object for require_admin check
+        user["_firebase_admin_claim"] = firebase_admin_claim
+        
+        return serialize_doc(user)
     except HTTPException:
         raise
     except Exception as e:
