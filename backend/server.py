@@ -8696,7 +8696,7 @@ async def admin_run_expiry_check(admin: dict = Depends(require_admin)):
         {
             "subscription.active": True,
             "subscription.plan": {"$in": ["trial", "pro"]},
-            "subscription.end_date": {"$lt": now}
+            "subscription.endDate": {"$lt": now}
         },
         {
             "$set": {
@@ -9216,7 +9216,7 @@ async def admin_get_stats(admin: dict = Depends(require_admin)):
             # Expiring in next 7 days
             "expiringSoon": await db.users.count_documents({
                 "roles": "seller",
-                "subscription.end_date": {
+                "subscription.endDate": {
                     "$gte": now,
                     "$lte": now + timedelta(days=7)
                 }
@@ -9540,12 +9540,12 @@ async def admin_get_kpi_metrics(admin: dict = Depends(require_admin)):
     pro_sellers = await db.users.count_documents({
         "isSeller": True,
         "subscription.plan": "pro",
-        "subscription.end_date": {"$gte": now}
+        "subscription.endDate": {"$gte": now}
     })
     trial_sellers = await db.users.count_documents({
         "isSeller": True,
         "subscription.plan": "trial",
-        "subscription.end_date": {"$gte": now}
+        "subscription.endDate": {"$gte": now}
     })
     free_sellers = total_sellers - pro_sellers - trial_sellers
     
@@ -9557,13 +9557,13 @@ async def admin_get_kpi_metrics(admin: dict = Depends(require_admin)):
     renewals_this_quarter = await db.users.count_documents({
         "isSeller": True,
         "subscription.plan": "pro",
-        "subscription.start_date": {"$gte": quarter_start}
+        "subscription.startDate": {"$gte": quarter_start}
     })
     
     # Expired subscriptions (end_date passed)
     expired_subscriptions = await db.users.count_documents({
         "isSeller": True,
-        "subscription.end_date": {"$lt": now},
+        "subscription.endDate": {"$lt": now},
         "subscription.plan": {"$in": ["pro", "trial"]}
     })
     
@@ -9574,7 +9574,7 @@ async def admin_get_kpi_metrics(admin: dict = Depends(require_admin)):
     # Expiring soon (next 7 days)
     expiring_soon = await db.users.count_documents({
         "isSeller": True,
-        "subscription.end_date": {
+        "subscription.endDate": {
             "$gte": now,
             "$lte": now + timedelta(days=7)
         }
@@ -9643,7 +9643,7 @@ async def admin_get_kpi_metrics(admin: dict = Depends(require_admin)):
         pro_by_month = await db.users.count_documents({
             "isSeller": True,
             "subscription.plan": "pro",
-            "subscription.start_date": {"$lte": trend_month}
+            "subscription.startDate": {"$lte": trend_month}
         })
         
         # Count inquiries for that month
