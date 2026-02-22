@@ -1109,6 +1109,56 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             }
         }
     
+    @router.get("/status")
+    async def get_seller_status_endpoint(
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """
+        PHASE 7 - FRONTEND SELLER DASHBOARD LOGIC
+        
+        Get seller's current status including:
+        - GST verification status
+        - Role status
+        - Permissions (canCreateDraft, canPublish)
+        
+        Frontend uses this to:
+        - Show "Register as seller" if not seller
+        - Show "GST verification in progress" banner if pending
+        - Enable/disable publish buttons
+        """
+        status = get_seller_status(seller)
+        gst = seller.get("gst", {})
+        
+        return success_response({
+            "isSeller": status["isSeller"],
+            "gst": {
+                "number": gst.get("number"),
+                "status": gst.get("status"),
+                "verified": gst.get("verified", False)
+            },
+            "permissions": {
+                "canCreateDraft": status["canCreateDraft"],
+                "canPublish": status["canPublish"]
+            },
+            "message": _get_seller_status_message(status, gst)
+        })
+    
+    def _get_seller_status_message(status: dict, gst: dict) -> str:
+        """Generate user-friendly status message"""
+        if not status["isSeller"]:
+            return "Register as a seller to access this section."
+        
+        if not gst.get("verified", False):
+            gst_status = gst.get("status", "pending")
+            if gst_status == "pending":
+                return "GST verification in progress. You can create drafts but cannot publish."
+            elif gst_status == "rejected":
+                return "GST verification rejected. Please re-submit valid GST documents."
+            else:
+                return "GST verification required to publish products."
+        
+        return "You are a verified seller."
+    
     # ==================== PRODUCT VARIANTS HELPER ====================
     
     @router.get("/products/{product_id}/variants")
