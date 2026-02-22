@@ -109,8 +109,74 @@ function SellerDashboardContent() {
     );
   }
 
+  // PHASE 7: Non-seller access block
+  if (!isSeller && !loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+            <Store className="h-8 w-8 text-gray-400" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Seller Access Required</h1>
+          <p className="text-gray-600 mb-6">
+            Register as a seller to access the seller dashboard and list your products.
+          </p>
+          <Link
+            href="/become-seller"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+          >
+            <Store className="h-5 w-5" />
+            Become a Seller
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Get GST status from profile or sellerStatus
+  const gstStatus = sellerStatus?.gst?.status || profile?.gst?.status;
+  const gstVerified = sellerStatus?.permissions?.canPublish || isGstVerified;
+  const canCreateDraft = sellerStatus?.permissions?.canCreateDraft ?? isSeller;
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Welcome Banner for new sellers */}
+      {showWelcome && (
+        <div className="bg-green-600 text-white px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5" />
+              <span className="font-medium">Welcome! Your seller account has been created.</span>
+            </div>
+            <button
+              onClick={() => setShowWelcome(false)}
+              className="text-white/80 hover:text-white"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PHASE 7: GST Verification Status Banner */}
+      {isSeller && !gstVerified && (
+        <div className={`px-4 py-3 ${gstStatus === 'rejected' ? 'bg-red-500' : 'bg-amber-500'} text-white`}>
+          <div className="max-w-7xl mx-auto flex items-center gap-3">
+            {gstStatus === 'rejected' ? (
+              <>
+                <ShieldAlert className="h-5 w-5" />
+                <span className="font-medium">GST verification rejected. Please re-submit valid documents.</span>
+              </>
+            ) : (
+              <>
+                <Clock className="h-5 w-5" />
+                <span className="font-medium">GST verification in progress. You can create drafts but cannot publish until verified.</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -138,14 +204,16 @@ function SellerDashboardContent() {
                 <MessageSquare className="h-5 w-5" />
                 Buyer Inquiries
               </Link>
-              <Link
-                href="/seller/listings/new"
-                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium shadow-sm"
-                data-testid="new-listing-header-btn"
-              >
-                <Plus className="h-5 w-5" />
-                New Listing
-              </Link>
+              {canCreateDraft && (
+                <Link
+                  href="/seller/listings/new"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium shadow-sm"
+                  data-testid="new-listing-header-btn"
+                >
+                  <Plus className="h-5 w-5" />
+                  New Listing
+                </Link>
+              )}
             </div>
           </div>
         </div>
