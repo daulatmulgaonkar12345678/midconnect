@@ -8792,21 +8792,21 @@ async def seller_get_subscription_status(user: dict = Depends(get_current_user))
             "isActive": isActive
         },
         "usage": {
-            "accepted_this_month": accepted_this_month,
+            "acceptedThisMonth": accepted_this_month,
             "monthlyLimit": inquiry_limit,
             "remaining": remaining,
             "limitReached": limit_reached,
             "resetsOn": next_month.strftime("%B 1, %Y")
         },
         "features": {
-            "can_accept_inquiries": isActive and (plan in ["trial", "pro"] or not limit_reached),
+            "canAcceptInquiries": isActive and (plan in ["trial", "pro"] or not limit_reached),
             "unlimitedInquiries": plan in ["trial", "pro"] and isActive,
             "verifiedBadge": plan == "pro" and isActive,
             "prioritySupport": plan == "pro" and isActive,
             "analyticsAccess": plan == "pro" and isActive
         },
-        "show_expiry_warning": serialized_sub.get("isExpiringSoon", False),
-        "show_upgrade_cta": plan == "free" or serialized_sub.get("status") in ["expired", "suspended"]
+        "showExpiryWarning": serialized_sub.get("isExpiringSoon", False),
+        "showUpgradeCta": plan == "free" or serialized_sub.get("status") in ["expired", "suspended"]
     }
 
 
