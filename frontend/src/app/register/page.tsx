@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
-import { Eye, EyeOff, UserPlus, AlertCircle, Mail } from 'lucide-react';
+import { Eye, EyeOff, UserPlus, AlertCircle, Mail, RefreshCw } from 'lucide-react';
 import { Suspense } from 'react';
+import { cleanupForReregister } from '@/lib/api';
 
 function RegisterContent() {
   const router = useRouter();
@@ -16,6 +17,8 @@ function RegisterContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState('');
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [showReregisterOption, setShowReregisterOption] = useState(false);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -27,6 +30,8 @@ function RegisterContent() {
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: field === 'email' ? value.toLowerCase().slice(0, 100) : value.slice(0, 100) }));
+    // Reset re-register option when email changes
+    if (field === 'email') setShowReregisterOption(false);
   };
 
   const validateForm = () => {
@@ -39,9 +44,40 @@ function RegisterContent() {
     return true;
   };
 
+  // NEW ARCHITECTURE: Handle cleanup for re-registration
+  const handleCleanupAndRetry = async () => {
+    setIsCleaningUp(true);
+    setLocalError('');
+    try {
+      const result = await cleanupForReregister(formData.email.trim());
+      if (result.cleaned) {
+        // Retry registration after cleanup
+        setShowReregisterOption(false);
+        const signupResult = await signUp(formData.email.trim(), formData.password);
+        if (signupResult.needsEmailVerification) {
+          setRegistrationSuccess(true);
+          setTimeout(() => router.push('/verify-email'), 2000);
+        }
+      } else {
+        setLocalError('This email is already registered. Please login instead.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to cleanup. Please try again.';
+      if (message.includes('verified')) {
+        setLocalError('This email is already registered and verified. Please login instead.');
+        setShowReregisterOption(false);
+      } else {
+        setLocalError(message);
+      }
+    } finally {
+      setIsCleaningUp(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
+    setShowReregisterOption(false);
     if (!validateForm()) return;
     setIsSubmitting(true);
     try {
@@ -50,7 +86,14 @@ function RegisterContent() {
         setRegistrationSuccess(true);
         setTimeout(() => router.push('/verify-email'), 2000);
       }
-    } catch {} finally { setIsSubmitting(false); }
+    } catch (err) {
+      // Check if it's "email already in use" error
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('already') || message.includes('in use')) {
+        setShowReregisterOption(true);
+        setLocalError('This email may have a previous unverified registration. You can try to re-register or login.');
+      }
+    } finally { setIsSubmitting(false); }
   };
 
   const displayError = localError || error;
@@ -84,11 +127,34 @@ function RegisterContent() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {displayError && <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-start gap-2"><AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" /><span>{displayError}</span></div>}
+            {displayError && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span>{displayError}</span>
+                  {showReregisterOption && (
+                    <button
+                      type="button"
+                      onClick={handleCleanupAndRetry}
+                      disabled={isCleaningUp}
+                      className="mt-2 flex items-center gap-2 text-blue-600 hover:underline disabled:opacity-50"
+                      data-testid="reregister-btn"
+                    >
+                      {isCleaningUp ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      {isCleaningUp ? 'Cleaning up...' : 'Try re-register'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div><label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">Email Address</label><input id="email" type="email" value={formData.email} onChange={(e) => handleChange('email', e.target.value)} required autoComplete="email" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="you@example.com" data-testid="register-email" /></div>
             <div><label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Password</label><div className="relative"><input id="password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => handleChange('password', e.target.value)} required autoComplete="new-password" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="At least 6 characters" data-testid="register-password" /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button></div></div>
             <div><label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label><input id="confirmPassword" type="password" value={formData.confirmPassword} onChange={(e) => handleChange('confirmPassword', e.target.value)} required autoComplete="new-password" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Confirm your password" data-testid="register-confirm-password" /></div>
-            <button type="submit" disabled={isSubmitting || authLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50" data-testid="register-submit-btn">{isSubmitting ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" /> : <><UserPlus className="h-5 w-5" /> Create Account</>}</button>
+            <button type="submit" disabled={isSubmitting || authLoading || isCleaningUp} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50" data-testid="register-submit-btn">{isSubmitting ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" /> : <><UserPlus className="h-5 w-5" /> Create Account</>}</button>
           </form>
           <div className="mt-6 text-center text-sm text-gray-500">Already have an account? <Link href="/login" className="text-blue-600 hover:underline">Sign In</Link></div>
         </div>
