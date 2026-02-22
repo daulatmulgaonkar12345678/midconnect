@@ -854,8 +854,13 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         """
         Publish a draft listing.
         
-        PHASE 4/5 - SELLER PRODUCT PERMISSION CONTROL:
-        Publish allowed ONLY if gst.verified == true
+        ENTERPRISE GRADE VALIDATION:
+        1. Check GST verification (PHASE 4/5)
+        2. Check seller account status (banned/suspended)
+        3. Validate listing completeness (all mandatory fields)
+        4. Only then allow publishing
+        
+        Returns HTTP 400 with missing fields if incomplete.
         """
         seller_oid = ObjectId(seller["_id"])
         
@@ -868,6 +873,13 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 status_code=403,
                 detail=f"GST verification required before publishing products. Current status: {gst_status}"
             )
+        
+        # Check seller account status
+        account_status = seller.get("sellerStatus", "active")
+        if account_status == "banned":
+            raise HTTPException(status_code=403, detail="Seller account is banned")
+        if account_status == "suspended":
+            raise HTTPException(status_code=403, detail="Seller account is suspended")
         
         try:
             listing_oid = ObjectId(listing_id)
@@ -886,11 +898,8 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if listing.get("status") == "active":
             return {"message": "Listing already published", "status": "active"}
         
-        # Validate for publish
-        if not listing.get("pricingTiers"):
-            raise HTTPException(status_code=400, detail="Cannot publish without pricing tiers")
-        if not listing.get("moq"):
-            raise HTTPException(status_code=400, detail="MOQ is required for publishing")
+        # ENTERPRISE GRADE: Validate listing completeness before publishing
+        validate_listing_completeness(listing)
         
         now = datetime.now(timezone.utc)
         await db.sellerListings.update_one(
