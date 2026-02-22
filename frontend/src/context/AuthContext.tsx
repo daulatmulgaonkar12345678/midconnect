@@ -129,6 +129,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
       
+      // NEW ARCHITECTURE: Force token refresh to get latest email_verified status
+      await result.user.reload();
+      const freshToken = await result.user.getIdToken(true);
+      
       if (!result.user.emailVerified) {
         setState(prev => ({
           ...prev, user: result.user, profile: null, loading: false,
@@ -137,10 +141,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { needsRegistration: false, needsEmailVerification: true };
       }
       
+      // Fetch profile - this will auto-create user in MongoDB if needed
       const profile = await fetchProfile(result.user);
-      if (!profile) {
+      
+      // Check if profile is complete
+      if (!profile || !profile.profileComplete) {
         setState(prev => ({
-          ...prev, user: result.user, profile: null, loading: false,
+          ...prev, user: result.user, profile, loading: false,
           error: null, registrationState: 'incomplete', emailVerified: true,
         }));
         return { needsRegistration: true, needsEmailVerification: false };
