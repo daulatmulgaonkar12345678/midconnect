@@ -209,11 +209,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkEmailVerification = async (): Promise<boolean> => {
     if (!state.user) return false;
     try {
+      // STEP 7 - Force token refresh after email verification
       await state.user.reload();
       const verified = state.user.emailVerified;
-      if (verified && state.registrationState === 'email_not_verified') {
-        setState(prev => ({ ...prev, registrationState: 'incomplete', emailVerified: true }));
+      
+      if (verified) {
+        // Force get fresh token with email_verified: true
+        const freshToken = await state.user.getIdToken(true);
+        
+        // Call /api/users/me to sync verification status with backend
+        try {
+          const profile = await getUserProfile(freshToken);
+          
+          // Check if profile is complete
+          if (profile && profile.profileComplete) {
+            setState(prev => ({ 
+              ...prev, 
+              profile,
+              registrationState: 'complete', 
+              emailVerified: true 
+            }));
+          } else {
+            setState(prev => ({ 
+              ...prev, 
+              profile,
+              registrationState: 'incomplete', 
+              emailVerified: true 
+            }));
+          }
+        } catch (error) {
+          // Backend call failed, but email is verified
+          setState(prev => ({ 
+            ...prev, 
+            registrationState: 'incomplete', 
+            emailVerified: true 
+          }));
+        }
       }
+      
       return verified;
     } catch { return false; }
   };
