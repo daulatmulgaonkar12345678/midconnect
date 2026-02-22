@@ -1,0 +1,191 @@
+<analysis>original_problem_statement:
+The user wants to implement a new role-based registration flow for an existing B2B marketplace application named midconnect. The project uses FastAPI, Next.js, MongoDB, and Firebase.
+
+**PRODUCT REQUIREMENTS (Summary of 10 Phases):**
+
+1.  **Frontend Registration Flow**:
+    *   **Step 1 (Sign Up)**: User signs up with email/password. This creates a Firebase user and sends a verification email. **No MongoDB user is created at this stage.**
+    *   **Step 2 (Post-Verification)**: On login, if the user's email is verified, they are redirected to a Profile Completion page.
+    *   **Profile Completion**: The user must select an account type: Buyer or Seller.
+        *   **Buyer**: Fills out Name, Mobile, Address, City, State, Pincode.
+        *   **Seller**: Fills out the same fields as a buyer, PLUS a GST Number.
+
+2.  **Backend Database Structure**:
+    *   A new endpoint will handle the profile completion data and create the user in MongoDB.
+    *   The MongoDB user document must strictly adhere to a specific schema, including fields like ,  (e.g.,  or ), ,  object,  details, etc.
+    *   The  object status will be  for new sellers.
+    *   The pincode will be validated, and latitude/longitude will be fetched and stored in  and .
+
+3.  **Seller State & Permissions**:
+    *   A seller's status is *derived*, not stored. It depends on  containing seller and the value of .
+    *   **Not a Seller**: Cannot create or publish products.
+    *   **Seller (GST Pending)**: Can create/edit product drafts but cannot publish them.
+    *   **Seller (GST Verified)**: Has full permissions (draft, publish, edit, delete).
+
+4.  **Backend Endpoint Logic**:
+    *   Product creation/publishing endpoints must enforce the new permission rules.
+
+5.  **Frontend Seller Dashboard**:
+    *   Display a banner indicating GST verification in progress if the seller's GST is pending.
+
+6.  **Atomic Registration**:
+    *   If the MongoDB user creation fails after Firebase user creation, the corresponding Firebase user must be deleted to prevent orphan accounts.
+
+**User's preferred language**: English
+
+**what currently exists?**
+The agent has cloned the user's existing  project from GitHub. It has implemented significant changes on both the backend and frontend to support the new role-based registration flow. This includes creating new API endpoints, new frontend pages (, ), updating authentication logic (), and adding permission checks.
+
+However, the development process was severely hampered by multiple environment resets (), which caused the loss of frontend files. The agent spent considerable time restoring files from a temporary backup and re-applying the necessary code changes. The project is currently in a non-working state due to a TypeScript build error on the frontend.
+
+**Last working item**:
+- Last item agent was working: The agent was attempting to resolve a critical TypeScript build error in the Next.js frontend. The error, , prevents the application from compiling and running. The user provided a detailed, step-by-step guide to fix this by explicitly exporting the  type and correcting its usage in .
+- Status: IN PROGRESS
+- Agent Testing Done: N
+- Which testing method agent to use? Frontend testing agent
+- User Testing Done: N
+
+**All Pending/In progress Issue list**:
+-   **Issue 1: TypeScript Build Error (P0)**
+    -   Description: The Vercel/Next.js build is failing with the error: . This is because the frontend type definitions are not perfectly aligned with the MongoDB schema, and there might be a module export/resolution issue. The user has provided a precise fix.
+    -   Status: IN PROGRESS
+    -   Is recurring issue? Y (The agent has struggled with type definitions throughout the session).
+    -   Should Test frontend/backend/both after fix? Both (Frontend to confirm the build passes and UI works as expected, Backend to ensure frontend changes didn't break API communication).
+
+-   **Issue 2: Environment Instability (P1)**
+    -   Description: The agent's environment has reset multiple times, causing a complete loss of the  directory. This forced the agent to repeatedly restore files from a backup () and re-apply all frontend code changes. This is a high-risk environmental problem.
+    -   Status: RESOLVED (by platform, but recurrence is possible)
+    -   Is recurring issue? Y
+    -   Should Test frontend/backend/both after fix? NA
+
+**In progress Task List**:
+-   **Task 1: Implement Role-Based Registration Flow (P0)**
+    -   Description: This is the main task requested by the user. The agent has made changes to the backend (models, endpoints) and frontend (pages, context, API calls) but is blocked by the TypeScript build error.
+    -   Where to resume: The agent must first apply the user-provided fix for the TypeScript error. After the fix, a full end-to-end test of the new registration flow is required.
+    -   What will be achieved with this? A complete, working, and testable implementation of the new user registration and permission system.
+    -   Status: BLOCKED
+    -   Should Test frontend/backend/both after fix? Both
+    -   Blocked on something: Issue 1: TypeScript Build Error.
+
+**Upcoming and Future Tasks**
+- **Upcoming Tasks:**
+  - **P0: Full End-to-End Testing**: Once the build error is fixed, perform a comprehensive test of the entire new flow:
+      1. Register a new user.
+      2. Verify the email verification step (mock or manual).
+      3. Log in and get redirected to the  page.
+      4. Complete the profile as a Buyer and verify correct data is saved and no GST field is shown.
+      5. Complete the profile as a Seller and verify GST field is present and data is saved correctly.
+      6. Verify the seller dashboard shows the GST pending banner.
+      7. Test product creation permissions for a non-seller, a pending seller, and a (manually) verified seller.
+  - **P1: Pincode to Geolocation Logic**: Implement the backend logic to validate a pincode against the  collection and store the corresponding latitude and longitude in the user's profile upon creation/update.
+
+- **Future Tasks:**
+  - None specified beyond the initial 10-phase plan.
+
+**Completed work in this session**
+- **Backend (FastAPI):**
+  - Updated :
+    - Added  Pydantic model for the new profile completion step.
+    - Modified the  endpoint to only create a Firebase user.
+    - Created a new endpoint  to handle profile completion and create the MongoDB user document with the correct structure (, , , etc.).
+    - Implemented atomic registration logic to delete the Firebase user if MongoDB insertion fails.
+    - Created a new endpoint  to provide GST status to the frontend.
+  - Updated :
+    - Added permission checks to product creation () to ensure only sellers can create drafts.
+    - Added permission checks to product publishing/updating endpoints to ensure only sellers with verified GST can publish products.
+
+- **Frontend (Next.js):**
+  - Created new pages:
+    - : A form for users to select their role (Buyer/Seller) and fill in profile details post-email verification.
+    - : A placeholder page to guide users after registration.
+  - Modified existing files:
+    - : Added new functions  and .
+    - : Major updates to handle the new multi-step registration flow, check for email verification, and manage user state.
+    - : Overhauled the registration page UI and logic to only handle the initial Firebase user creation and then direct users to verify their email.
+    - : Updated to handle redirects for users who haven't completed their profile.
+    - : Added logic to display a banner based on the seller's GST verification status.
+  - Updated type definitions in  to include the  property in the  and  interfaces (this is the area of the current bug).
+
+**Earlier issues found/mentioned but not fixed**
+- **Issue 1: Pre-existing Linting Errors**
+  - Description:  reported several pre-existing issues in the original  codebase. The agent correctly identified these as out-of-scope and did not attempt to fix them.
+  - Status: NOT STARTED (and not required)
+
+**Known issue recurrence from previous fork**
+- None.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **Backend**: FastAPI, MongoDB (via ), Pydantic
+-   **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+-   **Authentication**: Firebase Authentication (for user creation, email verification, and token management)
+-   **Architecture**: Monorepo-like structure with separate  and  directories. State management on the frontend is handled via React Context ().
+
+**key DB schema**
+- **users** collection:
+  
+
+**changes in tech stack**
+- None.
+
+**All files of reference**
+- : Modified to split registration and profile completion logic.
+- : Modified to add role-based permission checks.
+- : Modified to add new API call functions.
+- : Heavily modified to orchestrate the new auth flow.
+- : Modified to update user type definitions; contains the current bug.
+- : New file for the profile completion form.
+- : Overwritten with new registration logic.
+- : Modified to handle redirection.
+- : Modified to show GST status.
+
+**Areas that need refactoring**:
+- The entire  directory should be considered fragile due to the repeated file loss and restoration. A clean  or restoration might be safer than continuing with the current state if more issues arise.
+- The user-provided fix for the TypeScript issue involves creating an  in the  directory. The agent should ensure this is the correct pattern and doesn't conflict with existing structure.
+
+**key api endpoints**
+- : (Modified) Now only creates a Firebase user.
+- : (New) Creates the MongoDB user after email verification and profile submission.
+- : (New) Fetches the seller's GST and verification status.
+- : (Modified) Permission check added.
+- : (Modified) Permission check added for publishing.
+
+**Critical Info for New Agent**
+1.  **You are fixing a TypeScript build error.** The user has provided very specific, step-by-step instructions in the last message (). You MUST follow this plan exactly to fix the error: .
+2.  **The environment is unstable.** The previous agent experienced multiple pod terminations that resulted in the complete loss of the  directory. It had to be restored from a backup. Be prepared for this possibility and verify file integrity frequently.
+3.  **The goal is a complex, multi-step registration flow.** Do not treat this as a simple auth change. Review the full 10-phase plan in the .
+4.  **After the build fix, comprehensive testing is mandatory.** The previous agent was unable to perform a full end-to-end test. You must verify the entire flow from registration to product publishing permissions.
+
+**documents and test reports created in this job**
+- None. The agent was about to create  but was interrupted.
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User**: Provides detailed instructions to fix the TypeScript build error () by fixing type exports and imports. (PENDING IMPLEMENTATION)
+2.  **User**: Provides analysis of why the build is failing, pointing to the  type not having the  property on the frontend.
+3.  **User**: Provides git clone URL for the  project.
+4.  **User**: Asks the agent to confirm that it will only update the project and not delete anything.
+5.  **User**: Clarifies that  is their project with data, emphasizing the risk of deletion.
+
+**Project Health Check:**
+- **Broken**: The frontend has a critical TypeScript build error that prevents it from compiling and running.
+
+**3rd Party Integrations**
+-   Firebase (Authentication)
+-   MongoDB (Database)
+
+**Testing status**
+-   Testing agent used after significant changes: YES (but it failed due to a URL configuration issue, which was later resolved).
+-   Troubleshoot agent used after agent stuck in loop: NO
+-   Test files created: []
+-   Known regressions: The frontend is currently not building due to a TypeScript error introduced during the implementation.
+
+**Credentials to test flow:**
+- None provided. The agent noted that the Firebase Admin SDK is not configured, which will likely prevent backend API calls that interact with Firebase from working. This needs to be addressed for full testing.
+
+**What agent forgot to execute**
+- The agent was interrupted by environment failures and then the final build error. It did not forget, but was blocked from:
+    1.  Fully implementing the user's latest instructions to fix the TypeScript bug ().
+    2.  Performing a full end-to-end test of the new registration flow.
+    3.  Creating the  file as part of the  step.</analysis>
