@@ -139,14 +139,53 @@ export default function SellerDashboardPage() {
           </div>
         )}
 
-        {/* GST Pending Banner - Show for sellers with unverified GST */}
-        {isSeller && !isGstVerified && (
+        {/* Seller Account Banned Banner */}
+        {sellerStatus === 'banned' && (
+          <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-xl flex items-start gap-3" data-testid="seller-banned-banner">
+            <Ban className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-800">Account Banned</h3>
+              <p className="text-sm text-red-700 mt-1">
+                Your seller account has been banned. Contact support for assistance.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Seller Account Suspended Banner */}
+        {sellerStatus === 'suspended' && (
+          <div className="mb-6 p-4 bg-orange-100 border border-orange-300 rounded-xl flex items-start gap-3" data-testid="seller-suspended-banner">
+            <AlertCircle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-orange-800">Account Suspended</h3>
+              <p className="text-sm text-orange-700 mt-1">
+                Your seller account has been temporarily suspended. Contact support for more information.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* GST Pending Banner - Show for sellers with pending GST */}
+        {isSeller && gstStatus === 'pending' && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3" data-testid="gst-pending-banner">
             <Clock className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <h3 className="font-semibold text-amber-800">GST Verification Pending</h3>
               <p className="text-sm text-amber-700 mt-1">
                 Your GST number is being verified. You can create product drafts, but publishing will be enabled once verification is complete.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* GST Rejected Banner - Show for sellers with rejected GST */}
+        {isSeller && gstStatus === 'rejected' && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3" data-testid="gst-rejected-banner">
+            <XCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-800">GST Rejected</h3>
+              <p className="text-sm text-red-700 mt-1">
+                Your GST submission was rejected. Please re-upload correct documents to continue publishing products.
               </p>
             </div>
           </div>
