@@ -57,20 +57,12 @@ export interface PricingTier {
   currency?: string;
 }
 
-/**
- * PricingSlab - Backend-compatible pricing structure
- * Extends PricingTier with optional backend field aliases
- */
 export interface PricingSlab extends PricingTier {
-  minQuantity?: number;  // Backend alias for minQty
-  maxQuantity?: number | null;  // Backend alias for maxQty
+  minQuantity?: number;
+  maxQuantity?: number | null;
   timeBasis?: 'day' | 'week' | 'month';
 }
 
-/**
- * PricingTierCreate - SSOT: Type alias for PricingTier
- * No structural difference - prevents type drift and ensures contract consistency
- */
 export type PricingTierCreate = PricingTier;
 
 // ==================== Seller Types ====================
@@ -130,6 +122,20 @@ export interface ProductWithAllSellers {
   sellers: ProductSeller[];
 }
 
+
+export interface ProductWithAllSellers {
+  productId: string;
+  productName: string;
+  slug: string;
+  categoryId: string;
+  categoryName: string;
+  description?: string;
+  specifications: Record<string, string | number>;
+  images: string[];
+  sellerCount: number;
+  sellers: ProductSeller[];
+}
+
 // ==================== User Types ====================
 
 export interface User {
@@ -142,8 +148,12 @@ export interface User {
   state: string;
   pincode: string;
   address?: string;
+
+  roles: UserRole[]; // ✅ ADDED
+
   isSeller: boolean;
   isAdmin: boolean;
+
   gstNumber?: string;
   gstStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
   accountStatus: 'ACTIVE' | 'PENDING_DELETION' | 'SUSPENDED';
@@ -160,12 +170,18 @@ export interface UserProfile {
   state: string;
   pincode: string;
   address?: string;
+
+  roles: UserRole[]; // ✅ FIXES YOUR BUILD ERROR
+
   gstNumber?: string;
   gstStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
+
   isSeller: boolean;
   isAdmin: boolean;
+
   emailVerified: boolean;
   accountStatus: 'ACTIVE' | 'PENDING_DELETION' | 'SUSPENDED';
+
   subscription?: {
     status: string;
     trialEndsAt?: string;
