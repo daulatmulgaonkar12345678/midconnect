@@ -200,11 +200,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
+      
+      // PHASE 1: Check email verification first
+      if (!result.user.emailVerified) {
+        setState(prev => ({
+          ...prev,
+          user: result.user,
+          profile: null,
+          loading: false,
+          error: null,
+          registrationState: 'email_not_verified',
+          emailVerified: false,
+        }));
+        return { needsRegistration: false, needsEmailVerification: true };
+      }
+      
       const profile = await fetchProfile(result.user);
       
       if (!profile) {
-        // Firebase login succeeded but no backend profile
-        // User needs to complete registration - NOT an error
+        // Firebase login succeeded, email verified, but no backend profile
+        // User needs to complete profile with role selection
         setState(prev => ({
           ...prev,
           user: result.user,
@@ -212,8 +227,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           loading: false,
           error: null,
           registrationState: 'incomplete',
+          emailVerified: true,
         }));
-        return { needsRegistration: true };
+        return { needsRegistration: true, needsEmailVerification: false };
       }
       
       // Check account status
@@ -231,13 +247,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading: false,
         error: null,
         registrationState: 'complete',
+        emailVerified: true,
       }));
       
-      return { needsRegistration: false };
+      return { needsRegistration: false, needsEmailVerification: false };
     } catch (error: unknown) {
       // Don't treat "profile not found" as error - already handled above
       if (state.registrationState === 'incomplete') {
-        return { needsRegistration: true };
+        return { needsRegistration: true, needsEmailVerification: false };
+      }
+      if (state.registrationState === 'email_not_verified') {
+        return { needsRegistration: false, needsEmailVerification: true };
       }
       
       const message = getAuthErrorMessage(error);
@@ -247,10 +267,114 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Sign up with email/password and register in backend
-   * Creates both Firebase account AND backend profile
+   * PHASE 1 - Sign up: Only create Firebase user, send verification email
+   * DO NOT create MongoDB user yet - that happens after email verification
    */
-  const signUp = async (
+  const signUp = async (email: string, password: string): Promise<{ needsEmailVerification: boolean }> => {
+    setState(prev => ({ ...prev, loading: true, error: null }));
+    
+    try {
+      // Create Firebase user only
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Send verification email
+      await sendEmailVerification(result.user);
+      
+      setState(prev => ({
+        ...prev,
+        user: result.user,
+        profile: null,
+        loading: false,
+        error: null,
+        registrationState: 'email_not_verified',
+        emailVerified: false,
+      }));
+      
+      return { needsEmailVerification: true };
+    } catch (error: unknown) {
+      const message = getAuthErrorMessage(error);
+      setState(prev => ({ ...prev, loading: false, error: message }));
+      throw new Error(message);
+    }
+  };
+
+  /**
+   * PHASE 2 - Complete registration with role selection
+   * Called after email verification
+   */
+  const completeRegistrationHandler = async (profileData: ProfileCompleteData) => {
+    if (!state.user) {
+      throw new Error('No user logged in');
+    }
+    
+    // PHASE 1: Require email verification
+    if (!state.user.emailVerified) {
+      throw new Error('Email verification required before completing registration');
+    }
+    
+    setState(prev => ({ ...prev, loading: true, error: null }));
+    
+    try {
+      const token = await state.user.getIdToken();
+      
+      const response = await completeProfile(token, profileData);
+      
+      setState(prev => ({
+        ...prev,
+        user: state.user,
+        profile: response.user,
+        loading: false,
+        error: null,
+        registrationState: 'complete',
+        emailVerified: true,
+      }));
+    } catch (error: unknown) {
+      const message = getAuthErrorMessage(error);
+      setState(prev => ({ ...prev, loading: false, error: message }));
+      throw new Error(message);
+    }
+  };
+
+  // Resend verification email
+  const resendVerificationEmail = async () => {
+    if (!state.user) {
+      throw new Error('No user logged in');
+    }
+    
+    try {
+      await sendEmailVerification(state.user);
+    } catch (error: unknown) {
+      const message = getAuthErrorMessage(error);
+      throw new Error(message);
+    }
+  };
+
+  // Check if email has been verified (reload user)
+  const checkEmailVerification = async (): Promise<boolean> => {
+    if (!state.user) {
+      return false;
+    }
+    
+    try {
+      await state.user.reload();
+      const verified = state.user.emailVerified;
+      
+      if (verified && state.registrationState === 'email_not_verified') {
+        setState(prev => ({
+          ...prev,
+          registrationState: 'incomplete',
+          emailVerified: true,
+        }));
+      }
+      
+      return verified;
+    } catch {
+      return false;
+    }
+  };
+
+  // LEGACY signUp with profile data (for backwards compatibility)
+  const legacySignUp = async (
     email: string, 
     password: string, 
     profileData: {
