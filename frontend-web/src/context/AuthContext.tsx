@@ -78,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registrationState: 'unknown',
     connectionState: 'connecting',
     connectionMessage: 'Connecting to server...',
+    emailVerified: false,
   });
 
   // Warm backend before making auth calls
@@ -119,6 +120,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // PHASE 1: Determine registration state based on email verification and profile
+  const determineRegistrationState = useCallback((user: User, profile: UserProfile | null): RegistrationState => {
+    if (profile) {
+      return 'complete';
+    }
+    if (!user.emailVerified) {
+      return 'email_not_verified';
+    }
+    return 'incomplete'; // Email verified but no profile
+  }, []);
+
   // Initialize auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -128,13 +140,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await warmupBackend();
           
           const profile = await fetchProfile(user);
+          const regState = determineRegistrationState(user, profile);
+          
           setState(prev => ({
             ...prev,
             user,
             profile,
             loading: false,
             error: null,
-            registrationState: profile ? 'complete' : 'incomplete',
+            registrationState: regState,
+            emailVerified: user.emailVerified,
             connectionState: 'ready',
             connectionMessage: 'Connected',
           }));
@@ -147,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             loading: false,
             error: 'Failed to load profile. Please try again.',
             registrationState: 'unknown',
+            emailVerified: user.emailVerified,
             connectionState: 'error',
             connectionMessage: 'Connection error',
           }));
@@ -159,6 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           loading: false,
           error: null,
           registrationState: 'unknown',
+          emailVerified: false,
           connectionState: 'ready',
           connectionMessage: '',
         }));
@@ -166,16 +183,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [fetchProfile, warmupBackend]);
+  }, [fetchProfile, warmupBackend, determineRegistrationState]);
 
   /**
-   * Sign in with email/password
+   * PHASE 1 - Sign in with email/password
    * 
-   * IMPORTANT: Returns { needsRegistration: true } if Firebase login succeeds
-   * but user has no backend profile. This is NOT an error - user should be
-   * redirected to complete registration.
+   * Flow:
+   * 1. Firebase login
+   * 2. Check email_verified
+   * 3. If not verified -> needsEmailVerification: true
+   * 4. Check if MongoDB profile exists
+   * 5. If no profile -> needsRegistration: true
    */
-  const signIn = async (email: string, password: string): Promise<{ needsRegistration: boolean }> => {
+  const signIn = async (email: string, password: string): Promise<{ needsRegistration: boolean; needsEmailVerification: boolean }> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
