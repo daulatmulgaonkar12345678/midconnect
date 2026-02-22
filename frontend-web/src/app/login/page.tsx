@@ -4,13 +4,29 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
-import { Eye, EyeOff, LogIn, CheckCircle, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, LogIn, CheckCircle, AlertCircle, Mail } from 'lucide-react';
 import { Suspense } from 'react';
 
+/**
+ * PHASE 1 - Login Page (Updated Flow)
+ * 
+ * Handles:
+ * 1. Normal login -> dashboard
+ * 2. needsEmailVerification -> /verify-email
+ * 3. needsRegistration (email verified, no profile) -> /complete-profile
+ */
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, error, clearError, loading: authLoading, needsRegistration, user } = useAuth();
+  const { 
+    signIn, 
+    error, 
+    clearError, 
+    loading: authLoading, 
+    needsRegistration, 
+    needsEmailVerification,
+    user 
+  } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,12 +37,16 @@ function LoginContent() {
   const justRegistered = searchParams.get('registered') === 'true';
   const redirectTo = searchParams.get('redirect') || '/';
 
-  // Redirect to complete registration if needed
+  // Redirect based on registration state
   useEffect(() => {
-    if (needsRegistration && user) {
-      router.push('/register?complete=true');
+    if (user) {
+      if (needsEmailVerification) {
+        router.push('/verify-email');
+      } else if (needsRegistration) {
+        router.push('/complete-profile');
+      }
     }
-  }, [needsRegistration, user, router]);
+  }, [needsRegistration, needsEmailVerification, user, router]);
 
   // Input validation
   const validateInputs = (): boolean => {
@@ -57,10 +77,13 @@ function LoginContent() {
     try {
       const result = await signIn(email.trim().toLowerCase(), password);
       
-      if (result.needsRegistration) {
-        // User has Firebase account but no backend profile
-        // Redirect to complete registration
-        router.push('/register?complete=true');
+      if (result.needsEmailVerification) {
+        // User needs to verify email first
+        router.push('/verify-email');
+      } else if (result.needsRegistration) {
+        // Email verified but no backend profile
+        // Redirect to complete profile with role selection
+        router.push('/complete-profile');
       } else {
         // Full login successful
         router.push(redirectTo);
