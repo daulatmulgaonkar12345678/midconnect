@@ -10,7 +10,7 @@ import { Suspense } from 'react';
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, error, clearError, loading: authLoading, needsRegistration, user } = useAuth();
+  const { signIn, error, clearError, loading: authLoading, needsRegistration, needsEmailVerification, user } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,12 +21,13 @@ function LoginContent() {
   const justRegistered = searchParams.get('registered') === 'true';
   const redirectTo = searchParams.get('redirect') || '/';
 
-  // Redirect to complete registration if needed
+  // Redirect based on registration state
   useEffect(() => {
-    if (needsRegistration && user) {
-      router.push('/register?complete=true');
+    if (user) {
+      if (needsEmailVerification) router.push('/verify-email');
+      else if (needsRegistration) router.push('/complete-profile');
     }
-  }, [needsRegistration, user, router]);
+  }, [needsRegistration, needsEmailVerification, user, router]);
 
   // Input validation
   const validateInputs = (): boolean => {
