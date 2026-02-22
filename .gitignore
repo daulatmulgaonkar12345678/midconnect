@@ -86,3 +86,33 @@ frontend-web/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.n
 frontend-web/node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
 frontend/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.node
 frontend/node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
+
+# ===============================
+# Frontend Build & Cache
+# ===============================
+frontend/.next/
+frontend/node_modules/
+frontend/.turbo/
+frontend/out/
+frontend/build/
+
+# ===============================
+# Backend
+# ===============================
+__pycache__/
+*.pyc
+
+# ===============================
+# Node
+# ===============================
+node_modules/
+dist/
+build/
+
+# ===============================
+# Environment
+# ===============================
+.env
+.env.local
+.env.*.local
+
