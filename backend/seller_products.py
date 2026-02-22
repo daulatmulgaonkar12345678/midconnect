@@ -777,8 +777,23 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         listing_id: str,
         seller: dict = Depends(require_verified_seller)
     ):
-        """Publish a draft listing"""
+        """
+        Publish a draft listing.
+        
+        PHASE 4/5 - SELLER PRODUCT PERMISSION CONTROL:
+        Publish allowed ONLY if gst.verified == true
+        """
         seller_oid = ObjectId(seller["_id"])
+        
+        # PHASE 4: Check GST verification for publish
+        seller_status = get_seller_status(seller)
+        if not seller_status["canPublish"]:
+            gst = seller.get("gst", {})
+            gst_status = gst.get("status", "pending")
+            raise HTTPException(
+                status_code=403,
+                detail=f"GST verification required before publishing products. Current status: {gst_status}"
+            )
         
         try:
             listing_oid = ObjectId(listing_id)
