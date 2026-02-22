@@ -20,71 +20,122 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 - `specTemplates` - Specification field definitions
 - `inquiries` - Buyer-to-seller inquiries
 
-## Role-Based Registration Flow
+---
 
-### Step 1: Sign Up
-- User provides email/password
-- Firebase user created
-- Verification email sent
-- **NO MongoDB user created yet**
+## NEW EMAIL VERIFICATION ARCHITECTURE (Feb 22, 2026)
 
-### Step 2: Email Verification
-- User clicks verification link
-- User redirected to verify-email page
-- Can resend verification email
+### User Schema Updates
+```json
+{
+  "firebaseUid": "string",
+  "email": "string",
+  "roles": ["buyer"],
+  "isEmailVerified": false,
+  "profileComplete": false,
+  "status": "pending | active",
+  "verificationDeadline": "datetime (createdAt + 24h)",
+  "profile": null | {...},
+  "gst": {...},
+  "subscription": {...}
+}
+```
 
-### Step 3: Profile Completion
-- User selects role: **Buyer** or **Seller**
-- Fills profile fields:
-  - Business Name, Phone, Address, City, State, Pincode
-  - **Seller Only**: GST Number (mandatory)
-- MongoDB user created with:
-  - `roles`: ["buyer"] or ["buyer", "seller"]
-  - `gst.status`: "pending" for sellers
-  - `gst.verified`: false
+### Registration Flow
 
-### Seller States (Derived, NOT stored)
-- **Not Seller**: Cannot access seller features
-- **Seller (GST Pending)**: Can create drafts, cannot publish
-- **Seller (GST Verified)**: Full permissions
+#### Step 1: Sign Up
+```
+User submits email/password
+    ↓
+Firebase user created
+    ↓
+Frontend gets ID token
+    ↓
+Backend get_current_user auto-creates MongoDB user
+    - isEmailVerified: false
+    - status: "pending"
+    - profileComplete: false
+    - verificationDeadline: now + 24h
+    ↓
+Verification email sent
+    ↓
+Redirect to /verify-email
+```
 
-## Key Features
+#### Step 2: Email Verification
+```
+User clicks email link
+    ↓
+Firebase marks email as verified
+    ↓
+User logs in
+    ↓
+Backend syncs email_verified from Firebase token
+    - Updates isEmailVerified: true
+    - Updates status: "active"
+    - Removes verificationDeadline
+    ↓
+Redirect to /complete-profile
+```
 
-### Buyer Features
-- Browse products by category
-- Search products
-- Send inquiries to sellers
-- Track inquiry status
+#### Step 3: Profile Completion
+```
+User fills profile form (Buyer/Seller)
+    ↓
+Backend /api/auth/complete-profile
+    - UPDATES existing user (not creates new)
+    - Sets profileComplete: true
+    - Sets roles, profile, gst fields
+    - Sets subscription (trial)
+    ↓
+Redirect to /dashboard
+```
 
-### Seller Features
-- Create product listings
-- Set tier-based pricing
-- Respond to buyer inquiries
-- Quick price updates
-- Subscription management
+### Cleanup & Re-registration
 
-### Admin Features
-- Manage categories and products
-- Verify seller GST
-- View analytics
-- Manage user accounts
+#### Auto Cleanup (Background Task)
+```
+Every 1 hour:
+    ↓
+Find users where:
+    - isEmailVerified: false
+    - verificationDeadline < now
+    ↓
+For each expired user:
+    - Delete Firebase user
+    - Delete MongoDB user
+```
 
-## Pincode Geolocation
-- On profile completion, pincode is validated against `pincodes` collection
-- Latitude/longitude fetched and stored in `profile.latitude`, `profile.longitude`
+#### Re-registration Handler
+```
+POST /api/auth/cleanup-for-reregister
+Body: { email: "..." }
+    ↓
+If user exists AND NOT verified:
+    - Delete Firebase user
+    - Delete MongoDB user
+    - Return { cleaned: true }
+    ↓
+If user exists AND verified:
+    - Return 400: "Already registered"
+```
 
-## Seller Permissions Matrix
+### Seller Permissions Matrix
 
-| Role | GST Status | Create Draft | Publish |
-|------|------------|--------------|---------|
-| Buyer | N/A | No | No |
-| Seller | Pending | Yes | No |
-| Seller | Verified | Yes | Yes |
+| Role | Email Verified | Profile Complete | GST Verified | Create Draft | Publish |
+|------|----------------|------------------|--------------|--------------|---------|
+| Any | No | N/A | N/A | No | No |
+| Buyer | Yes | Yes | N/A | No | No |
+| Seller | Yes | Yes | No (Pending) | Yes | No |
+| Seller | Yes | Yes | Yes | Yes | Yes |
+
+---
 
 ## API Endpoints
 
-### Auth
-- `POST /api/auth/complete-profile` - Complete registration after email verification
+### Authentication
+- `GET /api/auth/check-registration` - Check profileComplete and isEmailVerified status
+- `POST /api/auth/complete-profile` - Complete profile (UPDATES existing user)
+- `POST /api/auth/cleanup-for-reregister` - Cleanup unverified user for re-registration
 
 ### Seller
 - `GET /api/seller/status` - Get seller GST/permission status
@@ -96,35 +147,37 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 ## Implementation Status
 
 ### Completed (Feb 22, 2026)
-- [x] TypeScript build error fixed - `UserProfile` type with `roles` array
+- [x] TypeScript build error fixed
 - [x] 3-step registration flow (Sign Up → Verify Email → Complete Profile)
-- [x] Role selection (Buyer/Seller) on complete-profile page
-- [x] GST field shown only for sellers
+- [x] MongoDB user auto-creation on Firebase signup
+- [x] profileComplete flag tracking
+- [x] isEmailVerified sync from Firebase on login
+- [x] Background cleanup task for unverified users (24h expiry)
+- [x] Re-registration cleanup endpoint
 - [x] GST pending banner on seller dashboard
-- [x] Protected route redirects
-- [x] Pincode-to-geolocation lookup implemented
 - [x] Seller permission checks on product publishing
 
-### Testing Results
-- Backend: 100% (11/11 tests passed)
-- Frontend: 100% (all pages load correctly)
+### Testing Results (Feb 22, 2026)
+- Backend: 100% (14/14 tests passed)
+- Frontend: 100% (all pages load, types verified)
 - Firebase Auth: NOT CONFIGURED (manual testing required)
 
 ---
 
 ## Next Steps / Backlog
 
+### P0 - Critical
+1. Configure Firebase Admin SDK for production
+
 ### P1 - High Priority
-1. Configure Firebase Admin SDK for full authentication testing
-2. End-to-end test with real Firebase users
-3. Admin GST verification workflow
+1. Full end-to-end test with real Firebase users
+2. Admin GST verification workflow
+3. Email notification system
 
 ### P2 - Medium Priority
 1. Enhanced seller analytics
 2. Product image upload improvements
-3. Inquiry notification system
 
 ### P3 - Low Priority
 1. Multi-language support
 2. Advanced search filters
-3. Seller performance metrics
