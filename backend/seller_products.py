@@ -189,6 +189,70 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             "canPublish": is_seller and is_verified  # Only verified sellers can publish
         }
     
+    def validate_listing_completeness(listing: dict) -> None:
+        """
+        ENTERPRISE GRADE: Server-side validation before publishing.
+        
+        Rules:
+        - Listings may be saved as draft with incomplete data
+        - Listings MUST NOT be published if mandatory fields are missing
+        - Returns HTTP 400 with detailed missing fields if incomplete
+        
+        Required fields for publishing:
+        - pricingTiers (must have at least one tier)
+        - moq (minimum order quantity, must be > 0)
+        - stock (must be > 0)
+        - maxCapacity (must be > 0)
+        - images (at least 1 image)
+        - variantId (must have product variant linked)
+        """
+        required_fields = {
+            "pricingTiers": {
+                "check": lambda v: v and len(v) > 0,
+                "message": "At least one pricing tier required"
+            },
+            "moq": {
+                "check": lambda v: v and v > 0,
+                "message": "MOQ (Minimum Order Quantity) must be greater than 0"
+            },
+            "stock": {
+                "check": lambda v: v and v > 0,
+                "message": "Stock quantity must be greater than 0"
+            },
+            "maxCapacity": {
+                "check": lambda v: v and v > 0,
+                "message": "Maximum capacity must be greater than 0"
+            },
+            "images": {
+                "check": lambda v: v and len(v) > 0,
+                "message": "At least one product image required"
+            },
+            "variantId": {
+                "check": lambda v: v is not None,
+                "message": "Product variant must be linked"
+            }
+        }
+        
+        missing_fields = []
+        field_errors = {}
+        
+        for field, config in required_fields.items():
+            value = listing.get(field)
+            if not config["check"](value):
+                missing_fields.append(field)
+                field_errors[field] = config["message"]
+        
+        if missing_fields:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Listing is incomplete and cannot be published",
+                    "missingFields": missing_fields,
+                    "fieldErrors": field_errors,
+                    "message": f"Please complete the following fields before publishing: {', '.join(missing_fields)}"
+                }
+            )
+    
     # ==================== HELPER FUNCTIONS ====================
     
     def serialize_mongo_doc(data):
