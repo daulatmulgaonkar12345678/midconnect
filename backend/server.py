@@ -8309,102 +8309,114 @@ async def admin_activate_subscription(
 ):
     """
     Activate or update subscription with admin-set start date.
-    Backend calculates end_date from start_date + duration.
+    Backend calculates endDate from startDate + duration.
+    
+    SSOT: All fields use camelCase, userId stored as ObjectId.
     """
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    now = datetime.now(timezone.utc)
-    plan_config = SUBSCRIPTION_PLANS.get(data.plan_name, {})
-    
-    # Determine duration
-    if data.duration_days:
-        duration_days = data.duration_days
-    elif data.plan_name == "trial":
-        duration_days = 90
-    elif data.plan_name == "pro":
-        duration_days = 90  # Quarterly default
-    else:
-        duration_days = 0  # Free plan
-    
-    # Calculate end_date (backend is source of truth)
-    if data.plan_name == "free":
-        end_date = None
-    else:
-        end_date = data.start_date + timedelta(days=duration_days)
-    
-    # Get existing subscription for history
-    old_subscription = await db.subscriptions.find_one({"user_id": user_id})
-    
-    # Build new subscription document
-    subscription_doc = {
-        "user_id": user_id,
-        "planName": data.plan_name,
-        "durationDays": duration_days,
-        "startDate": data.start_date,
-        "endDate": end_date,
-        "status": "active",
-        "lastUpdatedBy": str(admin["_id"]),
-        "updatedAt": now,
-        "notes": data.notes or "",
-        "createdAt": old_subscription.get("createdAt", now) if old_subscription else now
-    }
-    
-    # Upsert subscription
-    await db.subscriptions.update_one(
-        {"user_id": user_id},
-        {"$set": subscription_doc},
-        upsert=True
-    )
-    
-    # Also update legacy users.subscription for backward compatibility
-    legacy_subscription = {
-        "plan": data.plan_name,
-        "startDate": data.start_date,
-        "endDate": end_date,
-        "inquiryLimit": plan_config.get("inquiryLimit", 5),
-        "active": True
-    }
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {
-            "subscription": legacy_subscription,
-            "subscriptionUpdatedAt": now,
-            "subscriptionUpdatedBy": str(admin["_id"])
-        }}
-    )
-    
-    # SSOT: Log to subscription history with ObjectId foreign keys
-    await db.subscriptionHistory.insert_one({
-        "user_id": ObjectId(user_id),  # SSOT: Store as ObjectId
-        "action": "activate",
-        "oldSubscription": old_subscription,
-        "newSubscription": subscription_doc,
-        "admin_id": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],  # SSOT: Store as ObjectId
-        "adminEmail": admin.get("email"),
-        "note": data.notes,
-        "createdAt": now
-    })
-    
-    # Get calculated fields
-    subscription_doc = calculate_subscription_fields(subscription_doc)
-    
-    logger.info(f"[SUBSCRIPTION] Admin {admin['email']} activated {data.plan_name} for user {user_id}")
-    
-    return {
-        "message": "Subscription activated successfully",
-        "subscription": {
-            "user_id": user_id,
+    try:
+        user_oid = ObjectId(user_id)
+        user = await db.users.find_one({"_id": user_oid})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        now = datetime.now(timezone.utc)
+        plan_config = SUBSCRIPTION_PLANS.get(data.plan_name, {})
+        
+        # Determine duration
+        if data.duration_days:
+            duration_days = data.duration_days
+        elif data.plan_name == "trial":
+            duration_days = 90
+        elif data.plan_name == "pro":
+            duration_days = 90  # Quarterly default
+        else:
+            duration_days = 0  # Free plan
+        
+        # Calculate endDate (backend is source of truth)
+        if data.plan_name == "free":
+            end_date = None
+        else:
+            end_date = data.start_date + timedelta(days=duration_days)
+        
+        # Get existing subscription for history - SSOT: userId is ObjectId
+        old_subscription = await db.subscriptions.find_one({"userId": user_oid})
+        
+        # Get admin ObjectId
+        admin_oid = ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"]
+        
+        # Build new subscription document - SSOT: All camelCase
+        subscription_doc = {
+            "userId": user_oid,  # SSOT: Store as ObjectId
             "planName": data.plan_name,
-            "startDate": data.start_date.isoformat(),
-            "endDate": end_date.isoformat() if end_date else None,
             "durationDays": duration_days,
-            "daysRemaining": subscription_doc["daysRemaining"],
-            "isExpiringSoon": subscription_doc["isExpiringSoon"],
-            "status": "active"
+            "startDate": data.start_date,
+            "endDate": end_date,
+            "status": "active",
+            "lastUpdatedBy": admin_oid,
+            "updatedAt": now,
+            "notes": data.notes or "",
+            "createdAt": old_subscription.get("createdAt", now) if old_subscription else now
         }
-    }
+        
+        # Upsert subscription - SSOT: Query by userId ObjectId
+        await db.subscriptions.update_one(
+            {"userId": user_oid},
+            {"$set": subscription_doc},
+            upsert=True
+        )
+        
+        # Also update legacy users.subscription for backward compatibility - SSOT: camelCase
+        legacy_subscription = {
+            "plan": data.plan_name,
+            "startDate": data.start_date,
+            "endDate": end_date,
+            "inquiryLimit": plan_config.get("inquiryLimit", 5),
+            "active": True
+        }
+        await db.users.update_one(
+            {"_id": user_oid},
+            {"$set": {
+                "subscription": legacy_subscription,
+                "subscriptionUpdatedAt": now,
+                "subscriptionUpdatedBy": str(admin_oid)
+            }}
+        )
+        
+        # SSOT: Log to subscription history with ObjectId foreign keys - camelCase
+        await db.subscriptionHistory.insert_one({
+            "userId": user_oid,  # SSOT: Store as ObjectId, camelCase
+            "action": "activate",
+            "oldSubscription": old_subscription,
+            "newSubscription": subscription_doc,
+            "adminId": admin_oid,  # SSOT: Store as ObjectId, camelCase
+            "adminEmail": admin.get("email"),
+            "note": data.notes,
+            "createdAt": now
+        })
+        
+        # Get calculated fields
+        subscription_doc = calculate_subscription_fields(subscription_doc)
+        
+        logger.info(f"[SUBSCRIPTION] Admin {admin['email']} activated {data.plan_name} for user {user_id}")
+        
+        return {
+            "message": "Subscription activated successfully",
+            "subscription": {
+                "userId": user_id,
+                "planName": data.plan_name,
+                "startDate": data.start_date.isoformat(),
+                "endDate": end_date.isoformat() if end_date else None,
+                "durationDays": duration_days,
+                "daysRemaining": subscription_doc["daysRemaining"],
+                "isExpiringSoon": subscription_doc["isExpiringSoon"],
+                "status": "active"
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail="Subscription activation failed")
 
 
 @api_router.post("/admin/subscriptions/extend/{user_id}")
