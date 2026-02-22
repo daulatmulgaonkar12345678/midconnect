@@ -10432,6 +10432,13 @@ async def startup_db_client():
         await safe_create_index(db.inquiries, [("buyerId", 1)], "inquiries_buyerId", background=True)
         await safe_create_index(db.inquiries, [("createdAt", -1)], "inquiries_created_at", background=True)
         
+        # NEW ARCHITECTURE: Index for unverified user cleanup
+        await safe_create_index(
+            db.users, 
+            [("isEmailVerified", 1), ("verificationDeadline", 1)], 
+            "users_verification_cleanup",
+            background=True
+        )
         
         logger.info("✅ Database indexes creation completed")
     
