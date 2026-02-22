@@ -2362,11 +2362,12 @@ async def complete_profile(
 @api_router.get("/auth/check-registration")
 async def check_registration_status(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
-    Check if Firebase user has completed MongoDB registration.
+    NEW ARCHITECTURE: Check user registration and profile completion status.
     
     Returns:
-    - needsRegistration: true if Firebase user exists but no MongoDB profile
-    - emailVerified: true if Firebase email is verified
+    - profileComplete: true if user has completed profile
+    - isEmailVerified: true if email is verified  
+    - needsVerification: true if email needs verification
     - user: MongoDB user profile if exists
     """
     if credentials is None:
@@ -2379,19 +2380,26 @@ async def check_registration_status(credentials: HTTPAuthorizationCredentials = 
         email = decoded_token.get('email', '')
         email_verified = decoded_token.get('email_verified', False)
         
-        # Check if MongoDB user exists
-        user = await db.users.find_one({"firebaseUid": firebase_uid})
+        # Get user (auto-created by get_current_user if not exists)
+        user = await get_current_user(credentials)
         
         if user:
+            profile_complete = user.get("profileComplete", False)
+            is_email_verified = user.get("isEmailVerified", False) or user.get("emailVerified", False)
+            
             return {
-                "needsRegistration": False,
-                "emailVerified": email_verified,
-                "user": serialize_doc(user)
+                "profileComplete": profile_complete,
+                "isEmailVerified": is_email_verified,
+                "needsVerification": not email_verified,
+                "needsProfileCompletion": not profile_complete and is_email_verified,
+                "user": user
             }
         else:
             return {
-                "needsRegistration": True,
-                "emailVerified": email_verified,
+                "profileComplete": False,
+                "isEmailVerified": email_verified,
+                "needsVerification": not email_verified,
+                "needsProfileCompletion": email_verified,
                 "email": email,
                 "firebaseUid": firebase_uid
             }
@@ -2401,6 +2409,65 @@ async def check_registration_status(credentials: HTTPAuthorizationCredentials = 
     except Exception as e:
         logger.error(f"Check registration error: {e}")
         raise HTTPException(status_code=500, detail="Failed to check registration status")
+
+
+@api_router.post("/auth/cleanup-for-reregister")
+@limiter.limit("3/minute")
+async def cleanup_for_reregister(request: Request, email: str = Body(..., embed=True)):
+    """
+    STEP 6 - HANDLE RE-REGISTRATION SAFELY
+    
+    Before creating a new Firebase user on signup, call this endpoint to:
+    - Check if unverified user exists
+    - Delete from both MongoDB and Firebase
+    - Allow clean re-registration
+    
+    This prevents:
+    - "Email already exists in Firebase but not in database" error
+    """
+    try:
+        # Find existing unverified user by email
+        mongo_user = await db.users.find_one({"email": email})
+        
+        if not mongo_user:
+            return {"message": "No existing user found", "cleaned": False}
+        
+        # Only cleanup if NOT email verified
+        is_verified = mongo_user.get("isEmailVerified", False) or mongo_user.get("emailVerified", False)
+        
+        if is_verified:
+            raise HTTPException(
+                status_code=400,
+                detail="Email already registered and verified. Please login instead."
+            )
+        
+        # User exists but not verified - clean up
+        firebase_uid = mongo_user.get("firebaseUid")
+        
+        # Delete from Firebase first
+        if firebase_uid and firebase_initialized:
+            try:
+                firebase_auth.delete_user(firebase_uid)
+                logger.info(f"🧹 Re-registration cleanup: Deleted Firebase user for {email}")
+            except Exception as fb_err:
+                # Firebase user might not exist or already deleted
+                logger.warning(f"⚠️ Could not delete Firebase user for {email}: {fb_err}")
+        
+        # Delete from MongoDB
+        await db.users.delete_one({"_id": mongo_user["_id"]})
+        logger.info(f"🧹 Re-registration cleanup: Deleted MongoDB user for {email}")
+        
+        return {
+            "message": "Previous unverified registration cleaned up",
+            "cleaned": True,
+            "email": email
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Cleanup for re-register error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cleanup for re-registration")
 
 
 @api_router.get("/users/me")
