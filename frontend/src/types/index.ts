@@ -201,8 +201,12 @@ export interface User {
   status?: 'pending' | 'active';
   verificationDeadline?: string;
   
-  // Nested GST object
+  // UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH
+  // gst: { number, status: "pending"|"verified"|"rejected", verified: boolean }
   gst?: UserGst;
+  
+  // Seller account status
+  sellerStatus?: 'active' | 'suspended' | 'banned';
   
   emailVerified: boolean;
   accountStatus: string;
@@ -218,7 +222,7 @@ export interface User {
   createdAt?: string;
   updatedAt?: string;
   
-  // Legacy flat fields for backwards compatibility
+  // Legacy flat fields for backwards compatibility (DEPRECATED)
   businessName?: string;
   phone?: string;
   city?: string;
