@@ -489,6 +489,33 @@ export const completeProfile = (token: string, data: ProfileCompleteData): Promi
     body: data,
   });
 
+// NEW ARCHITECTURE: Check registration status
+export interface CheckRegistrationResponse {
+  profileComplete: boolean;
+  isEmailVerified: boolean;
+  needsVerification: boolean;
+  needsProfileCompletion: boolean;
+  user?: UserProfile;
+  email?: string;
+  firebaseUid?: string;
+}
+
+export const checkRegistrationStatus = (token: string): Promise<CheckRegistrationResponse> =>
+  fetchWithAuth<CheckRegistrationResponse>('/auth/check-registration', token);
+
+// NEW ARCHITECTURE: Cleanup for re-registration
+export interface CleanupResponse {
+  message: string;
+  cleaned: boolean;
+  email?: string;
+}
+
+export const cleanupForReregister = (email: string): Promise<CleanupResponse> =>
+  fetchAPI<CleanupResponse>('/auth/cleanup-for-reregister', {
+    method: 'POST',
+    body: { email },
+  });
+
 // PHASE 7 - Get seller status
 export interface SellerStatus {
   isSeller: boolean;
