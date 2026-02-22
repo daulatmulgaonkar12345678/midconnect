@@ -454,10 +454,22 @@ function SellerDashboardContent() {
       {/* Footer */}
       <footer className="bg-white border-t mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center">
-          <p className="text-gray-600">India's trusted B2B marketplace</p>
+          <p className="text-gray-600">India&apos;s trusted B2B marketplace</p>
           <p className="text-gray-500 text-sm mt-1">Connecting verified buyers and sellers across industries.</p>
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function SellerDashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <SellerDashboardContent />
+    </Suspense>
   );
 }
