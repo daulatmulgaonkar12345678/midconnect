@@ -1400,6 +1400,24 @@ class ProfileCompleteCreate(BaseModel):
             raise ValueError('GST number is required for seller registration')
         return self
 
+class InitialRegisterCreate(BaseModel):
+    """
+    NEW ARCHITECTURE: Create MongoDB user immediately after Firebase signup
+    
+    Flow:
+    1. Firebase user created (frontend)
+    2. Frontend calls this endpoint immediately
+    3. MongoDB user created with isEmailVerified: false, status: pending
+    4. User verifies email
+    5. On next login, isEmailVerified syncs to true
+    6. User completes profile to access protected features
+    
+    SSOT: All fields use camelCase
+    """
+    # These are all we need - the rest comes from Firebase token
+    pass  # No additional fields needed - all from token
+
+
 class UserUpdate(BaseModel):
     """SSOT: All fields use camelCase"""
     businessName: Optional[str] = None
