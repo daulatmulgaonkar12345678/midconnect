@@ -10368,8 +10368,69 @@ async def startup_db_client():
         
         logger.info("✅ Database indexes creation completed")
     
+    async def cleanup_unverified_users_task():
+        """
+        STEP 5 - AUTO CLEANUP UNVERIFIED USERS
+        
+        Background task that runs every hour to clean up:
+        - MongoDB users with isEmailVerified=false and past verificationDeadline
+        - Corresponding Firebase users
+        
+        This ensures:
+        - No orphan Firebase accounts
+        - No Mongo-Firebase mismatch
+        - Clean re-registration
+        """
+        while True:
+            try:
+                # Wait 1 hour between runs
+                await asyncio.sleep(3600)  # 3600 seconds = 1 hour
+                
+                logger.info("🧹 Starting cleanup of unverified users...")
+                
+                now = datetime.now(timezone.utc)
+                
+                # Find expired unverified users
+                expired_users = db.users.find({
+                    "isEmailVerified": False,
+                    "verificationDeadline": {"$lt": now}
+                })
+                
+                deleted_count = 0
+                
+                async for user in expired_users:
+                    try:
+                        firebase_uid = user.get("firebaseUid")
+                        email = user.get("email", "unknown")
+                        
+                        # Delete from Firebase first
+                        if firebase_uid and firebase_initialized:
+                            try:
+                                firebase_auth.delete_user(firebase_uid)
+                                logger.info(f"🧹 Deleted Firebase user: {email}")
+                            except Exception as fb_err:
+                                # Firebase user might not exist
+                                logger.warning(f"⚠️ Could not delete Firebase user {email}: {fb_err}")
+                        
+                        # Delete from MongoDB
+                        await db.users.delete_one({"_id": user["_id"]})
+                        logger.info(f"🧹 Deleted expired unverified user: {email}")
+                        deleted_count += 1
+                        
+                    except Exception as user_err:
+                        logger.error(f"Error cleaning up user {user.get('email', 'unknown')}: {user_err}")
+                
+                if deleted_count > 0:
+                    logger.info(f"🧹 Cleanup complete: {deleted_count} unverified users removed")
+                    
+            except Exception as e:
+                logger.error(f"Error in cleanup_unverified_users_task: {e}")
+    
     # Schedule index creation to run in background, don't await it
     asyncio.create_task(create_indexes_in_background())
+    
+    # Schedule cleanup task to run in background
+    asyncio.create_task(cleanup_unverified_users_task())
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
