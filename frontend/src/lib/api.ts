@@ -927,7 +927,7 @@ export const deleteSellerListing = (token: string, listingId: string, hardDelete
 
 // Seller Subscription
 export const getSellerSubscription = (token: string): Promise<SellerSubscriptionStatus> =>
-  fetchWithAuth('/seller/subscription', token);
+  fetchWithAuth('/seller/subscription/status', token);
 
 export const getSellerSubscriptionStatus = (token: string): Promise<SellerSubscriptionStatus> =>
   fetchWithAuth('/seller/subscription/status', token);
