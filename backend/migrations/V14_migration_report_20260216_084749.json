@@ -1,0 +1,89 @@
+{
+  "timestamp": "2026-02-16T08:47:49.341623+00:00",
+  "phases": {
+    "users": {
+      "total_docs": 3,
+      "modified": 0,
+      "already_valid": 0,
+      "errors": 3,
+      "changes": [
+        {
+          "user_id": "6981ea50d0f7789d258ef2b8",
+          "changes": [
+            "Move businessName -> profile.businessName",
+            "Move phone -> profile.phone",
+            "Move city -> profile.city",
+            "Move state -> profile.state",
+            "Add 'admin' to roles"
+          ]
+        },
+        {
+          "user_id": "6981ea51d0f7789d258ef2ba",
+          "changes": [
+            "Move businessName -> profile.businessName",
+            "Move phone -> profile.phone",
+            "Move city -> profile.city",
+            "Move state -> profile.state",
+            "Add 'seller' to roles",
+            "Add 'admin' to roles"
+          ]
+        },
+        {
+          "user_id": "698e23ae2f939f1cffdeee6b",
+          "changes": [
+            "Move businessName -> profile.businessName",
+            "Move phone -> profile.phone",
+            "Move city -> profile.city",
+            "Move state -> profile.state",
+            "Move pincode -> profile.pincode",
+            "Move gstStatus -> gst.status",
+            "Add 'seller' to roles",
+            "Add 'admin' to roles"
+          ]
+        }
+      ]
+    },
+    "products": {
+      "total_docs": 23,
+      "modified": 0,
+      "already_valid": 22,
+      "errors": 1,
+      "changes": []
+    },
+    "seller_listings": {
+      "total_docs": 2,
+      "modified": 0,
+      "already_valid": 0,
+      "errors": 2
+    },
+    "inquiries": {
+      "total_docs": 1,
+      "modified": 0,
+      "already_valid": 0,
+      "errors": 1
+    },
+    "categories": {
+      "total_docs": 8,
+      "modified": 0,
+      "already_valid": 8,
+      "errors": 0
+    },
+    "subscriptions": {
+      "total_docs": 1,
+      "modified": 0,
+      "already_valid": 1,
+      "errors": 0
+    }
+  },
+  "total_modified": 0,
+  "total_errors": 7,
+  "errors": [
+    "User 6981ea50d0f7789d258ef2b8: Document failed validation, full error: {'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('6981ea50d0f7789d258ef2b8'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'additionalProperties', 'specifiedAs': {'additionalProperties': False}, 'additionalProperties': ['adminPromotedAt', 'subscriptionUpdatedAt', 'subscriptionUpdatedBy']}]}}}",
+    "User 6981ea51d0f7789d258ef2ba: Document failed validation, full error: {'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('6981ea51d0f7789d258ef2ba'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'additionalProperties', 'specifiedAs': {'additionalProperties': False}, 'additionalProperties': ['isSeller']}]}}}",
+    "User 698e23ae2f939f1cffdeee6b: Document failed validation, full error: {'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('698e23ae2f939f1cffdeee6b'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'additionalProperties', 'specifiedAs': {'additionalProperties': False}, 'additionalProperties': ['isSeller']}]}}}",
+    "Product 698f6bcf8efa58c55576849a: Document failed validation, full error: {'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('698f6bcf8efa58c55576849a'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'additionalProperties', 'specifiedAs': {'additionalProperties': False}, 'additionalProperties': ['status', 'slug', 'deletedAt', 'specTemplateId', 'deletedBy', 'normalizedSpecHash', 'normalizedSpecs']}]}}}",
+    "Listing 698c7bf1d9a28b092c778a0d: Document failed validation, full error: {'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('698c7bf1d9a28b092c778a0d'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'properties', 'propertiesNotSatisfied': [{'propertyName': 'pricing', 'details': [{'operatorName': 'bsonType', 'specifiedAs': {'bsonType': 'object'}, 'reason': 'type did not match', 'consideredValue': [{'quantityMin': 1, 'quantityMax': None, 'pricePerUnit': 100.0, 'currency': 'INR'}], 'consideredType': 'array'}]}]}, {'operatorName': 'additionalProperties', 'specifiedAs': {'additionalProperties': False}, 'additionalProperties': ['description', 'currency', 'leadTime', 'stock', 'publishedAt', 'categoryId', 'moq', 'sellerRole']}]}}}",
+    "Listing 698ff4b00ea3ceea810b22e3: Document failed validation, full error: {'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('698ff4b00ea3ceea810b22e3'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'properties', 'propertiesNotSatisfied': [{'propertyName': 'pricing', 'details': [{'operatorName': 'bsonType', 'specifiedAs': {'bsonType': 'object'}, 'reason': 'type did not match', 'consideredValue': [{'quantityMin': 1, 'quantityMax': 50, 'pricePerUnit': 1000.0, 'currency': 'INR'}, {'quantityMin': 51, 'quantityMax': None, 'pricePerUnit': 950.0, 'currency': 'INR'}], 'consideredType': 'array'}]}]}, {'operatorName': 'additionalProperties', 'specifiedAs': {'additionalProperties': False}, 'additionalProperties': ['stock', 'moq', 'maxCapacity', 'capacityTimeBasis', 'leadTime', 'currency', 'sellerRole', 'description', 'packagingSize', 'deliveryLocations', 'sellerNotes', 'lastStockUpdate', 'publishedAt', 'categoryId']}]}}}",
+    "Inquiry 698d8c83c324e8b63e284d0c: Document failed validation, full error: {'index': 0, 'code': 121, 'errmsg': 'Document failed validation', 'errInfo': {'failingDocumentId': ObjectId('698d8c83c324e8b63e284d0c'), 'details': {'operatorName': '$jsonSchema', 'schemaRulesNotSatisfied': [{'operatorName': 'properties', 'propertiesNotSatisfied': [{'propertyName': 'buyerInfo', 'details': [{'operatorName': 'properties', 'propertiesNotSatisfied': [{'propertyName': 'email', 'details': [{'operatorName': 'bsonType', 'specifiedAs': {'bsonType': 'string'}, 'reason': 'type did not match', 'consideredValue': None, 'consideredType': 'null'}]}]}]}]}, {'operatorName': 'additionalProperties', 'specifiedAs': {'additionalProperties': False}, 'additionalProperties': ['isActive', 'productName']}]}}}"
+  ]
+}

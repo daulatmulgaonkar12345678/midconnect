@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-02-14T10:21:05.129114+00:00",
+  "database": "b2b_marketplace",
+  "checks": {
+    "legacy_fields": {
+      "passed": true,
+      "errors": []
+    },
+    "objectid_types": {
+      "passed": true,
+      "error_count": 0
+    },
+    "schema_validator": {
+      "passed": true,
+      "errors": []
+    },
+    "indexes": {
+      "passed": true,
+      "errors": []
+    },
+    "referential_integrity": {
+      "passed": true,
+      "error_count": 0
+    }
+  },
+  "critical_failures": [],
+  "warnings": [],
+  "passed": true
+}

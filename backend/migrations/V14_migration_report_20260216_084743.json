@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-02-16T08:47:43.467622+00:00",
+  "phases": {
+    "users": {
+      "total_docs": 3,
+      "modified": 3,
+      "already_valid": 0,
+      "errors": 0,
+      "changes": [
+        {
+          "user_id": "6981ea50d0f7789d258ef2b8",
+          "changes": [
+            "Move businessName -> profile.businessName",
+            "Move phone -> profile.phone",
+            "Move city -> profile.city",
+            "Move state -> profile.state",
+            "Add 'admin' to roles"
+          ]
+        },
+        {
+          "user_id": "6981ea51d0f7789d258ef2ba",
+          "changes": [
+            "Move businessName -> profile.businessName",
+            "Move phone -> profile.phone",
+            "Move city -> profile.city",
+            "Move state -> profile.state",
+            "Add 'seller' to roles",
+            "Add 'admin' to roles"
+          ]
+        },
+        {
+          "user_id": "698e23ae2f939f1cffdeee6b",
+          "changes": [
+            "Move businessName -> profile.businessName",
+            "Move phone -> profile.phone",
+            "Move city -> profile.city",
+            "Move state -> profile.state",
+            "Move pincode -> profile.pincode",
+            "Move gstStatus -> gst.status",
+            "Add 'seller' to roles",
+            "Add 'admin' to roles"
+          ]
+        }
+      ]
+    },
+    "products": {
+      "total_docs": 23,
+      "modified": 1,
+      "already_valid": 22,
+      "errors": 0,
+      "changes": []
+    },
+    "seller_listings": {
+      "total_docs": 2,
+      "modified": 2,
+      "already_valid": 0,
+      "errors": 0
+    },
+    "inquiries": {
+      "total_docs": 1,
+      "modified": 1,
+      "already_valid": 0,
+      "errors": 0
+    },
+    "categories": {
+      "total_docs": 8,
+      "modified": 0,
+      "already_valid": 8,
+      "errors": 0
+    },
+    "subscriptions": {
+      "total_docs": 1,
+      "modified": 0,
+      "already_valid": 1,
+      "errors": 0
+    }
+  },
+  "total_modified": 7,
+  "total_errors": 0,
+  "errors": []
+}

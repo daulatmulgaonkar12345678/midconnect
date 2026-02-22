@@ -1,0 +1,1462 @@
+"""
+MIDCONNECT FINAL MARKETPLACE ARCHITECTURE
+==========================================
+4-Layer Model with strict camelCase:
+
+Category → SpecTemplate (SSOT) → Product → ProductVariant → SellerListing
+
+COLLECTIONS (STRICT - NO LEGACY):
+1. specTemplates - Structure SSOT (admin controlled)
+2. products - Admin catalog (links to specTemplateId)
+3. productVariants - Attribute combinations (system managed)
+4. sellerListings - Commercial offers (seller controlled)
+5. categories - Product categories
+6. inquiries - Buyer inquiries
+
+RULES:
+- All fields camelCase
+- All IDs stored as ObjectId
+- Seller links to variantId, NOT productId directly
+- Seller CANNOT store specifications in listing
+- Tier pricing via pricingTiers array
+- No legacy/hybrid mode
+- No snake_case fields
+- No fallback collections
+"""
+
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Dict, Any, Literal
+from datetime import datetime, timedelta, timezone
+from bson import ObjectId
+import logging
+
+logger = logging.getLogger("b2b_seller")
+
+# ==================== PYDANTIC MODELS (FINAL ARCHITECTURE) ====================
+
+class PricingTier(BaseModel):
+    """A single tier in quantity-based pricing"""
+    minQty: int = Field(..., ge=1, description="Minimum quantity for this tier")
+    maxQty: Optional[int] = Field(None, ge=1, description="Maximum quantity (null = unlimited)")
+    pricePerUnit: float = Field(..., gt=0, description="Price per unit in this tier")
+    
+    @field_validator('maxQty')
+    @classmethod
+    def validate_max_greater_than_min(cls, v, info):
+        if v is not None and 'minQty' in info.data:
+            if v < info.data['minQty']:
+                raise ValueError('maxQty must be >= minQty')
+        return v
+
+
+class ListingCreate(BaseModel):
+    """
+    Create a new seller listing - FINAL ARCHITECTURE
+    
+    Seller provides productId and attributes.
+    Backend creates/reuses variant automatically.
+    Listing stores variantId (NOT specifications).
+    """
+    productId: str = Field(..., description="Reference to products collection")
+    attributes: Dict[str, Any] = Field(..., description="Attribute values matching specTemplate")
+    
+    # Commercial data (seller controls)
+    sellerRole: str = Field(..., description="distributor, manufacturer, trader, dealer")
+    description: Optional[str] = Field(None, max_length=2000)
+    images: List[str] = Field(default_factory=list, max_length=5)
+    
+    # Availability - FLAT fields
+    moq: int = Field(default=1, ge=1, description="Minimum Order Quantity")
+    stock: int = Field(default=0, ge=0)
+    maxCapacity: Optional[int] = Field(None, ge=1)
+    leadTime: Optional[int] = Field(None, ge=0, description="Days to fulfill")
+    
+    # Pricing - tier based
+    currency: str = Field(default="INR", max_length=3)
+    pricingTiers: List[PricingTier] = Field(..., min_length=1, max_length=10)
+    
+    # Optional
+    datasheetUrl: Optional[str] = None
+
+
+class ListingUpdate(BaseModel):
+    """Update an existing listing - commercial data and attributes"""
+    description: Optional[str] = Field(None, max_length=2000)
+    images: Optional[List[str]] = Field(None, max_length=5)
+    datasheetUrl: Optional[str] = None
+    status: Optional[Literal["draft", "active", "paused", "archived"]] = None
+    
+    # Availability - FLAT fields
+    moq: Optional[int] = Field(None, ge=1)
+    stock: Optional[int] = Field(None, ge=0)
+    maxCapacity: Optional[int] = Field(None, ge=1)
+    leadTime: Optional[int] = Field(None, ge=0)
+    
+    # Attributes - creates new variant if changed
+    attributes: Optional[Dict[str, Any]] = Field(None, description="Attribute values - creates new variant if changed")
+
+
+class PricingUpdate(BaseModel):
+    """Update pricing tiers only"""
+    pricingTiers: List[PricingTier] = Field(..., min_length=1, max_length=10)
+
+
+class QuickPriceUpdate(BaseModel):
+    """Quick price update for daily changes"""
+    basePrice: float = Field(..., gt=0)
+    pricingTiers: Optional[List[PricingTier]] = Field(None, max_length=10)
+    validTill: Literal["today", "7_days", "15_days", "30_days", "custom"] = Field(default="7_days")
+    validTillDate: Optional[datetime] = None
+    stockStatus: Optional[Literal["in_stock", "limited", "made_to_order", "out_of_stock"]] = None
+    note: Optional[str] = Field(None, max_length=200)
+
+
+# ==================== INQUIRY MODELS ====================
+
+class InquiryAccept(BaseModel):
+    """Seller accepts an inquiry with a quote"""
+    quotedPrice: float = Field(..., gt=0)
+    moq: Optional[int] = Field(None, ge=1)
+    leadTimeDays: Optional[int] = Field(None, ge=0)
+    validityDays: int = Field(default=7, ge=1, le=90)
+    sellerNote: Optional[str] = Field(None, max_length=500)
+
+
+class InquiryReject(BaseModel):
+    """Seller rejects an inquiry"""
+    reason: Literal[
+        "price_too_low", "not_available", "moq_issue",
+        "location_not_serviceable", "capacity_full", "other"
+    ]
+    note: Optional[str] = Field(None, max_length=300)
+
+
+class InquiryReport(BaseModel):
+    """Report a problematic inquiry"""
+    reportType: Literal["spam", "unrealistic_quantity", "fake_inquiry", "abusive", "other"]
+    details: Optional[str] = Field(None, max_length=500)
+
+
+# ==================== ROUTER SETUP ====================
+
+def create_seller_router(db, require_auth, require_verified_seller):
+    """
+    Create seller product management router.
+    FINAL ARCHITECTURE: 4-layer model with variantId
+    STRICT: No legacy collections, no snake_case
+    """
+    router = APIRouter(prefix="/seller", tags=["Seller Products"])
+    
+    # Import variant service
+    from services.product_variant_service import ProductVariantService
+    variant_service = ProductVariantService(db)
+    
+    # ==================== HELPER FUNCTIONS ====================
+    
+    def serialize_mongo_doc(data):
+        """
+        ENTERPRISE STANDARD: Full MongoDB serialization.
+        Handles ALL BSON types safely:
+        - ObjectId → string
+        - datetime → ISO string  
+        - dict → recursive serialize
+        - list → recursive serialize
+        - None → None
+        - primitives → pass through
+        
+        RULE: Every API response MUST pass through this.
+        """
+        if data is None:
+            return None
+        
+        if isinstance(data, ObjectId):
+            return str(data)
+        
+        if isinstance(data, datetime):
+            return data.isoformat()
+        
+        if isinstance(data, list):
+            return [serialize_mongo_doc(item) for item in data]
+        
+        if isinstance(data, dict):
+            return {key: serialize_mongo_doc(value) for key, value in data.items()}
+        
+        # Handle any other non-JSON-serializable types
+        try:
+            # Check if it's JSON serializable
+            import json
+            json.dumps(data)
+            return data
+        except (TypeError, ValueError):
+            return str(data)
+    
+    def success_response(data: dict) -> dict:
+        """
+        ENTERPRISE STANDARD: Wrap all responses with serialization.
+        Use this for EVERY endpoint return.
+        """
+        return serialize_mongo_doc(data)
+    
+    def serialize_listing(listing: dict) -> dict:
+        """Serialize listing for API response - uses full serializer"""
+        return serialize_mongo_doc(listing)
+    
+    def serialize_objectids(doc: dict) -> dict:
+        """Convert all ObjectIds in a document to strings - uses full serializer"""
+        return serialize_mongo_doc(doc)
+    
+    async def get_product_with_template(product_id: str):
+        """Get product with its spec template - STRICT camelCase only"""
+        try:
+            product = await db.products.find_one({"_id": ObjectId(product_id)})
+        except Exception:
+            return None, None
+        
+        if not product:
+            return None, None
+        
+        # Get spec template - STRICT: specTemplateId only
+        template = None
+        template_id = product.get("specTemplateId")
+        
+        if template_id:
+            try:
+                template = await db.specTemplates.find_one({"_id": ObjectId(template_id)})
+            except:
+                pass
+        
+        return product, template
+    
+    # ==================== LISTING ENDPOINTS ====================
+    
+    @router.post("/listings")
+    async def create_listing(
+        data: ListingCreate,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """
+        Create a new seller listing.
+        
+        FINAL ARCHITECTURE FLOW:
+        1. Seller selects product
+        2. Seller fills attribute values
+        3. Backend validates against specTemplate
+        4. Backend creates/reuses productVariant
+        5. Create sellerListing with variantId
+        
+        Listing NEVER stores specifications directly.
+        """
+        seller_oid = ObjectId(seller["_id"])
+        
+        # Validate product
+        try:
+            product_oid = ObjectId(data.productId)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid productId format")
+        
+        product, template = await get_product_with_template(data.productId)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        if not product.get("isActive", True):
+            raise HTTPException(status_code=400, detail="Product is not active")
+        
+        # ENTERPRISE: Product must have specTemplateIds
+        template_ids = product.get("specTemplateIds", [])
+        if not template_ids:
+            raise HTTPException(
+                status_code=400, 
+                detail="Product has no specTemplateIds. Cannot create listing without attribute structure."
+            )
+        
+        # Create or reuse variant - ENTERPRISE: Uses product's specTemplateIds
+        try:
+            variant = await variant_service.get_or_create_variant(
+                product_id=data.productId,
+                attributes=data.attributes
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
+        variant_oid = ObjectId(variant["_id"])
+        category_oid = product.get("categoryId")
+        if isinstance(category_oid, str):
+            category_oid = ObjectId(category_oid)
+        
+        # Check for existing listing (seller + variant) - STRICT: sellerListings only
+        existing = await db.sellerListings.find_one({
+            "sellerId": seller_oid,
+            "variantId": variant_oid
+        })
+        
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="You already have a listing for this product variant. Edit your existing listing instead."
+            )
+        
+        # Build listing document - FINAL ARCHITECTURE
+        now = datetime.now(timezone.utc)
+        
+        pricing_tiers = []
+        for tier in data.pricingTiers:
+            pricing_tiers.append({
+                "minQty": tier.minQty,
+                "maxQty": tier.maxQty,
+                "pricePerUnit": tier.pricePerUnit
+            })
+        
+        listing_doc = {
+            "_id": ObjectId(),
+            # References - ALL ObjectId
+            "sellerId": seller_oid,
+            "productId": product_oid,
+            "variantId": variant_oid,
+            "categoryId": category_oid,
+            
+            # Status
+            "status": "draft",
+            "isActive": False,
+            
+            # Commercial data (seller controlled)
+            "sellerRole": data.sellerRole,
+            "description": data.description,
+            "images": data.images[:5],
+            
+            # Availability - FLAT fields
+            "moq": data.moq,
+            "stock": data.stock,
+            "maxCapacity": data.maxCapacity,
+            "leadTime": data.leadTime,
+            
+            # Pricing
+            "currency": data.currency.upper(),
+            "pricingTiers": pricing_tiers,
+            
+            # Optional
+            "datasheetUrl": data.datasheetUrl,
+            
+            # Timestamps
+            "createdAt": now,
+            "updatedAt": now,
+            "publishedAt": None,
+            
+            # Audit
+            "priceHistory": [],
+        }
+        
+        # STRICT: sellerListings only
+        await db.sellerListings.insert_one(listing_doc)
+        
+        logger.info(f"Seller {seller['email']} created listing for variant: {variant['_id']}")
+        
+        # ENTERPRISE STANDARD: Always serialize before return
+        return success_response({
+            "message": "Listing created successfully",
+            "listing": listing_doc,
+            "variant": variant,
+            "nextStep": "Update pricing and publish when ready"
+        })
+    
+    @router.get("/listings")
+    async def get_my_listings(
+        seller: dict = Depends(require_verified_seller),
+        status: Optional[str] = Query(None),
+        categoryId: Optional[str] = Query(None),
+        page: int = Query(1, ge=1),
+        limit: int = Query(20, ge=1, le=100)
+    ):
+        """Get all listings for the current seller"""
+        seller_oid = ObjectId(seller["_id"])
+        
+        query = {"sellerId": seller_oid}
+        if status:
+            query["status"] = status
+        if categoryId:
+            try:
+                query["categoryId"] = ObjectId(categoryId)
+            except:
+                pass
+        
+        skip = (page - 1) * limit
+        
+        # STRICT: sellerListings only
+        total = await db.sellerListings.count_documents(query)
+        
+        listings = await db.sellerListings.find(query)\
+            .sort("updatedAt", -1)\
+            .skip(skip)\
+            .limit(limit)\
+            .to_list(limit)
+        
+        # Enrich with product and variant info
+        enriched = []
+        for listing in listings:
+            item = dict(listing)
+            
+            # Get variant attributes
+            if listing.get("variantId"):
+                variant = await db.productVariants.find_one({"_id": listing["variantId"]})
+                if variant:
+                    item["attributes"] = variant.get("attributes", {})
+            
+            # Get product name - STRICT: products use 'name' field
+            if listing.get("productId"):
+                product = await db.products.find_one({"_id": listing["productId"]})
+                if product:
+                    item["productName"] = product.get("name")
+            
+            enriched.append(item)
+        
+        # ENTERPRISE STANDARD: Always serialize before return
+        return success_response({
+            "listings": enriched,
+            "total": total,
+            "page": page,
+            "pages": (total + limit - 1) // limit if total > 0 else 1
+        })
+    
+    @router.get("/listings/{listing_id}")
+    async def get_listing(
+        listing_id: str,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """
+        Get a specific listing with full details including:
+        - Variant attributes
+        - Product info
+        - Spec template schema (for dynamic form rendering)
+        
+        ENTERPRISE STANDARD:
+        - All responses serialized via success_response()
+        - Spec template fields included for dynamic UI
+        """
+        try:
+            seller_oid = ObjectId(seller["_id"]) if isinstance(seller["_id"], str) else seller["_id"]
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid seller ID")
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        # STRICT: sellerListings only, enforce seller ownership
+        listing = await db.sellerListings.find_one({
+            "_id": listing_oid,
+            "sellerId": seller_oid
+        })
+        
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Build response - will be fully serialized at the end
+        result = dict(listing)
+        spec_template = None
+        
+        # Get variant with attributes AND extract template info
+        if listing.get("variantId"):
+            try:
+                variant_id = listing["variantId"] if isinstance(listing["variantId"], ObjectId) else ObjectId(listing["variantId"])
+                variant = await db.productVariants.find_one({"_id": variant_id})
+                logger.info(f"[SPEC_TEMPLATE_DEBUG] Variant found: {variant is not None}, variantId: {variant_id}")
+                
+                if variant:
+                    result["variant"] = variant
+                    result["attributes"] = variant.get("attributes", {})
+                    
+                    # CRITICAL: Extract spec template from variant's templateVersions
+                    template_versions = variant.get("templateVersions", [])
+                    logger.info(f"[SPEC_TEMPLATE_DEBUG] templateVersions: {template_versions}")
+                    
+                    if template_versions:
+                        template_info = template_versions[0]
+                        template_id = template_info.get("templateId")
+                        template_version = template_info.get("version", 1)
+                        logger.info(f"[SPEC_TEMPLATE_DEBUG] Looking for template: {template_id} version {template_version}")
+                        
+                        if template_id:
+                            # Fetch the full spec template with field definitions
+                            template = await db.specTemplates.find_one({
+                                "_id": template_id if isinstance(template_id, ObjectId) else ObjectId(template_id)
+                            })
+                            logger.info(f"[SPEC_TEMPLATE_DEBUG] Template found: {template is not None}")
+                            
+                            if template:
+                                spec_template = {
+                                    "templateId": template["_id"],
+                                    "name": template.get("name", ""),
+                                    "version": template.get("version", template_version),
+                                    "fields": template.get("fields", []),
+                                    "description": template.get("description", "")
+                                }
+                                logger.info(f"[SPEC_TEMPLATE_DEBUG] Template loaded: {template['_id']}, fields count: {len(template.get('fields', []))}")
+            except Exception as e:
+                logger.warning(f"Error fetching variant/template: {e}", exc_info=True)
+        
+        # Get product info - STRICT: products use 'name' field
+        if listing.get("productId"):
+            try:
+                product_id = listing["productId"] if isinstance(listing["productId"], ObjectId) else ObjectId(listing["productId"])
+                product = await db.products.find_one({"_id": product_id})
+                if product:
+                    result["product"] = {
+                        "_id": product["_id"],
+                        "productName": product.get("name"),
+                        "categoryId": product.get("categoryId"),
+                        "specTemplateIds": product.get("specTemplateIds", [])
+                    }
+                    
+                    # If no template from variant, try to get from product
+                    if not spec_template and product.get("specTemplateIds"):
+                        template_id = product["specTemplateIds"][0]
+                        template = await db.specTemplates.find_one({
+                            "_id": template_id if isinstance(template_id, ObjectId) else ObjectId(template_id)
+                        })
+                        if template:
+                            spec_template = {
+                                "templateId": template["_id"],
+                                "name": template.get("name", ""),
+                                "version": template.get("version", 1),
+                                "fields": template.get("fields", []),
+                                "description": template.get("description", "")
+                            }
+            except Exception as e:
+                logger.warning(f"Error fetching product: {e}")
+        
+        # Build final response with spec template for dynamic form
+        response = {
+            "listing": result,
+            "specTemplate": spec_template  # This enables dynamic field rendering in frontend
+        }
+        
+        # ENTERPRISE STANDARD: Always serialize before return
+        return success_response(response)
+    
+    @router.patch("/listings/{listing_id}")
+    async def update_listing(
+        listing_id: str,
+        data: ListingUpdate,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """
+        Update a listing - commercial data AND attributes.
+        
+        FINAL ARCHITECTURE:
+        - Seller CANNOT change productId
+        - Seller CAN change attributes → creates NEW variant, updates variantId
+        - Seller CAN update: description, images, availability, status
+        
+        When attributes change:
+        1. Create new ProductVariant (or reuse existing with same attributes)
+        2. Update listing's variantId to point to new variant
+        3. The old variant remains (may be used by other listings)
+        """
+        seller_oid = ObjectId(seller["_id"])
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        # STRICT: sellerListings only
+        listing = await db.sellerListings.find_one({
+            "_id": listing_oid,
+            "sellerId": seller_oid
+        })
+        
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        now = datetime.now(timezone.utc)
+        update_data = {"updatedAt": now}
+        variant_changed = False
+        new_variant = None
+        
+        # Handle attributes change → create new variant
+        if data.attributes is not None:
+            # Get current variant to compare
+            current_variant = None
+            if listing.get("variantId"):
+                current_variant = await db.productVariants.find_one({"_id": listing["variantId"]})
+            
+            current_attrs = current_variant.get("attributes", {}) if current_variant else {}
+            
+            # Normalize new attributes for comparison
+            new_attrs = variant_service._normalize_attributes(data.attributes)
+            
+            # Check if attributes actually changed
+            if new_attrs != current_attrs:
+                # Get product and spec template for variant creation
+                product_id = str(listing["productId"])
+                product, template = await get_product_with_template(product_id)
+                
+                if not product:
+                    raise HTTPException(status_code=400, detail="Product not found for listing")
+                
+                # ENTERPRISE: Product must have specTemplateIds
+                template_ids = product.get("specTemplateIds", [])
+                if not template_ids:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot change attributes: product has no specTemplateIds"
+                    )
+                
+                # Create or reuse variant with new attributes - ENTERPRISE architecture
+                try:
+                    new_variant = await variant_service.get_or_create_variant(
+                        product_id=product_id,
+                        attributes=data.attributes
+                    )
+                    
+                    # Update variantId to point to new variant
+                    new_variant_oid = ObjectId(new_variant["_id"])
+                    update_data["variantId"] = new_variant_oid
+                    variant_changed = True
+                    
+                    logger.info(f"Seller {seller['email']} changed attributes, new variant: {new_variant['_id']}")
+                    
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=str(e))
+        
+        # Build update - commercial fields
+        if data.description is not None:
+            update_data["description"] = data.description
+        if data.images is not None:
+            update_data["images"] = data.images[:5]
+        if data.datasheetUrl is not None:
+            update_data["datasheetUrl"] = data.datasheetUrl
+        
+        # FLAT availability fields
+        if data.moq is not None:
+            update_data["moq"] = data.moq
+        if data.stock is not None:
+            update_data["stock"] = data.stock
+        if data.maxCapacity is not None:
+            update_data["maxCapacity"] = data.maxCapacity
+        if data.leadTime is not None:
+            update_data["leadTime"] = data.leadTime
+        
+        # Status handling
+        if data.status is not None:
+            if data.status == "active":
+                # Validate can activate
+                pricing_tiers = listing.get("pricingTiers", [])
+                moq = listing.get("moq") or data.moq
+                if not pricing_tiers:
+                    raise HTTPException(status_code=400, detail="Cannot activate without pricing tiers")
+                if not moq:
+                    raise HTTPException(status_code=400, detail="Cannot activate without MOQ")
+                if not listing.get("publishedAt"):
+                    update_data["publishedAt"] = now
+            update_data["status"] = data.status
+            update_data["isActive"] = data.status == "active"
+        
+        # STRICT: sellerListings only
+        await db.sellerListings.update_one(
+            {"_id": listing_oid},
+            {"$set": update_data}
+        )
+        
+        updated = await db.sellerListings.find_one({"_id": listing_oid})
+        
+        logger.info(f"Seller {seller['email']} updated listing: {listing_id}")
+        
+        response = {"message": "Listing updated", "listing": updated}
+        if variant_changed and new_variant:
+            response["variantChanged"] = True
+            response["newVariant"] = new_variant
+        
+        # ENTERPRISE STANDARD: Always serialize before return
+        return success_response(response)
+    
+    @router.patch("/listings/{listing_id}/pricing")
+    async def update_pricing(
+        listing_id: str,
+        data: PricingUpdate,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Update pricing tiers only - fast path for daily price changes"""
+        seller_oid = ObjectId(seller["_id"])
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        # STRICT: sellerListings only
+        listing = await db.sellerListings.find_one({
+            "_id": listing_oid,
+            "sellerId": seller_oid
+        })
+        
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        now = datetime.now(timezone.utc)
+        
+        # Convert pricing tiers
+        new_tiers = []
+        for tier in data.pricingTiers:
+            new_tiers.append({
+                "minQty": tier.minQty,
+                "maxQty": tier.maxQty,
+                "pricePerUnit": tier.pricePerUnit
+            })
+        
+        # Store in price history
+        old_tiers = listing.get("pricingTiers", [])
+        if old_tiers != new_tiers:
+            await db.sellerListings.update_one(
+                {"_id": listing_oid},
+                {"$push": {
+                    "priceHistory": {
+                        "timestamp": now,
+                        "oldTiers": old_tiers,
+                        "action": "pricingUpdate"
+                    }
+                }}
+            )
+        
+        # Update pricing
+        await db.sellerListings.update_one(
+            {"_id": listing_oid},
+            {"$set": {
+                "pricingTiers": new_tiers,
+                "updatedAt": now
+            }}
+        )
+        
+        logger.info(f"Seller {seller['email']} updated pricing: {listing_id}")
+        return {
+            "message": "Pricing updated",
+            "pricingTiers": new_tiers,
+            "lastUpdated": now.isoformat()
+        }
+    
+    @router.post("/listings/{listing_id}/publish")
+    async def publish_listing(
+        listing_id: str,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Publish a draft listing"""
+        seller_oid = ObjectId(seller["_id"])
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        # STRICT: sellerListings only
+        listing = await db.sellerListings.find_one({
+            "_id": listing_oid,
+            "sellerId": seller_oid
+        })
+        
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        if listing.get("status") == "active":
+            return {"message": "Listing already published", "status": "active"}
+        
+        # Validate for publish
+        if not listing.get("pricingTiers"):
+            raise HTTPException(status_code=400, detail="Cannot publish without pricing tiers")
+        if not listing.get("moq"):
+            raise HTTPException(status_code=400, detail="MOQ is required for publishing")
+        
+        now = datetime.now(timezone.utc)
+        await db.sellerListings.update_one(
+            {"_id": listing_oid},
+            {"$set": {
+                "status": "active",
+                "isActive": True,
+                "publishedAt": now,
+                "updatedAt": now
+            }}
+        )
+        
+        logger.info(f"Seller {seller['email']} published listing: {listing_id}")
+        return {"message": "Listing published", "status": "active", "publishedAt": now}
+    
+    @router.post("/listings/{listing_id}/pause")
+    async def pause_listing(
+        listing_id: str,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Pause a listing"""
+        seller_oid = ObjectId(seller["_id"])
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        # STRICT: sellerListings only
+        listing = await db.sellerListings.find_one({
+            "_id": listing_oid,
+            "sellerId": seller_oid
+        })
+        
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        now = datetime.now(timezone.utc)
+        await db.sellerListings.update_one(
+            {"_id": listing_oid},
+            {"$set": {
+                "status": "paused",
+                "isActive": False,
+                "updatedAt": now
+            }}
+        )
+        
+        return {"message": "Listing paused", "status": "paused"}
+    
+    @router.delete("/listings/{listing_id}")
+    async def delete_listing(
+        listing_id: str,
+        seller: dict = Depends(require_verified_seller),
+        hardDelete: bool = Query(False)
+    ):
+        """Archive or permanently delete a listing"""
+        seller_oid = ObjectId(seller["_id"])
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        # STRICT: sellerListings only
+        listing = await db.sellerListings.find_one({
+            "_id": listing_oid,
+            "sellerId": seller_oid
+        })
+        
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        if hardDelete:
+            await db.sellerListings.delete_one({"_id": listing_oid})
+            logger.info(f"Seller {seller['email']} deleted listing: {listing_id}")
+            return {"message": "Listing permanently deleted"}
+        else:
+            now = datetime.now(timezone.utc)
+            await db.sellerListings.update_one(
+                {"_id": listing_oid},
+                {"$set": {
+                    "status": "archived",
+                    "isActive": False,
+                    "updatedAt": now
+                }}
+            )
+            logger.info(f"Seller {seller['email']} archived listing: {listing_id}")
+            return {"message": "Listing archived", "status": "archived"}
+    
+    # ==================== DASHBOARD & STATS ====================
+    
+    @router.get("/dashboard")
+    async def get_seller_dashboard(
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Get seller dashboard summary"""
+        seller_oid = ObjectId(seller["_id"])
+        
+        # STRICT: sellerListings only
+        pipeline = [
+            {"$match": {"sellerId": seller_oid}},
+            {"$group": {
+                "_id": "$status",
+                "count": {"$sum": 1}
+            }}
+        ]
+        status_counts = await db.sellerListings.aggregate(pipeline).to_list(10)
+        
+        stats = {"total": 0, "draft": 0, "active": 0, "paused": 0, "archived": 0}
+        for item in status_counts:
+            status = item["_id"]
+            if status in stats:
+                stats[status] = item["count"]
+            stats["total"] += item["count"]
+        
+        # Recent listings
+        recent = await db.sellerListings.find({"sellerId": seller_oid})\
+            .sort("updatedAt", -1)\
+            .limit(5)\
+            .to_list(5)
+        
+        enriched_recent = []
+        for listing in recent:
+            item = serialize_listing(listing)
+            if listing.get("productId"):
+                product = await db.products.find_one({"_id": listing["productId"]})
+                if product:
+                    item["productName"] = product.get("name")
+            enriched_recent.append(item)
+        
+        return {
+            "stats": stats,
+            "recentListings": enriched_recent
+        }
+    
+    @router.get("/stats")
+    async def get_seller_stats(
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Get seller statistics"""
+        from server import get_subscription_status as get_sub_status, count_accepted_inquiries_this_month, SUBSCRIPTION_PLANS
+        
+        seller_oid = ObjectId(seller["_id"])
+        seller_id_str = str(seller["_id"])
+        
+        try:
+            # Count listings - STRICT: sellerListings only
+            total_listings = await db.sellerListings.count_documents({"sellerId": seller_oid})
+            
+            published_listings = await db.sellerListings.count_documents({
+                "sellerId": seller_oid,
+                "status": "active"
+            })
+            
+            # Inquiry stats - STRICT: sellerId only
+            total_enquiries = await db.inquiries.count_documents({"sellerId": seller_id_str})
+            
+            pending_enquiries = await db.inquiries.count_documents({
+                "sellerId": seller_id_str,
+                "status": "pending"
+            })
+            
+            this_month_enquiries = await count_accepted_inquiries_this_month(db, seller_id_str)
+            
+            # Subscription
+            subscription = seller.get("subscription", {"plan": "free"})
+            plan = subscription.get("plan", "free")
+            plan_config = SUBSCRIPTION_PLANS.get(plan, SUBSCRIPTION_PLANS["free"])
+            subscription_status = get_sub_status(subscription)
+            
+            inquiry_limit = plan_config.get("inquiryLimit", 5)
+            is_unlimited = subscription_status == "unlimited"
+            
+            return {
+                "totalListings": total_listings,
+                "publishedListings": published_listings,
+                "totalEnquiries": total_enquiries,
+                "pendingEnquiries": pending_enquiries,
+                "thisMonthEnquiries": this_month_enquiries,
+                "subscription": {
+                    "plan": plan,
+                    "isUnlimited": is_unlimited,
+                    "usageDisplay": f"{this_month_enquiries} / {'Unlimited' if is_unlimited else inquiry_limit}",
+                    "remaining": -1 if is_unlimited else max(0, inquiry_limit - this_month_enquiries)
+                }
+            }
+        except Exception as e:
+            logger.warning(f"Error fetching seller stats: {e}")
+            return {
+                "totalListings": 0,
+                "publishedListings": 0,
+                "totalEnquiries": 0,
+                "pendingEnquiries": 0,
+                "thisMonthEnquiries": 0,
+                "subscription": {
+                    "plan": "free",
+                    "isUnlimited": False,
+                    "usageDisplay": "0 / 5",
+                    "remaining": 5
+                }
+            }
+    
+    @router.get("/subscription")
+    async def get_subscription_status(
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Get seller's subscription status"""
+        from server import get_subscription_status as get_sub_status, count_accepted_inquiries_this_month, SUBSCRIPTION_PLANS
+        
+        seller_id_str = str(seller["_id"])
+        
+        subscription = seller.get("subscription", {"plan": "free"})
+        plan = subscription.get("plan", "free")
+        end_date = subscription.get("endDate")
+        start_date = subscription.get("startDate")
+        
+        plan_config = SUBSCRIPTION_PLANS.get(plan, SUBSCRIPTION_PLANS["free"])
+        
+        status = get_sub_status(subscription)
+        is_unlimited = status == "unlimited"
+        is_active = status != "expired"
+        
+        days_remaining = 0
+        if end_date:
+            if isinstance(end_date, str):
+                try:
+                    end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                except:
+                    end_date = None
+            if end_date and end_date.tzinfo is None:
+                end_date = end_date.replace(tzinfo=timezone.utc)
+            if end_date and end_date > datetime.now(timezone.utc):
+                days_remaining = (end_date - datetime.now(timezone.utc)).days
+        
+        accepted_this_month = await count_accepted_inquiries_this_month(db, seller_id_str)
+        
+        inquiry_limit = plan_config.get("inquiryLimit", 5)
+        
+        if is_unlimited:
+            limit_display = "Unlimited"
+            remaining = -1
+        else:
+            limit_display = str(inquiry_limit)
+            remaining = max(0, inquiry_limit - accepted_this_month)
+        
+        now = datetime.now(timezone.utc)
+        if now.month == 12:
+            next_reset = datetime(now.year + 1, 1, 1)
+        else:
+            next_reset = datetime(now.year, now.month + 1, 1)
+        
+        return {
+            "subscription": {
+                "status": plan,
+                "planName": plan_config.get("name", plan.title()),
+                "isActive": is_active,
+                "endDate": end_date.isoformat() if isinstance(end_date, datetime) else end_date,
+                "startDate": start_date.isoformat() if isinstance(start_date, datetime) else start_date,
+                "daysRemaining": days_remaining if is_active else 0
+            },
+            "usage": {
+                "acceptedThisMonth": accepted_this_month,
+                "monthlyLimit": inquiry_limit,
+                "limitDisplay": limit_display,
+                "remaining": remaining,
+                "resetsOn": next_reset.strftime("%Y-%m-%d")
+            },
+            "benefits": {
+                "unlimitedInquiries": is_unlimited,
+                "instantApproval": is_unlimited,
+                "prioritySupport": plan == "pro",
+                "verifiedBadge": plan in ["trial", "pro"],
+                "analyticsAccess": plan == "pro",
+                "autoWhatsappUnlock": plan == "pro"
+            },
+            "upgradeInfo": {
+                "showUpgrade": plan == "free",
+                "upgradeUrl": "/seller/subscription",
+                "priceQuarterly": SUBSCRIPTION_PLANS.get("pro", {}).get("priceQuarterly", 999)
+            }
+        }
+    
+    # ==================== PRODUCT VARIANTS HELPER ====================
+    
+    @router.get("/products/{product_id}/variants")
+    async def get_product_variants(
+        product_id: str,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """
+        Get all available variants for a product.
+        Useful for seller to see what attribute combinations exist.
+        """
+        variants = await variant_service.get_variants_for_product(product_id)
+        
+        return {
+            "productId": product_id,
+            "variants": variants,
+            "total": len(variants)
+        }
+    
+    @router.get("/categories/{category_id}/spec-template")
+    async def get_category_spec_template(
+        category_id: str,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Get the spec template for a category - STRICT camelCase"""
+        try:
+            category_oid = ObjectId(category_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid category ID")
+        
+        category = await db.categories.find_one({"_id": category_oid})
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        # STRICT: specTemplates only, camelCase fields only
+        template = await db.specTemplates.find_one({
+            "categoryId": category_oid,
+            "isActive": {"$ne": False}
+        })
+        
+        result = {
+            "category": {
+                "_id": str(category["_id"]),
+                "name": category.get("name"),
+                "settings": category.get("settings", {})
+            }
+        }
+        
+        if template:
+            result["specTemplate"] = serialize_objectids(template)
+        else:
+            result["specTemplate"] = None
+            result["note"] = "No spec template defined for this category."
+        
+        return result
+    
+    # ==================== INQUIRY MANAGEMENT ====================
+    
+    @router.get("/inquiries")
+    async def get_seller_inquiries(
+        seller: dict = Depends(require_verified_seller),
+        status: Optional[str] = Query(None),
+        page: int = Query(1, ge=1),
+        limit: int = Query(20, ge=1, le=100)
+    ):
+        """Get all inquiries for this seller - STRICT camelCase with safe error handling"""
+        import traceback
+        
+        try:
+            # CRITICAL: Query must use ObjectId, not string
+            seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
+            
+            # Build query - sellerId as ObjectId
+            query = {"sellerId": seller_oid}
+            if status and status in ["pending", "accepted", "rejected", "reported", "new"]:
+                query["status"] = status
+            
+            # Safe pagination
+            page = max(1, page)
+            limit = min(100, max(1, limit))
+            skip = (page - 1) * limit
+            
+            # Count and fetch
+            total = await db.inquiries.count_documents(query)
+            logger.info(f"[SELLER INQUIRIES] sellerId={seller_oid}, status={status}, total={total}")
+            
+            inquiries = await db.inquiries.find(query)\
+                .sort("createdAt", -1)\
+                .skip(skip)\
+                .limit(limit)\
+                .to_list(limit)
+            
+            result = []
+            for inq in inquiries:
+                try:
+                    # Serialize ObjectIds safely
+                    serialized = serialize_mongo_doc(inq)
+                    
+                    # Get listing info - SAFE handling
+                    listing_id = inq.get("listingId")
+                    if listing_id:
+                        try:
+                            lid = listing_id if isinstance(listing_id, ObjectId) else ObjectId(str(listing_id))
+                            listing = await db.sellerListings.find_one({"_id": lid})
+                            
+                            if listing:
+                                # Get product name
+                                product_id = listing.get("productId")
+                                if product_id:
+                                    pid = product_id if isinstance(product_id, ObjectId) else ObjectId(str(product_id))
+                                    product = await db.products.find_one({"_id": pid})
+                                    if product:
+                                        serialized["listingName"] = product.get("name", "")
+                                
+                                # Get first image safely
+                                images = listing.get("images") or []
+                                serialized["listingImage"] = images[0] if images else None
+                        except Exception as e:
+                            logger.warning(f"Error fetching listing {listing_id}: {e}")
+                    
+                    # Mask buyer info unless accepted
+                    if serialized.get("status") != "accepted":
+                        buyer_info = serialized.get("buyerInfo") or {}
+                        company_name = buyer_info.get("companyName") or ""
+                        
+                        serialized["buyerMasked"] = {
+                            "city": buyer_info.get("city"),
+                            "state": buyer_info.get("state"),
+                            "buyerType": serialized.get("buyerType"),
+                            "companyInitial": company_name[0].upper() if company_name else "?"
+                        }
+                        serialized.pop("buyerInfo", None)
+                    
+                    result.append(serialized)
+                except Exception as e:
+                    logger.warning(f"Error processing inquiry {inq.get('_id')}: {e}")
+                    continue
+            
+            return {
+                "inquiries": result,
+                "total": total,
+                "page": page,
+                "pages": max(1, (total + limit - 1) // limit)
+            }
+            
+        except Exception as e:
+            logger.error(f"SELLER INQUIRY ERROR: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise HTTPException(status_code=500, detail="Failed to fetch inquiries")
+    
+    @router.post("/inquiries/{inquiry_id}/accept")
+    async def accept_inquiry(
+        inquiry_id: str,
+        data: InquiryAccept,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """
+        Accept an inquiry with a quote and generate WhatsApp redirect link.
+        
+        Updates inquiry status to "accepted", stores seller response,
+        reveals buyer contact details, and returns WhatsApp link for direct contact.
+        """
+        from server import get_subscription_status, count_accepted_inquiries_this_month, check_can_accept_inquiry, SUBSCRIPTION_PLANS
+        import urllib.parse
+        
+        # CRITICAL FIX: Use ObjectId for all database operations
+        seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
+        seller_id_str = str(seller_oid)  # Keep string for subscription functions
+        
+        subscription = seller.get("subscription", {"plan": "free"})
+        accepted_count = await count_accepted_inquiries_this_month(db, seller_id_str)
+        can_accept = check_can_accept_inquiry(subscription, accepted_count)
+        
+        now = datetime.now(timezone.utc)
+
+        if now.month == 12:
+                next_reset = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+                next_reset = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+
+        remaining_days = (next_reset - now).days
+
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": can_accept["reason"],
+                "currentCount": can_accept["used"],
+                "limit": can_accept["limit"],
+                "resetsInDays": remaining_days,
+                "upgradeUrl": "/seller/subscription"
+            }
+        )        
+        try:
+            # CRITICAL FIX: Use ObjectId for sellerId matching
+            inquiry = await db.inquiries.find_one({
+                "_id": ObjectId(inquiry_id),
+                "sellerId": seller_oid  # ObjectId, not string
+            })
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid inquiry ID")
+        
+        if not inquiry:
+            raise HTTPException(status_code=404, detail="Inquiry not found")
+        
+        if inquiry.get("status") not in ["pending", "new"]:
+            raise HTTPException(status_code=400, detail=f"Cannot accept inquiry with status: {inquiry.get('status')}")
+        
+        now = datetime.now(timezone.utc)
+        validity_date = now + timedelta(days=data.validityDays)
+        
+        # Update inquiry with sellerResponse format
+        await db.inquiries.update_one(
+            {"_id": ObjectId(inquiry_id)},
+            {"$set": {
+                "status": "accepted",
+                "sellerResponse": {
+                    "quotedPrice": data.quotedPrice,
+                    "validTill": validity_date,
+                    "sellerNote": data.sellerNote
+                },
+                # Keep legacy quote field for backwards compatibility
+                "quote": {
+                    "price": data.quotedPrice,
+                    "moq": data.moq,
+                    "leadTimeDays": data.leadTimeDays,
+                    "validTill": validity_date,
+                    "sellerNote": data.sellerNote,
+                    "quotedAt": now
+                },
+                "acceptedAt": now,
+                "updatedAt": now
+            }}
+        )
+        
+        # Get updated inquiry and buyer info
+        updated_inquiry = await db.inquiries.find_one({"_id": ObjectId(inquiry_id)})
+        buyer_info = updated_inquiry.get("buyerInfo", {})
+        
+        # Get product name from inquiry or listing
+        product_name = updated_inquiry.get("productName", "")
+        if not product_name:
+            listing_id = updated_inquiry.get("listingId")
+            if listing_id:
+                try:
+                    lid = listing_id if isinstance(listing_id, ObjectId) else ObjectId(str(listing_id))
+                    listing = await db.sellerListings.find_one({"_id": lid})
+                    if listing:
+                        product_id = listing.get("productId")
+                        if product_id:
+                            pid = product_id if isinstance(product_id, ObjectId) else ObjectId(str(product_id))
+                            product = await db.products.find_one({"_id": pid})
+                            if product:
+                                product_name = product.get("name", "your product")
+                except Exception as e:
+                    logger.warning(f"Error fetching product name: {e}")
+        
+        if not product_name:
+            product_name = "your product"
+        
+        # Get seller business name from profile
+        seller_name = seller.get("profile", {}).get("businessName") or seller.get("businessName") or "B2B Market Seller"
+        
+        # Get buyer details
+        buyer_name = buyer_info.get("name") or buyer_info.get("companyName") or "Customer"
+        buyer_phone = buyer_info.get("phone", "")
+        quantity = updated_inquiry.get("quantity", 1)
+        
+        # Format validity date as "18 Feb 2026"
+        formatted_date = validity_date.strftime("%d %b %Y")
+        
+        # Generate WhatsApp message
+        whatsapp_message = f"""Hello {buyer_name},
+
+This is {seller_name} from B2B Market.
+
+We received your inquiry for {product_name}, Qty {quantity}.
+
+Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
+        
+        # Add seller note if provided
+        if data.sellerNote:
+            whatsapp_message += f"\n\n{data.sellerNote}"
+        
+        # Generate WhatsApp link if buyer phone exists
+        whatsapp_link = None
+        if buyer_phone:
+            # Clean phone number - remove spaces, dashes, and ensure country code
+            clean_phone = buyer_phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+            # Add India country code if not present
+            if not clean_phone.startswith("+"):
+                if clean_phone.startswith("91"):
+                    clean_phone = "+" + clean_phone
+                else:
+                    clean_phone = "+91" + clean_phone
+            
+            # URL encode the message
+            encoded_message = urllib.parse.quote(whatsapp_message)
+            whatsapp_link = f"https://wa.me/{clean_phone.replace('+', '')}?text={encoded_message}"
+        
+        return {
+            "success": True,
+            "message": "Inquiry accepted successfully",
+            "inquiryId": inquiry_id,
+            "whatsappLink": whatsapp_link,
+            "buyerContact": {
+                "name": buyer_info.get("name"),
+                "phone": buyer_info.get("phone"),
+                "email": buyer_info.get("email"),
+                "company": buyer_info.get("companyName")
+            },
+            "quote": {
+                "price": data.quotedPrice,
+                "validTill": validity_date.isoformat()
+            },
+            "subscriptionUsage": {
+                "used": accepted_count + 1,
+                "limit": can_accept["limit"],
+                "remaining": (can_accept["limit"] - accepted_count - 1) if can_accept["limit"] > 0 else -1
+            }
+        }
+    
+    @router.post("/inquiries/{inquiry_id}/reject")
+    async def reject_inquiry(
+        inquiry_id: str,
+        data: InquiryReject,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Reject an inquiry"""
+        # CRITICAL FIX: Use ObjectId for sellerId matching
+        seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
+        
+        try:
+            inquiry = await db.inquiries.find_one({
+                "_id": ObjectId(inquiry_id),
+                "sellerId": seller_oid  # ObjectId, not string
+            })
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid inquiry ID")
+        
+        if not inquiry:
+            raise HTTPException(status_code=404, detail="Inquiry not found")
+        
+        if inquiry.get("status") not in ["pending", "new"]:
+            raise HTTPException(status_code=400, detail=f"Cannot reject inquiry with status: {inquiry.get('status')}")
+        
+        now = datetime.now(timezone.utc)
+        
+        await db.inquiries.update_one(
+            {"_id": ObjectId(inquiry_id)},
+            {"$set": {
+                "status": "rejected",
+                "rejection": {
+                    "reason": data.reason,
+                    "note": data.note,
+                    "rejectedAt": now
+                },
+                "updatedAt": now
+            }}
+        )
+        
+        return {"message": "Inquiry rejected", "inquiryId": inquiry_id, "reason": data.reason}
+    
+    @router.post("/inquiries/{inquiry_id}/report")
+    async def report_inquiry(
+        inquiry_id: str,
+        data: InquiryReport,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Report a problematic inquiry"""
+        # CRITICAL FIX: Use ObjectId for sellerId matching
+        seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
+        seller_id_str = str(seller_oid)
+        
+        try:
+            inquiry = await db.inquiries.find_one({
+                "_id": ObjectId(inquiry_id),
+                "sellerId": seller_oid  # ObjectId, not string
+            })
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid inquiry ID")
+        
+        if not inquiry:
+            raise HTTPException(status_code=404, detail="Inquiry not found")
+        
+        now = datetime.now(timezone.utc)
+        
+        await db.inquiries.update_one(
+            {"_id": ObjectId(inquiry_id)},
+            {"$set": {
+                "status": "reported",
+                "report": {
+                    "type": data.reportType,
+                    "details": data.details,
+                    "reportedAt": now,
+                    "reportedBy": seller_id_str
+                },
+                "updatedAt": now
+            }}
+        )
+        
+        await db.inquiryReports.insert_one({
+            "inquiryId": inquiry_id,
+            "sellerId": seller_id_str,
+            "buyerId": inquiry.get("buyerId"),
+            "reportType": data.reportType,
+            "details": data.details,
+            "status": "pendingReview",
+            "createdAt": now
+        })
+        
+        return {"message": "Inquiry reported", "inquiryId": inquiry_id, "reportType": data.reportType}
+    
+    return router

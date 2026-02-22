@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-02-14T10:21:05.903333+00:00",
+  "database": "b2b_marketplace",
+  "checks": {
+    "legacy_fields": {
+      "passed": true,
+      "counts": {
+        "seller_id": 0,
+        "product_id": 0,
+        "category_id": 0,
+        "product_name": 0,
+        "category_name": 0
+      }
+    },
+    "field_types": {
+      "passed": true,
+      "total_docs": 2,
+      "error_count": 0,
+      "sample_errors": []
+    },
+    "referential_integrity": {
+      "passed": true,
+      "error_count": 0,
+      "sample_errors": []
+    },
+    "indexes": {
+      "passed": true,
+      "existing": [
+        "_id_",
+        "unique_product_seller",
+        "status_1_productId_1",
+        "sellerId_1",
+        "productId_1",
+        "categoryId_1",
+        "status_1",
+        "is_active_1"
+      ],
+      "missing": [],
+      "unique_index_exists": true
+    },
+    "statistics": {
+      "total": 2,
+      "active": 1,
+      "inactive": 1,
+      "draft": 0,
+      "unique_sellers": 2,
+      "unique_products": 1
+    }
+  },
+  "passed": true,
+  "critical_failures": []
+}

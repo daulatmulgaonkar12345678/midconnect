@@ -1,0 +1,94 @@
+{
+  "timestamp": "2026-02-16T04:58:05.605441+00:00",
+  "dry_run": true,
+  "validation_reports": {
+    "categories": {
+      "collection": "categories",
+      "total_docs": 8,
+      "valid_docs": 8,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "category_requests": {
+      "collection": "category_requests",
+      "total_docs": 0,
+      "valid_docs": 0,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "inquiries": {
+      "collection": "inquiries",
+      "total_docs": 1,
+      "valid_docs": 1,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "inquiry_reports": {
+      "collection": "inquiry_reports",
+      "total_docs": 0,
+      "valid_docs": 0,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "product_requests": {
+      "collection": "product_requests",
+      "total_docs": 0,
+      "valid_docs": 0,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "products": {
+      "collection": "products",
+      "total_docs": 23,
+      "valid_docs": 23,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "seller_listings": {
+      "collection": "seller_listings",
+      "total_docs": 2,
+      "valid_docs": 2,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "spec_templates": {
+      "collection": "spec_templates",
+      "total_docs": 0,
+      "valid_docs": 0,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "subscription_changes": {
+      "collection": "subscription_changes",
+      "total_docs": 0,
+      "valid_docs": 0,
+      "invalid_docs": 0,
+      "issues": []
+    },
+    "subscriptions": {
+      "collection": "subscriptions",
+      "total_docs": 1,
+      "valid_docs": 0,
+      "invalid_docs": 1,
+      "issues": [
+        {
+          "doc_id": "698e23b62f939f1cffdeee6c",
+          "problems": [
+            "Missing required field: planName",
+            "Legacy snake_case field found: plan_name",
+            "Legacy snake_case field found: duration_days"
+          ]
+        }
+      ]
+    },
+    "users": {
+      "collection": "users",
+      "total_docs": 3,
+      "valid_docs": 3,
+      "invalid_docs": 0,
+      "issues": []
+    }
+  },
+  "upgrades_applied": {},
+  "errors": []
+}

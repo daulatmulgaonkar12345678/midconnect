@@ -1,0 +1,18 @@
+{
+  "migration": "V10_full_camelcase_enforcement",
+  "timestamp": "2026-02-15T15:04:06.681642+00:00",
+  "database": "b2b_marketplace",
+  "success": false,
+  "stats": {
+    "collections_processed": 5,
+    "documents_scanned": 37,
+    "documents_updated": 36,
+    "fields_renamed": 133,
+    "fields_removed": 133,
+    "ids_converted": 0,
+    "isActive_synced": 2,
+    "errors": [
+      "products/6981a9a74108b0cbd93aa631: E11000 duplicate key error collection: b2b_marketplace.products index: unique_product_identity dup key: { name: \"Three Phase AC Motor\", category_id: null, spec_template_id: null, normalized_spec_hash: null }, full error: {'index': 0, 'code': 11000, 'errmsg': 'E11000 duplicate key error collection: b2b_marketplace.products index: unique_product_identity dup key: { name: \"Three Phase AC Motor\", category_id: null, spec_template_id: null, normalized_spec_hash: null }', 'keyPattern': {'name': 1, 'category_id': 1, 'spec_template_id': 1, 'normalized_spec_hash': 1}, 'keyValue': {'name': 'Three Phase AC Motor', 'category_id': None, 'spec_template_id': None, 'normalized_spec_hash': None}}"
+    ]
+  }
+}

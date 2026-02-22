@@ -1,0 +1,1605 @@
+{
+  "migration_timestamp": "2026-02-14T19:53:08.492442+00:00",
+  "stats": {
+    "categories": {
+      "renamed": 7,
+      "converted": 0,
+      "errors": 0
+    },
+    "products": {
+      "renamed": 68,
+      "converted": 1,
+      "errors": 0
+    },
+    "inquiries": {
+      "renamed": 5,
+      "converted": 0,
+      "errors": 0
+    },
+    "subscriptions": {
+      "renamed": 5,
+      "converted": 0,
+      "errors": 0
+    },
+    "subscription_history": {
+      "renamed": 116,
+      "converted": 16,
+      "errors": 0
+    },
+    "users": {
+      "renamed": 6,
+      "converted": 0,
+      "errors": 0
+    }
+  },
+  "logs": [
+    {
+      "timestamp": "2026-02-14T19:53:08.484982+00:00",
+      "collection": "categories",
+      "doc_id": "6981a9a74108b0cbd93aa630",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.485023+00:00",
+      "collection": "categories",
+      "doc_id": "6981a9a74108b0cbd93aa636",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.485032+00:00",
+      "collection": "categories",
+      "doc_id": "6981a9a74108b0cbd93aa63b",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.485044+00:00",
+      "collection": "categories",
+      "doc_id": "6981a9a74108b0cbd93aa63e",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.485052+00:00",
+      "collection": "categories",
+      "doc_id": "6981a9a74108b0cbd93aa642",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.485060+00:00",
+      "collection": "categories",
+      "doc_id": "6981a9a74108b0cbd93aa645",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.485068+00:00",
+      "collection": "categories",
+      "doc_id": "6981a9a74108b0cbd93aa648",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486551+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa631",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486572+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa631",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486578+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa631",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486591+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa632",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486596+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa632",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486601+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa632",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486609+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa633",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486614+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa633",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486618+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa633",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486625+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa634",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486629+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa634",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486633+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa634",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486639+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa635",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486644+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa635",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486648+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa635",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486654+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa637",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486658+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa637",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486662+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa637",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486669+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa638",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486673+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa638",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486676+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa638",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486683+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa639",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486687+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa639",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486691+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa639",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486697+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63a",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486701+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63a",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486706+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63a",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486712+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63c",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486716+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63c",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486720+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63c",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486727+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63d",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486731+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63d",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486735+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63d",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486741+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63f",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486746+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63f",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486750+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa63f",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486756+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa640",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486760+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa640",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486764+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa640",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486771+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa641",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486775+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa641",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486779+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa641",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486785+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa643",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486789+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa643",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486793+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa643",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486800+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa644",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486804+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa644",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486808+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa644",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486835+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa646",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486842+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa646",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486851+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa646",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486858+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa647",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486862+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa647",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486866+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa647",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486873+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa649",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486877+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa649",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486881+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa649",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486887+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa64a",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486892+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa64a",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486896+00:00",
+      "collection": "products",
+      "doc_id": "6981a9a74108b0cbd93aa64a",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486902+00:00",
+      "collection": "products",
+      "doc_id": "698f6b81b10ca8fff9d2b77e",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486907+00:00",
+      "collection": "products",
+      "doc_id": "698f6b81b10ca8fff9d2b77e",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486910+00:00",
+      "collection": "products",
+      "doc_id": "698f6b81b10ca8fff9d2b77e",
+      "operation": "RENAME",
+      "details": "deleted_at -> deletedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486916+00:00",
+      "collection": "products",
+      "doc_id": "698f6bcf8efa58c55576849a",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486920+00:00",
+      "collection": "products",
+      "doc_id": "698f6bcf8efa58c55576849a",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486924+00:00",
+      "collection": "products",
+      "doc_id": "698f6bcf8efa58c55576849a",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486928+00:00",
+      "collection": "products",
+      "doc_id": "698f6bcf8efa58c55576849a",
+      "operation": "RENAME",
+      "details": "deleted_at -> deletedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486938+00:00",
+      "collection": "products",
+      "doc_id": "698f6bcf8efa58c55576849a",
+      "operation": "CONVERT",
+      "details": "categoryId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.486944+00:00",
+      "collection": "products",
+      "doc_id": "6990cce2e22f1faa5b38c2ac",
+      "operation": "RENAME",
+      "details": "category_id -> categoryId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.488151+00:00",
+      "collection": "inquiries",
+      "doc_id": "698d8c83c324e8b63e284d0c",
+      "operation": "RENAME",
+      "details": "seller_id -> sellerId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.488170+00:00",
+      "collection": "inquiries",
+      "doc_id": "698d8c83c324e8b63e284d0c",
+      "operation": "RENAME",
+      "details": "buyer_id -> buyerId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.488176+00:00",
+      "collection": "inquiries",
+      "doc_id": "698d8c83c324e8b63e284d0c",
+      "operation": "RENAME",
+      "details": "listing_id -> listingId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.488180+00:00",
+      "collection": "inquiries",
+      "doc_id": "698d8c83c324e8b63e284d0c",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.488185+00:00",
+      "collection": "inquiries",
+      "doc_id": "698d8c83c324e8b63e284d0c",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.489194+00:00",
+      "collection": "subscriptions",
+      "doc_id": "698e23b62f939f1cffdeee6c",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.489213+00:00",
+      "collection": "subscriptions",
+      "doc_id": "698e23b62f939f1cffdeee6c",
+      "operation": "RENAME",
+      "details": "start_date -> startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.489219+00:00",
+      "collection": "subscriptions",
+      "doc_id": "698e23b62f939f1cffdeee6c",
+      "operation": "RENAME",
+      "details": "end_date -> endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.489224+00:00",
+      "collection": "subscriptions",
+      "doc_id": "698e23b62f939f1cffdeee6c",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.489229+00:00",
+      "collection": "subscriptions",
+      "doc_id": "698e23b62f939f1cffdeee6c",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490351+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490373+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490383+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490389+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490394+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490398+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490403+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490414+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490420+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490426+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490430+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490434+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490447+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490453+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23bc2f939f1cffdeee6d",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490463+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23c12f939f1cffdeee6e",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490467+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23c12f939f1cffdeee6e",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490474+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23c52f939f1cffdeee6f",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490479+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23c52f939f1cffdeee6f",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490485+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23ca2f939f1cffdeee70",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490490+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23ca2f939f1cffdeee70",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490495+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490500+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490505+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490510+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490514+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490518+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490522+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490527+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490532+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490536+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490540+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490545+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490550+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490555+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e1",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490561+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490566+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490570+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490575+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490579+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490583+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490587+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490592+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490597+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490601+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490605+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490611+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490617+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490623+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e2",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490630+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e3",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490635+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e3",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490640+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490645+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490649+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490653+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490658+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490661+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490666+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490670+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490675+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490679+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490683+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490687+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490694+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490700+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e4",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490706+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e5",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490710+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e5",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490716+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490720+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490724+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490731+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490736+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490740+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490744+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490749+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490753+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490758+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490767+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490771+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490776+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490781+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e6",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490787+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e7",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490791+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e7",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490797+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e8",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490801+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e23fc2a689322545d33e8",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490807+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490811+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490838+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490842+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490846+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490851+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490854+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490859+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490863+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490867+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490870+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490874+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490880+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490884+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e283d33ca6385bf316a09",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490890+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490894+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490898+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490902+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490906+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490910+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490913+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490918+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490921+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490925+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490930+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490934+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490938+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490943+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e284133ca6385bf316a0a",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490948+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490952+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490963+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "old_subscription.user_id -> old_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490967+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "old_subscription.start_date -> old_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490971+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "old_subscription.end_date -> old_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490975+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "old_subscription.created_at -> old_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490979+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "old_subscription.updated_at -> old_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490983+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "new_subscription.user_id -> new_subscription.userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490988+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "new_subscription.start_date -> new_subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490993+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "new_subscription.end_date -> new_subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.490996+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "new_subscription.created_at -> new_subscription.createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491000+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "RENAME",
+      "details": "new_subscription.updated_at -> new_subscription.updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491006+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "CONVERT",
+      "details": "old_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491011+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e285f9784a87db4c48728",
+      "operation": "CONVERT",
+      "details": "new_subscription.userId: string -> ObjectId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491017+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e28669784a87db4c48729",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491020+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e28669784a87db4c48729",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491026+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e28669784a87db4c4872a",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491030+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e28669784a87db4c4872a",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491035+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e28669784a87db4c4872b",
+      "operation": "RENAME",
+      "details": "user_id -> userId"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.491039+00:00",
+      "collection": "subscription_history",
+      "doc_id": "698e28669784a87db4c4872b",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.492356+00:00",
+      "collection": "users",
+      "doc_id": "6981ea50d0f7789d258ef2b8",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.492374+00:00",
+      "collection": "users",
+      "doc_id": "6981ea50d0f7789d258ef2b8",
+      "operation": "RENAME",
+      "details": "updated_at -> updatedAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.492382+00:00",
+      "collection": "users",
+      "doc_id": "6981ea50d0f7789d258ef2b8",
+      "operation": "RENAME",
+      "details": "subscription.start_date -> subscription.startDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.492387+00:00",
+      "collection": "users",
+      "doc_id": "6981ea50d0f7789d258ef2b8",
+      "operation": "RENAME",
+      "details": "subscription.end_date -> subscription.endDate"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.492397+00:00",
+      "collection": "users",
+      "doc_id": "6981ea51d0f7789d258ef2ba",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    },
+    {
+      "timestamp": "2026-02-14T19:53:08.492403+00:00",
+      "collection": "users",
+      "doc_id": "698e23ae2f939f1cffdeee6b",
+      "operation": "RENAME",
+      "details": "created_at -> createdAt"
+    }
+  ]
+}

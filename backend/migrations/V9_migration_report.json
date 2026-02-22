@@ -1,0 +1,17 @@
+{
+  "migration": "V9_data_standardization",
+  "timestamp": "2026-02-15T13:13:27.674273+00:00",
+  "database": "b2b_marketplace",
+  "success": true,
+  "stats": {
+    "collections_processed": 5,
+    "documents_scanned": 37,
+    "documents_updated": 29,
+    "legacy_fields_removed": 0,
+    "ids_converted": 0,
+    "units_normalized": 18,
+    "active_to_isActive": 28,
+    "timestamps_added": 1,
+    "errors": []
+  }
+}

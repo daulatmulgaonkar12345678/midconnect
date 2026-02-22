@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-02-14T19:57:42.270620",
+  "results": [
+    {
+      "collection": "products",
+      "success": true,
+      "message": "Updated validator for 'products'"
+    },
+    {
+      "collection": "inquiries",
+      "success": true,
+      "message": "Updated validator for 'inquiries'"
+    },
+    {
+      "collection": "subscriptions",
+      "success": true,
+      "message": "Updated validator for 'subscriptions'"
+    },
+    {
+      "collection": "categories",
+      "success": true,
+      "message": "Updated validator for 'categories'"
+    }
+  ],
+  "summary": {
+    "successful": 4,
+    "failed": 0
+  }
+}

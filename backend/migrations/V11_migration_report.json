@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-02-15T18:03:48.020530+00:00",
+  "collections_processed": [
+    "categories",
+    "category_requests",
+    "inquiries",
+    "inquiry_reports",
+    "product_requests",
+    "products",
+    "seller_listings",
+    "spec_templates",
+    "subscription_changes",
+    "subscriptions",
+    "users"
+  ],
+  "field_renames": {
+    "seller_listings": {
+      "pricingTiers": "pricing"
+    },
+    "users": {
+      "firebase_uid": "firebaseUid",
+      "is_admin": "isAdmin",
+      "email_verified": "emailVerified",
+      "is_active": "isActive"
+    }
+  },
+  "validators_applied": {
+    "categories": "success",
+    "category_requests": "success",
+    "inquiries": "success",
+    "inquiry_reports": "success",
+    "product_requests": "success",
+    "products": "success",
+    "seller_listings": "success",
+    "spec_templates": "success",
+    "subscription_changes": "success",
+    "subscriptions": "success",
+    "users": "success"
+  },
+  "errors": []
+}
