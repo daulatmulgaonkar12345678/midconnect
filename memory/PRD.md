@@ -13,7 +13,7 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
-## UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH (Feb 22, 2026)
+## UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH
 
 ### Schema Structure
 ```json
@@ -26,50 +26,74 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 }
 ```
 
-### Removed Legacy Fields
-- ❌ `gstNumber` (flat field)
-- ❌ `gstStatus` (flat field)
-- ❌ `business.gst`
-- ❌ `business.gst_verified`
-- ❌ `isSeller` (use `roles.includes("seller")`)
-
 ### GST Status Flow
 ```
-New Seller Registration
-    ↓
-gst.status = "pending"
-gst.verified = false
-    ↓
-Admin Reviews
-    ↓
-┌─────────────────┬─────────────────┐
-│   APPROVED      │   REJECTED      │
-├─────────────────┼─────────────────┤
-│ gst.status =    │ gst.status =    │
-│  "verified"     │  "rejected"     │
-│ gst.verified =  │ gst.verified =  │
-│  true           │  false          │
-└─────────────────┴─────────────────┘
+New Seller → gst.status = "pending" → Admin Reviews
+    ↓                                      ↓
+    └──────────────────────────────────────┤
+                                           ↓
+                           ┌───────────────┴───────────────┐
+                           │ APPROVED         REJECTED     │
+                           │ gst.status =     gst.status = │
+                           │  "verified"       "rejected"  │
+                           └───────────────────────────────┘
 ```
-
-### Seller Permission Matrix
-| GST Status | Can Create Draft | Can Publish | Banner Color |
-|------------|------------------|-------------|--------------|
-| `none`     | ❌ No            | ❌ No       | N/A          |
-| `pending`  | ✅ Yes           | ❌ No       | Amber        |
-| `verified` | ✅ Yes           | ✅ Yes      | None         |
-| `rejected` | ✅ Yes           | ❌ No       | Red          |
-
-### Seller Account Status
-| Status | Can Access Dashboard | Can Create Listings | Banner |
-|--------|---------------------|---------------------|--------|
-| `active` | ✅ Yes | ✅ Yes | None |
-| `suspended` | ✅ Yes | ❌ No | Orange |
-| `banned` | ✅ Yes | ❌ No | Red |
 
 ---
 
-## Email Verification Architecture
+## SUBSCRIPTION SYSTEM - SINGLE SOURCE OF TRUTH
+
+### Data Architecture
+```
+subscriptions collection ← SSOT for subscription data
+    ↓
+Used by:
+  - /api/seller/subscription/status
+  - /api/admin/subscriptions
+  - /api/admin/users (joined)
+```
+
+### API Response Structure (camelCase)
+```json
+{
+  "subscription": {
+    "planName": "free" | "trial" | "pro",
+    "status": "active" | "expired" | "suspended",
+    "startDate": "ISO date",
+    "endDate": "ISO date | null",
+    "daysRemaining": number,
+    "isExpiringSoon": boolean,
+    "isActive": boolean
+  },
+  "usage": {
+    "acceptedThisMonth": number,
+    "monthlyLimit": number,
+    "remaining": number,
+    "limitReached": boolean,
+    "resetsOn": "formatted date"
+  },
+  "features": {
+    "canAcceptInquiries": boolean,
+    "unlimitedInquiries": boolean,
+    "verifiedBadge": boolean,
+    "prioritySupport": boolean,
+    "analyticsAccess": boolean
+  },
+  "showExpiryWarning": boolean,
+  "showUpgradeCta": boolean
+}
+```
+
+### Plan Features
+| Plan | Inquiry Limit | Verified Badge | Priority Support | Analytics |
+|------|---------------|----------------|------------------|-----------|
+| Free | 5/month | ❌ | ❌ | ❌ |
+| Trial | Unlimited | ❌ | ❌ | ❌ |
+| Pro | Unlimited | ✅ | ✅ | ✅ |
+
+---
+
+## EMAIL VERIFICATION ARCHITECTURE
 
 ### User Schema
 ```json
@@ -80,63 +104,52 @@ Admin Reviews
   "isEmailVerified": boolean,
   "profileComplete": boolean,
   "status": "pending" | "active",
-  "verificationDeadline": "datetime",
-  "sellerStatus": "active" | "suspended" | "banned",
-  "profile": { ... },
-  "gst": { number, status, verified },
-  "subscription": { ... }
+  "sellerStatus": "active" | "suspended" | "banned"
 }
 ```
 
 ### Registration Flow
-1. Sign Up → Firebase user created, MongoDB user created with `isEmailVerified: false`
+1. Sign Up → Firebase user + MongoDB user (isEmailVerified: false)
 2. Email Verification → Firebase verifies email
-3. Login → Backend syncs `isEmailVerified: true`
-4. Profile Completion → User fills profile, `profileComplete: true`
-
-### Background Cleanup
-- Hourly task deletes users where `isEmailVerified: false` AND `verificationDeadline < now`
-- Deletes from both MongoDB and Firebase
+3. Login → Backend syncs isEmailVerified: true
+4. Profile Completion → profileComplete: true
 
 ---
 
-## API Endpoints
+## API ENDPOINTS
 
-### Authentication
-- `GET /api/auth/check-registration` - Check profile and email verification status
-- `POST /api/auth/complete-profile` - Complete profile (updates existing user)
-- `POST /api/auth/cleanup-for-reregister` - Cleanup unverified user for re-registration
+### Seller Subscription
+- `GET /api/seller/subscription/status` - Get subscription status with usage and features
 
 ### Admin GST Management
 - `GET /api/admin/gst/pending` - Get pending GST reviews (returns `pending_reviews` array)
 - `PATCH /api/admin/users/{id}/verify-gst` - Verify or reject seller GST
 
-### Seller
-- `GET /api/seller/status` - Get seller GST and permission status
-- `POST /api/seller/listings` - Create listing (draft)
-- `POST /api/seller/listings/{id}/publish` - Publish listing (requires `gst.status: "verified"`)
+### Admin Users
+- `GET /api/admin/users` - List users with subscription fields included
 
 ---
 
-## Implementation Status
+## IMPLEMENTATION STATUS
 
 ### Completed (Feb 22, 2026)
-- [x] Email verification architecture (7 steps)
+- [x] Email verification architecture
 - [x] Unified GST schema (SSOT)
-- [x] Legacy field removal from queries
-- [x] GST pending/rejected banners on seller dashboard
+- [x] Subscription system fixes
+  - [x] Variable mismatch fix (snake_case → camelCase)
+  - [x] API endpoint alignment (/seller/subscription/status)
+  - [x] Admin users subscription columns
+- [x] GST pending/rejected banners
 - [x] Seller banned/suspended handling
-- [x] Admin GST pending endpoint with correct response format
-- [x] AuthContext exposes `gstStatus` and `sellerStatus`
 
 ### Testing Results
 - Backend: 100% (all tests passed)
-- Frontend: 100% (code review verified)
+- Frontend: 100% verified
 - Firebase Auth: NOT CONFIGURED
 
 ---
 
-## Next Steps / Backlog
+## NEXT STEPS / BACKLOG
 
 ### P0 - Critical
 1. Configure Firebase Admin SDK for production
@@ -144,10 +157,10 @@ Admin Reviews
 ### P1 - High Priority
 1. Full end-to-end test with real Firebase users
 2. Admin UI for GST verification workflow
-3. GST re-upload flow for rejected sellers
+3. Payment integration for Pro plan
 
 ### P2 - Medium Priority
-1. Email notifications (welcome, verification reminder)
+1. Email notifications
 2. Enhanced seller analytics
 
 ### P3 - Low Priority
