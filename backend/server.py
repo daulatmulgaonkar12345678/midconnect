@@ -9125,8 +9125,10 @@ async def admin_get_stats(admin: dict = Depends(require_admin)):
             "total": await db.users.count_documents({}),
             "active": await db.users.count_documents({"accountStatus": {"$ne": "deleted"}}),
             "deleted": await db.users.count_documents({"accountStatus": "deleted"}),
-            "sellers": await db.users.count_documents({"isSeller": True}),
-            "pendingGst": await db.users.count_documents({"gstStatus": "pending"})
+            # SSOT: Use roles array
+            "sellers": await db.users.count_documents({"roles": "seller"}),
+            # SSOT: Use gst.status
+            "pendingGst": await db.users.count_documents({"roles": "seller", "gst.status": "pending"})
         },
         "catalog": {
             "categories": await db.categories.count_documents({"isActive": {"$ne": False}}),  # SSOT: camelCase
@@ -9157,19 +9159,19 @@ async def admin_get_stats(admin: dict = Depends(require_admin)):
                 "acceptedAt": {"$gte": month_start}
             })
         },
-        # Subscription stats from users.subscription
+        # Subscription stats - SSOT: use roles array
         "subscriptions": {
-            "free": await db.users.count_documents({"isSeller": True, "subscription.plan": "free"}),
-            "trial": await db.users.count_documents({"isSeller": True, "subscription.plan": "trial"}),
-            "pro": await db.users.count_documents({"isSeller": True, "subscription.plan": "pro"}),
+            "free": await db.users.count_documents({"roles": "seller", "subscription.plan": "free"}),
+            "trial": await db.users.count_documents({"roles": "seller", "subscription.plan": "trial"}),
+            "pro": await db.users.count_documents({"roles": "seller", "subscription.plan": "pro"}),
             # Legacy sellers without new subscription object default to free
             "noSubscription": await db.users.count_documents({
-                "isSeller": True,
+                "roles": "seller",
                 "subscription": {"$exists": False}
             }),
             # Expiring in next 7 days
             "expiringSoon": await db.users.count_documents({
-                "isSeller": True,
+                "roles": "seller",
                 "subscription.end_date": {
                     "$gte": now,
                     "$lte": now + timedelta(days=7)
