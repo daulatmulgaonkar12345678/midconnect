@@ -8427,77 +8427,90 @@ async def admin_extend_subscription(
 ):
     """
     Extend subscription by X days.
-    Adds days to current end_date.
+    Adds days to current endDate.
+    
+    SSOT: All fields use camelCase, userId stored as ObjectId.
     """
-    subscription = await db.subscriptions.find_one({"user_id": user_id})
-    if not subscription:
-        raise HTTPException(status_code=404, detail="Subscription not found. Activate first.")
-    
-    if subscription.get("planName") == "free":
-        raise HTTPException(status_code=400, detail="Cannot extend free plan. Activate trial or pro first.")
-    
-    now = datetime.now(timezone.utc)
-    old_end_date = subscription.get("endDate")
-    
-    # If subscription expired, extend from now
-    if not old_end_date or now > old_end_date:
-        new_end_date = now + timedelta(days=data.extend_days)
-    else:
-        new_end_date = old_end_date + timedelta(days=data.extend_days)
-    
-    new_duration = subscription.get("durationDays", 0) + data.extend_days
-    
-    # Update subscription
-    await db.subscriptions.update_one(
-        {"user_id": user_id},
-        {"$set": {
-            "endDate": new_end_date,
-            "durationDays": new_duration,
-            "status": "active",  # Re-activate if was expired
-            "lastUpdatedBy": str(admin["_id"]),
-            "updatedAt": now,
-            "notes": f"Extended by {data.extend_days} days. {data.notes or ''}"
-        }}
-    )
-    
-    # Update legacy subscription
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {
-            "subscription.end_date": new_end_date,
-            "subscription.active": True,
-            "subscriptionUpdatedAt": now
-        }}
-    )
-    
-    # SSOT: Log history with ObjectId foreign keys
-    await db.subscriptionHistory.insert_one({
-        "user_id": ObjectId(user_id),  # SSOT: Store as ObjectId
-        "action": "extend",
-        "extendDays": data.extend_days,
-        "oldEndDate": old_end_date,
-        "newEndDate": new_end_date,
-        "admin_id": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],  # SSOT: Store as ObjectId
-        "adminEmail": admin.get("email"),
-        "note": data.notes,
-        "createdAt": now
-    })
-    
-    # Calculate remaining days
-    delta = new_end_date - now
-    days_remaining = max(0, delta.days)
-    
-    logger.info(f"[SUBSCRIPTION] Admin {admin['email']} extended user {user_id} by {data.extend_days} days")
-    
-    return {
-        "message": f"Subscription extended by {data.extend_days} days",
-        "subscription": {
-            "user_id": user_id,
-            "oldEndDate": old_end_date.isoformat() if old_end_date else None,
-            "newEndDate": new_end_date.isoformat(),
-            "daysRemaining": days_remaining,
-            "status": "active"
+    try:
+        user_oid = ObjectId(user_id)
+        subscription = await db.subscriptions.find_one({"userId": user_oid})
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found. Activate first.")
+        
+        if subscription.get("planName") == "free":
+            raise HTTPException(status_code=400, detail="Cannot extend free plan. Activate trial or pro first.")
+        
+        now = datetime.now(timezone.utc)
+        old_end_date = subscription.get("endDate")
+        
+        # Get admin ObjectId
+        admin_oid = ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"]
+        
+        # If subscription expired, extend from now
+        if not old_end_date or now > old_end_date:
+            new_end_date = now + timedelta(days=data.extend_days)
+        else:
+            new_end_date = old_end_date + timedelta(days=data.extend_days)
+        
+        new_duration = subscription.get("durationDays", 0) + data.extend_days
+        
+        # Update subscription - SSOT: userId as ObjectId
+        await db.subscriptions.update_one(
+            {"userId": user_oid},
+            {"$set": {
+                "endDate": new_end_date,
+                "durationDays": new_duration,
+                "status": "active",  # Re-activate if was expired
+                "lastUpdatedBy": admin_oid,
+                "updatedAt": now,
+                "notes": f"Extended by {data.extend_days} days. {data.notes or ''}"
+            }}
+        )
+        
+        # Update legacy subscription - SSOT: camelCase
+        await db.users.update_one(
+            {"_id": user_oid},
+            {"$set": {
+                "subscription.endDate": new_end_date,
+                "subscription.active": True,
+                "subscriptionUpdatedAt": now
+            }}
+        )
+        
+        # SSOT: Log history with ObjectId foreign keys - camelCase
+        await db.subscriptionHistory.insert_one({
+            "userId": user_oid,  # SSOT: Store as ObjectId, camelCase
+            "action": "extend",
+            "extendDays": data.extend_days,
+            "oldEndDate": old_end_date,
+            "newEndDate": new_end_date,
+            "adminId": admin_oid,  # SSOT: Store as ObjectId, camelCase
+            "adminEmail": admin.get("email"),
+            "note": data.notes,
+            "createdAt": now
+        })
+        
+        # Calculate remaining days
+        delta = new_end_date - now
+        days_remaining = max(0, delta.days)
+        
+        logger.info(f"[SUBSCRIPTION] Admin {admin['email']} extended user {user_id} by {data.extend_days} days")
+        
+        return {
+            "message": f"Subscription extended by {data.extend_days} days",
+            "subscription": {
+                "userId": user_id,
+                "oldEndDate": old_end_date.isoformat() if old_end_date else None,
+                "newEndDate": new_end_date.isoformat(),
+                "daysRemaining": days_remaining,
+                "status": "active"
+            }
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail="Subscription extension failed")
     }
 
 
