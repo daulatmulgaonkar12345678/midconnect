@@ -2076,20 +2076,42 @@ async def require_gst_verified_seller(credentials: HTTPAuthorizationCredentials 
     """
     Require a GST-verified seller for publishing products.
     
-    PHASE 4/5 - SELLER PRODUCT PERMISSION CONTROL:
+    UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH:
+    gst: {
+        number: string,
+        status: "pending" | "verified" | "rejected",
+        verified: boolean
+    }
+    
+    PERMISSION CONTROL:
     - CASE 1: Not seller -> 403
     - CASE 2: Seller but GST pending -> 403 (for publish)
-    - CASE 3: Seller GST verified -> Allow
+    - CASE 3: Seller but GST rejected -> 403 (for publish)
+    - CASE 4: Seller GST verified -> Allow
     """
     user = await require_verified_seller(credentials)
     
-    # Check GST verification status
-    gst = user.get("gst", {})
-    if not gst.get("verified", False):
-        gst_status = gst.get("status", "pending")
+    # Check seller status (banned/suspended)
+    seller_status = user.get("sellerStatus", "active")
+    if seller_status == "banned":
         raise HTTPException(
             status_code=403,
-            detail=f"GST verification required before publishing products. Current status: {gst_status}"
+            detail="Seller account is banned. Contact support for assistance."
+        )
+    if seller_status == "suspended":
+        raise HTTPException(
+            status_code=403,
+            detail="Seller account is suspended. Contact support for assistance."
+        )
+    
+    # Check GST verification status - SSOT: gst.status must be "verified"
+    gst = user.get("gst", {})
+    gst_status = gst.get("status", "none")
+    
+    if gst_status != "verified":
+        raise HTTPException(
+            status_code=403,
+            detail=f"GST verification required. Current status: {gst_status}"
         )
     
     return user
