@@ -8234,18 +8234,18 @@ async def get_or_create_subscription(user_id: str) -> dict:
     Get existing subscription or create default free subscription.
     ALWAYS returns calculated fields.
     
-    SSOT POLICY: user_id is stored as ObjectId.
+    SSOT POLICY: userId is stored as ObjectId (camelCase).
     """
     # SSOT: Convert user_id to ObjectId for query
     user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
     
-    subscription = await db.subscriptions.find_one({"user_id": user_oid})
+    subscription = await db.subscriptions.find_one({"userId": user_oid})
     
     if not subscription:
-        # Create default free subscription with ObjectId user_id
+        # Create default free subscription with ObjectId userId
         now = datetime.now(timezone.utc)
         subscription = {
-            "user_id": user_oid,  # SSOT: Store as ObjectId
+            "userId": user_oid,  # SSOT: Store as ObjectId, camelCase
             "planName": "free",
             "durationDays": 0,
             "startDate": now,
@@ -8257,7 +8257,7 @@ async def get_or_create_subscription(user_id: str) -> dict:
             "createdAt": now
         }
         await db.subscriptions.insert_one(subscription)
-        subscription = await db.subscriptions.find_one({"user_id": user_oid})
+        subscription = await db.subscriptions.find_one({"userId": user_oid})
     
     # Calculate derived fields
     subscription = calculate_subscription_fields(subscription)
@@ -8265,7 +8265,7 @@ async def get_or_create_subscription(user_id: str) -> dict:
     # Update status in DB if it changed
     if subscription.get("status") == "expired":
         await db.subscriptions.update_one(
-            {"user_id": user_oid},
+            {"userId": user_oid},
             {"$set": {"status": "expired", "updatedAt": datetime.now(timezone.utc)}}
         )
     
