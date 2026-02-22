@@ -1293,7 +1293,7 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 # ============== PYDANTIC MODELS ==============
 
 class UserCreate(BaseModel):
-    """SSOT: All fields use camelCase"""
+    """SSOT: All fields use camelCase - LEGACY: For backward compatibility only"""
     email: EmailStr
     firebaseUid: str
     businessName: str
@@ -1338,6 +1338,67 @@ class UserCreate(BaseModel):
                 raise ValueError('Invalid GST number format')
             return v.upper()
         return v
+
+
+class ProfileCompleteCreate(BaseModel):
+    """
+    PHASE 1 REGISTRATION: Profile completion after email verification
+    
+    Flow:
+    1. Firebase user created, email verification sent
+    2. User verifies email
+    3. User selects role (buyer/seller) and completes profile
+    4. This endpoint creates MongoDB user
+    
+    SSOT: All fields use camelCase
+    """
+    # Role selection - determines if GST is required
+    role: Literal["buyer", "seller"]
+    
+    # Profile fields (required for both)
+    businessName: str = Field(..., min_length=2, max_length=200)
+    phone: str
+    address: str = Field(..., min_length=5, max_length=500)
+    city: str = Field(..., min_length=2, max_length=100)
+    state: str = Field(..., min_length=2, max_length=100)
+    pincode: str
+    
+    # GST - ONLY for sellers
+    gstNumber: Optional[str] = None
+    
+    model_config = {"extra": "forbid"}  # Reject unknown fields
+    
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        digits = re.sub(r'\D', '', v)
+        if len(digits) < 10 or len(digits) > 15:
+            raise ValueError('Phone must be 10-15 digits')
+        return digits
+    
+    @field_validator('pincode')
+    @classmethod
+    def validate_pincode(cls, v):
+        if not re.match(r'^\d{6}$', v):
+            raise ValueError('Pincode must be 6 digits')
+        return v
+    
+    @field_validator('gstNumber')
+    @classmethod
+    def validate_gst(cls, v):
+        if v:
+            pattern = r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$'
+            if not re.match(pattern, v.upper()):
+                raise ValueError('Invalid GST number format')
+            return v.upper()
+        return v
+    
+    @model_validator(mode='after')
+    def validate_seller_gst(self):
+        """Seller MUST provide GST number"""
+        if self.role == "seller" and not self.gstNumber:
+            raise ValueError('GST number is required for seller registration')
+        return self
 
 class UserUpdate(BaseModel):
     """SSOT: All fields use camelCase"""
