@@ -2357,42 +2357,6 @@ async def complete_profile(
     except Exception as e:
         logger.error(f"Profile completion error: {e}")
         raise HTTPException(status_code=500, detail="Profile completion failed. Please try again.")
-                "message": "Profile completed successfully",
-                "user": serialize_doc(user_doc),
-                "isSeller": "seller" in roles,
-                "gstStatus": gst_status
-            }
-            
-        except Exception as insert_error:
-            # PHASE 9 - ATOMIC REGISTRATION: Rollback Firebase user if Mongo fails
-            error_str = str(insert_error).lower()
-            
-            if "duplicate key" in error_str or "e11000" in error_str:
-                # Race condition - user already exists
-                existing = await db.users.find_one({"firebaseUid": firebase_uid})
-                if existing:
-                    return {"message": "User already registered", "user": serialize_doc(existing)}
-            
-            # For other errors, attempt to delete Firebase user to prevent orphans
-            logger.error(f"MongoDB insert failed for {email}: {insert_error}")
-            
-            try:
-                if firebase_initialized:
-                    firebase_auth.delete_user(firebase_uid)
-                    logger.warning(f"Rolled back Firebase user {firebase_uid} due to MongoDB failure")
-            except Exception as delete_error:
-                logger.error(f"Failed to rollback Firebase user {firebase_uid}: {delete_error}")
-            
-            raise HTTPException(
-                status_code=500,
-                detail="Registration failed. Please try again."
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Profile completion error: {e}")
-        raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
 
 
 @api_router.get("/auth/check-registration")
