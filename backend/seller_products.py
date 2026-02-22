@@ -915,6 +915,106 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         logger.info(f"Seller {seller['email']} published listing: {listing_id}")
         return {"message": "Listing published", "status": "active", "publishedAt": now}
     
+    @router.get("/listings/{listing_id}/validate")
+    async def validate_listing_for_publish(
+        listing_id: str,
+        seller: dict = Depends(require_auth)
+    ):
+        """
+        ENTERPRISE GRADE: Pre-publish validation check.
+        
+        Allows frontend to check if a listing can be published
+        WITHOUT actually publishing it.
+        
+        Returns:
+        - isComplete: boolean
+        - canPublish: boolean (includes GST check)
+        - missingFields: list of fields that need to be filled
+        - fieldErrors: detailed error messages per field
+        """
+        seller_oid = ObjectId(seller["_id"])
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        listing = await db.sellerListings.find_one({
+            "_id": listing_oid,
+            "sellerId": seller_oid
+        })
+        
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Check listing completeness
+        required_fields = {
+            "pricingTiers": {
+                "check": lambda v: v and len(v) > 0,
+                "message": "At least one pricing tier required"
+            },
+            "moq": {
+                "check": lambda v: v and v > 0,
+                "message": "MOQ (Minimum Order Quantity) must be greater than 0"
+            },
+            "stock": {
+                "check": lambda v: v and v > 0,
+                "message": "Stock quantity must be greater than 0"
+            },
+            "maxCapacity": {
+                "check": lambda v: v and v > 0,
+                "message": "Maximum capacity must be greater than 0"
+            },
+            "images": {
+                "check": lambda v: v and len(v) > 0,
+                "message": "At least one product image required"
+            },
+            "variantId": {
+                "check": lambda v: v is not None,
+                "message": "Product variant must be linked"
+            }
+        }
+        
+        missing_fields = []
+        field_errors = {}
+        
+        for field, config in required_fields.items():
+            value = listing.get(field)
+            if not config["check"](value):
+                missing_fields.append(field)
+                field_errors[field] = config["message"]
+        
+        is_complete = len(missing_fields) == 0
+        
+        # Check GST verification
+        seller_status = get_seller_status(seller)
+        gst = seller.get("gst", {})
+        gst_verified = seller_status["gstVerified"]
+        gst_status_str = gst.get("status", "none")
+        
+        # Check seller account status
+        account_status = seller.get("sellerStatus", "active")
+        account_active = account_status not in ["banned", "suspended"]
+        
+        can_publish = is_complete and gst_verified and account_active
+        
+        return {
+            "listingId": listing_id,
+            "isComplete": is_complete,
+            "canPublish": can_publish,
+            "currentStatus": listing.get("status", "draft"),
+            "missingFields": missing_fields,
+            "fieldErrors": field_errors,
+            "gstVerified": gst_verified,
+            "gstStatus": gst_status_str,
+            "accountStatus": account_status,
+            "blockers": [
+                f"Missing fields: {', '.join(missing_fields)}" if missing_fields else None,
+                f"GST not verified (status: {gst_status_str})" if not gst_verified else None,
+                f"Account {account_status}" if not account_active else None
+            ]
+        }
+    
     @router.post("/listings/{listing_id}/pause")
     async def pause_listing(
         listing_id: str,
