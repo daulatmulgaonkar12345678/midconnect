@@ -13,7 +13,47 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
-## UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH
+## MONGODB SCHEMA SSOT (Single Source of Truth)
+
+### Subscriptions Collection Schema
+```json
+{
+  "userId": ObjectId,           // Required, foreign key to users
+  "planName": "free" | "trial" | "pro" | "enterprise",
+  "durationDays": number,
+  "startDate": Date,
+  "endDate": Date | null,
+  "status": "active" | "expired" | "cancelled" | "suspended",
+  "lastUpdatedBy": ObjectId,    // Admin who last updated
+  "updatedAt": Date,
+  "notes": string,
+  "createdAt": Date
+}
+```
+
+### Subscription History Collection Schema
+```json
+{
+  "userId": ObjectId,           // camelCase, stored as ObjectId
+  "action": "activate" | "extend" | "suspend" | "reactivate",
+  "oldSubscription": object,
+  "newSubscription": object,
+  "adminId": ObjectId,          // camelCase, stored as ObjectId
+  "adminEmail": string,
+  "note": string,
+  "createdAt": Date
+}
+```
+
+### Field Naming Convention
+- **All fields use camelCase** (not snake_case)
+- **All IDs stored as ObjectId** (not string)
+- ✅ `userId`, `adminId`, `planName`, `startDate`, `endDate`, `daysRemaining`
+- ❌ ~~`user_id`~~, ~~`admin_id`~~, ~~`plan_name`~~, ~~`start_date`~~, ~~`end_date`~~
+
+---
+
+## UNIFIED GST SCHEMA
 
 ### Schema Structure
 ```json
@@ -26,71 +66,6 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 }
 ```
 
-### GST Status Flow
-```
-New Seller → gst.status = "pending" → Admin Reviews
-    ↓                                      ↓
-    └──────────────────────────────────────┤
-                                           ↓
-                           ┌───────────────┴───────────────┐
-                           │ APPROVED         REJECTED     │
-                           │ gst.status =     gst.status = │
-                           │  "verified"       "rejected"  │
-                           └───────────────────────────────┘
-```
-
----
-
-## SUBSCRIPTION SYSTEM - SINGLE SOURCE OF TRUTH
-
-### Data Architecture
-```
-subscriptions collection ← SSOT for subscription data
-    ↓
-Used by:
-  - /api/seller/subscription/status
-  - /api/admin/subscriptions
-  - /api/admin/users (joined)
-```
-
-### API Response Structure (camelCase)
-```json
-{
-  "subscription": {
-    "planName": "free" | "trial" | "pro",
-    "status": "active" | "expired" | "suspended",
-    "startDate": "ISO date",
-    "endDate": "ISO date | null",
-    "daysRemaining": number,
-    "isExpiringSoon": boolean,
-    "isActive": boolean
-  },
-  "usage": {
-    "acceptedThisMonth": number,
-    "monthlyLimit": number,
-    "remaining": number,
-    "limitReached": boolean,
-    "resetsOn": "formatted date"
-  },
-  "features": {
-    "canAcceptInquiries": boolean,
-    "unlimitedInquiries": boolean,
-    "verifiedBadge": boolean,
-    "prioritySupport": boolean,
-    "analyticsAccess": boolean
-  },
-  "showExpiryWarning": boolean,
-  "showUpgradeCta": boolean
-}
-```
-
-### Plan Features
-| Plan | Inquiry Limit | Verified Badge | Priority Support | Analytics |
-|------|---------------|----------------|------------------|-----------|
-| Free | 5/month | ❌ | ❌ | ❌ |
-| Trial | Unlimited | ❌ | ❌ | ❌ |
-| Pro | Unlimited | ✅ | ✅ | ✅ |
-
 ---
 
 ## EMAIL VERIFICATION ARCHITECTURE
@@ -98,8 +73,8 @@ Used by:
 ### User Schema
 ```json
 {
-  "firebaseUid": "string",
-  "email": "string",
+  "firebaseUid": string,
+  "email": string,
   "roles": ["buyer"] | ["buyer", "seller"],
   "isEmailVerified": boolean,
   "profileComplete": boolean,
@@ -108,43 +83,39 @@ Used by:
 }
 ```
 
-### Registration Flow
-1. Sign Up → Firebase user + MongoDB user (isEmailVerified: false)
-2. Email Verification → Firebase verifies email
-3. Login → Backend syncs isEmailVerified: true
-4. Profile Completion → profileComplete: true
-
 ---
 
 ## API ENDPOINTS
 
+### Subscription Admin
+- `GET /api/admin/subscriptions/manage/{user_id}` - Get subscription details
+- `POST /api/admin/subscriptions/activate/{user_id}` - Activate subscription
+- `POST /api/admin/subscriptions/extend/{user_id}` - Extend subscription
+- `POST /api/admin/subscriptions/suspend/{user_id}` - Suspend subscription
+- `POST /api/admin/subscriptions/reactivate/{user_id}` - Reactivate subscription
+
 ### Seller Subscription
-- `GET /api/seller/subscription/status` - Get subscription status with usage and features
-
-### Admin GST Management
-- `GET /api/admin/gst/pending` - Get pending GST reviews (returns `pending_reviews` array)
-- `PATCH /api/admin/users/{id}/verify-gst` - Verify or reject seller GST
-
-### Admin Users
-- `GET /api/admin/users` - List users with subscription fields included
+- `GET /api/seller/subscription/status` - Get subscription status with usage
 
 ---
 
 ## IMPLEMENTATION STATUS
 
 ### Completed (Feb 22, 2026)
+- [x] MongoDB schema alignment (SSOT)
+  - [x] All `user_id` → `userId` (camelCase)
+  - [x] All IDs stored as ObjectId
+  - [x] All `end_date` → `endDate`, `start_date` → `startDate`
+  - [x] All `admin_id` → `adminId` in history
+  - [x] Try/except validation guards on all admin endpoints
+- [x] Subscription system camelCase API responses
 - [x] Email verification architecture
-- [x] Unified GST schema (SSOT)
-- [x] Subscription system fixes
-  - [x] Variable mismatch fix (snake_case → camelCase)
-  - [x] API endpoint alignment (/seller/subscription/status)
-  - [x] Admin users subscription columns
-- [x] GST pending/rejected banners
-- [x] Seller banned/suspended handling
+- [x] Unified GST schema
+- [x] GST status banners
 
 ### Testing Results
-- Backend: 100% (all tests passed)
-- Frontend: 100% verified
+- Backend: 95% (19/20 tests passed)
+- All admin subscription endpoints have validation guards
 - Firebase Auth: NOT CONFIGURED
 
 ---
@@ -156,13 +127,11 @@ Used by:
 
 ### P1 - High Priority
 1. Full end-to-end test with real Firebase users
-2. Admin UI for GST verification workflow
-3. Payment integration for Pro plan
+2. Payment integration for Pro plan
 
 ### P2 - Medium Priority
 1. Email notifications
-2. Enhanced seller analytics
+2. Enhanced analytics
 
 ### P3 - Low Priority
 1. Multi-language support
-2. Advanced search filters
