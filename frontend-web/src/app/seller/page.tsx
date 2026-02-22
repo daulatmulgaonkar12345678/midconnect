@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { getSellerDashboard, getSellerSubscription, SellerSubscriptionStatus } from '@/lib/api';
+import { getSellerDashboard, getSellerSubscription, SellerSubscriptionStatus, getSellerStatus, SellerStatus } from '@/lib/api';
 import { 
   Plus, 
   Package, 
@@ -17,13 +17,19 @@ import {
   Zap,
   TrendingUp,
   ArrowRight,
-  Crown
+  Crown,
+  ShieldCheck,
+  ShieldAlert,
+  Clock,
+  Store
 } from 'lucide-react';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-export default function SellerDashboardPage() {
+function SellerDashboardContent() {
   const router = useRouter();
-  const { user, getIdToken, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const { user, profile, getIdToken, loading: authLoading, isSeller, isGstVerified } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
@@ -34,6 +40,15 @@ export default function SellerDashboardPage() {
     archived: 0
   });
   const [subscription, setSubscription] = useState<SellerSubscriptionStatus | null>(null);
+  const [sellerStatus, setSellerStatus] = useState<SellerStatus | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Check for welcome parameter
+  useEffect(() => {
+    if (searchParams.get('welcome') === 'true') {
+      setShowWelcome(true);
+    }
+  }, [searchParams]);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -43,12 +58,12 @@ export default function SellerDashboardPage() {
         return;
       }
       
-      const [dashboardData, subscriptionData] = await Promise.all([
+      const [dashboardData, subscriptionData, statusData] = await Promise.all([
         getSellerDashboard(token),
-        getSellerSubscription(token).catch(() => null) // Non-blocking - subscription is optional
+        getSellerSubscription(token).catch(() => null),
+        getSellerStatus(token).catch(() => null)
       ]);
       
-      // Safely set stats with fallback to defaults
       if (dashboardData?.stats) {
         setStats({
           total: dashboardData.stats.total ?? 0,
@@ -61,8 +76,16 @@ export default function SellerDashboardPage() {
       if (subscriptionData) {
         setSubscription(subscriptionData);
       }
+      if (statusData) {
+        setSellerStatus(statusData);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      // PHASE 7: Handle non-seller access
+      if (err instanceof Error && err.message.includes('seller')) {
+        setError('You must register as a seller to access this section.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      }
     } finally {
       setLoading(false);
     }
