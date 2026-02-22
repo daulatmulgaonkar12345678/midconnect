@@ -448,47 +448,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Complete registration for users who have Firebase account but no backend profile
-   * Called when user logs in and needsRegistration is true
+   * LEGACY: Replaced by completeRegistrationHandler - kept for backwards compatibility
    */
-  const completeRegistration = async (profileData: {
-    businessName: string;
-    phone: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => {
-    if (!state.user) {
-      throw new Error('No user logged in');
-    }
-    
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    
-    try {
-      const token = await state.user.getIdToken();
-      
-      await registerUser(token, {
-        email: state.user.email || '',
-        firebaseUid: state.user.uid,
-        ...profileData,
-      });
-      
-      // Fetch the created profile
-      const profile = await getUserProfile(token);
-      
-      setState(prev => ({
-        ...prev,
-        user: state.user,
-        profile,
-        loading: false,
-        error: null,
-        registrationState: 'complete',
-      }));
-    } catch (error: unknown) {
-      const message = getAuthErrorMessage(error);
-      setState(prev => ({ ...prev, loading: false, error: message }));
-      throw new Error(message);
-    }
-  };
+  const completeRegistration = completeRegistrationHandler;
 
   // Sign out
   const signOut = async () => {
@@ -504,6 +466,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading: false,
       error: null,
       registrationState: 'unknown',
+      emailVerified: false,
     }));
   };
 
@@ -536,7 +499,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({ 
         ...prev, 
         profile,
-        registrationState: profile ? 'complete' : 'incomplete',
+        registrationState: profile ? 'complete' : (state.user?.emailVerified ? 'incomplete' : 'email_not_verified'),
       }));
     } catch (error) {
       // Handle auth errors by signing out
@@ -553,10 +516,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Computed properties
   const isAuthenticated = !!state.user && !!state.profile;
-  // SSOT: Use camelCase field names to match database schema
+  // PHASE 3: Derive seller status from roles array
   const isAdmin = state.profile?.isAdmin === true;
-  const isSeller = state.profile?.isSeller === true;
+  const roles = state.profile?.roles || [];
+  const isSeller = roles.includes('seller');
+  const isGstVerified = state.profile?.gst?.verified === true;
   const needsRegistration = state.registrationState === 'incomplete';
+  const needsEmailVerification = state.registrationState === 'email_not_verified';
   
   const role: UserRole = !state.user 
     ? 'guest' 
