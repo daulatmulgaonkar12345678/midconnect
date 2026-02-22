@@ -58,12 +58,11 @@ function LoginContent() {
     try {
       const result = await signIn(email.trim().toLowerCase(), password);
       
-      if (result.needsRegistration) {
-        // User has Firebase account but no backend profile
-        // Redirect to complete registration
-        router.push('/register?complete=true');
+      if (result.needsEmailVerification) {
+        router.push('/verify-email');
+      } else if (result.needsRegistration) {
+        router.push('/complete-profile');
       } else {
-        // Full login successful
         router.push(redirectTo);
       }
     } catch (err) {
