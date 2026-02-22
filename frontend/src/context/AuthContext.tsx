@@ -279,15 +279,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearError = () => setState(prev => ({ ...prev, error: null }));
 
   // ROLES-BASED COMPUTED PROPERTIES - derived from roles array
-  const isAuthenticated = !!state.user && !!state.profile;
-  const roles = state.profile?.roles ?? [];
+  const isAuthenticated = !!state.user && !!state.profile && state.profile.profileComplete === true;
+  const roles: string[] = state.profile?.roles ?? [];
   const isSeller = roles.includes('seller');
   const isAdmin = roles.includes('admin') || state.profile?.isAdmin === true;
-  const isGstVerified = state.profile?.gstStatus === 'VERIFIED';
+  // NEW ARCHITECTURE: Check gst.verified field
+  const isGstVerified = state.profile?.gst?.verified === true;
   const needsRegistration = state.registrationState === 'incomplete';
   const needsEmailVerification = state.registrationState === 'email_not_verified';
   
-  const role: UserRole = !state.user ? 'guest' : !state.profile ? 'guest' : isAdmin ? 'admin' : isSeller ? 'seller' : 'buyer';
+  const role: UserRole = !state.user ? 'guest' : !state.profile?.profileComplete ? 'guest' : isAdmin ? 'admin' : isSeller ? 'seller' : 'buyer';
 
   return (
     <AuthContext.Provider value={{
