@@ -140,17 +140,54 @@ class InquiryReport(BaseModel):
 
 # ==================== ROUTER SETUP ====================
 
-def create_seller_router(db, require_auth, require_verified_seller):
+def create_seller_router(db, require_auth, require_verified_seller, require_gst_verified_seller=None):
     """
     Create seller product management router.
     FINAL ARCHITECTURE: 4-layer model with variantId
     STRICT: No legacy collections, no snake_case
+    
+    PHASE 4 - SELLER PRODUCT PERMISSION CONTROL:
+    - Not seller -> 403
+    - Seller but GST pending -> Allow draft, block publish
+    - Seller GST verified -> Allow all
     """
     router = APIRouter(prefix="/seller", tags=["Seller Products"])
     
     # Import variant service
     from services.product_variant_service import ProductVariantService
     variant_service = ProductVariantService(db)
+    
+    # ==================== PERMISSION HELPERS ====================
+    
+    def check_seller_role(user: dict) -> bool:
+        """PHASE 3: Check if user has seller role"""
+        roles = user.get("roles", [])
+        return "seller" in roles
+    
+    def check_gst_verified(user: dict) -> bool:
+        """PHASE 3: Check if seller GST is verified"""
+        gst = user.get("gst", {})
+        return gst.get("verified", False)
+    
+    def get_seller_status(user: dict) -> dict:
+        """
+        PHASE 3 - SELLER STATE DERIVED (NO sellerStatus FIELD):
+        Returns computed seller state from roles and gst fields.
+        """
+        roles = user.get("roles", [])
+        gst = user.get("gst", {})
+        
+        is_seller = "seller" in roles
+        is_verified = gst.get("verified", False)
+        is_pending = gst.get("status") == "pending"
+        
+        return {
+            "isSeller": is_seller,
+            "gstVerified": is_verified,
+            "gstPending": is_pending,
+            "canCreateDraft": is_seller,  # Sellers can create drafts
+            "canPublish": is_seller and is_verified  # Only verified sellers can publish
+        }
     
     # ==================== HELPER FUNCTIONS ====================
     
