@@ -678,6 +678,16 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         # Status handling
         if data.status is not None:
             if data.status == "active":
+                # PHASE 4/5: Check GST verification for publish/activate
+                seller_status = get_seller_status(seller)
+                if not seller_status["canPublish"]:
+                    gst = seller.get("gst", {})
+                    gst_status = gst.get("status", "pending")
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"GST verification required before publishing products. Current status: {gst_status}"
+                    )
+                
                 # Validate can activate
                 pricing_tiers = listing.get("pricingTiers", [])
                 moq = listing.get("moq") or data.moq
