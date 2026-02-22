@@ -132,46 +132,80 @@ export interface ProductWithAllSellers {
 
 // ==================== User Types ====================
 
+/**
+ * PHASE 2 - User Schema (STRICTLY ALIGNED)
+ * 
+ * Key changes:
+ * - roles: ["buyer"] or ["buyer", "seller"] instead of isSeller boolean
+ * - gst: { number, status, verified } instead of flat gstNumber/gstStatus
+ * - profile: nested object for business details
+ */
+
+export interface UserGst {
+  number: string | null;
+  status: 'pending' | 'verified' | 'rejected' | null;
+  verified: boolean;
+}
+
+export interface UserProfile {
+  businessName: string;
+  phone: string;
+  city: string;
+  state: string;
+  pincode: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface UserSubscription {
+  plan: 'trial' | 'free' | 'pro' | 'enterprise';
+  status: 'trial' | 'active' | 'expired' | 'cancelled';
+  startDate?: string;
+  endDate?: string;
+  trialEndsAt?: string;
+  inquiryLimit?: number;
+  enquiriesThisMonth: number;
+  enquiriesResetAt?: string;
+}
+
 export interface User {
   _id: string;
   firebaseUid: string;
   email: string;
-  businessName: string;
-  phone: string;
-  city: string;
-  state: string;
-  pincode: string;
-  address?: string;
-  isSeller: boolean;
+  // PHASE 3: roles array instead of isSeller boolean
+  roles: ('buyer' | 'seller')[];
   isAdmin: boolean;
-  gstNumber?: string;
-  gstStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
-  accountStatus: 'ACTIVE' | 'PENDING_DELETION' | 'SUSPENDED';
+  // Nested profile object
+  profile: UserProfile;
+  // Nested GST object
+  gst: UserGst;
   emailVerified: boolean;
+  accountStatus: 'active' | 'pending_deletion' | 'suspended' | 'deleted';
+  canLogin: boolean;
+  isActive: boolean;
+  deletedAt?: string | null;
+  deletionReason?: string | null;
+  subscription?: UserSubscription;
+  favourites: string[];
+  recentSearches: string[];
+  createdAt: string;
+  updatedAt: string;
+  
+  // Computed helpers for backwards compatibility
+  businessName?: string;  // Alias for profile.businessName
+  phone?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  address?: string;
+  gstNumber?: string;  // Alias for gst.number
+  gstStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';  // Legacy alias
+  isSeller?: boolean;  // Computed from roles.includes('seller')
 }
 
-export interface UserProfile {
-  _id: string;
-  email: string;
-  firebaseUid: string;
-  businessName: string;
-  phone: string;
-  city: string;
-  state: string;
-  pincode: string;
-  address?: string;
-  gstNumber?: string;
-  gstStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
-  isSeller: boolean;
-  isAdmin: boolean;
-  emailVerified: boolean;
-  accountStatus: 'ACTIVE' | 'PENDING_DELETION' | 'SUSPENDED';
-  subscription?: {
-    status: string;
-    trialEndsAt?: string;
-    enquiriesThisMonth: number;
-  };
-}
+// Legacy UserProfile type for backwards compatibility
+export type LegacyUserProfile = User;
 
 // ==================== Seller Listing Types ====================
 
