@@ -11,156 +11,128 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 - **Database**: MongoDB (via Motor async driver)
 - **Auth**: Firebase Authentication
 
-### Database Collections
-- `users` - User accounts with roles, profile, GST info
-- `categories` - Product categories
-- `products` - Admin-created product templates
-- `productVariants` - Attribute combinations
-- `sellerListings` - Seller product offerings
-- `specTemplates` - Specification field definitions
-- `inquiries` - Buyer-to-seller inquiries
+---
+
+## UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH (Feb 22, 2026)
+
+### Schema Structure
+```json
+{
+  "gst": {
+    "number": "22AAAAA0000A1Z5",
+    "status": "pending" | "verified" | "rejected",
+    "verified": boolean
+  }
+}
+```
+
+### Removed Legacy Fields
+- ❌ `gstNumber` (flat field)
+- ❌ `gstStatus` (flat field)
+- ❌ `business.gst`
+- ❌ `business.gst_verified`
+- ❌ `isSeller` (use `roles.includes("seller")`)
+
+### GST Status Flow
+```
+New Seller Registration
+    ↓
+gst.status = "pending"
+gst.verified = false
+    ↓
+Admin Reviews
+    ↓
+┌─────────────────┬─────────────────┐
+│   APPROVED      │   REJECTED      │
+├─────────────────┼─────────────────┤
+│ gst.status =    │ gst.status =    │
+│  "verified"     │  "rejected"     │
+│ gst.verified =  │ gst.verified =  │
+│  true           │  false          │
+└─────────────────┴─────────────────┘
+```
+
+### Seller Permission Matrix
+| GST Status | Can Create Draft | Can Publish | Banner Color |
+|------------|------------------|-------------|--------------|
+| `none`     | ❌ No            | ❌ No       | N/A          |
+| `pending`  | ✅ Yes           | ❌ No       | Amber        |
+| `verified` | ✅ Yes           | ✅ Yes      | None         |
+| `rejected` | ✅ Yes           | ❌ No       | Red          |
+
+### Seller Account Status
+| Status | Can Access Dashboard | Can Create Listings | Banner |
+|--------|---------------------|---------------------|--------|
+| `active` | ✅ Yes | ✅ Yes | None |
+| `suspended` | ✅ Yes | ❌ No | Orange |
+| `banned` | ✅ Yes | ❌ No | Red |
 
 ---
 
-## NEW EMAIL VERIFICATION ARCHITECTURE (Feb 22, 2026)
+## Email Verification Architecture
 
-### User Schema Updates
+### User Schema
 ```json
 {
   "firebaseUid": "string",
   "email": "string",
-  "roles": ["buyer"],
-  "isEmailVerified": false,
-  "profileComplete": false,
-  "status": "pending | active",
-  "verificationDeadline": "datetime (createdAt + 24h)",
-  "profile": null | {...},
-  "gst": {...},
-  "subscription": {...}
+  "roles": ["buyer"] | ["buyer", "seller"],
+  "isEmailVerified": boolean,
+  "profileComplete": boolean,
+  "status": "pending" | "active",
+  "verificationDeadline": "datetime",
+  "sellerStatus": "active" | "suspended" | "banned",
+  "profile": { ... },
+  "gst": { number, status, verified },
+  "subscription": { ... }
 }
 ```
 
 ### Registration Flow
+1. Sign Up → Firebase user created, MongoDB user created with `isEmailVerified: false`
+2. Email Verification → Firebase verifies email
+3. Login → Backend syncs `isEmailVerified: true`
+4. Profile Completion → User fills profile, `profileComplete: true`
 
-#### Step 1: Sign Up
-```
-User submits email/password
-    ↓
-Firebase user created
-    ↓
-Frontend gets ID token
-    ↓
-Backend get_current_user auto-creates MongoDB user
-    - isEmailVerified: false
-    - status: "pending"
-    - profileComplete: false
-    - verificationDeadline: now + 24h
-    ↓
-Verification email sent
-    ↓
-Redirect to /verify-email
-```
-
-#### Step 2: Email Verification
-```
-User clicks email link
-    ↓
-Firebase marks email as verified
-    ↓
-User logs in
-    ↓
-Backend syncs email_verified from Firebase token
-    - Updates isEmailVerified: true
-    - Updates status: "active"
-    - Removes verificationDeadline
-    ↓
-Redirect to /complete-profile
-```
-
-#### Step 3: Profile Completion
-```
-User fills profile form (Buyer/Seller)
-    ↓
-Backend /api/auth/complete-profile
-    - UPDATES existing user (not creates new)
-    - Sets profileComplete: true
-    - Sets roles, profile, gst fields
-    - Sets subscription (trial)
-    ↓
-Redirect to /dashboard
-```
-
-### Cleanup & Re-registration
-
-#### Auto Cleanup (Background Task)
-```
-Every 1 hour:
-    ↓
-Find users where:
-    - isEmailVerified: false
-    - verificationDeadline < now
-    ↓
-For each expired user:
-    - Delete Firebase user
-    - Delete MongoDB user
-```
-
-#### Re-registration Handler
-```
-POST /api/auth/cleanup-for-reregister
-Body: { email: "..." }
-    ↓
-If user exists AND NOT verified:
-    - Delete Firebase user
-    - Delete MongoDB user
-    - Return { cleaned: true }
-    ↓
-If user exists AND verified:
-    - Return 400: "Already registered"
-```
-
-### Seller Permissions Matrix
-
-| Role | Email Verified | Profile Complete | GST Verified | Create Draft | Publish |
-|------|----------------|------------------|--------------|--------------|---------|
-| Any | No | N/A | N/A | No | No |
-| Buyer | Yes | Yes | N/A | No | No |
-| Seller | Yes | Yes | No (Pending) | Yes | No |
-| Seller | Yes | Yes | Yes | Yes | Yes |
+### Background Cleanup
+- Hourly task deletes users where `isEmailVerified: false` AND `verificationDeadline < now`
+- Deletes from both MongoDB and Firebase
 
 ---
 
 ## API Endpoints
 
 ### Authentication
-- `GET /api/auth/check-registration` - Check profileComplete and isEmailVerified status
-- `POST /api/auth/complete-profile` - Complete profile (UPDATES existing user)
+- `GET /api/auth/check-registration` - Check profile and email verification status
+- `POST /api/auth/complete-profile` - Complete profile (updates existing user)
 - `POST /api/auth/cleanup-for-reregister` - Cleanup unverified user for re-registration
 
+### Admin GST Management
+- `GET /api/admin/gst/pending` - Get pending GST reviews (returns `pending_reviews` array)
+- `PATCH /api/admin/users/{id}/verify-gst` - Verify or reject seller GST
+
 ### Seller
-- `GET /api/seller/status` - Get seller GST/permission status
+- `GET /api/seller/status` - Get seller GST and permission status
 - `POST /api/seller/listings` - Create listing (draft)
-- `POST /api/seller/listings/{id}/publish` - Publish listing (requires verified GST)
+- `POST /api/seller/listings/{id}/publish` - Publish listing (requires `gst.status: "verified"`)
 
 ---
 
 ## Implementation Status
 
 ### Completed (Feb 22, 2026)
-- [x] TypeScript build error fixed
-- [x] 3-step registration flow (Sign Up → Verify Email → Complete Profile)
-- [x] MongoDB user auto-creation on Firebase signup
-- [x] profileComplete flag tracking
-- [x] isEmailVerified sync from Firebase on login
-- [x] Background cleanup task for unverified users (24h expiry)
-- [x] Re-registration cleanup endpoint
-- [x] GST pending banner on seller dashboard
-- [x] Seller permission checks on product publishing
+- [x] Email verification architecture (7 steps)
+- [x] Unified GST schema (SSOT)
+- [x] Legacy field removal from queries
+- [x] GST pending/rejected banners on seller dashboard
+- [x] Seller banned/suspended handling
+- [x] Admin GST pending endpoint with correct response format
+- [x] AuthContext exposes `gstStatus` and `sellerStatus`
 
-### Testing Results (Feb 22, 2026)
-- Backend: 100% (14/14 tests passed)
-- Frontend: 100% (all pages load, types verified)
-- Firebase Auth: NOT CONFIGURED (manual testing required)
+### Testing Results
+- Backend: 100% (all tests passed)
+- Frontend: 100% (code review verified)
+- Firebase Auth: NOT CONFIGURED
 
 ---
 
@@ -171,12 +143,12 @@ If user exists AND verified:
 
 ### P1 - High Priority
 1. Full end-to-end test with real Firebase users
-2. Admin GST verification workflow
-3. Email notification system
+2. Admin UI for GST verification workflow
+3. GST re-upload flow for rejected sellers
 
 ### P2 - Medium Priority
-1. Enhanced seller analytics
-2. Product image upload improvements
+1. Email notifications (welcome, verification reminder)
+2. Enhanced seller analytics
 
 ### P3 - Low Priority
 1. Multi-language support
