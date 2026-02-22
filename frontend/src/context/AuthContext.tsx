@@ -240,7 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const roles = state.profile?.roles ?? [];
   const isSeller = roles.includes('seller');
   const isAdmin = roles.includes('admin') || state.profile?.isAdmin === true;
-  const isGstVerified = state.profile?.gst?.verified === 'VERIFIED';
+  const isGstVerified = state.profile?.gstStatus === 'VERIFIED';
   const needsRegistration = state.registrationState === 'incomplete';
   const needsEmailVerification = state.registrationState === 'email_not_verified';
   
