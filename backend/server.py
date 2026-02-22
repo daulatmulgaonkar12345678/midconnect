@@ -1933,24 +1933,56 @@ async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(secu
 async def require_verified_seller(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
     Require a verified seller for seller product management.
+    
+    PHASE 3 - SELLER STATE DERIVED (NO sellerStatus FIELD):
+    - is_seller = "seller" in user["roles"]
+    - is_verified = user["gst"]["verified"] == True
+    - is_pending = user["gst"]["status"] == "pending"
+    
     User must:
     1. Be authenticated
-    2. Have is_seller = True
+    2. Have "seller" in roles array
     3. Have active account
     """
     user = await require_auth(credentials)
     
-    # Check seller status
-    if not user.get("isSeller", False):
+    # PHASE 3: Derive seller status from roles array
+    roles = user.get("roles", [])
+    is_seller = "seller" in roles
+    
+    if not is_seller:
         metrics.record_auth_failure("seller_access_denied")
         raise HTTPException(
             status_code=403, 
-            detail="Seller access required. Please complete seller registration first."
+            detail="You must register as a seller to access this section."
         )
     
     # Check account is active
     if user.get("accountStatus") == "deleted":
         raise HTTPException(status_code=403, detail="Account is deactivated")
+    
+    return user
+
+
+async def require_gst_verified_seller(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Require a GST-verified seller for publishing products.
+    
+    PHASE 4/5 - SELLER PRODUCT PERMISSION CONTROL:
+    - CASE 1: Not seller -> 403
+    - CASE 2: Seller but GST pending -> 403 (for publish)
+    - CASE 3: Seller GST verified -> Allow
+    """
+    user = await require_verified_seller(credentials)
+    
+    # Check GST verification status
+    gst = user.get("gst", {})
+    if not gst.get("verified", False):
+        gst_status = gst.get("status", "pending")
+        raise HTTPException(
+            status_code=403,
+            detail=f"GST verification required before publishing products. Current status: {gst_status}"
+        )
     
     return user
 
