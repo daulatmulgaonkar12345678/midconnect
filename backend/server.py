@@ -5173,14 +5173,15 @@ async def publish_listing(listing_id: str, user: dict = Depends(require_verified
     
     # Check if user has GST verification (required for first publish)
     user_doc = await db.users.find_one({"_id": seller_oid})
-    if not user_doc.get("gstNumber") or not user_doc.get("gstDocument"):
-        raise HTTPException(status_code=400, detail="GST verification required to publish")
+    gst = user_doc.get("gst", {})
+    if not gst.get("number"):
+        raise HTTPException(status_code=400, detail="GST number required to publish")
     
-    # LOCKED RULE: GST must be verified to publish (not just pending)
-    if user_doc.get("gstStatus") != "verified":
+    # SSOT: gst.status must be "verified" to publish
+    if gst.get("status") != "verified":
         raise HTTPException(
             status_code=403, 
-            detail="GST verification pending. You can prepare listings, publishing will unlock after verification."
+            detail=f"GST verification required. Current status: {gst.get('status', 'none')}"
         )
     
     # Validate mandatory fields
@@ -5204,12 +5205,6 @@ async def publish_listing(listing_id: str, user: dict = Depends(require_verified
             "lastStockUpdate": now,
             "updatedAt": now
         }}
-    )
-    
-    # Activate seller role on first publish
-    await db.users.update_one(
-        {"_id": seller_oid},
-        {"$set": {"isSeller": True}}
     )
     
     return {"message": "Listing published successfully"}
