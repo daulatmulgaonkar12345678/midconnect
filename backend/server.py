@@ -5154,7 +5154,13 @@ async def publish_listing(listing_id: str, user: dict = Depends(require_verified
     """
     Publish a draft listing (set status to active).
     
-    SSOT: Uses seller_listings collection exclusively.
+    ENTERPRISE GRADE VALIDATION:
+    1. Check GST verification
+    2. Check seller account status
+    3. Validate listing completeness (all mandatory fields)
+    4. Only then allow publishing
+    
+    SSOT: Uses sellerListings collection exclusively.
     """
     seller_oid = ObjectId(user["_id"])
     listing_oid = ObjectId(listing_id)
@@ -5184,17 +5190,60 @@ async def publish_listing(listing_id: str, user: dict = Depends(require_verified
             detail=f"GST verification required. Current status: {gst.get('status', 'none')}"
         )
     
-    # Validate mandatory fields
-    if not listing.get("images"):
-        raise HTTPException(status_code=400, detail="At least 1 image required to publish")
-    if not listing.get("pricingTiers"):
-        raise HTTPException(status_code=400, detail="Pricing tiers required to publish")
-    if listing.get("stock", 0) <= 0:
-        raise HTTPException(status_code=400, detail="Valid stock quantity required")
-    if listing.get("moq", 0) <= 0:
-        raise HTTPException(status_code=400, detail="Valid MOQ required")
-    if listing.get("maxCapacity", 0) <= 0:
-        raise HTTPException(status_code=400, detail="Valid max capacity required")
+    # Check seller account status
+    seller_status = user_doc.get("sellerStatus", "active")
+    if seller_status == "banned":
+        raise HTTPException(status_code=403, detail="Seller account is banned")
+    if seller_status == "suspended":
+        raise HTTPException(status_code=403, detail="Seller account is suspended")
+    
+    # ENTERPRISE GRADE: Validate all mandatory fields
+    required_fields = {
+        "pricingTiers": {
+            "check": lambda v: v and len(v) > 0,
+            "message": "At least one pricing tier required"
+        },
+        "moq": {
+            "check": lambda v: v and v > 0,
+            "message": "MOQ (Minimum Order Quantity) must be greater than 0"
+        },
+        "stock": {
+            "check": lambda v: v and v > 0,
+            "message": "Stock quantity must be greater than 0"
+        },
+        "maxCapacity": {
+            "check": lambda v: v and v > 0,
+            "message": "Maximum capacity must be greater than 0"
+        },
+        "images": {
+            "check": lambda v: v and len(v) > 0,
+            "message": "At least one product image required"
+        },
+        "variantId": {
+            "check": lambda v: v is not None,
+            "message": "Product variant must be linked"
+        }
+    }
+    
+    missing_fields = []
+    field_errors = {}
+    
+    for field, config in required_fields.items():
+        value = listing.get(field)
+        if not config["check"](value):
+            missing_fields.append(field)
+            field_errors[field] = config["message"]
+    
+    if missing_fields:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Listing is incomplete and cannot be published",
+                "missingFields": missing_fields,
+                "fieldErrors": field_errors,
+                "message": f"Please complete the following fields before publishing: {', '.join(missing_fields)}"
+            }
+        )
     
     now = datetime.now(timezone.utc)
     await db.sellerListings.update_one(
