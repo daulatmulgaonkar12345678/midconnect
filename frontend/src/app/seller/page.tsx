@@ -23,7 +23,7 @@ import Link from 'next/link';
 
 export default function SellerDashboardPage() {
   const router = useRouter();
-  const { user, getIdToken, loading: authLoading } = useAuth();
+  const { user, getIdToken, loading: authLoading, isSeller, isGstVerified } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
