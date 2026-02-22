@@ -11,14 +11,14 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { getUserProfile, registerUser, ApiError, warmBackend } from '@/lib/api';
+import { getUserProfile, registerUser, ApiError, warmBackend, checkRegistrationStatus, completeProfile, ProfileCompleteData } from '@/lib/api';
 import type { UserProfile } from '@/types';
 
 // User roles for role-based access control
 export type UserRole = 'guest' | 'buyer' | 'seller' | 'admin';
 
 // Registration state for users who have Firebase account but no backend profile
-export type RegistrationState = 'complete' | 'incomplete' | 'unknown';
+export type RegistrationState = 'complete' | 'incomplete' | 'email_not_verified' | 'unknown';
 
 // Connection state for server warm-up
 export type ConnectionState = 'connecting' | 'ready' | 'error';
@@ -31,6 +31,7 @@ interface AuthState {
   registrationState: RegistrationState;
   connectionState: ConnectionState;
   connectionMessage: string;
+  emailVerified: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -38,33 +39,25 @@ interface AuthContextType extends AuthState {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isSeller: boolean;
+  isGstVerified: boolean;
   role: UserRole;
   needsRegistration: boolean;
+  needsEmailVerification: boolean;
   
   // Auth actions
-  signIn: (email: string, password: string) => Promise<{ needsRegistration: boolean }>;
-  signUp: (email: string, password: string, profileData: {
-    businessName: string;
-    phone: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => Promise<void>;
-  completeRegistration: (profileData: {
-    businessName: string;
-    phone: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ needsRegistration: boolean; needsEmailVerification: boolean }>;
+  signUp: (email: string, password: string) => Promise<{ needsEmailVerification: boolean }>;
+  completeRegistration: (profileData: ProfileCompleteData) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
   
   // Token management
   getIdToken: () => Promise<string | null>;
   
   // Profile management
   refreshProfile: () => Promise<void>;
+  checkEmailVerification: () => Promise<boolean>;
   
   // Error handling
   clearError: () => void;
