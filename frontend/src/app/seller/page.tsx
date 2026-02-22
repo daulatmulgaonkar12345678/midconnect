@@ -17,7 +17,8 @@ import {
   Zap,
   TrendingUp,
   ArrowRight,
-  Crown
+  Crown,
+  Clock
 } from 'lucide-react';
 import Link from 'next/link';
 
