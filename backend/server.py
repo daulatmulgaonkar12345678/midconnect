@@ -8594,66 +8594,76 @@ async def admin_reactivate_subscription(
 ):
     """
     Reactivate a suspended subscription.
-    Does NOT extend the end_date - use extend endpoint for that.
+    Does NOT extend the endDate - use extend endpoint for that.
+    
+    SSOT: All fields use camelCase, userId stored as ObjectId.
     """
-    subscription = await db.subscriptions.find_one({"user_id": user_id})
-    if not subscription:
-        raise HTTPException(status_code=404, detail="Subscription not found")
-    
-    if subscription.get("status") != "suspended":
-        raise HTTPException(status_code=400, detail="Subscription is not suspended")
-    
-    now = datetime.now(timezone.utc)
-    end_date = subscription.get("endDate")
-    
-    # Check if subscription would immediately expire
-    new_status = "active"
-    if end_date and now > end_date:
-        new_status = "expired"
-    
-    await db.subscriptions.update_one(
-        {"user_id": user_id},
-        {"$set": {
-            "status": new_status,
-            "lastUpdatedBy": str(admin["_id"]),
-            "updatedAt": now
-        },
-        "$unset": {
-            "suspendedAt": "",
-            "suspendedBy": "",
-            "suspendedReason": ""
-        }}
-    )
-    
-    # Update legacy
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {
-            "subscription.active": new_status == "active",
-            "subscriptionUpdatedAt": now
-        }}
-    )
-    
-    # SSOT: Log history with ObjectId foreign keys
-    await db.subscriptionHistory.insert_one({
-        "user_id": ObjectId(user_id),  # SSOT: Store as ObjectId
-        "action": "reactivate",
-        "newStatus": new_status,
-        "admin_id": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],  # SSOT: Store as ObjectId
-        "adminEmail": admin.get("email"),
-        "createdAt": now
-    })
-    
-    logger.info(f"[SUBSCRIPTION] Admin {admin['email']} reactivated user {user_id} -> {new_status}")
-    
-    return {
-        "message": f"Subscription reactivated (status: {new_status})",
-        "subscription": {
-            "user_id": user_id,
-            "status": new_status,
-            "endDate": end_date.isoformat() if end_date else None
+    try:
+        user_oid = ObjectId(user_id)
+        subscription = await db.subscriptions.find_one({"userId": user_oid})
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        
+        if subscription.get("status") != "suspended":
+            raise HTTPException(status_code=400, detail="Subscription is not suspended")
+        
+        now = datetime.now(timezone.utc)
+        end_date = subscription.get("endDate")
+        admin_oid = ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"]
+        
+        # Check if subscription would immediately expire
+        new_status = "active"
+        if end_date and now > end_date:
+            new_status = "expired"
+        
+        await db.subscriptions.update_one(
+            {"userId": user_oid},
+            {"$set": {
+                "status": new_status,
+                "lastUpdatedBy": admin_oid,
+                "updatedAt": now
+            },
+            "$unset": {
+                "suspendedAt": "",
+                "suspendedBy": "",
+                "suspendedReason": ""
+            }}
+        )
+        
+        # Update legacy
+        await db.users.update_one(
+            {"_id": user_oid},
+            {"$set": {
+                "subscription.active": new_status == "active",
+                "subscriptionUpdatedAt": now
+            }}
+        )
+        
+        # SSOT: Log history with ObjectId foreign keys - camelCase
+        await db.subscriptionHistory.insert_one({
+            "userId": user_oid,  # SSOT: Store as ObjectId, camelCase
+            "action": "reactivate",
+            "newStatus": new_status,
+            "adminId": admin_oid,  # SSOT: Store as ObjectId, camelCase
+            "adminEmail": admin.get("email"),
+            "createdAt": now
+        })
+        
+        logger.info(f"[SUBSCRIPTION] Admin {admin['email']} reactivated user {user_id} -> {new_status}")
+        
+        return {
+            "message": f"Subscription reactivated (status: {new_status})",
+            "subscription": {
+                "userId": user_id,
+                "status": new_status,
+                "endDate": end_date.isoformat() if end_date else None
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail="Subscription reactivation failed")
 
 
 @api_router.post("/admin/subscriptions/run-expiry-check")
