@@ -11,14 +11,14 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { getUserProfile, registerUser, ApiError, warmBackend } from '@/lib/api';
+import { getUserProfile, registerUser, ApiError, warmBackend, checkRegistrationStatus, completeProfile, ProfileCompleteData } from '@/lib/api';
 import type { UserProfile } from '@/types';
 
 // User roles for role-based access control
 export type UserRole = 'guest' | 'buyer' | 'seller' | 'admin';
 
 // Registration state for users who have Firebase account but no backend profile
-export type RegistrationState = 'complete' | 'incomplete' | 'unknown';
+export type RegistrationState = 'complete' | 'incomplete' | 'email_not_verified' | 'unknown';
 
 // Connection state for server warm-up
 export type ConnectionState = 'connecting' | 'ready' | 'error';
@@ -31,6 +31,7 @@ interface AuthState {
   registrationState: RegistrationState;
   connectionState: ConnectionState;
   connectionMessage: string;
+  emailVerified: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -38,33 +39,25 @@ interface AuthContextType extends AuthState {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isSeller: boolean;
+  isGstVerified: boolean;
   role: UserRole;
   needsRegistration: boolean;
+  needsEmailVerification: boolean;
   
   // Auth actions
-  signIn: (email: string, password: string) => Promise<{ needsRegistration: boolean }>;
-  signUp: (email: string, password: string, profileData: {
-    businessName: string;
-    phone: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => Promise<void>;
-  completeRegistration: (profileData: {
-    businessName: string;
-    phone: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ needsRegistration: boolean; needsEmailVerification: boolean }>;
+  signUp: (email: string, password: string) => Promise<{ needsEmailVerification: boolean }>;
+  completeRegistration: (profileData: ProfileCompleteData) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
   
   // Token management
   getIdToken: () => Promise<string | null>;
   
   // Profile management
   refreshProfile: () => Promise<void>;
+  checkEmailVerification: () => Promise<boolean>;
   
   // Error handling
   clearError: () => void;
@@ -85,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registrationState: 'unknown',
     connectionState: 'connecting',
     connectionMessage: 'Connecting to server...',
+    emailVerified: false,
   });
 
   // Warm backend before making auth calls
@@ -107,23 +101,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Fetch profile helper - never logs tokens
-  // Returns null if user not found (404) - this means registration is incomplete
   const fetchProfile = useCallback(async (user: User): Promise<UserProfile | null> => {
     try {
       const token = await user.getIdToken();
       return await getUserProfile(token);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
-        // User exists in Firebase but not registered in backend
-        // This is NOT an error - user needs to complete registration
         return null;
       }
       if (error instanceof ApiError && error.status === 401) {
-        // Token invalid/expired - not a profile issue
         return null;
       }
       throw error;
     }
+  }, []);
+
+  // Determine registration state
+  const determineRegistrationState = useCallback((user: User, profile: UserProfile | null): RegistrationState => {
+    if (profile) {
+      return 'complete';
+    }
+    if (!user.emailVerified) {
+      return 'email_not_verified';
+    }
+    return 'incomplete';
   }, []);
 
   // Initialize auth state listener
@@ -131,22 +132,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          // Warm backend before fetching profile
           await warmupBackend();
-          
           const profile = await fetchProfile(user);
+          const regState = determineRegistrationState(user, profile);
+          
           setState(prev => ({
             ...prev,
             user,
             profile,
             loading: false,
             error: null,
-            registrationState: profile ? 'complete' : 'incomplete',
+            registrationState: regState,
+            emailVerified: user.emailVerified,
             connectionState: 'ready',
             connectionMessage: 'Connected',
           }));
         } catch (error) {
-          // Unexpected error - don't expose details
           setState(prev => ({
             ...prev,
             user,
@@ -154,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             loading: false,
             error: 'Failed to load profile. Please try again.',
             registrationState: 'unknown',
+            emailVerified: user.emailVerified,
             connectionState: 'error',
             connectionMessage: 'Connection error',
           }));
@@ -166,6 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           loading: false,
           error: null,
           registrationState: 'unknown',
+          emailVerified: false,
           connectionState: 'ready',
           connectionMessage: '',
         }));
@@ -173,25 +176,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [fetchProfile, warmupBackend]);
+  }, [fetchProfile, warmupBackend, determineRegistrationState]);
 
-  /**
-   * Sign in with email/password
-   * 
-   * IMPORTANT: Returns { needsRegistration: true } if Firebase login succeeds
-   * but user has no backend profile. This is NOT an error - user should be
-   * redirected to complete registration.
-   */
-  const signIn = async (email: string, password: string): Promise<{ needsRegistration: boolean }> => {
+  // Sign in with email/password
+  const signIn = async (email: string, password: string): Promise<{ needsRegistration: boolean; needsEmailVerification: boolean }> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
+      
+      if (!result.user.emailVerified) {
+        setState(prev => ({
+          ...prev,
+          user: result.user,
+          profile: null,
+          loading: false,
+          error: null,
+          registrationState: 'email_not_verified',
+          emailVerified: false,
+        }));
+        return { needsRegistration: false, needsEmailVerification: true };
+      }
+      
       const profile = await fetchProfile(result.user);
       
       if (!profile) {
-        // Firebase login succeeded but no backend profile
-        // User needs to complete registration - NOT an error
         setState(prev => ({
           ...prev,
           user: result.user,
@@ -199,11 +208,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           loading: false,
           error: null,
           registrationState: 'incomplete',
+          emailVerified: true,
         }));
-        return { needsRegistration: true };
+        return { needsRegistration: true, needsEmailVerification: false };
       }
       
-      // Check account status
       if (profile.accountStatus === 'SUSPENDED') {
         await firebaseSignOut(auth);
         const error = 'Your account has been suspended. Please contact support.';
@@ -218,13 +227,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading: false,
         error: null,
         registrationState: 'complete',
+        emailVerified: true,
       }));
       
-      return { needsRegistration: false };
+      return { needsRegistration: false, needsEmailVerification: false };
     } catch (error: unknown) {
-      // Don't treat "profile not found" as error - already handled above
       if (state.registrationState === 'incomplete') {
-        return { needsRegistration: true };
+        return { needsRegistration: true, needsEmailVerification: false };
+      }
+      if (state.registrationState === 'email_not_verified') {
+        return { needsRegistration: false, needsEmailVerification: true };
       }
       
       const message = getAuthErrorMessage(error);
@@ -233,74 +245,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /**
-   * Sign up with email/password and register in backend
-   * Creates both Firebase account AND backend profile
-   */
-  const signUp = async (
-    email: string, 
-    password: string, 
-    profileData: {
-      businessName: string;
-      phone: string;
-      city: string;
-      state: string;
-      pincode: string;
-    }
-  ) => {
+  // Sign up - Only create Firebase user, send verification email
+  const signUp = async (email: string, password: string): Promise<{ needsEmailVerification: boolean }> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      // Create Firebase user
       const result = await createUserWithEmailAndPassword(auth, email, password);
-      
-      // Send verification email (don't block on this)
-      sendEmailVerification(result.user).catch(() => {
-        // Silently fail - user can request verification later
-      });
-      
-      // Get token and register in backend
-      const token = await result.user.getIdToken();
-      
-      try {
-        await registerUser(token, {
-          email,
-          firebaseUid: result.user.uid,
-          ...profileData,
-        });
-      } catch (regError) {
-        // Handle specific registration errors
-        if (regError instanceof ApiError) {
-          if (regError.status === 409) {
-            // User already exists in backend - try to fetch profile
-            const existingProfile = await fetchProfile(result.user);
-            if (existingProfile) {
-              setState(prev => ({
-                ...prev,
-                user: result.user,
-                profile: existingProfile,
-                loading: false,
-                error: null,
-                registrationState: 'complete',
-              }));
-              return;
-            }
-          }
-          throw new Error(regError.getUserMessage());
-        }
-        throw regError;
-      }
-      
-      // Fetch the created profile
-      const profile = await getUserProfile(token);
+      await sendEmailVerification(result.user);
       
       setState(prev => ({
         ...prev,
         user: result.user,
-        profile,
+        profile: null,
+        loading: false,
+        error: null,
+        registrationState: 'email_not_verified',
+        emailVerified: false,
+      }));
+      
+      return { needsEmailVerification: true };
+    } catch (error: unknown) {
+      const message = getAuthErrorMessage(error);
+      setState(prev => ({ ...prev, loading: false, error: message }));
+      throw new Error(message);
+    }
+  };
+
+  // Complete registration with role selection
+  const completeRegistrationHandler = async (profileData: ProfileCompleteData) => {
+    if (!state.user) {
+      throw new Error('No user logged in');
+    }
+    
+    if (!state.user.emailVerified) {
+      throw new Error('Email verification required before completing registration');
+    }
+    
+    setState(prev => ({ ...prev, loading: true, error: null }));
+    
+    try {
+      const token = await state.user.getIdToken();
+      const response = await completeProfile(token, profileData);
+      
+      setState(prev => ({
+        ...prev,
+        user: state.user,
+        profile: response.user,
         loading: false,
         error: null,
         registrationState: 'complete',
+        emailVerified: true,
       }));
     } catch (error: unknown) {
       const message = getAuthErrorMessage(error);
@@ -309,47 +303,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /**
-   * Complete registration for users who have Firebase account but no backend profile
-   * Called when user logs in and needsRegistration is true
-   */
-  const completeRegistration = async (profileData: {
-    businessName: string;
-    phone: string;
-    city: string;
-    state: string;
-    pincode: string;
-  }) => {
+  // Resend verification email
+  const resendVerificationEmail = async () => {
     if (!state.user) {
       throw new Error('No user logged in');
     }
     
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    
     try {
-      const token = await state.user.getIdToken();
-      
-      await registerUser(token, {
-        email: state.user.email || '',
-        firebaseUid: state.user.uid,
-        ...profileData,
-      });
-      
-      // Fetch the created profile
-      const profile = await getUserProfile(token);
-      
-      setState(prev => ({
-        ...prev,
-        user: state.user,
-        profile,
-        loading: false,
-        error: null,
-        registrationState: 'complete',
-      }));
+      await sendEmailVerification(state.user);
     } catch (error: unknown) {
       const message = getAuthErrorMessage(error);
-      setState(prev => ({ ...prev, loading: false, error: message }));
       throw new Error(message);
+    }
+  };
+
+  // Check if email has been verified
+  const checkEmailVerification = async (): Promise<boolean> => {
+    if (!state.user) {
+      return false;
+    }
+    
+    try {
+      await state.user.reload();
+      const verified = state.user.emailVerified;
+      
+      if (verified && state.registrationState === 'email_not_verified') {
+        setState(prev => ({
+          ...prev,
+          registrationState: 'incomplete',
+          emailVerified: true,
+        }));
+      }
+      
+      return verified;
+    } catch {
+      return false;
     }
   };
 
@@ -367,6 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading: false,
       error: null,
       registrationState: 'unknown',
+      emailVerified: false,
     }));
   };
 
@@ -380,7 +369,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Get ID token - never logs it
+  // Get ID token
   const getIdToken = async (): Promise<string | null> => {
     if (!state.user) return null;
     try {
@@ -399,10 +388,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState(prev => ({ 
         ...prev, 
         profile,
-        registrationState: profile ? 'complete' : 'incomplete',
+        registrationState: profile ? 'complete' : (state.user?.emailVerified ? 'incomplete' : 'email_not_verified'),
       }));
     } catch (error) {
-      // Handle auth errors by signing out
       if (error instanceof ApiError && error.isAuthError()) {
         await signOut();
       }
@@ -416,15 +404,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Computed properties
   const isAuthenticated = !!state.user && !!state.profile;
-  // SSOT: Use camelCase field names to match database schema
   const isAdmin = state.profile?.isAdmin === true;
-  const isSeller = state.profile?.isSeller === true;
+  const roles = state.profile?.roles || [];
+  const isSeller = roles.includes('seller');
+  const isGstVerified = state.profile?.gst?.verified === true;
   const needsRegistration = state.registrationState === 'incomplete';
+  const needsEmailVerification = state.registrationState === 'email_not_verified';
   
   const role: UserRole = !state.user 
     ? 'guest' 
     : !state.profile
-      ? 'guest'  // Not fully registered
+      ? 'guest'
       : isAdmin 
         ? 'admin' 
         : isSeller 
@@ -438,15 +428,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         isAdmin,
         isSeller,
+        isGstVerified,
         role,
         needsRegistration,
+        needsEmailVerification,
         signIn,
         signUp,
-        completeRegistration,
+        completeRegistration: completeRegistrationHandler,
         signOut,
         resetPassword,
+        resendVerificationEmail,
         getIdToken,
         refreshProfile,
+        checkEmailVerification,
         clearError,
       }}
     >
@@ -470,7 +464,6 @@ function getAuthErrorMessage(error: unknown): string {
   }
   
   if (error instanceof Error) {
-    // Firebase error codes
     const errorCode = (error as { code?: string }).code;
     switch (errorCode) {
       case 'auth/user-not-found':
