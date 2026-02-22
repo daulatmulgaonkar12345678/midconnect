@@ -285,8 +285,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const roles: string[] = state.profile?.roles ?? [];
   const isSeller = roles.includes('seller');
   const isAdmin = roles.includes('admin') || state.profile?.isAdmin === true;
-  // NEW ARCHITECTURE: Check gst.verified field
+  
+  // UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH
+  // gst: { number, status: "pending"|"verified"|"rejected", verified: boolean }
   const isGstVerified = state.profile?.gst?.verified === true;
+  const gstStatus = (state.profile?.gst?.status || 'none') as 'none' | 'pending' | 'verified' | 'rejected';
+  
+  // Seller account status
+  const sellerStatus = (state.profile?.sellerStatus || 'active') as 'active' | 'suspended' | 'banned';
+  
   const needsRegistration = state.registrationState === 'incomplete';
   const needsEmailVerification = state.registrationState === 'email_not_verified';
   
@@ -294,7 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      ...state, isAuthenticated, isAdmin, isSeller, isGstVerified, role,
+      ...state, isAuthenticated, isAdmin, isSeller, isGstVerified, gstStatus, sellerStatus, role,
       needsRegistration, needsEmailVerification, signIn, signUp,
       completeRegistration: completeRegistrationHandler, signOut, resetPassword,
       resendVerificationEmail, getIdToken, refreshProfile, checkEmailVerification, clearError,
