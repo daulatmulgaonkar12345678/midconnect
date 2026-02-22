@@ -84,8 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const determineRegistrationState = useCallback((user: User, profile: UserProfile | null): RegistrationState => {
-    if (profile) return 'complete';
+    // NEW ARCHITECTURE: Check profileComplete flag
+    if (profile && profile.profileComplete) return 'complete';
     if (!user.emailVerified) return 'email_not_verified';
+    // User exists but profile not completed
+    if (profile && !profile.profileComplete) return 'incomplete';
     return 'incomplete';
   }, []);
 
