@@ -1959,11 +1959,45 @@ async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(secur
     return user
 
 async def require_verified_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Require email-verified user (for enquiries and publishing)"""
+    """
+    Require email-verified user (for enquiries and publishing).
+    
+    NEW ARCHITECTURE: Check both isEmailVerified and emailVerified for compatibility
+    """
     user = await require_auth(credentials)
-    if not user.get("emailVerified", False):
+    
+    # Check both new and legacy verification fields
+    is_verified = user.get("isEmailVerified", False) or user.get("emailVerified", False)
+    
+    if not is_verified:
         metrics.record_auth_failure("email_not_verified")
-        raise HTTPException(status_code=403, detail="Email verification required. Please verify your email first.")
+        raise HTTPException(
+            status_code=403, 
+            detail="Email verification required. Please verify your email first."
+        )
+    return user
+
+
+async def require_profile_complete(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Require user with completed profile for protected actions.
+    
+    NEW ARCHITECTURE:
+    - Must be email verified
+    - Must have profile completed
+    """
+    user = await require_verified_user(credentials)
+    
+    # Check if profile is complete
+    profile = user.get("profile")
+    profile_complete = user.get("profileComplete", False)
+    
+    if not profile or not profile_complete:
+        raise HTTPException(
+            status_code=403,
+            detail="Profile completion required. Please complete your profile first."
+        )
+    
     return user
 
 async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
