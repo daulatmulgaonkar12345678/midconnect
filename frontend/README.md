@@ -1,70 +1,123 @@
-# Getting Started with Create React App
+# MidConnect Website (Next.js)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+B2B Marketplace website with SEO-optimized public pages and admin panel.
 
-## Available Scripts
+## Architecture
 
-In the project directory, you can run:
+```
+frontend-web/
+├── src/
+│   ├── app/                # Next.js App Router
+│   │   ├── (main)/        # Public pages
+│   │   ├── admin/         # Admin panel
+│   │   └── layout.tsx     # Root layout
+│   ├── components/        # React components
+│   ├── context/           # Auth context
+│   └── lib/
+│       ├── firebase.ts    # Firebase (Web SDK)
+│       └── api.ts         # API client
+├── public/                # Static assets
+├── .env.local            # Environment variables
+└── package.json
+```
 
-### `npm start`
+## Key Differences from Mobile
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+| Feature | Web | Mobile |
+|---------|-----|--------|
+| Firebase SDK | `firebase/auth` | `firebase/auth/react-native` |
+| Persistence | Browser (auto) | AsyncStorage |
+| Routing | Next.js App Router | Expo Router |
+| Styling | Tailwind CSS | StyleSheet.create() |
+| SEO | Full SSR/SSG | N/A |
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Setup
 
-### `npm test`
+```bash
+# Install dependencies
+yarn install
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+# Start development server
+yarn dev
 
-### `npm run build`
+# Build for production
+yarn build
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+# Start production server
+yarn start
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Environment Variables
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Create `.env.local`:
 
-### `npm run eject`
+```env
+# Backend API
+NEXT_PUBLIC_API_URL=https://midconnect.onrender.com/api
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+# Firebase
+NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
+NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abc123
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Firebase Configuration
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+Firebase is configured in `src/lib/firebase.ts` using standard web SDK:
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```typescript
+import { getAuth } from 'firebase/auth';
 
-## Learn More
+// Browser persistence is automatic
+export const auth = getAuth(app);
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## API Calls
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```typescript
+import { getCategories, fetchWithAuth } from '@/lib/api';
 
-### Code Splitting
+// Public endpoints
+const categories = await getCategories();
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+// Authenticated endpoints  
+const profile = await fetchWithAuth('/users/me', token);
+```
 
-### Analyzing the Bundle Size
+## Deployment (Vercel)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+```bash
+# Deploy to Vercel
+vercel
 
-### Making a Progressive Web App
+# Set environment variables in Vercel dashboard
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+Required environment variables on Vercel:
+- `NEXT_PUBLIC_API_URL`
+- All `NEXT_PUBLIC_FIREBASE_*` variables
 
-### Advanced Configuration
+## No Mobile Code
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+This project is **web-only**. It does NOT:
+- Use React Native components
+- Use Expo packages
+- Include any mobile-specific dependencies
 
-### Deployment
+For mobile, use the separate `frontend-mobile` project.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+## Pages
 
-### `npm run build` fails to minify
+### Public Pages
+- `/` - Home page
+- `/products` - Product listings
+- `/search` - Product search
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### Admin Panel
+- `/admin` - Dashboard
+- `/admin/categories` - Category management
+- `/admin/products` - Product management
+- `/admin/users` - User management

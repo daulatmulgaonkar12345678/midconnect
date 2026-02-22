@@ -84,3 +84,5 @@ android-sdk/ -e
 temp_midconnect/.git/objects/pack/pack-70b6d85203c4201b7654f1584b0f6b2168fd14c4.pack
 frontend-web/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.node
 frontend-web/node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
+frontend/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.node
+frontend/node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
