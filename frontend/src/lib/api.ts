@@ -883,8 +883,8 @@ export const updateSellerListing = (token: string, listingId: string, data: List
 export const getProductById = (productId: string): Promise<Product> =>
   fetchAPI<Product>(`/products/${encodeURIComponent(productId)}`);
 
-export const getSpecTemplateById = (token: string, templateId: string): Promise<B2BSpecTemplate> =>
-  fetchWithAuth<B2BSpecTemplate>(`/spec-templates/${encodeURIComponent(templateId)}`, token);
+//export const getSpecTemplateById = (token: string, templateId: string): Promise<B2BSpecTemplate> =>
+//fetchWithAuth<B2BSpecTemplate>(`/specTemplates/${encodeURIComponent(templateId)}`, token);
 
 // Pricing Updates
 export interface PricingUpdatePayload {
