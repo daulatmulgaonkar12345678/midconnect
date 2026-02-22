@@ -137,6 +137,19 @@ export default function SellerDashboardPage() {
           </div>
         )}
 
+        {/* GST Pending Banner - Show for sellers with unverified GST */}
+        {isSeller && !isGstVerified && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3" data-testid="gst-pending-banner">
+            <Clock className="h-6 w-6 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-amber-800">GST Verification Pending</h3>
+              <p className="text-sm text-amber-700 mt-1">
+                Your GST number is being verified. You can create product drafts, but publishing will be enabled once verification is complete.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Stats Overview */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           {/* Subscription Status Card */}
