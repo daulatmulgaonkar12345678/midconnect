@@ -2076,6 +2076,222 @@ async def register_user(request: Request, user_data: UserCreate):
         logger.error(f"Registration error: {e}")
         raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
 
+@api_router.post("/auth/complete-profile")
+@limiter.limit("5/minute")
+async def complete_profile(
+    request: Request,
+    profile_data: ProfileCompleteCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    PHASE 1 & 2 - COMPLETE PROFILE AFTER EMAIL VERIFICATION
+    
+    Flow:
+    1. Firebase user created (frontend)
+    2. Email verification sent (frontend)
+    3. User verifies email
+    4. User logs in, email_verified = true
+    5. Frontend redirects to profile completion
+    6. This endpoint creates MongoDB user with role-based fields
+    
+    PHASE 2 - DATABASE INSERT STRUCTURE (STRICTLY ALIGNED):
+    - roles: ["buyer"] or ["buyer", "seller"]
+    - gst.number: seller only
+    - gst.status: "pending" for seller, null for buyer
+    
+    PHASE 6 - PINCODE GEO LOGIC:
+    - Validate pincode exists in pincodes collection
+    - Fetch latitude & longitude
+    - Save to profile.latitude, profile.longitude
+    
+    PHASE 9 - ATOMIC REGISTRATION:
+    - If MongoDB insert fails, delete Firebase user
+    """
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authorization token required")
+    
+    try:
+        # Verify Firebase token
+        token = credentials.credentials
+        decoded_token = await verify_firebase_token(token)
+        firebase_uid = decoded_token['uid']
+        email = decoded_token.get('email', '')
+        email_verified = decoded_token.get('email_verified', False)
+        
+        # PHASE 1 - REQUIRE EMAIL VERIFICATION
+        if not email_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="Email verification required. Please verify your email before completing registration."
+            )
+        
+        # Check if user already exists
+        existing = await db.users.find_one({"firebaseUid": firebase_uid})
+        if existing:
+            logger.info(f"User already registered, returning existing profile: {email}")
+            return {"message": "User already registered", "user": serialize_doc(existing)}
+        
+        # PHASE 6 - PINCODE GEO LOGIC
+        latitude = None
+        longitude = None
+        pincode_doc = await db.pincodes.find_one({"pincode": profile_data.pincode})
+        if pincode_doc:
+            latitude = pincode_doc.get("latitude")
+            longitude = pincode_doc.get("longitude")
+            logger.info(f"Pincode {profile_data.pincode} found: lat={latitude}, lng={longitude}")
+        else:
+            logger.warning(f"Pincode {profile_data.pincode} not found in pincodes collection")
+        
+        # Calculate trial end date (90 days as per spec)
+        now = datetime.now(timezone.utc)
+        trial_days = 90
+        
+        # Calculate next month for enquiriesResetAt
+        next_month = now.replace(day=1) + timedelta(days=32)
+        next_month = next_month.replace(day=1)  # First day of next month
+        
+        # PHASE 2 - BUILD ROLES ARRAY
+        if profile_data.role == "seller":
+            roles = ["buyer", "seller"]
+            gst_number = profile_data.gstNumber
+            gst_status = "pending"
+        else:
+            roles = ["buyer"]
+            gst_number = None
+            gst_status = None
+        
+        # PHASE 2 - DATABASE INSERT STRUCTURE (STRICTLY ALIGNED)
+        user_doc = {
+            "_id": ObjectId(),
+            "email": email,
+            "firebaseUid": firebase_uid,
+            "roles": roles,
+            "isAdmin": False,
+            "profile": {
+                "businessName": profile_data.businessName,
+                "phone": profile_data.phone,
+                "city": profile_data.city,
+                "state": profile_data.state,
+                "pincode": profile_data.pincode,
+                "address": profile_data.address,
+                "latitude": latitude,
+                "longitude": longitude
+            },
+            "gst": {
+                "number": gst_number,
+                "status": gst_status,
+                "verified": False
+            },
+            "emailVerified": True,  # Already verified via Firebase
+            "accountStatus": "active",
+            "canLogin": True,
+            "isActive": True,
+            "deletedAt": None,
+            "deletionReason": None,
+            "subscription": {
+                "plan": "trial",
+                "status": "trial",
+                "startDate": now,
+                "endDate": None,
+                "trialEndsAt": now + timedelta(days=trial_days),
+                "inquiryLimit": 10,
+                "enquiriesThisMonth": 0,
+                "enquiriesResetAt": next_month
+            },
+            "favourites": [],
+            "recentSearches": [],
+            "createdAt": now,
+            "updatedAt": now
+        }
+        
+        # Insert user
+        try:
+            await db.users.insert_one(user_doc)
+            logger.info(f"New user registered via profile completion: {email}, role: {profile_data.role}")
+            
+            return {
+                "message": "Profile completed successfully",
+                "user": serialize_doc(user_doc),
+                "isSeller": "seller" in roles,
+                "gstStatus": gst_status
+            }
+            
+        except Exception as insert_error:
+            # PHASE 9 - ATOMIC REGISTRATION: Rollback Firebase user if Mongo fails
+            error_str = str(insert_error).lower()
+            
+            if "duplicate key" in error_str or "e11000" in error_str:
+                # Race condition - user already exists
+                existing = await db.users.find_one({"firebaseUid": firebase_uid})
+                if existing:
+                    return {"message": "User already registered", "user": serialize_doc(existing)}
+            
+            # For other errors, attempt to delete Firebase user to prevent orphans
+            logger.error(f"MongoDB insert failed for {email}: {insert_error}")
+            
+            try:
+                if firebase_initialized:
+                    firebase_auth.delete_user(firebase_uid)
+                    logger.warning(f"Rolled back Firebase user {firebase_uid} due to MongoDB failure")
+            except Exception as delete_error:
+                logger.error(f"Failed to rollback Firebase user {firebase_uid}: {delete_error}")
+            
+            raise HTTPException(
+                status_code=500,
+                detail="Registration failed. Please try again."
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Profile completion error: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
+
+
+@api_router.get("/auth/check-registration")
+async def check_registration_status(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Check if Firebase user has completed MongoDB registration.
+    
+    Returns:
+    - needsRegistration: true if Firebase user exists but no MongoDB profile
+    - emailVerified: true if Firebase email is verified
+    - user: MongoDB user profile if exists
+    """
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authorization token required")
+    
+    try:
+        token = credentials.credentials
+        decoded_token = await verify_firebase_token(token)
+        firebase_uid = decoded_token['uid']
+        email = decoded_token.get('email', '')
+        email_verified = decoded_token.get('email_verified', False)
+        
+        # Check if MongoDB user exists
+        user = await db.users.find_one({"firebaseUid": firebase_uid})
+        
+        if user:
+            return {
+                "needsRegistration": False,
+                "emailVerified": email_verified,
+                "user": serialize_doc(user)
+            }
+        else:
+            return {
+                "needsRegistration": True,
+                "emailVerified": email_verified,
+                "email": email,
+                "firebaseUid": firebase_uid
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Check registration error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to check registration status")
+
+
 @api_router.get("/users/me")
 async def get_current_user_profile(user: dict = Depends(require_auth)):
     """Get current user profile"""
