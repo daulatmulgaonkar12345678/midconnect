@@ -191,7 +191,15 @@ export interface User {
   isAdmin?: boolean;
   
   // Nested profile object
-  profile: UserProfileData;
+  profile: UserProfileData | null;
+  
+  // NEW ARCHITECTURE: Profile completion flag
+  profileComplete?: boolean;
+  
+  // NEW ARCHITECTURE: Email verification and status
+  isEmailVerified?: boolean;
+  status?: 'pending' | 'active';
+  verificationDeadline?: string;
   
   // Nested GST object
   gst?: UserGst;
