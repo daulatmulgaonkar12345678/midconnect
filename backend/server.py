@@ -8028,13 +8028,13 @@ async def admin_update_subscription(
     
     await db.users.update_one({"_id": ObjectId(user_id)}, update_query)
     
-    # SSOT: Log subscription history with ObjectId foreign keys
+    # SSOT: Log subscription history with ObjectId foreign keys - camelCase
     await db.subscriptionHistory.insert_one({
-        "user_id": ObjectId(user_id),  # SSOT: Store as ObjectId
+        "userId": ObjectId(user_id),  # SSOT: Store as ObjectId, camelCase
         "action": "admin_update",
         "oldSubscription": user.get("subscription"),
         "newSubscription": new_subscription,
-        "admin_id": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],  # SSOT: Store as ObjectId
+        "adminId": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],  # SSOT: Store as ObjectId, camelCase
         "adminEmail": admin.get("email"),
         "note": data.note,
         "createdAt": now
@@ -8044,7 +8044,7 @@ async def admin_update_subscription(
     
     return {
         "message": "Subscription updated successfully",
-        "user_id": user_id,
+        "userId": user_id,
         "subscription": {
             "plan": data.plan,
             "startDate": now.isoformat(),
