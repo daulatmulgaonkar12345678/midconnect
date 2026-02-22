@@ -8511,7 +8511,6 @@ async def admin_extend_subscription(
     except Exception as e:
         logger.error(f"[SUBSCRIPTION ERROR] {str(e)}")
         raise HTTPException(status_code=500, detail="Subscription extension failed")
-    }
 
 
 @api_router.post("/admin/subscriptions/suspend/{user_id}")
@@ -8523,59 +8522,69 @@ async def admin_suspend_subscription(
     """
     Immediately suspend a subscription.
     User loses access to premium features.
+    
+    SSOT: All fields use camelCase, userId stored as ObjectId.
     """
-    subscription = await db.subscriptions.find_one({"user_id": user_id})
-    if not subscription:
-        raise HTTPException(status_code=404, detail="Subscription not found")
-    
-    now = datetime.now(timezone.utc)
-    old_status = subscription.get("status")
-    
-    # Update subscription
-    await db.subscriptions.update_one(
-        {"user_id": user_id},
-        {"$set": {
-            "status": "suspended",
-            "suspendedAt": now,
-            "suspendedBy": str(admin["_id"]),
-            "suspendedReason": data.reason,
-            "lastUpdatedBy": str(admin["_id"]),
-            "updatedAt": now
-        }}
-    )
-    
-    # Update legacy subscription
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {
-            "subscription.active": False,
-            "subscriptionUpdatedAt": now
-        }}
-    )
-    
-    # SSOT: Log history with ObjectId foreign keys
-    await db.subscriptionHistory.insert_one({
-        "user_id": ObjectId(user_id),  # SSOT: Store as ObjectId
-        "action": "suspend",
-        "oldStatus": old_status,
-        "newStatus": "suspended",
-        "reason": data.reason,
-        "admin_id": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],  # SSOT: Store as ObjectId
-        "adminEmail": admin.get("email"),
-        "createdAt": now
-    })
-    
-    logger.info(f"[SUBSCRIPTION] Admin {admin['email']} suspended user {user_id}: {data.reason}")
-    
-    return {
-        "message": "Subscription suspended",
-        "subscription": {
-            "user_id": user_id,
-            "status": "suspended",
-            "suspendedAt": now.isoformat(),
-            "reason": data.reason
+    try:
+        user_oid = ObjectId(user_id)
+        subscription = await db.subscriptions.find_one({"userId": user_oid})
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        
+        now = datetime.now(timezone.utc)
+        old_status = subscription.get("status")
+        admin_oid = ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"]
+        
+        # Update subscription - SSOT: userId as ObjectId
+        await db.subscriptions.update_one(
+            {"userId": user_oid},
+            {"$set": {
+                "status": "suspended",
+                "suspendedAt": now,
+                "suspendedBy": admin_oid,
+                "suspendedReason": data.reason,
+                "lastUpdatedBy": admin_oid,
+                "updatedAt": now
+            }}
+        )
+        
+        # Update legacy subscription
+        await db.users.update_one(
+            {"_id": user_oid},
+            {"$set": {
+                "subscription.active": False,
+                "subscriptionUpdatedAt": now
+            }}
+        )
+        
+        # SSOT: Log history with ObjectId foreign keys - camelCase
+        await db.subscriptionHistory.insert_one({
+            "userId": user_oid,  # SSOT: Store as ObjectId, camelCase
+            "action": "suspend",
+            "oldStatus": old_status,
+            "newStatus": "suspended",
+            "reason": data.reason,
+            "adminId": admin_oid,  # SSOT: Store as ObjectId, camelCase
+            "adminEmail": admin.get("email"),
+            "createdAt": now
+        })
+        
+        logger.info(f"[SUBSCRIPTION] Admin {admin['email']} suspended user {user_id}: {data.reason}")
+        
+        return {
+            "message": "Subscription suspended",
+            "subscription": {
+                "userId": user_id,
+                "status": "suspended",
+                "suspendedAt": now.isoformat(),
+                "reason": data.reason
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SUBSCRIPTION ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail="Subscription suspension failed")
 
 
 @api_router.post("/admin/subscriptions/reactivate/{user_id}")
