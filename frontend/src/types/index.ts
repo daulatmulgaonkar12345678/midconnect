@@ -132,46 +132,100 @@ export interface ProductWithAllSellers {
 
 // ==================== User Types ====================
 
+/**
+ * User Profile nested structure (matches MongoDB profile object)
+ */
+export interface UserProfileData {
+  businessName?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+/**
+ * GST structure (matches MongoDB gst object)
+ */
+export interface UserGst {
+  number?: string | null;
+  status?: 'pending' | 'verified' | 'rejected' | null;
+  verified: boolean;
+}
+
+/**
+ * Subscription structure
+ */
+export interface UserSubscription {
+  plan?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string | null;
+  trialEndsAt?: string;
+  inquiryLimit?: number;
+  enquiriesThisMonth: number;
+  enquiriesResetAt?: string;
+}
+
+/**
+ * User interface - matches MongoDB schema exactly
+ * 
+ * IMPORTANT: Roles system:
+ * - Default user → ["buyer"]
+ * - Seller → ["buyer", "seller"]
+ * - Admin → ["buyer", "admin"]
+ * 
+ * NO sellerStatus field. Seller state is derived from:
+ * - roles.includes("seller")
+ * - gst.verified === true
+ */
 export interface User {
   _id: string;
   firebaseUid: string;
   email: string;
-  businessName: string;
-  phone: string;
-  city: string;
-  state: string;
-  pincode: string;
-  address?: string;
-  isSeller: boolean;
-  isAdmin: boolean;
-  gstNumber?: string;
-  gstStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
-  accountStatus: 'ACTIVE' | 'PENDING_DELETION' | 'SUSPENDED';
+  
+  // ROLES ARRAY - this is the source of truth for user type
+  roles: string[];
+  isAdmin?: boolean;
+  
+  // Nested profile object
+  profile: UserProfileData;
+  
+  // Nested GST object
+  gst?: UserGst;
+  
   emailVerified: boolean;
+  accountStatus: string;
+  canLogin: boolean;
+  isActive: boolean;
+  deletedAt?: string | null;
+  deletionReason?: string | null;
+  
+  subscription?: UserSubscription;
+  favourites?: string[];
+  recentSearches?: string[];
+  
+  createdAt?: string;
+  updatedAt?: string;
+  
+  // Legacy flat fields for backwards compatibility
+  businessName?: string;
+  phone?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  address?: string;
+  gstNumber?: string;
+  gstStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
+  isSeller?: boolean;
 }
 
-export interface UserProfile {
-  _id: string;
-  email: string;
-  firebaseUid: string;
-  businessName: string;
-  phone: string;
-  city: string;
-  state: string;
-  pincode: string;
-  address?: string;
-  gstNumber?: string;
-  gstStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
-  isSeller: boolean;
-  isAdmin: boolean;
-  emailVerified: boolean;
-  accountStatus: 'ACTIVE' | 'PENDING_DELETION' | 'SUSPENDED';
-  subscription?: {
-    status: string;
-    trialEndsAt?: string;
-    enquiriesThisMonth: number;
-  };
-}
+/**
+ * UserProfile - alias for User, used in AuthContext
+ */
+export type UserProfile = User;
 
 // ==================== Seller Listing Types ====================
 
