@@ -515,8 +515,8 @@ export default function EnterpriseProductPage() {
     async function loadData() {
       try {
         const [productData, facetsData] = await Promise.all([
-          getEnterpriseProduct(productId),
-          getProductFacets(productId)
+          getEnterpriseProduct(productId as string),
+          getProductFacets(productId as string)
         ]);
 
         setProduct(productData);
