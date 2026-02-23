@@ -257,6 +257,21 @@ if allowed → accept + increment (only for non-unlimited)
   - [x] Ranking badges: "Top Pick" (80+), "Great Match" (60+), "Good Match" (40+)
   - [x] Debug mode for ranking breakdown transparency
 
+### New Backend Services Created
+```
+/app/backend/config/
+├── __init__.py
+└── ranking_config.py     # Configurable ranking weights
+
+/app/backend/services/
+└── ranking_service.py    # Enterprise ranking engine
+```
+
+### Ranking API Endpoints
+- `GET /api/products/ranking/config` - Get current weights
+- `POST /api/products/ranking/config` - Update weights (admin)
+- `POST /api/products/ranking/reset` - Reset to defaults
+
 ### New Frontend Components Created
 ```
 /app/frontend/src/components/enterprise/
