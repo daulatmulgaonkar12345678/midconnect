@@ -10630,6 +10630,62 @@ async def admin_migrate_category_ids(admin: dict = Depends(require_admin)):
         "totalProducts": len(products)
     }
 
+
+# ================== ENTERPRISE MIGRATION ENDPOINTS ==================
+
+@api_router.get("/admin/enterprise/status")
+async def get_enterprise_migration_status(admin: dict = Depends(require_admin)):
+    """Get current enterprise migration status."""
+    from services.enterprise_migration import EnterpriseMigrationService
+    
+    migration_service = EnterpriseMigrationService(db)
+    status = await migration_service.get_migration_status()
+    
+    return {
+        "status": "ready" if status["migrationComplete"] else "pending",
+        **status
+    }
+
+
+@api_router.post("/admin/enterprise/migrate")
+async def run_enterprise_migration(admin: dict = Depends(require_admin)):
+    """
+    Run enterprise migration on all sellerListings.
+    
+    Creates:
+    - productVariants for each unique attribute combination
+    - searchableAttributes denormalized on listings
+    - searchableText for full-text search
+    """
+    from services.enterprise_migration import EnterpriseMigrationService
+    
+    migration_service = EnterpriseMigrationService(db)
+    results = await migration_service.run_full_migration()
+    
+    logger.info(f"Admin {admin['email']} ran enterprise migration: {results['migrated']} migrated, {results['skipped']} skipped")
+    
+    return {
+        "message": "Enterprise migration complete",
+        **results
+    }
+
+
+@api_router.post("/admin/enterprise/indexes")
+async def create_enterprise_indexes(admin: dict = Depends(require_admin)):
+    """Create enterprise indexes for optimized search."""
+    from services.enterprise_migration import EnterpriseMigrationService
+    
+    migration_service = EnterpriseMigrationService(db)
+    results = await migration_service.create_indexes()
+    
+    logger.info(f"Admin {admin['email']} created enterprise indexes: {results['created']}")
+    
+    return {
+        "message": "Enterprise indexes created",
+        **results
+    }
+
+
 # ================== MOUNT ROUTER ==================
 
 # Include the api_router in the app
