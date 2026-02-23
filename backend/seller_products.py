@@ -1448,41 +1448,39 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         """
         Accept an inquiry with a quote and generate WhatsApp redirect link.
         
+        ENTERPRISE SUBSCRIPTION FLOW:
+        1. can_accept_inquiry() → checks subscription limits from subscriptions collection (SSOT)
+        2. If cannot accept → 403 with detailed error
+        3. If can accept → update inquiry, increment counter (only for non-unlimited), return success
+        
         Updates inquiry status to "accepted", stores seller response,
         reveals buyer contact details, and returns WhatsApp link for direct contact.
         """
-        from server import get_subscription_status, count_accepted_inquiries_this_month, check_can_accept_inquiry, SUBSCRIPTION_PLANS
+        from services.subscription_service import can_accept_inquiry as check_can_accept, increment_enquiry_usage
         import urllib.parse
         
-        # CRITICAL FIX: Use ObjectId for all database operations
+        # CRITICAL: Use ObjectId for all database operations
         seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
-        seller_id_str = str(seller_oid)  # Keep string for subscription functions
         
-        subscription = seller.get("subscription", {"plan": "free"})
-        accepted_count = await count_accepted_inquiries_this_month(db, seller_id_str)
-        can_accept = check_can_accept_inquiry(subscription, accepted_count)
+        # Step 1: Check subscription limits using SSOT (subscriptions collection)
+        can_accept_result = await check_can_accept(db, seller_oid)
         
-        now = datetime.now(timezone.utc)
-
-        if now.month == 12:
-                next_reset = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
-        else:
-                next_reset = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
-
-        remaining_days = (next_reset - now).days
-
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": can_accept["reason"],
-                "currentCount": can_accept["used"],
-                "limit": can_accept["limit"],
-                "resetsInDays": remaining_days,
-                "upgradeUrl": "/seller/subscription"
-            }
-        )        
+        # Step 2: If cannot accept → return 403 with detailed error
+        if not can_accept_result["canAccept"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": can_accept_result["reason"],
+                    "currentCount": can_accept_result["usage"]["used"],
+                    "limit": can_accept_result["usage"]["limit"],
+                    "resetsInDays": can_accept_result.get("resetsInDays", 0),
+                    "notification": can_accept_result.get("notification"),
+                    "upgradeUrl": can_accept_result.get("upgradeUrl", "/seller/subscription")
+                }
+            )
+        
+        # Step 3: Validate and fetch the inquiry
         try:
-            # CRITICAL FIX: Use ObjectId for sellerId matching
             inquiry = await db.inquiries.find_one({
                 "_id": ObjectId(inquiry_id),
                 "sellerId": seller_oid  # ObjectId, not string
@@ -1499,7 +1497,7 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         now = datetime.now(timezone.utc)
         validity_date = now + timedelta(days=data.validityDays)
         
-        # Update inquiry with sellerResponse format
+        # Step 4: Update inquiry with sellerResponse
         await db.inquiries.update_one(
             {"_id": ObjectId(inquiry_id)},
             {"$set": {
@@ -1523,7 +1521,16 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             }}
         )
         
-        # Get updated inquiry and buyer info
+        # Step 5: Increment usage counter ONLY for non-unlimited plans
+        subscription = can_accept_result["subscription"]
+        new_used_count = can_accept_result["usage"]["used"]
+        
+        if not subscription["isUnlimited"]:
+            # Increment counter for free/trial/expired plans
+            new_used_count = await increment_enquiry_usage(db, seller_oid)
+        # For unlimited plans (pro/enterprise), we do NOT increment enquiriesUsed
+        
+        # Step 6: Get updated inquiry and buyer info
         updated_inquiry = await db.inquiries.find_one({"_id": ObjectId(inquiry_id)})
         buyer_info = updated_inquiry.get("buyerInfo", {})
         
@@ -1588,6 +1595,13 @@ Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
             encoded_message = urllib.parse.quote(whatsapp_message)
             whatsapp_link = f"https://wa.me/{clean_phone.replace('+', '')}?text={encoded_message}"
         
+        # Calculate remaining
+        limit = subscription["limit"]
+        if subscription["isUnlimited"]:
+            remaining = -1
+        else:
+            remaining = max(0, limit - new_used_count)
+        
         return {
             "success": True,
             "message": "Inquiry accepted successfully",
@@ -1604,9 +1618,10 @@ Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
                 "validTill": validity_date.isoformat()
             },
             "subscriptionUsage": {
-                "used": accepted_count + 1,
-                "limit": can_accept["limit"],
-                "remaining": (can_accept["limit"] - accepted_count - 1) if can_accept["limit"] > 0 else -1
+                "used": new_used_count,
+                "limit": limit,
+                "remaining": remaining,
+                "isUnlimited": subscription["isUnlimited"]
             }
         }
     
