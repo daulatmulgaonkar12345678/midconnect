@@ -8758,54 +8758,16 @@ async def admin_activate_subscription(
         return {
             "message": f"Subscription {result['action']} successfully",
             "subscription": {
-            {"$set": subscription_doc},
-            upsert=True
-        )
-
-        # Legacy: Update users.subscription for backwards compatibility
-        legacy_subscription = {
-            "plan": data.planName,
-            "startDate": data.startDate,
-            "endDate": end_date,
-            "inquiryLimit": enquiry_limit,
-            "active": True
-        }
-
-        await db.users.update_one(
-            {"_id": user_oid},
-            {"$set": {
-                "subscription": legacy_subscription,
-                "subscriptionUpdatedAt": now,
-                "subscriptionUpdatedBy": str(admin["_id"])
-            }}
-        )
-
-        await db.subscriptionHistory.insert_one({
-            "userId": user_oid,
-            "action": "activate",
-            "oldSubscription": old_subscription,
-            "newSubscription": subscription_doc,
-            "adminId": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],
-            "adminEmail": admin.get("email"),
-            "note": data.notes,
-            "createdAt": now
-        })
-
-        subscription_doc = calculate_subscription_fields(subscription_doc)
-
-        logger.info(f"[SUBSCRIPTION] Admin {admin['email']} activated {data.planName} for user {user_id}")
-
-        return {
-            "message": "Subscription activated successfully",
-            "subscription": {
                 "userId": user_id,
-                "planName": data.planName,
-                "startDate": data.startDate.isoformat(),
-                "endDate": end_date.isoformat() if end_date else None,
-                "durationDays": duration_days,
+                "planName": subscription_doc.get("planName"),
+                "startDate": subscription_doc.get("startDate").isoformat() if subscription_doc.get("startDate") else None,
+                "endDate": subscription_doc.get("endDate").isoformat() if subscription_doc.get("endDate") else None,
+                "durationDays": subscription_doc.get("durationDays"),
                 "daysRemaining": subscription_doc.get("daysRemaining"),
                 "isExpiringSoon": subscription_doc.get("isExpiringSoon"),
-                "status": "active"
+                "status": subscription_doc.get("status", "active"),
+                "action": result["action"],
+                "activationSource": "admin"
             }
         }
 
