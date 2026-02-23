@@ -427,6 +427,7 @@ export default function EnterpriseProductPage() {
                     onCompareToggle={handleCompareToggle}
                     onInquiry={setInquirySeller}
                     compareDisabled={compareSelected.size >= MAX_COMPARE}
+                    showRankingScore={sortBy === 'ranking'}
                   />
                 ))}
               </div>
