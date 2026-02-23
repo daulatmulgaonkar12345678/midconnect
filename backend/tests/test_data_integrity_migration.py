@@ -153,7 +153,7 @@ class TestValidateSpecTemplateIds:
         assert TestValidateSpecTemplateIds.test_category_1_id, "No categories found in database"
         assert TestValidateSpecTemplateIds.test_template_1_id, "No templates found for category 1"
     
-    def test_08_product_create_with_valid_template_passes(self, api_client, auth_headers):
+    def test_05_product_create_with_valid_template_passes(self, api_client, auth_headers):
         """Creating product with valid template that matches category should work"""
         if not TestValidateSpecTemplateIds.test_category_1_id or not TestValidateSpecTemplateIds.test_template_1_id:
             pytest.skip("Prerequisites not met - category or template not created")
@@ -176,7 +176,7 @@ class TestValidateSpecTemplateIds:
         TestValidateSpecTemplateIds.test_product_id = product.get("_id") or product.get("id")
         print(f"✅ Product created with valid template: {TestValidateSpecTemplateIds.test_product_id}")
     
-    def test_09_product_create_with_category_mismatch_fails(self, api_client, auth_headers):
+    def test_06_product_create_with_category_mismatch_fails(self, api_client, auth_headers):
         """Creating product with template from different category should fail (validate_spec_template_ids)"""
         if not TestValidateSpecTemplateIds.test_category_1_id or not TestValidateSpecTemplateIds.test_template_2_id:
             pytest.skip("Prerequisites not met - category or template not created")
@@ -197,7 +197,7 @@ class TestValidateSpecTemplateIds:
         assert response.status_code == 400, f"Expected 400 for category mismatch, got {response.status_code}: {response.text}"
         print(f"✅ Category mismatch correctly rejected with 400")
     
-    def test_10_product_create_with_nonexistent_template_fails(self, api_client, auth_headers):
+    def test_07_product_create_with_nonexistent_template_fails(self, api_client, auth_headers):
         """Creating product with non-existent template should fail"""
         if not TestValidateSpecTemplateIds.test_category_1_id:
             pytest.skip("Prerequisites not met - category not created")
@@ -220,7 +220,7 @@ class TestValidateSpecTemplateIds:
         assert response.status_code == 400, f"Expected 400 for non-existent template, got {response.status_code}: {response.text}"
         print(f"✅ Non-existent template correctly rejected with 400")
     
-    def test_11_product_update_with_valid_template_passes(self, api_client, auth_headers):
+    def test_08_product_update_with_valid_template_passes(self, api_client, auth_headers):
         """Updating product with valid template should work"""
         if not TestValidateSpecTemplateIds.test_product_id:
             pytest.skip("No product to update")
@@ -236,7 +236,7 @@ class TestValidateSpecTemplateIds:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         print(f"✅ Product update with valid template succeeded")
     
-    def test_12_product_update_with_category_mismatch_fails(self, api_client, auth_headers):
+    def test_09_product_update_with_category_mismatch_fails(self, api_client, auth_headers):
         """Updating product with template from different category should fail"""
         if not TestValidateSpecTemplateIds.test_product_id:
             pytest.skip("No product to update")
