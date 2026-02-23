@@ -1,0 +1,115 @@
+{
+  "summary": "Phase B Governance Layer Testing Complete - 30/30 API tests passed (100%). All governance endpoints working correctly. CRITICAL: Governance enforcement NOT integrated into lead acceptance flow - suspended sellers can still accept leads.",
+  
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/seller/inquiries/{id}/accept",
+        "issue": "Governance enforcement NOT integrated - suspended sellers can still accept leads. The seller_governance_service.can_accept_lead() function exists but is NOT called from seller_products.py accept_inquiry endpoint. Only subscription limits are checked (subscription_service.can_accept_inquiry), not seller status.",
+        "priority": "CRITICAL",
+        "fix_location": "/app/backend/seller_products.py lines 1047-1065",
+        "suggested_fix": "Import and call SellerGovernanceService.can_accept_lead() before checking subscription limits in accept_inquiry endpoint"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "All audit logs",
+        "issue": "adminEmail shows 'Unknown' for dev-test-token user - cosmetic only",
+        "priority": "LOW"
+      }
+    ]
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": [
+    "✅ GET /api/admin/governance/market-health - Returns healthScore (80), sellers.active, quotes.total (200)",
+    "✅ GET /api/admin/governance/abuse-summary - Returns thresholds (40%, 24hrs, 5 min), alerts structure (200)",
+    "✅ GET /api/admin/governance/high-expiry-sellers - Returns threshold=40, sellers array (200)",
+    "✅ GET /api/admin/governance/high-expiry-sellers?threshold=20 - Custom threshold works (200)",
+    "✅ GET /api/admin/governance/slow-responders - Returns thresholdHours=24, sellers array (200)",
+    "✅ GET /api/admin/governance/zero-conversion - Returns count, sellers array (200)",
+    "✅ GET /api/admin/governance/suspicious-activity - Returns count, patterns array (200)",
+    "✅ GET /api/admin/governance/seller/{id}/summary - Returns comprehensive summary (200)",
+    "✅ GET /api/admin/governance/seller/invalid-id/summary - Returns 400 for invalid ID",
+    "✅ GET /api/admin/governance/seller/000000000000000000000000/summary - Returns 404 for nonexistent",
+    "✅ POST /api/admin/governance/seller/{id}/suspend - Suspends seller with audit log (200)",
+    "✅ POST /api/admin/governance/seller/{id}/unsuspend - Unsuspends seller with audit log (200)",
+    "✅ POST /api/admin/governance/seller/{id}/warn - Issues warning level 1-3 (200)",
+    "✅ POST /api/admin/governance/gst/{id}/approve - Approves GST with audit (200)",
+    "✅ POST /api/admin/governance/gst/{id}/reject - Rejects GST with reason (200)",
+    "✅ GET /api/admin/governance/gst/pending - Lists pending verifications (200)",
+    "✅ RBAC: All governance endpoints return 401 without auth",
+    "✅ Audit logs: seller.suspend, seller.unsuspend, seller.warn, gst.approve, gst.reject all logged",
+    "✅ Audit logs: Can filter by action type",
+    "✅ Seller summary includes warningCount, warnings array, performance metrics"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_phase_b_governance.py",
+    "/app/test_reports/pytest/phase_b_governance_results.xml"
+  ],
+  
+  "action_items": [
+    "CRITICAL: Integrate governance enforcement into lead acceptance - call SellerGovernanceService.can_accept_lead() in seller_products.py accept_inquiry endpoint before subscription check",
+    "Verify that suspended sellers are blocked from accepting leads after fix",
+    "Consider also integrating governance check into quote creation (quotation_service.create_quote)"
+  ],
+  
+  "critical_code_review_comments": [
+    "❌ MISSING INTEGRATION: seller_governance_service.can_accept_lead() exists but NOT called from seller_products.py accept_inquiry",
+    "❌ Current flow only checks subscription limits (subscription_service.can_accept_inquiry), not seller status",
+    "✅ Governance service correctly checks for SUSPENDED/BANNED status",
+    "✅ Audit logging working correctly for all governance actions",
+    "✅ Abuse monitoring endpoints return correct thresholds (40% expiry, 24hrs response, 5 min quotes)",
+    "✅ GST approve/reject properly updates user document and logs audit"
+  ],
+  
+  "updated_files": [
+    "/app/backend/tests/test_phase_b_governance.py"
+  ],
+  
+  "success_rate": {
+    "backend": "100% API tests passed (30/30)",
+    "governance_enforcement": "FAILED - not integrated into lead acceptance"
+  },
+  
+  "test_credentials": {
+    "dev_token": "dev-test-token",
+    "api_url": "https://quote-system-19.preview.emergentagent.com",
+    "test_seller_id": "699cb1d8ded1c6446549c19f"
+  },
+  
+  "seed_data_context": {
+    "test_seller": "699cb1d8ded1c6446549c19f - Suspend Test Seller",
+    "seller_status": "active (after test cleanup)",
+    "warning_count": "3+ (from testing)"
+  },
+  
+  "mocked_integrations": {
+    "Firebase Authentication": "MOCKED - using dev-test-token for testing"
+  },
+  
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  
+  "context_for_next_testing_agent": "Phase B Governance APIs all working (30/30 tests). CRITICAL BUG: Governance enforcement is NOT integrated into lead acceptance flow. The seller_governance_service.can_accept_lead() function exists and correctly checks seller status, but it is NOT called from the seller_products.py accept_inquiry endpoint. Only subscription limits are checked. Main agent needs to integrate governance check before subscription check in accept_inquiry endpoint. Test seller 699cb1d8ded1c6446549c19f has been unsuspended after tests but has 3+ warnings.",
+  
+  "rca_of_the_issue": {
+    "root_cause": "Missing integration between governance service and lead acceptance flow",
+    "affected_code": "/app/backend/seller_products.py - accept_inquiry endpoint (lines 1047-1065)",
+    "expected_behavior": "Suspended seller should receive 403 error when trying to accept leads",
+    "actual_behavior": "Suspended seller can accept leads - only subscription limits are checked",
+    "reproduction_steps": [
+      "1. Suspend seller via POST /api/admin/governance/seller/{id}/suspend",
+      "2. Verify seller is suspended via GET /api/admin/governance/seller/{id}/summary",
+      "3. As suspended seller, try to accept an inquiry (would succeed due to missing check)",
+      "4. Seller should be blocked but currently is not"
+    ],
+    "fix_suggestion": "In seller_products.py accept_inquiry function, add governance check before line 1052: from services.seller_governance_service import SellerGovernanceService; governance_service = SellerGovernanceService(db); governance_result = await governance_service.can_accept_lead(seller_oid); if not governance_result['canAccept']: raise HTTPException(status_code=403, detail=governance_result)"
+  }
+}
