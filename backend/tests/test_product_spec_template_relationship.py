@@ -104,8 +104,8 @@ class TestProductSpecTemplateRelationship:
             "name": f"TEST_Template_Cat1_{datetime.now().timestamp()}",
             "categoryId": TestProductSpecTemplateRelationship.test_category_id,
             "fields": [
-                {"name": "Color", "key": "color", "type": "text", "required": False},
-                {"name": "Size", "key": "size", "type": "dropdown", "options": ["Small", "Medium", "Large"], "required": True}
+                {"key": "color", "label": "Color", "fieldType": "text", "required": False},
+                {"key": "size", "label": "Size", "fieldType": "dropdown", "options": ["Small", "Medium", "Large"], "required": True}
             ]
         }
         response = requests.post(
@@ -128,7 +128,7 @@ class TestProductSpecTemplateRelationship:
             "name": f"TEST_Template2_Cat1_{datetime.now().timestamp()}",
             "categoryId": TestProductSpecTemplateRelationship.test_category_id,
             "fields": [
-                {"name": "Weight", "key": "weight", "type": "number", "unit": "kg", "required": False}
+                {"key": "weight", "label": "Weight", "fieldType": "number", "unit": "kg", "required": False}
             ]
         }
         response = requests.post(
@@ -151,7 +151,7 @@ class TestProductSpecTemplateRelationship:
             "name": f"TEST_Template_Cat2_{datetime.now().timestamp()}",
             "categoryId": TestProductSpecTemplateRelationship.test_category_id_2,
             "fields": [
-                {"name": "Material", "key": "material", "type": "text", "required": False}
+                {"key": "material", "label": "Material", "fieldType": "text", "required": False}
             ]
         }
         response = requests.post(
@@ -336,7 +336,7 @@ class TestProductSpecTemplateRelationship:
         template_payload = {
             "name": f"TEST_Template_ToDelete_{datetime.now().timestamp()}",
             "categoryId": TestProductSpecTemplateRelationship.test_category_id,
-            "fields": [{"name": "Deletable", "key": "deletable", "type": "text", "required": False}]
+            "fields": [{"key": "deletable", "label": "Deletable", "fieldType": "text", "required": False}]
         }
         template_response = requests.post(
             f"{BASE_URL}/api/admin/spec-templates",
@@ -457,7 +457,7 @@ class TestProductSpecTemplateRelationship:
         template_payload = {
             "name": f"TEST_Template_ToDeactivate_{datetime.now().timestamp()}",
             "categoryId": TestProductSpecTemplateRelationship.test_category_id,
-            "fields": [{"name": "Temp", "key": "temp", "type": "text", "required": False}]
+            "fields": [{"key": "temp", "label": "Temp", "fieldType": "text", "required": False}]
         }
         template_response = requests.post(
             f"{BASE_URL}/api/admin/spec-templates",
