@@ -619,7 +619,7 @@ export default function NewSellerListingPage() {
     }
   }, [token]);
 
-  // Load spec template when product changes
+  // Load spec template when product changes - FINAL ARCHITECTURE: Use category-based spec template
   const loadSpecTemplateByProduct = useCallback(
   async (productId: string) => {
     if (!productId || !token) return;
@@ -627,25 +627,25 @@ export default function NewSellerListingPage() {
     setLoadingSpecs(true);
 
     try {
-      // 1️⃣ Fetch product
+      // 1️⃣ Fetch product to get its categoryId
       const product = await getProductById(productId);
 
-      // 2️⃣ Get template ID (first one for now)
-      const templateId =
-        product.specTemplateId ||
-        (product.specTemplateIds && product.specTemplateIds[0]);
-
-      if (!templateId) {
+      // 2️⃣ Use categoryId to fetch spec template (FINAL ARCHITECTURE)
+      const categoryId = product.categoryId;
+      
+      if (!categoryId) {
+        console.warn('Product has no categoryId, cannot fetch spec template');
         setSpecTemplate(null);
         return;
       }
 
-      // 3️⃣ Fetch template
-      const template = await getSpecTemplateById(token, templateId);
+      // 3️⃣ Fetch template using category-based endpoint (NOT /specTemplates/:id)
+      const templateData = await getCategorySpecTemplate(token, categoryId);
+      const template = templateData.specTemplate;
 
       setSpecTemplate(template);
 
-      // 4️⃣ Initialize attributes
+      // 4️⃣ Initialize attributes from template.fields (SSOT)
       if (template?.fields) {
         const attrs: Record<string, { value: any; touched: boolean }> = {};
 
