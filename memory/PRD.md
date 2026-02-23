@@ -257,6 +257,17 @@ if allowed → accept + increment (only for non-unlimited)
   - [x] Ranking badges: "Top Pick" (80+), "Great Match" (60+), "Good Match" (40+)
   - [x] Debug mode for ranking breakdown transparency
 
+- [x] **Unified Subscription Engine + Behavior Boost (Phase 4.5 Complete)**
+  - [x] Unified subscription activation/extension logic
+  - [x] Payment integration flow (create-order, webhook, verify)
+  - [x] Idempotent payment processing (paymentId check)
+  - [x] No duplicate active subscriptions
+  - [x] Subscription extends correctly (max(endDate, now) + duration)
+  - [x] `buyerInteractions` collection for behavior tracking
+  - [x] Behavior boost calculation: orders(+15), inquiries(+10), views(+5) - capped at 15
+  - [x] Batch loading for performance (no N+1 queries)
+  - [x] Performance maintained: P95 < 3ms for ranking with boost
+
 ### New Backend Services Created
 ```
 /app/backend/config/
