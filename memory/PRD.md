@@ -13,106 +13,103 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
-## SPEC TEMPLATE ARCHITECTURE (Final)
+## PRODUCT ↔ SPEC TEMPLATE ARCHITECTURE (Final)
 
-### Category-Based Resolution
-```
-GET /api/seller/categories/{categoryId}/spec-template
+### MongoDB Schema
+```json
+// specTemplates collection
+{
+  "_id": ObjectId,
+  "name": "electrical specification",
+  "categoryId": ObjectId,
+  "fields": [{ "key": "voltage", "label": "Voltage", "fieldType": "number", "unit": "V", "required": true }],
+  "isActive": true
+}
+
+// products collection
+{
+  "_id": ObjectId,
+  "name": "Industrial Motor",
+  "categoryId": ObjectId,
+  "specTemplateIds": [ObjectId]  // Array, not singular
+}
 ```
 
+### Architectural Rules (Mandatory)
+1. Product can only reference templates that:
+   - **Exist** in specTemplates collection
+   - **Are active** (isActive != false)
+   - **Have matching categoryId**
+
+2. Template delete → Auto-cleanup:
+   ```python
+   db.products.update_many(
+       {"specTemplateIds": template_id},
+       {"$pull": {"specTemplateIds": template_id}}
+   )
+   ```
+
+3. Field naming:
+   - ✅ `specTemplateIds` (array, camelCase)
+   - ❌ ~~`specTemplateId`~~ (singular)
+   - ❌ ~~`spec_template_ids`~~ (snake_case)
+
+### Validation Flow
+```
+Product Create/Update
+    ↓
+validate_spec_template_ids()
+    ↓
+For each template ID:
+    ├── Convert to ObjectId (or 400)
+    ├── Fetch from DB (or 400: "not found")
+    ├── Check isActive (or 400: "inactive")
+    └── Check categoryId match (or 400: "category mismatch")
+    ↓
+Return validated ObjectId list
+```
+
+### Cleanup Endpoint
+```
+POST /api/admin/products/cleanup-template-refs
+```
 Returns:
 ```json
 {
-  "specTemplate": {
-    "_id": "ObjectId",
-    "name": "electrical specification",
-    "categoryId": "string",
-    "fields": [
-      {
-        "key": "voltage",
-        "label": "Voltage",
-        "fieldType": "number",
-        "unit": "V",
-        "options": [],
-        "required": true,
-        "displayOrder": 0
-      }
-    ],
-    "isActive": true
-  },
-  "category": { ... }
+  "productsScanned": 100,
+  "productsCleaned": 5,
+  "invalidRefsRemoved": 3,
+  "categoryMismatchRemoved": 2
 }
 ```
 
-### REMOVED (Legacy)
-- ❌ `getSpecTemplateById(token, templateId)`
-- ❌ `GET /api/specTemplates/:id`
-- ❌ `specTemplateIds` array on products
-
-### SSOT Rules
-- Use `getCategorySpecTemplate(token, categoryId)`
-- Access fields via `specTemplate.fields`
-- All field names camelCase
-
----
-
-## LISTING PUBLISH VALIDATION
-
-### Required Fields
-| Field | Validation |
-|-------|------------|
-| `pricingTiers` | Array with 1+ items |
-| `moq` | Integer > 0 |
-| `stock` | Integer > 0 |
-| `maxCapacity` | Integer > 0 |
-| `images` | Array with 1+ items |
-| `variantId` | Not null |
-
-### Pre-Publish Validation
-```
-GET /api/seller/listings/{id}/validate
-```
-
----
-
-## MONGODB SCHEMA SSOT
-
-### Subscriptions
-```json
-{
-  "userId": ObjectId,
-  "planName": "free" | "trial" | "pro",
-  "status": "active" | "expired" | "suspended"
-}
-```
-
-### GST
-```json
-{
-  "gst": {
-    "number": string,
-    "status": "pending" | "verified" | "rejected",
-    "verified": boolean
-  }
-}
+### Database Indexes
+```javascript
+db.products.createIndex({ specTemplateIds: 1 });
+db.specTemplates.createIndex({ categoryId: 1 });
+db.specTemplates.createIndex({ categoryId: 1, isActive: 1 });
 ```
 
 ---
 
 ## IMPLEMENTATION STATUS
 
-### Completed (Feb 22, 2026)
+### Completed (Feb 23, 2026)
+- [x] Product ↔ SpecTemplate architectural fix
+  - [x] `validate_spec_template_ids()` helper function
+  - [x] Strict validation on product create/update
+  - [x] Template delete auto-cleans product references
+  - [x] Cleanup endpoint for existing data
+  - [x] Performance indexes
 - [x] Category-based spec template resolution
-- [x] Removed legacy getSpecTemplateById
-- [x] Listing publish validation (6 fields)
-- [x] MongoDB schema alignment (camelCase)
+- [x] Listing publish validation
+- [x] MongoDB schema alignment
 - [x] Subscription system fixes
 - [x] Unified GST schema
 - [x] Email verification architecture
 
 ### Testing Results
-- Frontend: 100% (build success, no legacy code)
-- Backend: 100% verified
+- Backend: 100% (19/19 tests passed)
 
 ---
 
