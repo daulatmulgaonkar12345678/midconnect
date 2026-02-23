@@ -13,6 +13,70 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## ENTERPRISE SUBSCRIPTION ARCHITECTURE (Final)
+
+### Single Source of Truth (SSOT)
+The `subscriptions` collection is the ONLY source of truth for subscription logic.
+**DO NOT** use `users.subscription` for any subscription checks.
+
+### MongoDB Schema
+```json
+// subscriptions collection
+{
+  "_id": ObjectId,
+  "userId": ObjectId,          // References users._id
+  "planName": "free" | "trial" | "pro" | "enterprise",
+  "status": "free" | "active" | "trial" | "expired" | "cancelled" | "suspended",
+  "startDate": ISODate,
+  "endDate": ISODate | null,   // null for free plans
+  "enquiryLimit": int,         // -1 for unlimited (pro/enterprise)
+  "enquiriesUsed": int,        // Monthly counter, resets on enquiriesResetAt
+  "enquiriesResetAt": ISODate  // First of next month
+}
+```
+
+### Business Rules
+1. **Pro/Enterprise (active)**: Unlimited leads, `enquiriesUsed` does NOT increment
+2. **Trial (active)**: Defined limit per `enquiryLimit`, counter increments
+3. **Free/Expired/Cancelled**: 5 leads/month limit, counter increments
+4. **Monthly Reset**: When `enquiriesResetAt < now`, reset `enquiriesUsed` to 0
+
+### Subscription Resolution Flow
+```
+accept_inquiry
+   ↓
+get_effective_subscription()    ← SSOT: reads subscriptions collection
+   ↓
+check_and_update_monthly_usage() ← handles monthly reset
+   ↓
+can_accept_inquiry()
+   ↓
+if used >= limit → 403 with detailed error
+   ↓
+if allowed → accept + increment (only for non-unlimited)
+```
+
+### Key Files
+- `/app/backend/services/subscription_service.py` - SSOT for all subscription logic
+- `/app/backend/seller_products.py` - `accept_inquiry`, `get_seller_stats`, `get_subscription_status`
+- `/app/backend/server.py` - `seller_get_subscription_status`, `admin_activate_subscription`
+
+### 403 Error Response (Limit Reached)
+```json
+{
+  "detail": {
+    "error": "LIMIT_REACHED",
+    "currentCount": 5,
+    "limit": 5,
+    "resetsInDays": 5,
+    "notification": "You've reached your monthly limit...",
+    "upgradeUrl": "/seller/subscription"
+  }
+}
+```
+
+---
+
 ## PRODUCT ↔ SPEC TEMPLATE ARCHITECTURE (Final)
 
 ### MongoDB Schema
@@ -54,47 +118,21 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
    - ❌ ~~`specTemplateId`~~ (singular)
    - ❌ ~~`spec_template_ids`~~ (snake_case)
 
-### Validation Flow
-```
-Product Create/Update
-    ↓
-validate_spec_template_ids()
-    ↓
-For each template ID:
-    ├── Convert to ObjectId (or 400)
-    ├── Fetch from DB (or 400: "not found")
-    ├── Check isActive (or 400: "inactive")
-    └── Check categoryId match (or 400: "category mismatch")
-    ↓
-Return validated ObjectId list
-```
-
-### Cleanup Endpoint
-```
-POST /api/admin/products/cleanup-template-refs
-```
-Returns:
-```json
-{
-  "productsScanned": 100,
-  "productsCleaned": 5,
-  "invalidRefsRemoved": 3,
-  "categoryMismatchRemoved": 2
-}
-```
-
-### Database Indexes
-```javascript
-db.products.createIndex({ specTemplateIds: 1 });
-db.specTemplates.createIndex({ categoryId: 1 });
-db.specTemplates.createIndex({ categoryId: 1, isActive: 1 });
-```
-
 ---
 
 ## IMPLEMENTATION STATUS
 
 ### Completed (Feb 23, 2026)
+- [x] **Enterprise Subscription Enforcement (P0)**
+  - [x] `subscription_service.py` as SSOT
+  - [x] `accept_inquiry` enforces limits via `can_accept_inquiry()`
+  - [x] Pro/Enterprise: unlimited, counter NOT incremented
+  - [x] Free/Expired: 5/month limit, counter incremented
+  - [x] Monthly reset via `enquiriesResetAt`
+  - [x] Admin activation initializes counters
+  - [x] 403 error with detailed response
+  - [x] **All 24/24 backend tests passed (100%)**
+
 - [x] Product ↔ SpecTemplate architectural fix
   - [x] `validate_spec_template_ids()` helper function
   - [x] Strict validation on product create/update
@@ -109,7 +147,7 @@ db.specTemplates.createIndex({ categoryId: 1, isActive: 1 });
 - [x] Email verification architecture
 
 ### Testing Results
-- Backend: 100% (19/19 tests passed)
+- Backend: 100% (24/24 tests passed)
 
 ---
 
@@ -118,9 +156,13 @@ db.specTemplates.createIndex({ categoryId: 1, isActive: 1 });
 ### P0 - Critical
 1. Configure Firebase Admin SDK
 
-### P1 - High Priority
-1. Payment integration
-2. End-to-end testing
+### P1 - High Priority (Frontend Subscription UI)
+1. Update seller dashboard to display subscription status from new SSOT
+2. Show badge (e.g., "Pro Active", "Expired – Free Mode")
+3. Display limit notification when nearing/at limit
+4. Handle 403 error with user-friendly message
 
 ### P2 - Medium Priority
-1. Email notifications
+1. Payment integration
+2. Email notifications
+3. Implement "Banned Seller" Status with `sellerStatus` field
