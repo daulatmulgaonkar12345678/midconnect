@@ -32,7 +32,8 @@ import {
   ComparisonTable,
   MobileFilterDrawer,
   EmptyState,
-  InquiryModal
+  InquiryModal,
+  FloatingCompareBar
 } from '@/components/enterprise';
 
 const DEBOUNCE_MS = 300;
