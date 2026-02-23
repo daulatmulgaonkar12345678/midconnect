@@ -1,4 +1,4 @@
-'use client';
+good ? 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -536,7 +536,43 @@ export default function SellerInquiriesPage() {
                       {inquiry.buyerInfo.phone && (
                         <button
                           onClick={() => {
-                            const msg = `Hello ${inquiry.buyerInfo?.name || ''},\nThis is regarding your inquiry for ${inquiry.listingName}.\nQuantity: ${inquiry.quantity}`;
+                            const buyerName = inquiry.buyerInfo?.name || 'Customer';
+const productName = inquiry.listingName || 'your product';
+const quantity = inquiry.quantity || 0;
+
+const sellerName = user?.displayName || 'Seller';
+const sellerBusiness = (user as any)?.businessName || 'Your Company';
+
+const price = inquiry.quote?.price ?? 0;
+const moq = inquiry.quote?.moq ?? null;
+const leadTime = inquiry.quote?.leadTimeDays ?? null;
+
+const validDate = inquiry.quote?.validTill
+  ? new Date(inquiry.quote.validTill).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+  : null;
+
+let msg =
+  `Hello ${buyerName},\n\n` +
+  `Greetings from B2B Market Place.\n\n` +
+  `This is ${sellerName} from ${sellerBusiness}.\n\n` +
+  `We are pleased to share our quotation for your inquiry regarding "${productName}".\n\n` +
+  `Requested Quantity: ${quantity}\n` +
+  `Quoted Price: ₹${price} per unit\n`;
+
+if (moq) msg += `Minimum Order Quantity (MOQ): ${moq}\n`;
+if (leadTime) msg += `Lead Time: ${leadTime} days\n`;
+if (validDate) msg += `Quotation Valid Till: ${validDate}\n`;
+
+msg +=
+  `\nPlease feel free to reach out for any further clarification.\n\n` +
+  `Best Regards,\n` +
+  `${sellerName}\n` +
+  `${sellerBusiness}\n` +
+  `B2B Market Place`;
                             
                             // Clean phone number - remove non-digits
                             const rawPhone = inquiry.buyerInfo?.phone || '';
