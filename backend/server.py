@@ -7362,6 +7362,95 @@ async def admin_delete_spec_template(
     }
 
 
+@api_router.post("/admin/products/cleanup-template-refs")
+async def admin_cleanup_template_refs(
+    admin: dict = Depends(require_admin)
+):
+    """
+    ARCHITECTURAL FIX: Cleanup invalid template references from all products.
+    
+    This endpoint:
+    1. Gets all valid template IDs from specTemplates collection
+    2. Scans all products with specTemplateIds
+    3. Removes any template IDs that don't exist or are inactive
+    4. Returns summary of cleanup
+    
+    Run this once to fix existing data integrity issues.
+    """
+    # Get all valid template IDs (active templates)
+    valid_templates = await db.specTemplates.find(
+        {"isActive": {"$ne": False}},
+        {"_id": 1, "categoryId": 1}
+    ).to_list(length=None)
+    
+    valid_template_ids = {str(t["_id"]): str(t.get("categoryId", "")) for t in valid_templates}
+    
+    # Find all products with specTemplateIds
+    products = await db.products.find(
+        {"specTemplateIds": {"$exists": True, "$ne": []}},
+        {"_id": 1, "name": 1, "categoryId": 1, "specTemplateIds": 1}
+    ).to_list(length=None)
+    
+    cleaned_count = 0
+    invalid_refs_removed = 0
+    category_mismatch_removed = 0
+    products_cleaned = []
+    
+    for product in products:
+        product_id = product["_id"]
+        product_category = str(product.get("categoryId", ""))
+        current_template_ids = product.get("specTemplateIds", [])
+        
+        valid_for_product = []
+        removed = []
+        
+        for tid in current_template_ids:
+            tid_str = str(tid)
+            
+            # Check if template exists and is active
+            if tid_str not in valid_template_ids:
+                removed.append({"id": tid_str, "reason": "not_found_or_inactive"})
+                invalid_refs_removed += 1
+                continue
+            
+            # Check category match
+            template_category = valid_template_ids[tid_str]
+            if template_category and template_category != product_category:
+                removed.append({"id": tid_str, "reason": "category_mismatch"})
+                category_mismatch_removed += 1
+                continue
+            
+            # Valid
+            valid_for_product.append(tid)
+        
+        # Update product if any templates were removed
+        if len(valid_for_product) != len(current_template_ids):
+            await db.products.update_one(
+                {"_id": product_id},
+                {"$set": {"specTemplateIds": valid_for_product}}
+            )
+            cleaned_count += 1
+            products_cleaned.append({
+                "productId": str(product_id),
+                "name": product.get("name", "Unknown"),
+                "removed": removed
+            })
+    
+    logger.info(f"Admin {admin['email']} ran template cleanup: {cleaned_count} products cleaned")
+    
+    return {
+        "message": f"Cleanup complete. {cleaned_count} products updated.",
+        "summary": {
+            "productsScanned": len(products),
+            "productsCleaned": cleaned_count,
+            "invalidRefsRemoved": invalid_refs_removed,
+            "categoryMismatchRemoved": category_mismatch_removed,
+            "validTemplatesCount": len(valid_template_ids)
+        },
+        "details": products_cleaned if cleaned_count <= 50 else f"{cleaned_count} products cleaned (details truncated)"
+    }
+
+
 # === Product Admin Endpoints ===
 
 @api_router.get("/admin/products")
