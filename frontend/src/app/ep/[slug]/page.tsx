@@ -384,7 +384,7 @@ export default function EnterpriseProductPage() {
               {/* Sort Options (Desktop) */}
               <div className="hidden lg:flex items-center gap-2">
                 <span className="text-sm text-gray-500">Sort by:</span>
-                {(['price', 'leadTime', 'stock'] as SortOption[]).map((option) => (
+                {(['ranking', 'price', 'leadTime', 'stock'] as SortOption[]).map((option) => (
                   <button
                     key={option}
                     onClick={() => handleSortChange(option)}
@@ -394,10 +394,11 @@ export default function EnterpriseProductPage() {
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
+                    {option === 'ranking' && 'Best Match'}
                     {option === 'price' && 'Price'}
                     {option === 'leadTime' && 'Lead Time'}
                     {option === 'stock' && 'Stock'}
-                    {sortBy === option && (
+                    {sortBy === option && option !== 'ranking' && (
                       <ArrowUpDown className="inline h-3 w-3 ml-1" />
                     )}
                   </button>
