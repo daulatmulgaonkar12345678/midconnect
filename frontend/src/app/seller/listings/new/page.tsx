@@ -40,7 +40,7 @@ import {
 import Link from 'next/link';
 import {
   getProductById,
-  getSpecTemplateById
+  getCategorySpecTemplate
 } from '@/lib/api';
 
 
