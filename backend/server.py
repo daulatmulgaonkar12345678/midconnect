@@ -10635,6 +10635,13 @@ async def admin_migrate_category_ids(admin: dict = Depends(require_admin)):
 # Include the api_router in the app
 app.include_router(api_router)
 
+# ================== ENTERPRISE PRODUCT ROUTER ==================
+# Phase: Enterprise-grade product pages with structured search
+
+from routers.enterprise_products import create_enterprise_product_router
+enterprise_product_router = create_enterprise_product_router(db)
+app.include_router(enterprise_product_router, prefix="/api")
+
 # ================== B2B ADMIN ROUTER ==================
 # Phase 1: Admin Foundation - Dynamic dropdowns, category settings, spec templates
 
