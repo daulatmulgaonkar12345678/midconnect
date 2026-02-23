@@ -277,16 +277,15 @@ if allowed → accept + increment (only for non-unlimited)
 1. Configure Firebase Admin SDK
 
 ### P1 - High Priority
-1. Performance & Load Testing (10k, 50k, 100k listings) on enterprise endpoints
-2. Deprecate old product page (`/product/[slug]`) after enterprise page is validated
-3. Update seller dashboard to display subscription status from new SSOT
-4. Show badge (e.g., "Pro Active", "Expired – Free Mode")
+1. ~~Performance & Load Testing~~ ✅ DONE - Passes benchmarks at 50k
+2. Deprecate old product page (`/product/[slug]`) after enterprise page validation in production
+3. AI Enterprise Ranking Layer - Prepare for semantic search integration
+4. Payment integration for subscription upgrades
 
 ### P2 - Medium Priority
 1. Usage analytics for filter interactions on enterprise page
-2. Payment integration
-3. Email notifications
-4. Implement "Banned Seller" Status with `sellerStatus` field
+2. Email notifications
+3. Implement "Banned Seller" Status with `sellerStatus` field
 
 ### P3 - Future
 1. AI Semantic Search Layer with vector embeddings
