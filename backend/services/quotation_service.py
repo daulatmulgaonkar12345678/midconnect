@@ -860,7 +860,7 @@ B2B Market Place"""
         })
     
     def _serialize_quote(self, quote: Dict[str, Any]) -> Dict[str, Any]:
-        """Serialize quote for API response."""
+        """Serialize quote for API response (excludes sensitive internal fields)."""
         def format_date(d):
             if d is None:
                 return None
@@ -870,18 +870,19 @@ B2B Market Place"""
         
         return {
             "quoteId": quote.get("quoteId"),
-            "inquiryId": str(quote.get("inquiryId")),
-            "productId": str(quote.get("productId")),
+            "inquiryId": str(quote.get("inquiryId")) if quote.get("inquiryId") else None,
+            "productId": str(quote.get("productId")) if quote.get("productId") else None,
             "productName": quote.get("productName"),
-            "sellerId": str(quote.get("sellerId")),
+            "sellerId": str(quote.get("sellerId")) if quote.get("sellerId") else None,
             "sellerName": quote.get("sellerName"),
-            "buyerId": str(quote.get("buyerId")),
+            "buyerId": str(quote.get("buyerId")) if quote.get("buyerId") else None,
             "buyerName": quote.get("buyerName"),
+            "buyerCompany": quote.get("buyerCompany"),
             "requestedQuantity": quote.get("requestedQuantity"),
             "unitPrice": quote.get("unitPrice"),
             "moq": quote.get("moq"),
             "packagingCharges": quote.get("packagingCharges", 0),
-            "transportChargesIncluded": False,
+            "transportIncluded": False,  # Always false per spec
             "totalPrice": quote.get("totalPrice"),
             "leadTimeDays": quote.get("leadTimeDays"),
             "validityDate": format_date(quote.get("validityDate")),
@@ -889,11 +890,12 @@ B2B Market Place"""
             "terms": quote.get("terms"),
             "customMessage": quote.get("customMessage"),
             "status": quote.get("status"),
-            "whatsappPreviewSent": quote.get("whatsappPreviewSent", False),
+            "whatsappRedirectUsed": quote.get("whatsappRedirectUsed", False),
             "createdAt": format_date(quote.get("createdAt")),
             "viewedAt": format_date(quote.get("viewedAt")),
             "acceptedAt": format_date(quote.get("acceptedAt")),
-            "rejectedAt": format_date(quote.get("rejectedAt"))
+            "rejectedAt": format_date(quote.get("rejectedAt")),
+            "rejectionReason": quote.get("rejectionReason")
         }
 
 
