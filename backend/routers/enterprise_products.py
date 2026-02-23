@@ -574,7 +574,80 @@ def create_enterprise_product_router(db):
             "pages": (total + request.limit - 1) // request.limit if total > 0 else 1,
             "fallbackLevel": fallback_level,
             "fallbackMessage": fallback_message,
-            "appliedFilters": original_filters
+            "appliedFilters": original_filters,
+            "sortedBy": request.sortBy
+        }
+    
+    # ==========================================
+    # RANKING CONFIGURATION ENDPOINTS
+    # ==========================================
+    
+    @router.get("/ranking/config")
+    async def get_ranking_config():
+        """
+        Get current ranking weight configuration.
+        
+        Returns all weights used in the enterprise ranking engine.
+        """
+        return {
+            "weights": ranking_config.get_weights_dict(),
+            "maxPossibleScore": ranking_config.get_max_possible_score(),
+            "description": {
+                "stock_available": "Points for having stock > 0",
+                "stock_high": "Bonus for stock > 50 units",
+                "subscription_free": "Points for free tier sellers",
+                "subscription_trial": "Points for trial tier sellers",
+                "subscription_pro": "Points for pro tier sellers (monetization)",
+                "subscription_enterprise": "Points for enterprise tier sellers",
+                "lead_time_under_3_days": "Points for fast delivery",
+                "lead_time_under_7_days": "Points for quick delivery",
+                "price_lowest_10_percent": "Points for being in cheapest 10%",
+                "price_lowest_20_percent": "Points for being in cheapest 20%",
+                "location_same_city": "Points for same city as buyer",
+                "location_same_state": "Points for same state as buyer",
+                "spec_exact_match": "Points for exact specification match",
+                "verified_seller": "Bonus for manufacturer/authorized dealer"
+            }
+        }
+    
+    @router.post("/ranking/config")
+    async def update_ranking_config(updates: Dict[str, float]):
+        """
+        Update ranking weight configuration.
+        
+        Allows A/B testing and tuning of ranking weights.
+        
+        Example:
+        {"subscription_pro": 20, "location_same_state": 12}
+        """
+        # Validate weight names
+        valid_weights = ranking_config.get_weights_dict().keys()
+        invalid_keys = [k for k in updates.keys() if k not in valid_weights]
+        
+        if invalid_keys:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid weight keys: {invalid_keys}. Valid keys: {list(valid_weights)}"
+            )
+        
+        # Apply updates
+        ranking_config.update_weights(updates)
+        
+        return {
+            "message": "Ranking weights updated",
+            "updatedWeights": updates,
+            "currentConfig": ranking_config.get_weights_dict()
+        }
+    
+    @router.post("/ranking/reset")
+    async def reset_ranking_config():
+        """
+        Reset ranking weights to defaults.
+        """
+        ranking_config.reset_weights()
+        return {
+            "message": "Ranking weights reset to defaults",
+            "currentConfig": ranking_config.get_weights_dict()
         }
     
     return router
