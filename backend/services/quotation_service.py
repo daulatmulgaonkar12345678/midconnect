@@ -1,49 +1,62 @@
 """
-ENTERPRISE QUOTATION SERVICE
-=============================
+ENTERPRISE QUOTATION SERVICE - HYBRID RFQ SYSTEM
+=================================================
 
-Hybrid seller quotation system with:
-- Structured in-app quotes
-- WhatsApp preview messages (no contact leakage)
-- Platform-only acceptance
-- Auto-expiry logic
-- Analytics tracking
+Production v1 - Hybrid Seller Quotation Model
+
+Key Principles:
+- Quote always stored in platform (SSOT)
+- WhatsApp is redirect only (no API integration)
+- Acceptance only inside app (platform control)
+- No data leakage before acceptance
+- No quote edits after sent
 
 Quote Flow:
 1. Buyer → RFQ (Inquiry)
-2. Seller → Accept Inquiry → Create Quote
-3. Quote → WhatsApp Preview Sent
-4. Buyer → View Quote in Platform
-5. Buyer → Accept/Reject inside Platform
-6. Auto Expiry enforced
+2. Seller → Accept Inquiry (lead counted)
+3. Seller → Create Quote
+4. Seller → WhatsApp button (redirect)
+5. Buyer → Receives message with secure link
+6. Buyer → Views quote on platform
+7. Buyer → Accept/Reject inside platform
+8. Auto Expiry enforced
 
 Collection: quotes
 Schema:
 {
     "_id": ObjectId,
-    "quoteId": "QT-000123",
+    "quoteId": "QT-XXXXX",           # Non-sequential, secure alphanumeric
     "inquiryId": ObjectId,
-    "productId": ObjectId,
     "sellerId": ObjectId,
     "buyerId": ObjectId,
+    "productId": ObjectId,
     "requestedQuantity": Number,
     "unitPrice": Number,
     "moq": Number,
     "packagingCharges": Number,
-    "transportChargesIncluded": false,
-    "totalPrice": Number,
+    "transportIncluded": false,       # Always false for v1
+    "totalPrice": Number,             # Auto-calc: (unitPrice × qty) + packagingCharges
     "leadTimeDays": Number,
     "validityDate": ISODate,
-    "terms": String,
-    "customMessage": String,
     "status": "sent" | "viewed" | "accepted" | "rejected" | "expired",
-    "whatsappPreviewSent": Boolean,
+    "whatsappRedirectUsed": Boolean,  # Tracks if seller clicked WhatsApp button
+    "accessToken": String,            # Secure token for public URL access
+    "createdAt": ISODate,
+    "updatedAt": ISODate,
     "viewedAt": ISODate,
     "acceptedAt": ISODate,
     "rejectedAt": ISODate,
-    "createdAt": ISODate,
-    "updatedAt": ISODate
+    "rejectionReason": String
 }
+
+Security Checklist:
+✔ QuoteId non-sequential (random alphanumeric)
+✔ Quote not editable after sent
+✔ Buyer only sees their quotes
+✔ Seller cannot modify after submission
+✔ Acceptance requires login
+✔ Expired quote cannot be accepted
+✔ Lead count enforced before inquiry acceptance
 """
 
 from datetime import datetime, timezone, timedelta
