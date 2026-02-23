@@ -540,9 +540,8 @@ export default function SellerInquiriesPage() {
 const productName = inquiry.listingName || 'your product';
 const quantity = inquiry.quantity || 0;
 
-const sellerName = user?.displayName || 'Seller';
-const sellerBusiness = (user as any)?.businessName || 'Your Company';
-
+const sellerBusiness =
+  (user as any)?.profile?.businessName || 'Your Business';
 const price = inquiry.quote?.price ?? 0;
 const moq = inquiry.quote?.moq ?? null;
 const leadTime = inquiry.quote?.leadTimeDays ?? null;
