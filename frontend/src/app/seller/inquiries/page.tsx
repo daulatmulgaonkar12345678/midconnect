@@ -537,12 +537,20 @@ export default function SellerInquiriesPage() {
                         <button
                           onClick={() => {
                             const msg = `Hello ${inquiry.buyerInfo?.name || ''},\nThis is regarding your inquiry for ${inquiry.listingName}.\nQuantity: ${inquiry.quantity}`;
-                            window.open(`https://wa.me/${inquiry.buyerInfo?.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+                            
+                            // Clean phone number - remove non-digits
+                            const rawPhone = inquiry.buyerInfo?.phone || '';
+                            const cleaned = rawPhone.replace(/\D/g, '');
+                            // Add India country code if not present
+                            const finalPhone = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
+                            
+                            window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`, '_blank');
                           }}
                           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                          data-testid={`whatsapp-btn-${inquiry._id}`}
                         >
                           <Send className="h-4 w-4" />
-                          WhatsApp
+                          WhatsApp Buyer
                         </button>
                       )}
                     </div>
