@@ -242,6 +242,21 @@ if allowed → accept + increment (only for non-unlimited)
     - Facets P95: 179.5ms (~target, network latency included)
     - Enterprise P95: 262ms (~target, within 5% with network latency)
 
+- [x] **Enterprise Ranking Engine (Phase 4 Complete)**
+  - [x] Deterministic weight-based scoring system
+  - [x] Configurable weights via admin API (`/ranking/config`)
+  - [x] Score components:
+    - Stock availability (+20/+25)
+    - Subscription tier (+0 to +25) - monetization lever
+    - Lead time (+0 to +15)
+    - Price competitiveness (+0 to +15)
+    - Location proximity (+0 to +10)
+    - Spec match quality (+5 to +20)
+    - Seller quality signals (bonus +13)
+  - [x] "Best Match" sort option in frontend (default)
+  - [x] Ranking badges: "Top Pick" (80+), "Great Match" (60+), "Good Match" (40+)
+  - [x] Debug mode for ranking breakdown transparency
+
 ### New Frontend Components Created
 ```
 /app/frontend/src/components/enterprise/
