@@ -329,7 +329,13 @@ async def get_subscription_status_for_seller(db, user_id: ObjectId) -> Dict[str,
     Get complete subscription status for seller dashboard.
     
     Returns frontend-ready subscription data.
+    
+    This is the ONLY function that should be used for seller subscription UI.
     """
+    # Ensure user_id is ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    
     subscription = await get_effective_subscription(db, user_id)
     used = await check_and_update_monthly_usage(db, user_id)
     
@@ -340,35 +346,44 @@ async def get_subscription_status_for_seller(db, user_id: ObjectId) -> Dict[str,
     
     # Calculate days remaining
     days_remaining = None
-    if raw_sub and raw_sub.get("endDate"):
-        delta = raw_sub["endDate"] - now
+    end_date = subscription.get("endDate")
+    if end_date:
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+        delta = end_date - now
         days_remaining = max(0, delta.days)
     
     # Calculate reset date
     reset_date = None
     if raw_sub and raw_sub.get("enquiriesResetAt"):
-        reset_date = raw_sub["enquiriesResetAt"].strftime("%B 1, %Y")
+        reset_dt = raw_sub["enquiriesResetAt"]
+        if isinstance(reset_dt, datetime):
+            reset_date = reset_dt.strftime("%B 1, %Y")
     
     # Determine badge text
-    if subscription["status"] == "active" and subscription["plan"] == "pro":
+    plan = subscription["plan"]
+    status = subscription["status"]
+    
+    if status == "active" and plan == "pro":
         badge = "Pro Active"
-    elif subscription["status"] == "active" and subscription["plan"] == "enterprise":
+    elif status == "active" and plan == "enterprise":
         badge = "Enterprise Active"
-    elif subscription["status"] == "trial":
+    elif status == "active" and plan == "trial":
         badge = f"Trial ({days_remaining} days left)" if days_remaining else "Trial"
-    elif subscription["status"] == "expired":
+    elif status == "expired":
         badge = "Expired – Free Mode (5/month)"
     else:
         badge = "Free Plan (5/month)"
     
     return {
         "subscription": {
-            "planName": subscription["plan"],
-            "status": subscription["status"],
+            "planName": plan,
+            "status": status,
             "isUnlimited": subscription["isUnlimited"],
             "daysRemaining": days_remaining,
             "isExpiringSoon": days_remaining is not None and days_remaining <= 7,
-            "badge": badge
+            "badge": badge,
+            "endDate": end_date.isoformat() if end_date else None
         },
         "usage": {
             "used": used,
@@ -379,7 +394,49 @@ async def get_subscription_status_for_seller(db, user_id: ObjectId) -> Dict[str,
         "features": {
             "canAcceptInquiries": True,  # Always can accept (up to limit)
             "unlimitedInquiries": subscription["isUnlimited"],
-            "verifiedBadge": subscription["plan"] in ["pro", "enterprise"],
-            "prioritySupport": subscription["plan"] in ["pro", "enterprise"]
-        }
+            "verifiedBadge": plan in ["pro", "enterprise"],
+            "prioritySupport": plan in ["pro", "enterprise"]
+        },
+        "showUpgradeCta": plan == "free" or status == "expired"
     }
+
+
+async def ensure_subscription_exists(db, user_id: ObjectId) -> Dict[str, Any]:
+    """
+    Ensure a subscription record exists for the user.
+    If not, create a default free subscription.
+    
+    Used by admin activation to ensure we have a record to update.
+    
+    Returns the subscription document.
+    """
+    # Ensure user_id is ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    
+    sub = await db.subscriptions.find_one({"userId": user_id})
+    
+    if not sub:
+        now = datetime.now(timezone.utc)
+        # Calculate next month for reset date
+        if now.month == 12:
+            next_month = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            next_month = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+        
+        sub = {
+            "userId": user_id,
+            "planName": "free",
+            "status": "free",
+            "startDate": now,
+            "endDate": None,
+            "enquiryLimit": FREE_MONTHLY_LIMIT,
+            "enquiriesUsed": 0,
+            "enquiriesResetAt": next_month,
+            "createdAt": now,
+            "updatedAt": now
+        }
+        await db.subscriptions.insert_one(sub)
+        logger.info(f"Created default subscription for user {user_id}")
+    
+    return sub
