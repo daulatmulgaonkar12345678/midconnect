@@ -209,7 +209,7 @@ export default function SellerInquiriesPage() {
         sellerNote: quoteNote || undefined
       });
 
-      // Update local state with buyer contact info
+      // Update local state with buyer contact info and seller business name
       setInquiries(prev => prev.map(inq => 
         inq._id === actionInquiryId 
           ? { 
@@ -220,7 +220,8 @@ export default function SellerInquiriesPage() {
                 companyName: result.buyerContact?.company,
                 phone: result.buyerContact?.phone,
                 email: result.buyerContact?.email
-              }
+              },
+              sellerBusinessName: result.sellerContact?.businessName
             }
           : inq
       ));
