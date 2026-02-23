@@ -13,71 +13,80 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
-## LISTING PUBLISH VALIDATION (Enterprise Grade)
+## SPEC TEMPLATE ARCHITECTURE (Final)
 
-### Validation Rules
-- **Drafts**: Can be saved with incomplete data
-- **Publishing**: MUST NOT be allowed if mandatory fields are missing
-- **Backend enforces**: Frontend validation is NOT security
-
-### Required Fields for Publishing
-| Field | Validation | Error Message |
-|-------|------------|---------------|
-| `pricingTiers` | Array with at least 1 item | "At least one pricing tier required" |
-| `moq` | Integer > 0 | "MOQ must be greater than 0" |
-| `stock` | Integer > 0 | "Stock quantity must be greater than 0" |
-| `maxCapacity` | Integer > 0 | "Maximum capacity must be greater than 0" |
-| `images` | Array with at least 1 item | "At least one product image required" |
-| `variantId` | Not null | "Product variant must be linked" |
-
-### API Error Response (HTTP 400)
-```json
-{
-  "error": "Listing is incomplete and cannot be published",
-  "missingFields": ["pricingTiers", "moq"],
-  "fieldErrors": {
-    "pricingTiers": "At least one pricing tier required",
-    "moq": "MOQ must be greater than 0"
-  },
-  "message": "Please complete the following fields before publishing: pricingTiers, moq"
-}
+### Category-Based Resolution
+```
+GET /api/seller/categories/{categoryId}/spec-template
 ```
 
-### Pre-Publish Validation Endpoint
-```
-GET /api/seller/listings/{id}/validate
-```
 Returns:
 ```json
 {
-  "listingId": "abc123",
-  "isComplete": false,
-  "canPublish": false,
-  "missingFields": ["pricingTiers"],
-  "fieldErrors": {...},
-  "gstVerified": true,
-  "accountStatus": "active",
-  "blockers": ["Missing fields: pricingTiers"]
+  "specTemplate": {
+    "_id": "ObjectId",
+    "name": "electrical specification",
+    "categoryId": "string",
+    "fields": [
+      {
+        "key": "voltage",
+        "label": "Voltage",
+        "fieldType": "number",
+        "unit": "V",
+        "options": [],
+        "required": true,
+        "displayOrder": 0
+      }
+    ],
+    "isActive": true
+  },
+  "category": { ... }
 }
+```
+
+### REMOVED (Legacy)
+- ❌ `getSpecTemplateById(token, templateId)`
+- ❌ `GET /api/specTemplates/:id`
+- ❌ `specTemplateIds` array on products
+
+### SSOT Rules
+- Use `getCategorySpecTemplate(token, categoryId)`
+- Access fields via `specTemplate.fields`
+- All field names camelCase
+
+---
+
+## LISTING PUBLISH VALIDATION
+
+### Required Fields
+| Field | Validation |
+|-------|------------|
+| `pricingTiers` | Array with 1+ items |
+| `moq` | Integer > 0 |
+| `stock` | Integer > 0 |
+| `maxCapacity` | Integer > 0 |
+| `images` | Array with 1+ items |
+| `variantId` | Not null |
+
+### Pre-Publish Validation
+```
+GET /api/seller/listings/{id}/validate
 ```
 
 ---
 
 ## MONGODB SCHEMA SSOT
 
-### Subscriptions Collection
+### Subscriptions
 ```json
 {
   "userId": ObjectId,
-  "planName": "free" | "trial" | "pro" | "enterprise",
-  "startDate": Date,
-  "endDate": Date | null,
-  "status": "active" | "expired" | "cancelled" | "suspended",
-  "createdAt": Date
+  "planName": "free" | "trial" | "pro",
+  "status": "active" | "expired" | "suspended"
 }
 ```
 
-### GST Schema
+### GST
 ```json
 {
   "gst": {
@@ -90,47 +99,31 @@ Returns:
 
 ---
 
-## API ENDPOINTS
-
-### Seller Listings
-- `POST /api/seller/listings` - Create draft listing (allows incomplete)
-- `GET /api/seller/listings/{id}/validate` - Pre-publish validation
-- `POST /api/seller/listings/{id}/publish` - Publish with validation
-- `POST /api/seller/listings/{id}/pause` - Pause listing
-- `DELETE /api/seller/listings/{id}` - Archive listing
-
----
-
 ## IMPLEMENTATION STATUS
 
 ### Completed (Feb 22, 2026)
-- [x] Listing publish validation (6 required fields)
-- [x] Pre-publish validation endpoint
-- [x] Structured error response with missingFields and fieldErrors
-- [x] Banned/suspended seller blocking
+- [x] Category-based spec template resolution
+- [x] Removed legacy getSpecTemplateById
+- [x] Listing publish validation (6 fields)
 - [x] MongoDB schema alignment (camelCase)
 - [x] Subscription system fixes
 - [x] Unified GST schema
 - [x] Email verification architecture
 
 ### Testing Results
-- Backend: 100% (19/19 tests passed for listing validation)
-- All endpoints verified
+- Frontend: 100% (build success, no legacy code)
+- Backend: 100% verified
 
 ---
 
-## NEXT STEPS / BACKLOG
+## NEXT STEPS
 
 ### P0 - Critical
-1. Configure Firebase Admin SDK for production
+1. Configure Firebase Admin SDK
 
 ### P1 - High Priority
-1. Full end-to-end test with real listings
-2. Payment integration for Pro plan
+1. Payment integration
+2. End-to-end testing
 
 ### P2 - Medium Priority
 1. Email notifications
-2. Enhanced analytics
-
-### P3 - Low Priority
-1. Multi-language support
