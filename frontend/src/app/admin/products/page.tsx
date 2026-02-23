@@ -211,10 +211,17 @@ export default function ProductsPage() {
     });
   };
 
-  // Get templates filtered by selected category
+  // STRICT FILTER: Templates must match selected category exactly
+  // NO LEGACY FALLBACK LOGIC
   const filteredTemplates = templates.filter(
-    t => !formData.categoryId || (t.categoryId || t.categoryId) === formData.categoryId
+    t => !formData.categoryId || t.categoryId === formData.categoryId
   );
+
+  // Validate template selection before save
+  const validateTemplateSelection = (): string[] => {
+    const validTemplateIds = filteredTemplates.map(t => t._id);
+    return formData.specTemplateIds.filter(id => !validTemplateIds.includes(id));
+  };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -223,6 +230,13 @@ export default function ProductsPage() {
     }
     if (!formData.categoryId) {
       setError('Please select a category');
+      return;
+    }
+
+    // ENTERPRISE VALIDATION: Check for invalid template selection
+    const invalidIds = validateTemplateSelection();
+    if (invalidIds.length > 0) {
+      setError(`Invalid template selection: ${invalidIds.length} template(s) do not belong to the selected category`);
       return;
     }
 
