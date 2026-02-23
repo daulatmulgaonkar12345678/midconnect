@@ -341,6 +341,15 @@ export interface SellerInquiry {
   createdAt: string;
 }
 
+// Response type for seller inquiries list endpoint
+export interface SellerInquiriesResponse {
+  inquiries: SellerInquiry[];
+  total: number;
+  page: number;
+  pages: number;
+  unreadCount?: number; // optional for backwards compatibility
+}
+
 // ==================== Admin Types ====================
 
 export interface AdminUser {
