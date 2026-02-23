@@ -5,11 +5,12 @@ ENTERPRISE PRODUCT ENDPOINTS
 New enterprise-grade endpoints for structured product pages:
 - GET /products/{id}/enterprise - Full product data with aggregation
 - GET /products/{id}/facets - Dynamic filter values
-- POST /products/{id}/filter - Structured attribute filtering
+- POST /products/{id}/filter - Structured attribute filtering with RANKING
 
 NO N+1 queries.
 NO joins during search.
 USES denormalized searchableAttributes.
+SUPPORTS enterprise ranking with configurable weights.
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -18,6 +19,9 @@ from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
+
+from services.ranking_service import enterprise_ranker
+from config.ranking_config import ranking_config
 
 logger = logging.getLogger("enterprise_products")
 
