@@ -17,7 +17,7 @@ Collection: admin_audit_logs
 
 from datetime import datetime, timezone
 from bson import ObjectId
-from typing import Dict, Any, Optional, Literal
+from typing import Dict, Any, Optional, Literal, List
 from enum import Enum
 import logging
 
