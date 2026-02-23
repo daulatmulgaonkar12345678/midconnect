@@ -182,7 +182,7 @@ class TestValidateSpecTemplateIds:
                 "name": "TEST_DataIntegrity_Template1",
                 "categoryId": TestValidateSpecTemplateIds.test_category_1_id,
                 "fields": [
-                    {"name": "Voltage", "key": "voltage", "type": "text", "required": True}
+                    {"label": "Voltage", "key": "voltage", "fieldType": "text", "required": True}
                 ]
             }
         )
@@ -216,7 +216,7 @@ class TestValidateSpecTemplateIds:
                 "name": "TEST_DataIntegrity_Template2",
                 "categoryId": TestValidateSpecTemplateIds.test_category_2_id,
                 "fields": [
-                    {"name": "Power", "key": "power", "type": "text", "required": True}
+                    {"label": "Power", "key": "power", "fieldType": "text", "required": True}
                 ]
             }
         )
