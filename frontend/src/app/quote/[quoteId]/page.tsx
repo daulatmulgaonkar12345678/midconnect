@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { viewQuote, viewQuotePublic, acceptQuote, rejectQuote } from '@/lib/api';
-import type { Quote } from '@/lib/api';
+import { viewQuote, viewQuotePublic, acceptQuote, rejectQuote, Quote } from '@/lib/api';
 import Link from 'next/link';
 import {
   Loader2,
