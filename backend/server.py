@@ -10607,6 +10607,26 @@ async def startup_db_client():
             background=True
         )
         
+        # ARCHITECTURAL FIX: Indexes for Product ↔ SpecTemplate relationship
+        await safe_create_index(
+            db.products,
+            [("specTemplateIds", 1)],
+            "products_specTemplateIds",
+            background=True
+        )
+        await safe_create_index(
+            db.specTemplates,
+            [("categoryId", 1)],
+            "specTemplates_categoryId",
+            background=True
+        )
+        await safe_create_index(
+            db.specTemplates,
+            [("categoryId", 1), ("isActive", 1)],
+            "specTemplates_category_active",
+            background=True
+        )
+        
         logger.info("✅ Database indexes creation completed")
     
     async def cleanup_unverified_users_task():
