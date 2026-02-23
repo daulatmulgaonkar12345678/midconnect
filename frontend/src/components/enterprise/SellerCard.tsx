@@ -85,14 +85,23 @@ export default function SellerCard({
       {/* Top Spec Strip */}
       {topSpecs.length > 0 && (
         <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 rounded-t-lg">
-          <div className="flex items-center gap-3 text-sm font-medium text-gray-700">
-            {topSpecs.map(([key, value], idx) => (
-              <span key={key} className="flex items-center gap-1.5">
-                {idx > 0 && <span className="text-gray-300">|</span>}
-                <span className="text-gray-500 text-xs uppercase">{seller.attributeLabels?.[key] || key}:</span>
-                <span className="text-gray-900">{formatSpecValue(key, value)}</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 text-sm font-medium text-gray-700">
+              {topSpecs.map(([key, value], idx) => (
+                <span key={key} className="flex items-center gap-1.5">
+                  {idx > 0 && <span className="text-gray-300">|</span>}
+                  <span className="text-gray-500 text-xs uppercase">{seller.attributeLabels?.[key] || key}:</span>
+                  <span className="text-gray-900">{formatSpecValue(key, value)}</span>
+                </span>
+              ))}
+            </div>
+            {/* Ranking Badge */}
+            {showRankingScore && seller.rankingScore !== undefined && getRankingBadge(seller.rankingScore) && (
+              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded border ${getRankingBadge(seller.rankingScore)!.color}`}>
+                <Sparkles className="h-3 w-3" />
+                {getRankingBadge(seller.rankingScore)!.label}
               </span>
-            ))}
+            )}
           </div>
         </div>
       )}
