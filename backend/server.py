@@ -6063,6 +6063,15 @@ async def create_inquiry(
     
     await db.inquiries.insert_one(inquiry_doc)
     
+    # Track behavior for ranking boost
+    if product_oid and seller_oid:
+        try:
+            from services.buyer_interaction_service import BuyerInteractionService
+            interaction_service = BuyerInteractionService(db)
+            await interaction_service.track_inquiry(buyer_id, seller_oid, product_oid)
+        except Exception as e:
+            logger.warning(f"Failed to track inquiry interaction: {e}")
+    
     logger.info(f"Inquiry created: buyer={user.get('email')}, seller={str(seller_oid)}, product={product_name}")
     
     return {
