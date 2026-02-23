@@ -217,7 +217,7 @@ def create_admin_analytics_router(db, require_admin):
         
         try:
             seller_oid = ObjectId(seller_id)
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid seller ID")
         
         # Verify seller exists
