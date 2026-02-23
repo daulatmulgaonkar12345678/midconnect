@@ -28,9 +28,9 @@ class FilterRequest(BaseModel):
         default=None,
         description="Attribute filters: {'power': {'$gte': 40}, 'voltage': '415'}"
     )
-    sortBy: Literal["price", "leadTime", "stock", "updatedAt"] = Field(
+    sortBy: Literal["price", "leadTime", "stock", "updatedAt", "ranking"] = Field(
         default="price",
-        description="Sort field"
+        description="Sort field. Use 'ranking' for enterprise ranking score"
     )
     order: Literal["asc", "desc"] = Field(
         default="asc",
@@ -38,6 +38,11 @@ class FilterRequest(BaseModel):
     )
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=100)
+    # Buyer context for location-based ranking
+    buyerCity: Optional[str] = Field(default=None, description="Buyer's city for proximity ranking")
+    buyerState: Optional[str] = Field(default=None, description="Buyer's state for proximity ranking")
+    # Debug mode for ranking breakdown
+    debug: bool = Field(default=False, description="Include ranking breakdown in response")
 
 
 def create_enterprise_product_router(db):
