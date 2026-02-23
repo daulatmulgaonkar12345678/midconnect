@@ -250,12 +250,7 @@ async def run_load_test(listing_count: int):
         await db.users.delete_many({'email': {'$regex': f'^lt_{timestamp}_.*@loadtest.com$'}})
         
         # Drop temp indexes
-        try:
-            await db.sellerListings.drop_index(f'perf_test_{timestamp}_ps')
-            await db.sellerListings.drop_index(f'perf_test_{timestamp}_pp')
-            await db.sellerListings.drop_index(f'perf_test_{timestamp}_pv')
-        except:
-            pass
+        # (indexes are shared, don't drop)
         
         client.close()
     
