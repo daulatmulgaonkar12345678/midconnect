@@ -10660,6 +10660,11 @@ from routers.enterprise_products import create_enterprise_product_router
 enterprise_product_router = create_enterprise_product_router(db)
 app.include_router(enterprise_product_router, prefix="/api")
 
+# Phase: Subscription Payment Router
+from routers.subscription_payment_router import create_subscription_payment_router
+subscription_payment_router = create_subscription_payment_router(db, get_current_user)
+app.include_router(subscription_payment_router, prefix="/api")
+
 # ================== B2B ADMIN ROUTER ==================
 # Phase 1: Admin Foundation - Dynamic dropdowns, category settings, spec templates
 
