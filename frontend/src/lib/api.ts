@@ -1566,5 +1566,181 @@ export const filterProductListings = (
     headers: { 'Content-Type': 'application/json' }
   });
 
+// ==========================================
+// QUOTE API ENDPOINTS (Hybrid RFQ System)
+// ==========================================
+
+export interface Quote {
+  quoteId: string;
+  inquiryId: string;
+  productId: string;
+  productName: string;
+  sellerId: string;
+  sellerName: string;
+  buyerId: string;
+  buyerName: string;
+  buyerCompany?: string;
+  requestedQuantity: number;
+  unitPrice: number;
+  moq: number;
+  packagingCharges: number;
+  transportIncluded: boolean;
+  totalPrice: number;
+  leadTimeDays: number;
+  validityDate: string;
+  validityDays: number;
+  terms?: string;
+  customMessage?: string;
+  status: 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired';
+  whatsappRedirectUsed: boolean;
+  createdAt: string;
+  viewedAt?: string;
+  acceptedAt?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+}
+
+export interface CreateQuoteRequest {
+  inquiryId: string;
+  unitPrice: number;
+  moq: number;
+  leadTimeDays: number;
+  validityDays?: number;
+  packagingCharges?: number;
+  terms?: string;
+  customMessage?: string;
+}
+
+export interface QuoteResponse {
+  success: boolean;
+  quote: Quote;
+  accessToken: string;
+}
+
+export interface WhatsAppRedirectResponse {
+  message: string;
+  secureUrl: string;
+  quoteId: string;
+  whatsappLink: string | null;
+  buyerPhoneAvailable: boolean;
+}
+
+export interface QuoteAcceptResponse {
+  success: boolean;
+  message: string;
+  quoteId: string;
+  sellerContact: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    whatsapp?: string;
+  };
+}
+
+export interface QuoteListResponse {
+  quotes: Quote[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+// Create a quote (seller)
+export const createQuote = (
+  token: string,
+  data: CreateQuoteRequest
+): Promise<QuoteResponse> =>
+  fetchWithAuth('/quotes/create', token, {
+    method: 'POST',
+    body: data
+  });
+
+// Get WhatsApp redirect link (seller)
+export const getWhatsAppRedirect = (
+  token: string,
+  quoteId: string
+): Promise<WhatsAppRedirectResponse> =>
+  fetchWithAuth(`/quotes/${encodeURIComponent(quoteId)}/whatsapp-redirect`, token, {
+    method: 'POST'
+  });
+
+// View quote (buyer)
+export const viewQuote = (
+  token: string,
+  quoteId: string,
+  accessToken?: string
+): Promise<{ quote: Quote; canAccept: boolean; isExpired: boolean; paymentComingSoon: boolean }> => {
+  const params = accessToken ? `?token=${encodeURIComponent(accessToken)}` : '';
+  return fetchWithAuth(`/quotes/${encodeURIComponent(quoteId)}${params}`, token);
+};
+
+// View quote (public with token)
+export const viewQuotePublic = (
+  quoteId: string,
+  accessToken: string
+): Promise<{ quote: Partial<Quote>; isExpired: boolean; requiresLogin: boolean; paymentComingSoon: boolean }> =>
+  fetchAPI(`/quotes/public/${encodeURIComponent(quoteId)}?token=${encodeURIComponent(accessToken)}`);
+
+// Accept quote (buyer)
+export const acceptQuote = (
+  token: string,
+  quoteId: string
+): Promise<QuoteAcceptResponse> =>
+  fetchWithAuth(`/quotes/${encodeURIComponent(quoteId)}/accept`, token, {
+    method: 'POST'
+  });
+
+// Reject quote (buyer)
+export const rejectQuote = (
+  token: string,
+  quoteId: string,
+  reason?: string
+): Promise<{ success: boolean; message: string; quoteId: string }> =>
+  fetchWithAuth(`/quotes/${encodeURIComponent(quoteId)}/reject`, token, {
+    method: 'POST',
+    body: { reason }
+  });
+
+// Get seller's quotes
+export const getSellerQuotes = (
+  token: string,
+  params?: { status?: string; page?: number; limit?: number }
+): Promise<QuoteListResponse> => {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
+  const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  return fetchWithAuth(`/quotes/seller${query}`, token);
+};
+
+// Get buyer's quotes
+export const getBuyerQuotes = (
+  token: string,
+  params?: { status?: string; page?: number; limit?: number }
+): Promise<QuoteListResponse> => {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
+  const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  return fetchWithAuth(`/quotes/buyer${query}`, token);
+};
+
+// Get quote analytics (seller)
+export const getQuoteAnalytics = (
+  token: string,
+  days: number = 30
+): Promise<{
+  period: string;
+  totalQuotes: number;
+  viewRate: number;
+  acceptanceRate: number;
+  rejectionRate: number;
+  expiryRate: number;
+  totalValue: number;
+  acceptedValue: number;
+}> =>
+  fetchWithAuth(`/quotes/analytics?days=${days}`, token);
+
 // Re-export ApiError for consumers
 export { ApiError };
