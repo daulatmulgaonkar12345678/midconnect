@@ -7607,23 +7607,24 @@ async def admin_create_product(
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     
-    # Build specTemplateIds list
+    # ARCHITECTURAL FIX: Strict validation of specTemplateIds
     spec_template_ids = list(product.specTemplateIds) if product.specTemplateIds else []
     
-    # Verify all spec templates exist and gather spec fields for hash
+    # Validate all templates: exist, active, matching category
+    validated_template_oids = await validate_spec_template_ids(
+        spec_template_ids,
+        product.categoryId,
+        db
+    )
+    
+    # Gather spec fields from validated templates for hash
     spec_fields = {}
-    for template_id in spec_template_ids:
-        try:
-            template = await db.specTemplates.find_one({"_id": ObjectId(template_id)})
-            if not template:
-                raise HTTPException(status_code=400, detail=f"Spec template not found: {template_id}")
-            # Collect spec fields from template for identity hash
-            if template.get("fields"):
-                for field in template["fields"]:
-                    key = field.get("key", field.get("name", ""))
-                    spec_fields[key] = ""  # Empty placeholder - actual values come from listings
-        except Exception:
-            raise HTTPException(status_code=400, detail=f"Invalid spec template ID: {template_id}")
+    for template_oid in validated_template_oids:
+        template = await db.specTemplates.find_one({"_id": template_oid})
+        if template and template.get("fields"):
+            for field in template["fields"]:
+                key = field.get("key", field.get("name", ""))
+                spec_fields[key] = ""  # Empty placeholder
     
     # Generate normalized spec hash for product identity
     spec_hash = identity_service.generate_spec_hash(spec_fields)
