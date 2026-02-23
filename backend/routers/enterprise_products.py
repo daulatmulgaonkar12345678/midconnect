@@ -45,6 +45,8 @@ class FilterRequest(BaseModel):
     # Buyer context for location-based ranking
     buyerCity: Optional[str] = Field(default=None, description="Buyer's city for proximity ranking")
     buyerState: Optional[str] = Field(default=None, description="Buyer's state for proximity ranking")
+    # Buyer ID for behavior-based boost (optional, from auth token)
+    buyerId: Optional[str] = Field(default=None, description="Buyer ID for personalized behavior boost")
     # Debug mode for ranking breakdown
     debug: bool = Field(default=False, description="Include ranking breakdown in response")
 
