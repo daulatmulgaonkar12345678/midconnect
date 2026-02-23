@@ -1350,12 +1350,7 @@ export const getBuyerInquiries = (
 export const getSellerInquiries = (
   token: string,
   options?: { status?: string; page?: number; limit?: number }
-): Promise<{
-  inquiries: SellerInquiry[];
-  total: number;
-  page: number;
-  pages: number;
-}> => {
+): Promise<SellerInquiriesResponse> => {
   const params = new URLSearchParams();
   if (options?.status) params.append('status', options.status);
   if (options?.page) params.append('page', String(options.page));
