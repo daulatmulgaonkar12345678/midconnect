@@ -40,7 +40,7 @@ const DEBOUNCE_MS = 300;
 const MAX_COMPARE = 3;
 const PAGE_SIZE = 20;
 
-type SortOption = 'price' | 'leadTime' | 'stock' | 'updatedAt';
+type SortOption = 'price' | 'leadTime' | 'stock' | 'updatedAt' | 'ranking';
 type SortOrder = 'asc' | 'desc';
 
 export default function EnterpriseProductPage() {
