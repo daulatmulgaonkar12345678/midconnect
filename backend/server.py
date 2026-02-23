@@ -7306,7 +7306,11 @@ async def admin_delete_spec_template(
     force: bool = Query(False),
     admin: dict = Depends(require_admin)
 ):
-    """Soft-delete a spec template (admin only)"""
+    """
+    Soft-delete a spec template (admin only).
+    
+    ARCHITECTURAL FIX: Automatically removes template reference from all products.
+    """
 
     # Validate ObjectId
     try:
@@ -7319,7 +7323,7 @@ async def admin_delete_spec_template(
     if not existing:
         raise HTTPException(status_code=404, detail="Spec template not found")
 
-    # 🔥 Correct usage check for ARRAY-based schema
+    # Count products using this template
     product_count = await db.products.count_documents({
         "specTemplateIds": template_oid
     })
@@ -7330,7 +7334,17 @@ async def admin_delete_spec_template(
             detail=f"Cannot delete spec template. {product_count} products use this template. Use force=true to soft-delete anyway."
         )
 
-    # Soft delete
+    # ARCHITECTURAL FIX: Remove template reference from all products
+    # This ensures no orphan references
+    cleanup_result = await db.products.update_many(
+        {"specTemplateIds": template_oid},
+        {"$pull": {"specTemplateIds": template_oid}}
+    )
+    
+    if cleanup_result.modified_count > 0:
+        logger.info(f"Cleaned up template reference from {cleanup_result.modified_count} products")
+
+    # Soft delete the template
     await db.specTemplates.update_one(
         {"_id": template_oid},
         {"$set": {
@@ -7342,7 +7356,10 @@ async def admin_delete_spec_template(
 
     logger.info(f"Admin {admin['email']} soft-deleted spec template: {template_id}")
 
-    return {"message": "Spec template deactivated successfully"}
+    return {
+        "message": "Spec template deactivated successfully",
+        "productsUpdated": cleanup_result.modified_count
+    }
 
 
 # === Product Admin Endpoints ===
