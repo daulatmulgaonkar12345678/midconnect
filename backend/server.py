@@ -7634,7 +7634,7 @@ async def admin_create_product(
     existing_product = await identity_service.find_existing_product(
         name=product.name,
         category_id=product.categoryId,
-        spec_template_id=spec_template_ids[0] if spec_template_ids else None,
+        spec_template_id=str(validated_template_oids[0]) if validated_template_oids else None,
         specifications=spec_fields
     )
     
@@ -7665,8 +7665,8 @@ async def admin_create_product(
         "description": product.description,
         # Admin provides mandatory product cover image - Firebase URL
         "coverImageUrl": product.coverImageUrl,  # SSOT: camelCase
-        # Multiple templates support - camelCase
-        "specTemplateIds": [ObjectId(tid) for tid in spec_template_ids] if spec_template_ids else [],
+        # ARCHITECTURAL FIX: Use validated ObjectIds directly
+        "specTemplateIds": validated_template_oids,
         "specTemplateVersions": [],  # Will be populated on first use
         "unit": product.unit,
         "family": product.family,
