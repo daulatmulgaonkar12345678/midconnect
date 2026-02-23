@@ -365,6 +365,33 @@ export default function SellerInquiriesPage() {
           </div>
         )}
 
+        {/* New Inquiry Notification Banner */}
+        {hasNewInquiry && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex justify-between items-center" data-testid="new-inquiry-banner">
+            <span className="text-blue-700 font-medium flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              🔔 New inquiry received!
+            </span>
+            <button
+              onClick={handleRefresh}
+              className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+              data-testid="refresh-btn"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+          </div>
+        )}
+
+        {/* Unread Count Badge */}
+        {unreadCount > 0 && !hasNewInquiry && (
+          <div className="mb-4 text-sm text-gray-600">
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full">
+              {unreadCount} pending {unreadCount === 1 ? 'inquiry' : 'inquiries'}
+            </span>
+          </div>
+        )}
+
         {inquiries.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
             <MessageSquare className="h-16 w-16 text-gray-300 mx-auto mb-4" />
