@@ -1432,5 +1432,122 @@ export const reportInquiry = (
   body: data
 });
 
+// ==================== ENTERPRISE PRODUCT ENDPOINTS ====================
+
+export interface EnterpriseProductSeller {
+  listingId: string;
+  sellerId: string;
+  variantId?: string;
+  companyName: string;
+  location: string;
+  sellerRole: string;
+  searchableAttributes: Record<string, string | number>;
+  attributeLabels: Record<string, string>;
+  pricingTiers: PricingTier[];
+  lowestPrice?: number;
+  moq: number;
+  stock: number;
+  leadTimeDays?: number;
+  images: string[];
+  stockStatus: 'in_stock' | 'out_of_stock' | 'limited';
+}
+
+export interface EnterpriseProductResponse {
+  product: {
+    _id: string;
+    name: string;
+    slug?: string;
+    description?: string;
+    images: string[];
+    categoryId?: string;
+    categoryName?: string;
+  };
+  specTemplate?: {
+    templateId: string;
+    name: string;
+    fields: Array<{
+      key: string;
+      label: string;
+      fieldType: string;
+      unit?: string;
+      filterable?: boolean;
+      options?: string[];
+    }>;
+    version: number;
+  };
+  summary: {
+    sellerCount: number;
+    minPrice?: number;
+    variantCount: number;
+    totalPages: number;
+  };
+  availableFacets: Record<string, (string | number)[]>;
+  sellers: EnterpriseProductSeller[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface ProductFacetsResponse {
+  productId: string;
+  facets: Record<string, {
+    values: (string | number)[];
+    count: number;
+    metadata: {
+      label: string;
+      fieldType: string;
+      unit?: string;
+      filterable?: boolean;
+      options?: string[];
+    };
+  }>;
+  totalListings: number;
+  specTemplate?: string;
+}
+
+export interface FilterRequest {
+  attributes?: Record<string, unknown>;
+  sortBy?: 'price' | 'leadTime' | 'stock' | 'updatedAt';
+  order?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+export interface FilterResponse {
+  results: EnterpriseProductSeller[];
+  total: number;
+  page: number;
+  pages: number;
+  fallbackLevel: number;
+  fallbackMessage?: string;
+  appliedFilters: Record<string, unknown>;
+}
+
+// Get enterprise product page data (single aggregation)
+export const getEnterpriseProduct = (
+  productId: string,
+  page: number = 1,
+  limit: number = 20
+): Promise<EnterpriseProductResponse> =>
+  fetchApi(`/products/${encodeURIComponent(productId)}/enterprise?page=${page}&limit=${limit}`);
+
+// Get product facets for filtering
+export const getProductFacets = (productId: string): Promise<ProductFacetsResponse> =>
+  fetchApi(`/products/${encodeURIComponent(productId)}/facets`);
+
+// Filter product listings with fallback
+export const filterProductListings = (
+  productId: string,
+  filters: FilterRequest
+): Promise<FilterResponse> =>
+  fetchApi(`/products/${encodeURIComponent(productId)}/filter`, {
+    method: 'POST',
+    body: JSON.stringify(filters),
+    headers: { 'Content-Type': 'application/json' }
+  });
+
 // Re-export ApiError for consumers
 export { ApiError };
