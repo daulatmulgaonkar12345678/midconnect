@@ -231,7 +231,7 @@ export default function FilterPanel({
                 <span className="text-sm text-gray-700">{String(value)}</span>
               </label>
             ))}
-            {currentValue && (
+            {currentValue !== undefined && currentValue !== null && (
               <button
                 onClick={() => handleFilterUpdate(key, null)}
                 className="text-xs text-blue-600 hover:underline mt-1"
