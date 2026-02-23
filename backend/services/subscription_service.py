@@ -207,9 +207,17 @@ async def check_and_update_monthly_usage(db, user_id: ObjectId) -> int:
 async def increment_enquiry_usage(db, user_id: ObjectId) -> int:
     """
     Increment the enquiry usage counter.
+    
+    IMPORTANT: Only call this for NON-UNLIMITED plans.
+    For pro/enterprise (unlimited), do NOT call this.
+    
     Returns: New usage count
     """
     now = datetime.now(timezone.utc)
+    
+    # Ensure user_id is ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
     
     result = await db.subscriptions.find_one_and_update(
         {"userId": user_id},
@@ -221,7 +229,9 @@ async def increment_enquiry_usage(db, user_id: ObjectId) -> int:
     )
     
     if result:
-        return result.get("enquiriesUsed", 1)
+        new_count = result.get("enquiriesUsed", 1)
+        logger.info(f"Incremented enquiry usage for user {user_id} to {new_count}")
+        return new_count
     return 1
 
 
