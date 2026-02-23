@@ -8691,14 +8691,16 @@ async def admin_activate_subscription(
 ):
     """
     Activate or update subscription with admin-set start date.
-    Backend calculates end_date from startDate + durationDays.
     
-    ENTERPRISE SUBSCRIPTION:
-    - Initializes enquiriesUsed = 0
-    - Initializes enquiriesResetAt to next month's first day
-    - Sets enquiryLimit based on plan (5 for free/expired, unlimited for pro)
+    UNIFIED SUBSCRIPTION ENGINE:
+    - Uses activate_or_extend() for all activation logic
+    - Properly extends existing subscriptions
+    - Records activation source as "admin"
+    - Maintains history
     """
     try:
+        from services.subscription_engine import SubscriptionEngine
+        
         user_oid = ObjectId(user_id)
 
         user = await db.users.find_one({"_id": user_oid})
@@ -8707,12 +8709,6 @@ async def admin_activate_subscription(
 
         now = datetime.now(timezone.utc)
         
-        # Calculate next month for reset date
-        if now.month == 12:
-            next_reset = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
-        else:
-            next_reset = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
-
         # Determine duration
         if data.durationDays:
             duration_days = data.durationDays
@@ -8723,41 +8719,45 @@ async def admin_activate_subscription(
         else:
             duration_days = 0
 
-        # Calculate end date
-        if data.planName == "free":
-            end_date = None
-        else:
-            end_date = data.startDate + timedelta(days=duration_days)
+        # Use unified subscription engine
+        engine = SubscriptionEngine(db)
+        result = await engine.activate_or_extend(
+            user_id=user_oid,
+            plan_name=data.planName,
+            duration_days=duration_days,
+            source="admin",
+            activated_by=ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],
+            notes=data.notes
+        )
         
-        # Determine enquiry limit
-        # Pro/Enterprise = unlimited (-1), Trial/Free = 5
-        if data.planName in ["pro", "enterprise"]:
-            enquiry_limit = -1  # Unlimited
-        elif data.planName == "trial":
-            enquiry_limit = -1  # Trial also unlimited
-        else:
-            enquiry_limit = 5  # Free
-
-        old_subscription = await db.subscriptions.find_one({"userId": user_oid})
-
-        subscription_doc = {
-            "userId": user_oid,
-            "planName": data.planName,
-            "durationDays": duration_days,
-            "startDate": data.startDate,
+        subscription_doc = result["subscription"]
+        
+        # Legacy: Update users.subscription for backwards compatibility
+        end_date = subscription_doc.get("endDate")
+        legacy_subscription = {
+            "plan": data.planName,
+            "startDate": subscription_doc.get("startDate", now),
             "endDate": end_date,
-            "status": "active",
-            "enquiryLimit": enquiry_limit,
-            "enquiriesUsed": 0,  # ENTERPRISE: Reset counter on activation
-            "enquiriesResetAt": next_reset,  # ENTERPRISE: Initialize reset date
-            "lastUpdatedBy": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],
-            "updatedAt": now,
-            "notes": data.notes or "",
-            "createdAt": old_subscription.get("createdAt", now) if old_subscription else now
+            "inquiryLimit": subscription_doc.get("enquiryLimit", -1),
+            "active": True
         }
 
-        await db.subscriptions.update_one(
-            {"userId": user_oid},
+        await db.users.update_one(
+            {"_id": user_oid},
+            {"$set": {
+                "subscription": legacy_subscription,
+                "subscriptionUpdatedAt": now,
+                "subscriptionUpdatedBy": str(admin["_id"])
+            }}
+        )
+
+        subscription_doc = calculate_subscription_fields(subscription_doc)
+
+        logger.info(f"[SUBSCRIPTION] Admin {admin['email']} {result['action']} {data.planName} for user {user_id}")
+
+        return {
+            "message": f"Subscription {result['action']} successfully",
+            "subscription": {
             {"$set": subscription_doc},
             upsert=True
         )
