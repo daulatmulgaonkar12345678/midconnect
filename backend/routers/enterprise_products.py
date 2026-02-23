@@ -98,65 +98,24 @@ def create_enterprise_product_router(db):
             template_id = template_ids[0] if isinstance(template_ids[0], ObjectId) else ObjectId(str(template_ids[0]))
             spec_template = await db.specTemplates.find_one({"_id": template_id})
         
-        # SINGLE AGGREGATION for all listing data
+        # OPTIMIZED AGGREGATION - Two-phase approach for better performance
         skip = (page - 1) * limit
         
-        pipeline = [
-            # Match active listings for this product
-            {"$match": {
-                "productId": product_oid,
-                "status": "active"
-            }},
-            # Lookup sellers in one go
-            {"$lookup": {
-                "from": "users",
-                "localField": "sellerId",
-                "foreignField": "_id",
-                "as": "sellerData"
-            }},
-            {"$unwind": {"path": "$sellerData", "preserveNullAndEmptyArrays": True}},
-            # Facet for parallel operations
+        # Phase 1: Get summary statistics (no $lookup needed)
+        summary_pipeline = [
+            {"$match": {"productId": product_oid, "status": "active"}},
             {"$facet": {
-                # Get total count
                 "totalCount": [{"$count": "count"}],
-                # Get min price
                 "minPrice": [
                     {"$unwind": "$pricingTiers"},
                     {"$group": {"_id": None, "min": {"$min": "$pricingTiers.pricePerUnit"}}}
                 ],
-                # Get variant count
                 "variantCount": [
                     {"$group": {"_id": "$variantId"}},
                     {"$count": "count"}
                 ],
-                # Get paginated listings
-                "listings": [
-                    {"$sort": {"pricingTiers.0.pricePerUnit": 1}},
-                    {"$skip": skip},
-                    {"$limit": limit},
-                    {"$project": {
-                        "_id": 1,
-                        "sellerId": 1,
-                        "variantId": 1,
-                        "searchableAttributes": 1,
-                        "attributeLabels": 1,
-                        "pricingTiers": 1,
-                        "moq": 1,
-                        "stock": 1,
-                        "leadTime": 1,
-                        "images": {"$slice": ["$images", 2]},
-                        "description": 1,
-                        "sellerRole": 1,
-                        "updatedAt": 1,
-                        "sellerProfile": {
-                            "businessName": {"$ifNull": ["$sellerData.profile.businessName", "$sellerData.businessName"]},
-                            "city": "$sellerData.profile.city",
-                            "state": "$sellerData.profile.state"
-                        }
-                    }}
-                ],
-                # Get facets (distinct attribute values)
                 "facets": [
+                    {"$limit": 1000},  # Sample for facets to improve performance
                     {"$group": {
                         "_id": None,
                         "allAttributes": {"$push": "$searchableAttributes"}
@@ -165,7 +124,47 @@ def create_enterprise_product_router(db):
             }}
         ]
         
-        result = await db.sellerListings.aggregate(pipeline).to_list(1)
+        # Phase 2: Get paginated listings with seller lookup (only for the page)
+        listings_pipeline = [
+            {"$match": {"productId": product_oid, "status": "active"}},
+            {"$sort": {"pricingTiers.0.pricePerUnit": 1}},
+            {"$skip": skip},
+            {"$limit": limit},
+            {"$lookup": {
+                "from": "users",
+                "localField": "sellerId",
+                "foreignField": "_id",
+                "as": "sellerData"
+            }},
+            {"$unwind": {"path": "$sellerData", "preserveNullAndEmptyArrays": True}},
+            {"$project": {
+                "_id": 1,
+                "sellerId": 1,
+                "variantId": 1,
+                "searchableAttributes": 1,
+                "attributeLabels": 1,
+                "pricingTiers": 1,
+                "moq": 1,
+                "stock": 1,
+                "leadTime": 1,
+                "images": {"$slice": ["$images", 2]},
+                "description": 1,
+                "sellerRole": 1,
+                "updatedAt": 1,
+                "sellerProfile": {
+                    "businessName": {"$ifNull": ["$sellerData.profile.businessName", "$sellerData.businessName"]},
+                    "city": "$sellerData.profile.city",
+                    "state": "$sellerData.profile.state"
+                }
+            }}
+        ]
+        
+        # Execute both in parallel
+        import asyncio
+        summary_task = db.sellerListings.aggregate(summary_pipeline).to_list(1)
+        listings_task = db.sellerListings.aggregate(listings_pipeline).to_list(limit)
+        
+        summary_result, listings = await asyncio.gather(summary_task, listings_task)
         
         if not result:
             result = [{"totalCount": [], "minPrice": [], "variantCount": [], "listings": [], "facets": []}]
