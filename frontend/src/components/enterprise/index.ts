@@ -6,3 +6,4 @@ export { default as ComparisonTable } from './ComparisonTable';
 export { default as MobileFilterDrawer } from './MobileFilterDrawer';
 export { default as EmptyState } from './EmptyState';
 export { default as InquiryModal } from './InquiryModal';
+export { default as FloatingCompareBar } from './FloatingCompareBar';
