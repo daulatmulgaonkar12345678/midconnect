@@ -7451,6 +7451,144 @@ async def admin_cleanup_template_refs(
     }
 
 
+@api_router.post("/admin/data-integrity/migrate")
+async def admin_data_integrity_migration(
+    admin: dict = Depends(require_admin)
+):
+    """
+    ENTERPRISE DATA INTEGRITY MIGRATION
+    
+    This endpoint performs a comprehensive database migration:
+    
+    STEP 1: Convert specTemplates.categoryId string → ObjectId
+    STEP 2: Convert products.categoryId string → ObjectId
+    STEP 3: Remove orphan template references from products
+    STEP 4: Enforce category matching (remove cross-category refs)
+    
+    Run this ONCE to fix all existing data integrity issues.
+    """
+    results = {
+        "step1_specTemplates_categoryId_converted": 0,
+        "step2_products_categoryId_converted": 0,
+        "step3_orphan_refs_removed": 0,
+        "step4_category_mismatch_removed": 0,
+        "errors": []
+    }
+    
+    # STEP 1: Convert specTemplates.categoryId string → ObjectId
+    try:
+        spec_templates = await db.specTemplates.find({}).to_list(length=None)
+        for template in spec_templates:
+            category_id = template.get("categoryId")
+            if category_id and isinstance(category_id, str):
+                try:
+                    # Convert string to ObjectId
+                    await db.specTemplates.update_one(
+                        {"_id": template["_id"]},
+                        {"$set": {"categoryId": ObjectId(category_id)}}
+                    )
+                    results["step1_specTemplates_categoryId_converted"] += 1
+                except Exception as e:
+                    results["errors"].append(f"Template {template['_id']}: {str(e)}")
+    except Exception as e:
+        results["errors"].append(f"Step 1 error: {str(e)}")
+    
+    # STEP 2: Convert products.categoryId string → ObjectId
+    try:
+        products = await db.products.find({}).to_list(length=None)
+        for product in products:
+            category_id = product.get("categoryId")
+            if category_id and isinstance(category_id, str):
+                try:
+                    await db.products.update_one(
+                        {"_id": product["_id"]},
+                        {"$set": {"categoryId": ObjectId(category_id)}}
+                    )
+                    results["step2_products_categoryId_converted"] += 1
+                except Exception as e:
+                    results["errors"].append(f"Product {product['_id']}: {str(e)}")
+    except Exception as e:
+        results["errors"].append(f"Step 2 error: {str(e)}")
+    
+    # STEP 3: Remove orphan template references
+    try:
+        # Get all valid template IDs
+        valid_templates = await db.specTemplates.find(
+            {"isActive": {"$ne": False}},
+            {"_id": 1}
+        ).to_list(length=None)
+        valid_template_ids = set(str(t["_id"]) for t in valid_templates)
+        
+        # Scan products
+        products = await db.products.find(
+            {"specTemplateIds": {"$exists": True, "$ne": []}}
+        ).to_list(length=None)
+        
+        for product in products:
+            current_ids = product.get("specTemplateIds", [])
+            valid_ids = [
+                tid for tid in current_ids
+                if str(tid) in valid_template_ids
+            ]
+            
+            if len(valid_ids) != len(current_ids):
+                orphan_count = len(current_ids) - len(valid_ids)
+                results["step3_orphan_refs_removed"] += orphan_count
+                await db.products.update_one(
+                    {"_id": product["_id"]},
+                    {"$set": {"specTemplateIds": valid_ids}}
+                )
+    except Exception as e:
+        results["errors"].append(f"Step 3 error: {str(e)}")
+    
+    # STEP 4: Enforce category matching
+    try:
+        # Refresh products after step 3
+        products = await db.products.find(
+            {"specTemplateIds": {"$exists": True, "$ne": []}}
+        ).to_list(length=None)
+        
+        for product in products:
+            product_category = product.get("categoryId")
+            if not product_category:
+                continue
+            
+            product_category_str = str(product_category)
+            current_ids = product.get("specTemplateIds", [])
+            
+            # Find valid templates matching category
+            valid_for_category = []
+            for tid in current_ids:
+                template = await db.specTemplates.find_one({"_id": tid})
+                if template:
+                    template_category = template.get("categoryId")
+                    if template_category and str(template_category) == product_category_str:
+                        valid_for_category.append(tid)
+                    else:
+                        results["step4_category_mismatch_removed"] += 1
+            
+            if len(valid_for_category) != len(current_ids):
+                await db.products.update_one(
+                    {"_id": product["_id"]},
+                    {"$set": {"specTemplateIds": valid_for_category}}
+                )
+    except Exception as e:
+        results["errors"].append(f"Step 4 error: {str(e)}")
+    
+    logger.info(f"Admin {admin['email']} ran data integrity migration: {results}")
+    
+    return {
+        "message": "Data integrity migration complete",
+        "results": results,
+        "totalFixes": (
+            results["step1_specTemplates_categoryId_converted"] +
+            results["step2_products_categoryId_converted"] +
+            results["step3_orphan_refs_removed"] +
+            results["step4_category_mismatch_removed"]
+        )
+    }
+
+
 # === Product Admin Endpoints ===
 
 @api_router.get("/admin/products")
