@@ -166,16 +166,15 @@ def create_enterprise_product_router(db):
         
         summary_result, listings = await asyncio.gather(summary_task, listings_task)
         
-        if not result:
-            result = [{"totalCount": [], "minPrice": [], "variantCount": [], "listings": [], "facets": []}]
+        if not summary_result:
+            summary_result = [{"totalCount": [], "minPrice": [], "variantCount": [], "facets": []}]
         
-        agg_result = result[0]
+        agg_result = summary_result[0]
         
         # Extract values
         total_count = agg_result["totalCount"][0]["count"] if agg_result["totalCount"] else 0
         min_price = agg_result["minPrice"][0]["min"] if agg_result["minPrice"] else None
         variant_count = agg_result["variantCount"][0]["count"] if agg_result["variantCount"] else 0
-        listings = agg_result["listings"]
         
         # Build dynamic facets from attribute values
         facets = {}
