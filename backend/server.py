@@ -10697,6 +10697,12 @@ manufacturer_router = create_manufacturer_router(
 )
 app.include_router(manufacturer_router, prefix="/api")
 
+# ================== QUOTATION ROUTER ==================
+# Hybrid RFQ → Quote → WhatsApp → Acceptance System
+from routers.quotation_router import create_quotation_router
+quotation_router = create_quotation_router(db, get_current_user)
+app.include_router(quotation_router, prefix="/api")
+
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health
 # @app.get("/")
