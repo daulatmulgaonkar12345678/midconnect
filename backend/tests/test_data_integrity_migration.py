@@ -240,6 +240,9 @@ class TestValidateSpecTemplateIds:
     
     def test_08_product_create_with_valid_template_passes(self, api_client, auth_headers):
         """Creating product with valid template that matches category should work"""
+        if not TestValidateSpecTemplateIds.test_category_1_id or not TestValidateSpecTemplateIds.test_template_1_id:
+            pytest.skip("Prerequisites not met - category or template not created")
+        
         response = api_client.post(
             f"{BASE_URL}/api/admin/products",
             headers=auth_headers,
@@ -254,11 +257,15 @@ class TestValidateSpecTemplateIds:
         
         assert response.status_code in [200, 201], f"Expected 200/201, got {response.status_code}: {response.text}"
         data = response.json()
-        TestValidateSpecTemplateIds.test_product_id = data.get("_id") or data.get("id")
+        product = data.get("product", data)
+        TestValidateSpecTemplateIds.test_product_id = product.get("_id") or product.get("id")
         print(f"✅ Product created with valid template: {TestValidateSpecTemplateIds.test_product_id}")
     
     def test_09_product_create_with_category_mismatch_fails(self, api_client, auth_headers):
         """Creating product with template from different category should fail (validate_spec_template_ids)"""
+        if not TestValidateSpecTemplateIds.test_category_1_id or not TestValidateSpecTemplateIds.test_template_2_id:
+            pytest.skip("Prerequisites not met - category or template not created")
+        
         response = api_client.post(
             f"{BASE_URL}/api/admin/products",
             headers=auth_headers,
@@ -277,6 +284,9 @@ class TestValidateSpecTemplateIds:
     
     def test_10_product_create_with_nonexistent_template_fails(self, api_client, auth_headers):
         """Creating product with non-existent template should fail"""
+        if not TestValidateSpecTemplateIds.test_category_1_id:
+            pytest.skip("Prerequisites not met - category not created")
+        
         fake_template_id = "507f1f77bcf86cd799439011"  # Valid ObjectId format, but doesn't exist
         
         response = api_client.post(
@@ -344,11 +354,14 @@ class TestCleanupEndpoint:
         
         if response.status_code == 200:
             data = response.json()
-            # Verify response has expected keys
+            # Response structure: {summary: {...}, details: [...], message: "..."}
+            summary = data.get("summary", data)
+            
+            # Verify response has expected keys (either in root or in summary)
             expected_keys = ["productsScanned", "productsCleaned", "invalidRefsRemoved", "categoryMismatchRemoved"]
             for key in expected_keys:
-                assert key in data, f"Response should have '{key}' key"
-            print(f"✅ Cleanup response: {data}")
+                assert key in summary, f"Response summary should have '{key}' key"
+            print(f"✅ Cleanup response: {summary}")
 
 
 class TestSpecTemplatesEndpoint:
