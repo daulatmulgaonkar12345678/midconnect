@@ -115,8 +115,19 @@ export default function SellerInquiriesPage() {
         page,
         limit: 20
       });
+      
+      const newTotal = data?.total ?? 0;
+      const newUnreadCount = data?.unreadCount ?? 0;
+      
+      // Check for new inquiries (only if we've loaded before)
+      if (previousTotalRef.current > 0 && newTotal > previousTotalRef.current) {
+        setHasNewInquiry(true);
+      }
+      previousTotalRef.current = newTotal;
+      
       setInquiries(data?.inquiries ?? []);
-      setTotal(data?.total ?? 0);
+      setTotal(newTotal);
+      setUnreadCount(newUnreadCount);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load inquiries');
     } finally {
