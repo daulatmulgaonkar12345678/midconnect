@@ -541,8 +541,9 @@ export default function SellerInquiriesPage() {
 const productName = inquiry.listingName || 'your product';
 const quantity = inquiry.quantity || 0;
 
-const sellerBusiness =
-  (user as any)?.profile?.businessName || 'Your Business';
+// Use sellerBusinessName from API response (set when inquiry was accepted)
+const sellerBusiness = inquiry.sellerBusinessName || 'Your Business';
+const sellerName = sellerBusiness;
 const price = inquiry.quote?.price ?? 0;
 const moq = inquiry.quote?.moq ?? null;
 const leadTime = inquiry.quote?.leadTimeDays ?? null;
