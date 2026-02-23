@@ -177,16 +177,14 @@ export default function ProductsPage() {
 
   const openEditModal = (product: AdminProduct) => {
     setEditingProduct(product);
-    // Support both legacy single template and new array format
-    // Read from camelCase or snake_case for backward compatibility
-    const templateIds = product.specTemplateIds || product.specTemplateIds || 
-      (product.specTemplateId ? [product.specTemplateId] : []);
+    // SSOT: Use camelCase only - NO LEGACY FALLBACK
+    const templateIds = product.specTemplateIds || [];
     
     const existingCoverImage = product.coverImageUrl || '';
     
     setFormData({
       name: product.name,
-      categoryId: product.categoryId || product.categoryId || '',
+      categoryId: product.categoryId || '',
       description: product.description || '',
       family: product.family || '',
       variant: product.variant || '',
