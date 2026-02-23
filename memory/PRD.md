@@ -326,6 +326,90 @@ if allowed → accept + increment (only for non-unlimited)
 
 ---
 
+## HYBRID SELLER QUOTATION SYSTEM (Completed Feb 23, 2026)
+
+### System Overview
+Production v1 of the Hybrid RFQ → Quote → WhatsApp → Acceptance System. Key principles:
+- **Quote stored in platform (SSOT)** - All quotes managed in-app
+- **WhatsApp is redirect only** - No API integration, manual send
+- **Acceptance only inside app** - Platform maintains control
+- **No data leakage** - Contact info revealed only after acceptance
+
+### Database Schema
+```json
+// quotes collection
+{
+  "_id": ObjectId,
+  "quoteId": "QT-XXXXX",           // Non-sequential, secure alphanumeric
+  "inquiryId": ObjectId,
+  "sellerId": ObjectId,
+  "buyerId": ObjectId,
+  "productId": ObjectId,
+  "requestedQuantity": Number,
+  "unitPrice": Number,
+  "moq": Number,
+  "packagingCharges": Number,
+  "transportIncluded": false,       // Always false for v1
+  "totalPrice": Number,             // Auto-calc: (unitPrice × qty) + packagingCharges
+  "leadTimeDays": Number,
+  "validityDate": ISODate,
+  "status": "sent" | "viewed" | "accepted" | "rejected" | "expired",
+  "whatsappRedirectUsed": Boolean,
+  "accessToken": String,            // Secure token for public URL
+  "viewedAt": ISODate,
+  "acceptedAt": ISODate,
+  "rejectedAt": ISODate
+}
+```
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/quotes/create` | POST | Create quote (seller) |
+| `/api/quotes/{id}` | GET | View quote (buyer) |
+| `/api/quotes/{id}/whatsapp-redirect` | POST | Get WhatsApp link (seller) |
+| `/api/quotes/{id}/accept` | POST | Accept quote (buyer) |
+| `/api/quotes/{id}/reject` | POST | Reject quote (buyer) |
+| `/api/quotes/seller` | GET | List seller quotes |
+| `/api/quotes/buyer` | GET | List buyer quotes |
+| `/api/quotes/analytics` | GET | Quote analytics |
+| `/api/quotes/public/{id}` | GET | Public view with token |
+| `/api/quotes/admin/expire-quotes` | POST | Run expiry job |
+
+### Frontend Pages
+- `/quote/[quoteId]` - Buyer quote view page
+- `/buyer/quotes` - Buyer quotes list
+
+### Implementation Files
+```
+/app/backend/
+├── routers/quotation_router.py        # All quote endpoints
+├── services/quotation_service.py      # Quote business logic
+├── services/lead_service.py           # Lead counting (SSOT)
+├── services/quote_analytics_service.py # Analytics tracking
+└── cron/quote_expiry_cron.py          # Auto-expiry job
+
+/app/frontend/src/app/
+├── quote/[quoteId]/page.tsx           # Buyer quote view
+└── buyer/quotes/page.tsx              # Buyer quotes list
+```
+
+### Security Checklist ✅
+- [x] QuoteId non-sequential (random alphanumeric)
+- [x] Quote not editable after sent
+- [x] Buyer only sees their quotes
+- [x] Seller cannot modify after submission
+- [x] Acceptance requires login
+- [x] Expired quote cannot be accepted
+- [x] Lead count enforced before inquiry acceptance
+
+### Test Results
+- Backend: 26/26 tests passed (100%)
+- Frontend: Quote page renders correctly
+- All API endpoints verified working
+
+---
+
 ## NEXT STEPS
 
 ### P0 - Critical
@@ -335,16 +419,20 @@ if allowed → accept + increment (only for non-unlimited)
 1. ~~Performance & Load Testing~~ ✅ DONE - Passes benchmarks at 50k
 2. ~~Enterprise Ranking Engine~~ ✅ DONE - Deterministic weight-based ranking
 3. ~~Unified Subscription + Behavior Boost~~ ✅ DONE - Payment flow + behavior tracking
-4. Integrate actual payment gateway (Razorpay/Stripe) - Currently simulated
-5. Deprecate old product page (`/product/[slug]`) after production validation
+4. ~~Hybrid Seller Quotation System~~ ✅ DONE - Quote flow with WhatsApp redirect
+5. Integrate actual payment gateway (Razorpay/Stripe) - Currently simulated
+6. Deprecate old product page (`/product/[slug]`) after production validation
 
 ### P2 - Medium Priority
 1. Email notifications for subscription events
 2. Implement "Banned Seller" Status with `sellerStatus` field
 3. Analytics dashboard for ranking performance
+4. Online payments for quotes (Stripe/Razorpay)
+5. Counter-offer system for quotes
 
 ### P3 - Future (AI Semantic Layer - Phase 5)
 1. Vector embeddings for search query understanding
 2. NLP-based query parsing
 3. Similar product suggestions
 4. ML feedback loop for ranking optimization
+
