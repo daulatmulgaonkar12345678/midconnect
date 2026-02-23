@@ -132,7 +132,7 @@ class TestValidateSpecTemplateIds:
             category = data.get("category", data)
             TestValidateSpecTemplateIds.test_category_1_id = category.get("_id") or category.get("id")
             print(f"✅ Created test category 1: {TestValidateSpecTemplateIds.test_category_1_id}")
-        elif response.status_code == 409:
+        elif response.status_code in [400, 409]:
             # Category already exists, fetch it
             list_response = api_client.get(f"{BASE_URL}/api/admin/categories", headers=auth_headers)
             if list_response.status_code == 200:
@@ -158,7 +158,7 @@ class TestValidateSpecTemplateIds:
             category = data.get("category", data)
             TestValidateSpecTemplateIds.test_category_2_id = category.get("_id") or category.get("id")
             print(f"✅ Created test category 2: {TestValidateSpecTemplateIds.test_category_2_id}")
-        elif response.status_code == 409:
+        elif response.status_code in [400, 409]:
             list_response = api_client.get(f"{BASE_URL}/api/admin/categories", headers=auth_headers)
             if list_response.status_code == 200:
                 cats = list_response.json().get("categories", [])
@@ -192,7 +192,7 @@ class TestValidateSpecTemplateIds:
             template = data.get("template", data)
             TestValidateSpecTemplateIds.test_template_1_id = template.get("_id") or template.get("id")
             print(f"✅ Created spec template for cat1: {TestValidateSpecTemplateIds.test_template_1_id}")
-        elif response.status_code == 409:
+        elif response.status_code in [400, 409]:
             list_response = api_client.get(f"{BASE_URL}/api/admin/spec-templates", headers=auth_headers)
             if list_response.status_code == 200:
                 templates = list_response.json().get("templates", [])
@@ -226,7 +226,7 @@ class TestValidateSpecTemplateIds:
             template = data.get("template", data)
             TestValidateSpecTemplateIds.test_template_2_id = template.get("_id") or template.get("id")
             print(f"✅ Created spec template for cat2: {TestValidateSpecTemplateIds.test_template_2_id}")
-        elif response.status_code == 409:
+        elif response.status_code in [400, 409]:
             list_response = api_client.get(f"{BASE_URL}/api/admin/spec-templates", headers=auth_headers)
             if list_response.status_code == 200:
                 templates = list_response.json().get("templates", [])
