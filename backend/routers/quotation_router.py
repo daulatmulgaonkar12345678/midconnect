@@ -349,6 +349,13 @@ def create_quotation_router(db, get_current_user):
                 is_expired = validity_date < datetime.now(timezone.utc)
         
         # Return limited public view
+        # Format createdAt for public view
+        created_at = quote.get("createdAt")
+        if isinstance(created_at, datetime):
+            created_at_str = created_at.isoformat()
+        else:
+            created_at_str = str(created_at) if created_at else None
+        
         return {
             "quote": {
                 "quoteId": quote.get("quoteId"),
@@ -364,7 +371,8 @@ def create_quotation_router(db, get_current_user):
                 "validityDate": quote.get("validityDate").isoformat() if isinstance(quote.get("validityDate"), datetime) else quote.get("validityDate"),
                 "terms": quote.get("terms"),
                 "customMessage": quote.get("customMessage"),
-                "status": quote.get("status")
+                "status": quote.get("status"),
+                "createdAt": created_at_str
             },
             "isExpired": is_expired,
             "requiresLogin": True,  # Flag to show login prompt for accepting
