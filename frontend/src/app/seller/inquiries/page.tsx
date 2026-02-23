@@ -145,6 +145,23 @@ export default function SellerInquiriesPage() {
     }
   }, [user, authLoading, loadInquiries, router]);
 
+  // Polling for new inquiries every 30 seconds
+  useEffect(() => {
+    if (!user || authLoading) return;
+    
+    const interval = setInterval(() => {
+      loadInquiries();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [user, authLoading, loadInquiries]);
+
+  const handleRefresh = () => {
+    setHasNewInquiry(false);
+    setLoading(true);
+    loadInquiries();
+  };
+
   const openAction = (inquiryId: string, type: 'accept' | 'reject' | 'report') => {
     setActionInquiryId(inquiryId);
     setActionType(type);
