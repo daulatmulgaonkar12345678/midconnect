@@ -287,6 +287,15 @@ if allowed → accept + increment (only for non-unlimited)
 - `GET /api/products/ranking/config` - Get current weights
 - `POST /api/products/ranking/config` - Update weights (admin)
 - `POST /api/products/ranking/reset` - Reset to defaults
+- `POST /api/products/{id}/track-view` - Track product view for behavior boost
+- `GET /api/products/behavior/stats` - Get buyer behavior stats
+
+### Subscription Payment API Endpoints
+- `GET /api/subscription/plans` - List plans with pricing
+- `POST /api/subscription/create-order` - Create payment order
+- `POST /api/subscription/webhook` - Payment webhook (idempotent)
+- `POST /api/subscription/verify` - Verify payment status
+- `POST /api/subscription/simulate-payment` - DEV: Simulate payment
 
 ### New Frontend Components Created
 ```
