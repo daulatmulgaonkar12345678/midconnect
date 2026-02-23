@@ -215,94 +215,124 @@ class QuotationService:
         """
         Create a new quote for an accepted inquiry.
         
-        Validations:
+        Validations (per spec):
         - Inquiry must be accepted
-        - Seller must match inquiry seller
-        - No duplicate active quote for same inquiry
+        - Seller must own inquiry
+        - Only 1 active quote per inquiry
+        - validityDays <= 15
+        
+        Auto-calculations:
+        - totalPrice = (unitPrice × requestedQuantity) + packagingCharges
+        - transportIncluded = false (always)
+        - status = "sent"
+        - quoteId = random secure alphanumeric (NOT sequential)
         
         Returns:
-            Quote document with WhatsApp preview link
+            Quote document with WhatsApp preview capability
         """
         inquiry_oid = ObjectId(request.inquiryId)
+        
+        # Validate validityDays
+        if request.validityDays > MAX_VALIDITY_DAYS:
+            raise ValueError(f"Validity cannot exceed {MAX_VALIDITY_DAYS} days")
         
         # Get inquiry
         inquiry = await self.db.inquiries.find_one({"_id": inquiry_oid})
         if not inquiry:
             raise ValueError("Inquiry not found")
         
-        # Validate seller
+        # Validate seller owns this inquiry
         if str(inquiry.get("sellerId")) != str(seller_id):
             raise ValueError("You are not authorized to quote on this inquiry")
         
-        # Validate inquiry status
+        # Validate inquiry status - MUST be accepted first
         if inquiry.get("status") != "accepted":
-            raise ValueError("Inquiry must be accepted before creating a quote")
+            raise ValueError("Inquiry must be accepted before creating a quote. Please accept the inquiry first.")
         
-        # Check for existing active quote
+        # Check for existing active quote (only 1 allowed per inquiry)
         existing_quote = await self.db.quotes.find_one({
             "inquiryId": inquiry_oid,
             "status": {"$in": ["sent", "viewed"]}
         })
         if existing_quote:
-            raise ValueError(f"Active quote already exists: {existing_quote.get('quoteId')}")
+            raise ValueError(f"Active quote already exists for this inquiry: {existing_quote.get('quoteId')}")
         
         # Get product info
-        product = await self.db.products.find_one({"_id": inquiry.get("productId")})
-        product_name = product.get("name", "Unknown Product") if product else "Unknown Product"
+        product_id = inquiry.get("productId")
+        product = None
+        product_name = "Unknown Product"
+        
+        if product_id:
+            product = await self.db.products.find_one({"_id": product_id})
+            if product:
+                product_name = product.get("name", "Unknown Product")
         
         # Get seller info
         seller = await self.db.users.find_one({"_id": seller_id})
-        seller_name = seller.get("profile", {}).get("businessName", "Seller") if seller else "Seller"
+        seller_name = "Seller"
+        seller_phone = None
+        if seller:
+            profile = seller.get("profile") or {}
+            seller_name = profile.get("businessName") or seller.get("email", "Seller").split("@")[0]
+            seller_phone = profile.get("phone")
         
         # Get buyer info
         buyer_id = inquiry.get("buyerId")
         buyer = await self.db.users.find_one({"_id": buyer_id})
-        buyer_name = buyer.get("profile", {}).get("name", "Buyer") if buyer else "Buyer"
+        buyer_name = "Buyer"
+        buyer_company = None
+        buyer_phone = None
+        if buyer:
+            profile = buyer.get("profile") or {}
+            buyer_name = profile.get("name") or profile.get("businessName") or "Buyer"
+            buyer_company = profile.get("businessName")
+            buyer_phone = profile.get("phone")
         
-        # Calculate totals
+        # Auto-calculate totals (per spec)
         requested_qty = inquiry.get("quantity", 1)
         unit_price = request.unitPrice
         packaging = request.packagingCharges
         total_price = (unit_price * requested_qty) + packaging
         
-        # Generate IDs
+        # Generate secure IDs
         quote_id = await self._generate_quote_id()
         access_token = await self._generate_access_token()
         
         now = datetime.now(timezone.utc)
         validity_date = now + timedelta(days=request.validityDays)
         
-        # MOQ warning (logged, not blocking)
-        if requested_qty < request.moq:
-            logger.warning(f"Quote {quote_id}: Requested qty ({requested_qty}) < MOQ ({request.moq})")
-        
+        # Build quote document
         quote_doc = {
             "_id": ObjectId(),
             "quoteId": quote_id,
             "accessToken": access_token,
             "inquiryId": inquiry_oid,
-            "productId": inquiry.get("productId"),
+            "productId": product_id,
             "productName": product_name,
             "sellerId": seller_id,
             "sellerName": seller_name,
+            "sellerPhone": seller_phone,  # For buyer view after acceptance
             "buyerId": buyer_id,
             "buyerName": buyer_name,
+            "buyerCompany": buyer_company,
+            "buyerPhone": buyer_phone,  # For WhatsApp redirect
             "requestedQuantity": requested_qty,
             "unitPrice": unit_price,
             "moq": request.moq,
             "packagingCharges": packaging,
-            "transportChargesIncluded": False,  # Always false
-            "totalPrice": total_price,
+            "transportIncluded": False,  # Always false per spec
+            "totalPrice": round(total_price, 2),
             "leadTimeDays": request.leadTimeDays,
             "validityDate": validity_date,
             "validityDays": request.validityDays,
             "terms": request.terms,
             "customMessage": request.customMessage,
             "status": "sent",
-            "whatsappPreviewSent": False,
+            "whatsappRedirectUsed": False,  # Per spec: track if seller clicked WhatsApp
             "viewedAt": None,
             "acceptedAt": None,
             "rejectedAt": None,
+            "rejectionReason": None,
             "createdAt": now,
             "updatedAt": now
         }
@@ -314,14 +344,19 @@ class QuotationService:
             "quoteId": quote_id,
             "sellerId": str(seller_id),
             "buyerId": str(buyer_id),
-            "productId": str(inquiry.get("productId")),
-            "totalPrice": total_price
+            "productId": str(product_id) if product_id else None,
+            "totalPrice": total_price,
+            "validityDays": request.validityDays
         })
         
         # Update inquiry with quote reference
         await self.db.inquiries.update_one(
             {"_id": inquiry_oid},
-            {"$set": {"latestQuoteId": quote_doc["_id"], "updatedAt": now}}
+            {"$set": {
+                "latestQuoteId": quote_doc["_id"],
+                "quoteStatus": "sent",
+                "updatedAt": now
+            }}
         )
         
         logger.info(f"Quote created: {quote_id} for inquiry {request.inquiryId}")
