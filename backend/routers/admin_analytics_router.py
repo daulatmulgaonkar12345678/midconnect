@@ -164,7 +164,7 @@ def create_admin_analytics_router(db, require_admin):
         
         try:
             target_oid = ObjectId(target_id)
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid target ID")
         
         return await service.get_entity_audit_trail(target_type, target_oid)
