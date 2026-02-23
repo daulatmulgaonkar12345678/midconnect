@@ -117,16 +117,22 @@ def create_quotation_router(db, get_current_user):
             limit=limit
         )
     
-    @router.post("/{quote_id}/whatsapp-preview")
-    async def get_whatsapp_preview(
+    @router.post("/{quote_id}/whatsapp-redirect")
+    async def get_whatsapp_redirect(
         quote_id: str,
         current_user: dict = Depends(get_current_user)
     ):
         """
-        Generate WhatsApp preview message for a quote.
+        Generate WhatsApp redirect link for a quote.
         
-        Returns structured message without contact info.
-        Marks quote as WhatsApp preview sent.
+        Per spec:
+        - Returns structured message with secure quote link
+        - Marks quote as whatsappRedirectUsed = true
+        - Returns wa.me link with buyer phone if available
+        
+        Security:
+        - Only the seller who created the quote can access
+        - No contact details leaked in message
         """
         if "seller" not in current_user.get("roles", []):
             raise HTTPException(status_code=403, detail="Only sellers can access this")
@@ -140,22 +146,24 @@ def create_quotation_router(db, get_current_user):
         if str(quote.get("sellerId")) != str(current_user["_id"]):
             raise HTTPException(status_code=403, detail="Not authorized")
         
-        # Get buyer phone for WhatsApp link (only if inquiry was accepted)
-        buyer = await db.users.find_one({"_id": quote.get("buyerId")})
-        buyer_phone = None
-        if buyer:
-            # Get phone from inquiry acceptance (contact was revealed)
+        # Get buyer phone for WhatsApp link
+        buyer_phone = quote.get("buyerPhone")
+        
+        # If not in quote, try to fetch from inquiry/user
+        if not buyer_phone:
             inquiry = await db.inquiries.find_one({"_id": quote.get("inquiryId")})
             if inquiry and inquiry.get("status") == "accepted":
-                buyer_phone = buyer.get("profile", {}).get("phone") or buyer.get("phone")
+                buyer = await db.users.find_one({"_id": quote.get("buyerId")})
+                if buyer:
+                    buyer_phone = buyer.get("profile", {}).get("phone") or buyer.get("phone")
         
         # Generate base URL
         base_url = os.environ.get("FRONTEND_URL", "https://quote-system-19.preview.emergentagent.com")
         
         preview = service.generate_whatsapp_preview(quote, base_url)
         
-        # Mark as sent
-        await service.mark_whatsapp_sent(quote_id)
+        # Mark as WhatsApp redirect used
+        await service.mark_whatsapp_redirect_used(quote_id)
         
         # Generate WhatsApp link if phone available
         whatsapp_link = None
