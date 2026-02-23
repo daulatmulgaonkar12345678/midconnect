@@ -13,6 +13,7 @@ import {
   requestProduct,
   requestCategory,
   requestSpecField,
+  getProductById,
   Category,
   AdminProduct,
   B2BSpecTemplate,
@@ -38,10 +39,6 @@ import {
   Send
 } from 'lucide-react';
 import Link from 'next/link';
-import {
-  getProductById,
-  getCategorySpecTemplate
-} from '@/lib/api';
 
 
 // ==================== Types (FINAL ARCHITECTURE - camelCase, flat) ====================
