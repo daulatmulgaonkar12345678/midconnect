@@ -10,7 +10,8 @@ import {
   CheckSquare,
   Square,
   Building2,
-  TrendingDown
+  TrendingDown,
+  Sparkles
 } from 'lucide-react';
 import type { EnterpriseProductSeller, PricingTier } from '@/lib/api';
 
@@ -20,6 +21,7 @@ interface SellerCardProps {
   onCompareToggle: (sellerId: string) => void;
   onInquiry: (seller: EnterpriseProductSeller) => void;
   compareDisabled?: boolean;
+  showRankingScore?: boolean;
 }
 
 // Seller role badges
@@ -31,12 +33,21 @@ const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
   retailer: { label: 'Retailer', color: 'bg-pink-100 text-pink-700' },
 };
 
+// Get ranking badge config based on score
+const getRankingBadge = (score: number) => {
+  if (score >= 80) return { label: 'Top Pick', color: 'bg-green-100 text-green-700 border-green-200' };
+  if (score >= 60) return { label: 'Great Match', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+  if (score >= 40) return { label: 'Good Match', color: 'bg-gray-100 text-gray-600 border-gray-200' };
+  return null;
+};
+
 export default function SellerCard({ 
   seller, 
   isCompareSelected, 
   onCompareToggle, 
   onInquiry,
-  compareDisabled 
+  compareDisabled,
+  showRankingScore = false
 }: SellerCardProps) {
   const [showAllSpecs, setShowAllSpecs] = useState(false);
 
