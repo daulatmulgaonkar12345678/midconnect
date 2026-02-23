@@ -503,19 +503,15 @@ def create_enterprise_product_router(db):
                     "state": request.buyerState
                 }
             
-            # Load subscription data for sellers
+            # Load subscription data for sellers using unified engine
             seller_ids = list(set(str(r.get("sellerId")) for r in results if r.get("sellerId")))
             subscription_cache = {}
             
             if seller_ids:
-                # Batch load subscriptions
-                subscriptions = await db.subscriptions.find({
-                    "userId": {"$in": [ObjectId(sid) for sid in seller_ids if ObjectId.is_valid(sid)]},
-                    "status": {"$in": ["active", "trial"]}
-                }).to_list(None)
-                
-                for sub in subscriptions:
-                    subscription_cache[str(sub["userId"])] = sub.get("planName", "free")
+                # Use subscription engine for consistent logic
+                from services.subscription_engine import SubscriptionEngine
+                sub_engine = SubscriptionEngine(db)
+                subscription_cache = await sub_engine.get_subscription_for_ranking(seller_ids)
             
             # Prepare listings with seller profile data for ranking
             listings_for_ranking = []
