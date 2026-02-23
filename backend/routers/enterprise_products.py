@@ -487,12 +487,66 @@ def create_enterprise_product_router(db):
         
         # Format results
         formatted = []
+        
+        # Determine match quality based on fallback level
+        match_quality = "exact" if fallback_level == 0 else (
+            "partial" if fallback_level <= 2 else "fallback"
+        )
+        
+        # If sorting by ranking, apply enterprise ranking
+        if request.sortBy == "ranking":
+            # Build buyer context for location-based ranking
+            buyer_context = None
+            if request.buyerCity or request.buyerState:
+                buyer_context = {
+                    "city": request.buyerCity,
+                    "state": request.buyerState
+                }
+            
+            # Load subscription data for sellers
+            seller_ids = list(set(str(r.get("sellerId")) for r in results if r.get("sellerId")))
+            subscription_cache = {}
+            
+            if seller_ids:
+                # Batch load subscriptions
+                subscriptions = await db.subscriptions.find({
+                    "userId": {"$in": [ObjectId(sid) for sid in seller_ids if ObjectId.is_valid(sid)]},
+                    "status": {"$in": ["active", "trial"]}
+                }).to_list(None)
+                
+                for sub in subscriptions:
+                    subscription_cache[str(sub["userId"])] = sub.get("planName", "free")
+            
+            # Prepare listings with seller profile data for ranking
+            listings_for_ranking = []
+            for listing in results:
+                listing_dict = dict(listing)
+                # Add seller profile if available from lookup
+                if "sellerData" in listing:
+                    listing_dict["sellerProfile"] = {
+                        "city": listing.get("sellerData", {}).get("profile", {}).get("city"),
+                        "state": listing.get("sellerData", {}).get("profile", {}).get("state")
+                    }
+                listings_for_ranking.append(listing_dict)
+            
+            # Apply ranking
+            ranked_results = enterprise_ranker.rank_listings(
+                listings=listings_for_ranking,
+                buyer_context=buyer_context,
+                match_quality=match_quality,
+                subscription_cache=subscription_cache,
+                debug=request.debug
+            )
+            
+            # Use ranked results
+            results = ranked_results
+        
         for listing in results:
             pricing = listing.get("pricingTiers", [])
             lowest = min([t.get("pricePerUnit", 0) for t in pricing]) if pricing else None
             
-            formatted.append(serialize_doc({
-                "listingId": listing["_id"],
+            result_item = serialize_doc({
+                "listingId": listing.get("_id") or listing.get("listingId"),
                 "sellerId": listing["sellerId"],
                 "variantId": listing.get("variantId"),
                 "searchableAttributes": listing.get("searchableAttributes", {}),
@@ -503,8 +557,15 @@ def create_enterprise_product_router(db):
                 "stock": listing.get("stock", 0),
                 "leadTimeDays": listing.get("leadTime"),
                 "images": listing.get("images", [])[:2],
-                "sellerRole": listing.get("sellerRole")
-            }))
+                "sellerRole": listing.get("sellerRole"),
+                "rankingScore": listing.get("rankingScore")  # Include if ranked
+            })
+            
+            # Include ranking breakdown in debug mode
+            if request.debug and listing.get("rankingBreakdown"):
+                result_item["rankingBreakdown"] = listing["rankingBreakdown"]
+            
+            formatted.append(result_item)
         
         return {
             "results": formatted,
