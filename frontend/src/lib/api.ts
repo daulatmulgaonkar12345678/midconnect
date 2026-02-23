@@ -1450,6 +1450,9 @@ export interface EnterpriseProductSeller {
   leadTimeDays?: number;
   images: string[];
   stockStatus: 'in_stock' | 'out_of_stock' | 'limited';
+  // Ranking fields (populated when sortBy=ranking)
+  rankingScore?: number;
+  rankingBreakdown?: RankingBreakdown;
 }
 
 export interface EnterpriseProductResponse {
