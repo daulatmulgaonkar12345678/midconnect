@@ -479,20 +479,21 @@ class TestLimitReached403Error:
         print("✅ 403 error returned with detailed limit information")
 
 
-class TestEnterpriseSubscription:
+class TestTrialSubscription:
     """
-    Tests for Enterprise subscription (also unlimited like PRO)
+    Tests for Trial subscription (unlimited like PRO for 90 days)
+    Note: 'enterprise' is not a valid plan in the API - use 'pro' or 'trial'
     """
     
-    def test_14_activate_enterprise_subscription(self, api_client):
-        """Test admin activation of Enterprise subscription"""
+    def test_14_activate_trial_subscription(self, api_client):
+        """Test admin activation of Trial subscription"""
         start_date = datetime.now(timezone.utc)
         
         payload = {
-            "planName": "enterprise",
+            "planName": "trial",
             "startDate": start_date.isoformat(),
-            "durationDays": 365,
-            "notes": "Test ENTERPRISE activation"
+            "durationDays": 90,
+            "notes": "Test TRIAL activation"
         }
         
         response = api_client.post(
@@ -503,12 +504,12 @@ class TestEnterpriseSubscription:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["subscription"]["planName"] == "enterprise"
+        assert data["subscription"]["planName"] == "trial"
         assert data["subscription"]["status"] == "active"
         
-        print(f"✅ Enterprise subscription activated")
+        print(f"✅ Trial subscription activated")
         
-        # Verify unlimited access
+        # Verify unlimited access (trial has unlimited inquiries)
         time.sleep(0.5)
         status_response = api_client.get(f"{BASE_URL}/api/seller/subscription/status")
         assert status_response.status_code == 200
@@ -516,7 +517,7 @@ class TestEnterpriseSubscription:
         
         assert status_data["features"]["unlimitedInquiries"] == True
         
-        print("✅ Enterprise subscription shows unlimited access")
+        print("✅ Trial subscription shows unlimited access")
 
 
 class TestMonthlyReset:
