@@ -64,12 +64,27 @@ from bson import ObjectId
 from typing import Dict, Any, Optional, Literal, List
 from pydantic import BaseModel, Field
 import secrets
+import string
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Quote ID counter key in database
-QUOTE_COUNTER_KEY = "quote_counter"
+# Maximum validity days (per spec)
+MAX_VALIDITY_DAYS = 15
+
+
+def generate_secure_quote_id() -> str:
+    """
+    Generate a non-sequential, secure alphanumeric quote ID.
+    
+    Format: QT-XXXXX (5 random alphanumeric characters)
+    
+    Security: Uses secrets module for cryptographically secure random generation.
+    NOT sequential to prevent enumeration attacks.
+    """
+    chars = string.ascii_uppercase + string.digits
+    random_part = ''.join(secrets.choice(chars) for _ in range(5))
+    return f"QT-{random_part}"
 
 
 class QuoteCreateRequest(BaseModel):
@@ -78,7 +93,7 @@ class QuoteCreateRequest(BaseModel):
     unitPrice: float = Field(..., gt=0, description="Price per unit in INR")
     moq: int = Field(..., ge=1, description="Minimum order quantity")
     leadTimeDays: int = Field(..., ge=1, le=365, description="Lead time in days")
-    validityDays: int = Field(default=7, ge=1, le=30, description="Quote validity in days")
+    validityDays: int = Field(default=7, ge=1, le=MAX_VALIDITY_DAYS, description=f"Quote validity (max {MAX_VALIDITY_DAYS} days)")
     packagingCharges: float = Field(default=0, ge=0, description="Optional packaging charges")
     terms: Optional[str] = Field(default=None, max_length=2000, description="Terms and conditions")
     customMessage: Optional[str] = Field(default=None, max_length=1000, description="Custom message to buyer")
