@@ -502,6 +502,14 @@ export default function EnterpriseProductPage() {
         productId={product._id}
         productName={product.name}
       />
+
+      {/* Floating Compare Bar */}
+      <FloatingCompareBar
+        selectedCount={compareSelected.size}
+        maxCount={MAX_COMPARE}
+        onViewCompare={() => setShowComparison(true)}
+        onClearAll={() => setCompareSelected(new Set())}
+      />
     </div>
   );
 }
