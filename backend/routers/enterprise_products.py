@@ -527,12 +527,27 @@ def create_enterprise_product_router(db):
                     }
                 listings_for_ranking.append(listing_dict)
             
+            # Load behavior boosts if buyer is authenticated
+            behavior_boost_cache = {}
+            if request.buyerId and ObjectId.is_valid(request.buyerId):
+                try:
+                    from services.buyer_interaction_service import BuyerInteractionService
+                    interaction_service = BuyerInteractionService(db)
+                    behavior_boost_cache = await interaction_service.get_batch_boosts(
+                        buyer_id=ObjectId(request.buyerId),
+                        product_id=product_oid,
+                        seller_ids=seller_ids
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to load behavior boosts: {e}")
+            
             # Apply ranking
             ranked_results = enterprise_ranker.rank_listings(
                 listings=listings_for_ranking,
                 buyer_context=buyer_context,
                 match_quality=match_quality,
                 subscription_cache=subscription_cache,
+                behavior_boost_cache=behavior_boost_cache,
                 debug=request.debug
             )
             
