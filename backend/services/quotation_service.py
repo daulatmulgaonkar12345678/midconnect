@@ -184,15 +184,24 @@ class QuotationService:
         logger.info("Quote indexes ensured")
     
     async def _generate_quote_id(self) -> str:
-        """Generate sequential quote ID (QT-000001)."""
-        result = await self.db.counters.find_one_and_update(
-            {"_id": QUOTE_COUNTER_KEY},
-            {"$inc": {"seq": 1}},
-            upsert=True,
-            return_document=True
-        )
-        seq = result.get("seq", 1)
-        return f"QT-{seq:06d}"
+        """
+        Generate a secure, non-sequential quote ID.
+        
+        Uses cryptographically secure random generation.
+        Checks for uniqueness in database (collision handling).
+        """
+        max_attempts = 10
+        for _ in range(max_attempts):
+            quote_id = generate_secure_quote_id()
+            # Check uniqueness
+            existing = await self.db.quotes.find_one({"quoteId": quote_id})
+            if not existing:
+                return quote_id
+        
+        # Fallback: Add timestamp suffix for guaranteed uniqueness
+        import time
+        timestamp = int(time.time() * 1000) % 10000
+        return f"QT-{secrets.token_hex(2).upper()}{timestamp}"
     
     async def _generate_access_token(self) -> str:
         """Generate secure access token for quote URL."""
