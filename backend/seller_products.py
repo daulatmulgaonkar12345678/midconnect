@@ -1606,9 +1606,35 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         # Get seller business name from profile
         seller_name = seller.get("profile", {}).get("businessName") or seller.get("businessName") or "B2B Market Seller"
         
-        # Get buyer details
-        buyer_name = buyer_info.get("name") or buyer_info.get("companyName") or "Customer"
-        buyer_phone = buyer_info.get("phone", "")
+        # STRICT CONTACT UNLOCK: Fetch buyer from users collection
+        buyer_id = updated_inquiry.get("buyerId")
+        buyer_name = "Customer"
+        buyer_phone = ""
+        buyer_email = ""
+        buyer_company = ""
+        
+        if buyer_id:
+            try:
+                bid = buyer_id if isinstance(buyer_id, ObjectId) else ObjectId(str(buyer_id))
+                buyer = await db.users.find_one({"_id": bid})
+                
+                if buyer:
+                    buyer_profile = buyer.get("profile") or {}
+                    buyer_name = buyer_profile.get("businessName") or buyer.get("email", "").split("@")[0] or "Customer"
+                    buyer_phone = buyer_profile.get("phone") or ""
+                    buyer_email = buyer.get("email") or ""
+                    buyer_company = buyer_profile.get("businessName") or ""
+            except Exception as e:
+                logger.warning(f"Error fetching buyer {buyer_id}: {e}")
+        
+        # Fallback to embedded buyerInfo for legacy inquiries
+        if not buyer_phone:
+            embedded_buyer = updated_inquiry.get("buyerInfo") or {}
+            buyer_name = embedded_buyer.get("name") or embedded_buyer.get("companyName") or buyer_name
+            buyer_phone = embedded_buyer.get("phone") or ""
+            buyer_email = embedded_buyer.get("email") or buyer_email
+            buyer_company = embedded_buyer.get("companyName") or buyer_company
+        
         quantity = updated_inquiry.get("quantity", 1)
         
         # Format validity date as "18 Feb 2026"
@@ -1630,18 +1656,15 @@ Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
         # Generate WhatsApp link if buyer phone exists
         whatsapp_link = None
         if buyer_phone:
-            # Clean phone number - remove spaces, dashes, and ensure country code
-            clean_phone = buyer_phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+            # Clean phone number - remove non-digits
+            clean_phone = "".join(filter(str.isdigit, buyer_phone))
             # Add India country code if not present
-            if not clean_phone.startswith("+"):
-                if clean_phone.startswith("91"):
-                    clean_phone = "+" + clean_phone
-                else:
-                    clean_phone = "+91" + clean_phone
+            if not clean_phone.startswith("91"):
+                clean_phone = "91" + clean_phone
             
             # URL encode the message
             encoded_message = urllib.parse.quote(whatsapp_message)
-            whatsapp_link = f"https://wa.me/{clean_phone.replace('+', '')}?text={encoded_message}"
+            whatsapp_link = f"https://wa.me/{clean_phone}?text={encoded_message}"
         
         # Calculate remaining
         limit = subscription["limit"]
@@ -1656,10 +1679,10 @@ Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
             "inquiryId": inquiry_id,
             "whatsappLink": whatsapp_link,
             "buyerContact": {
-                "name": buyer_info.get("name"),
-                "phone": buyer_info.get("phone"),
-                "email": buyer_info.get("email"),
-                "company": buyer_info.get("companyName")
+                "name": buyer_name,
+                "phone": buyer_phone,
+                "email": buyer_email,
+                "company": buyer_company
             },
             "quote": {
                 "price": data.quotedPrice,
