@@ -207,6 +207,56 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
     def serialize_objectids(doc: dict) -> dict:
         return serialize_mongo_doc(doc)
     
+    async def _build_searchable_text(db, product, category_id, variant, seller, description):
+        """Build searchable text from all relevant fields."""
+        parts = []
+        
+        # Product name
+        if product.get("name"):
+            parts.append(product["name"])
+        
+        # Category name
+        if category_id:
+            category = await db.categories.find_one({"_id": category_id})
+            if category and category.get("name"):
+                parts.append(category["name"])
+        
+        # Variant attributes
+        attrs = variant.get("attributes", {})
+        for key, value in attrs.items():
+            parts.append(f"{key}")
+            parts.append(f"{value}")
+        
+        # Seller location
+        if seller:
+            profile = seller.get("profile", {})
+            if profile.get("city"):
+                parts.append(profile["city"])
+            if profile.get("state"):
+                parts.append(profile["state"])
+        
+        # Description
+        if description:
+            parts.append(description)
+        
+        return " ".join(filter(None, parts)).lower()
+    
+    async def _get_attribute_labels(db, product):
+        """Get attribute labels from spec template."""
+        labels = {}
+        template_ids = product.get("specTemplateIds", [])
+        if template_ids:
+            template_id = template_ids[0] if isinstance(template_ids[0], ObjectId) else ObjectId(str(template_ids[0]))
+            template = await db.specTemplates.find_one({"_id": template_id})
+            if template and template.get("fields"):
+                for field in template["fields"]:
+                    key = field.get("key")
+                    label = field.get("label")
+                    unit = field.get("unit")
+                    if key and label:
+                        labels[key] = f"{label}" + (f" ({unit})" if unit else "")
+        return labels
+    
     async def get_product_with_template(product_id: str):
         try:
             product = await db.products.find_one({"_id": ObjectId(product_id)})
