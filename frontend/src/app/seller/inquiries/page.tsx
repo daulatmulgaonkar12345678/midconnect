@@ -77,6 +77,11 @@ export default function SellerInquiriesPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<InquiryStatus>('');
   
+  // New inquiry notification state
+  const [hasNewInquiry, setHasNewInquiry] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const previousTotalRef = useRef(0);
+  
   // Action states
   const [actionInquiryId, setActionInquiryId] = useState<string | null>(null);
   const [actionType, setActionType] = useState<'accept' | 'reject' | 'report' | null>(null);
