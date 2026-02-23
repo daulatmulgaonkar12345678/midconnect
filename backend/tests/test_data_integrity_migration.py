@@ -120,29 +120,26 @@ class TestValidateSpecTemplateIds:
     
     def test_04_find_existing_test_data(self, api_client, auth_headers):
         """Find existing test categories and templates from previous test runs"""
-        # Get existing categories
-        cat_response = api_client.get(f"{BASE_URL}/api/admin/categories", headers=auth_headers)
-        assert cat_response.status_code == 200, "Failed to fetch categories"
-        cats = cat_response.json().get("categories", [])
-        
-        # Find two different categories
-        for cat in cats:
-            if not TestValidateSpecTemplateIds.test_category_1_id:
-                TestValidateSpecTemplateIds.test_category_1_id = cat.get("_id")
-            elif not TestValidateSpecTemplateIds.test_category_2_id and cat.get("_id") != TestValidateSpecTemplateIds.test_category_1_id:
-                TestValidateSpecTemplateIds.test_category_2_id = cat.get("_id")
-        
-        # Get existing templates
+        # Get existing templates first, then find their categories
         tmpl_response = api_client.get(f"{BASE_URL}/api/admin/spec-templates", headers=auth_headers)
         assert tmpl_response.status_code == 200, "Failed to fetch templates"
         templates = tmpl_response.json().get("templates", [])
         
-        # Find templates for category 1 and category 2
+        # Group templates by category
+        cat_to_template = {}
         for t in templates:
-            if t.get("categoryId") == TestValidateSpecTemplateIds.test_category_1_id and not TestValidateSpecTemplateIds.test_template_1_id:
-                TestValidateSpecTemplateIds.test_template_1_id = t.get("_id")
-            elif t.get("categoryId") == TestValidateSpecTemplateIds.test_category_2_id and not TestValidateSpecTemplateIds.test_template_2_id:
-                TestValidateSpecTemplateIds.test_template_2_id = t.get("_id")
+            cat_id = t.get("categoryId")
+            if cat_id and cat_id not in cat_to_template:
+                cat_to_template[cat_id] = t.get("_id")
+        
+        # Find two different categories that have templates
+        cat_ids = list(cat_to_template.keys())
+        if len(cat_ids) >= 1:
+            TestValidateSpecTemplateIds.test_category_1_id = cat_ids[0]
+            TestValidateSpecTemplateIds.test_template_1_id = cat_to_template[cat_ids[0]]
+        if len(cat_ids) >= 2:
+            TestValidateSpecTemplateIds.test_category_2_id = cat_ids[1]
+            TestValidateSpecTemplateIds.test_template_2_id = cat_to_template[cat_ids[1]]
         
         print(f"✅ Found test data:")
         print(f"   - Category 1: {TestValidateSpecTemplateIds.test_category_1_id}")
@@ -150,7 +147,7 @@ class TestValidateSpecTemplateIds:
         print(f"   - Template 1 (for cat 1): {TestValidateSpecTemplateIds.test_template_1_id}")
         print(f"   - Template 2 (for cat 2): {TestValidateSpecTemplateIds.test_template_2_id}")
         
-        assert TestValidateSpecTemplateIds.test_category_1_id, "No categories found in database"
+        assert TestValidateSpecTemplateIds.test_category_1_id, "No categories found with templates in database"
         assert TestValidateSpecTemplateIds.test_template_1_id, "No templates found for category 1"
     
     def test_05_product_create_with_valid_template_passes(self, api_client, auth_headers):
