@@ -373,13 +373,39 @@ class QuotationService:
         base_url: str
     ) -> Dict[str, Any]:
         """
-        Generate WhatsApp preview message.
+        Generate WhatsApp preview message per spec.
         
-        IMPORTANT:
-        - NO seller phone number
-        - NO buyer phone number
+        Format (exact per user spec):
+        Hello {Buyer Name},
+
+        Greetings from B2B Market Place.
+
+        This is {Seller Business Name}.
+        We are pleased to share our quotation for your inquiry regarding "{Product Name}".
+
+        Requested Quantity: {X}
+        Quoted Price: ₹{unitPrice} per unit
+        Minimum Order Quantity (MOQ): {moq}
+        Packaging Charges: ₹{packagingCharges}
+        Transportation Charges: Not Included
+        Total (Excl. Transport): ₹{totalPrice}
+
+        Quotation Valid Till: {validityDate}
+
+        You may also view this quotation securely:
+        {secureQuoteLink}
+
+        Please confirm acceptance via the platform link above.
+
+        Best Regards,
+        {Seller Business Name}
+        B2B Market Place
+        
+        SECURITY:
+        - NO seller phone number in message
+        - NO buyer phone number in message
         - NO bank details
-        - Only secure quote link
+        - Only secure quote link for platform acceptance
         """
         quote_id = quote.get("quoteId")
         access_token = quote.get("accessToken")
@@ -392,31 +418,43 @@ class QuotationService:
         if isinstance(validity_date, datetime):
             validity_str = validity_date.strftime("%d %b %Y")
         else:
-            validity_str = str(validity_date)[:10]
+            validity_str = str(validity_date)[:10] if validity_date else "N/A"
         
         # Format currency
         def format_inr(amount):
-            return f"₹{amount:,.2f}"
+            if amount is None:
+                return "₹0.00"
+            return f"₹{float(amount):,.2f}"
         
-        message = f"""You have received a quotation on MidConnect.
+        buyer_name = quote.get("buyerName") or quote.get("buyerCompany") or "Valued Customer"
+        seller_name = quote.get("sellerName") or "B2B Market Seller"
+        product_name = quote.get("productName") or "Product"
+        
+        # Build message per spec format
+        message = f"""Hello {buyer_name},
 
-Quote ID: {quote_id}
-Product: {quote.get('productName', 'Product')}
-Requested Qty: {quote.get('requestedQuantity', 0)}
+Greetings from B2B Market Place.
 
-Unit Price: {format_inr(quote.get('unitPrice', 0))}
-MOQ: {quote.get('moq', 1)}
+This is {seller_name}.
+We are pleased to share our quotation for your inquiry regarding "{product_name}".
+
+Requested Quantity: {quote.get('requestedQuantity', 0)}
+Quoted Price: {format_inr(quote.get('unitPrice'))} per unit
+Minimum Order Quantity (MOQ): {quote.get('moq', 1)}
 Packaging Charges: {format_inr(quote.get('packagingCharges', 0))}
 Transportation Charges: Not Included
+Total (Excl. Transport): {format_inr(quote.get('totalPrice'))}
 
-Total (Excl. Transport): {format_inr(quote.get('totalPrice', 0))}
-Valid Till: {validity_str}
-Lead Time: {quote.get('leadTimeDays', 0)} days
+Quotation Valid Till: {validity_str}
 
-View full quotation securely:
+You may also view this quotation securely:
 {secure_url}
 
-(Online payment coming soon on MidConnect)"""
+Please confirm acceptance via the platform link above.
+
+Best Regards,
+{seller_name}
+B2B Market Place"""
         
         return {
             "message": message,
@@ -424,12 +462,26 @@ View full quotation securely:
             "quoteId": quote_id
         }
     
-    async def mark_whatsapp_sent(self, quote_id: str) -> bool:
-        """Mark WhatsApp preview as sent."""
+    async def mark_whatsapp_redirect_used(self, quote_id: str) -> bool:
+        """
+        Mark WhatsApp redirect as used.
+        
+        Called when seller clicks the WhatsApp button.
+        Per spec: whatsappRedirectUsed = true
+        """
         result = await self.db.quotes.update_one(
             {"quoteId": quote_id},
-            {"$set": {"whatsappPreviewSent": True, "updatedAt": datetime.now(timezone.utc)}}
+            {"$set": {
+                "whatsappRedirectUsed": True,
+                "updatedAt": datetime.now(timezone.utc)
+            }}
         )
+        
+        if result.modified_count > 0:
+            await self._track_analytics("whatsapp_redirect_used", {
+                "quoteId": quote_id
+            })
+        
         return result.modified_count > 0
     
     async def get_quote_by_id(
