@@ -47,6 +47,7 @@ import type {
   SellerRequest,
   UserProfile,
   TechnicalSpec,
+  SellerInquiriesResponse,
 } from '@/types';
 
 // Re-export types for backwards compatibility with existing imports
