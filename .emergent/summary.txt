@@ -1,85 +1,85 @@
 <analysis>original_problem_statement:
-The user's goal is to build and refactor a B2B marketplace application named midconnect. The project has evolved from an initial registration flow implementation to a series of major architectural upgrades. The current overarching goal is to transform the application's product search and display capabilities into a scalable, enterprise-grade system.
+The user's goal is to build and refactor a B2B marketplace application named midconnect. The project has evolved from an initial registration flow to major architectural upgrades. The current focus is on implementing a Hybrid Seller Quotation Model to create a structured, in-app communication and quoting system that also leverages WhatsApp for notifications.
 
 **PRODUCT REQUIREMENTS:**
-1.  **Enterprise Subscription Model**: Implement a robust subscription system where a seller's ability to accept inquiries is governed by their plan (Pro, Free, Expired) and monthly usage limits. This has been completed.
-2.  **Enterprise Product Architecture**: Refactor the entire product data model to be structured, searchable, and scalable. This involves:
-    *   Activating the  layer as a single source of truth for product specifications.
-    *   Denormalizing key searchable attributes () and a text blob () onto the  collection to eliminate expensive joins and enable fast, indexed search.
-    *   Creating a new suite of enterprise backend endpoints that use this denormalized structure and MongoDB aggregation pipelines.
-    *   Building a new Enterprise Product Page on the frontend that provides a structured, industrial-grade user experience with dynamic specification filters.
-3.  **Secure Contact Information**: Ensure buyer contact details are only revealed to sellers after they have formally accepted an inquiry.
-4.  **UI/UX Enhancements**: Implement features like new inquiry notifications for sellers and a clear, structured layout for product specifications.
+1.  **Enterprise Product Architecture**: Refactor the product data model to be structured, searchable, and scalable using denormalization and aggregation pipelines. (Completed)
+2.  **Enterprise Subscription Model**: Implement a robust subscription system governing seller capabilities. (Completed)
+3.  **Deterministic Ranking Engine**: Implement a weighted, rule-based ranking system for seller listings based on factors like stock, subscription tier, and performance. (Completed)
+4.  **Behavior-Based Ranking Boost**: Enhance the ranking with a capped, deterministic boost based on buyer-seller interactions (views, inquiries, orders). (Completed)
+5.  **Unified Subscription Engine**: Standardize the subscription model to support both manual admin activations and a foundation for future payment gateway integrations, ensuring idempotency and preventing duplicate active subscriptions. (Completed)
+6.  **Hybrid Seller Quotation System (Current Task)**: Build a system where sellers can send structured quotes to buyers within the platform. A preview of the quote is sent via WhatsApp, but acceptance and management happen exclusively on the platform to maintain control and gather analytics.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application's backend has undergone a significant architectural overhaul to support an enterprise-grade product experience.
-
--   **Backend**: A new router () has been created, providing a suite of new, optimized endpoints (, , ). These endpoints use denormalized data and aggregation pipelines to deliver all necessary product page information in a single, efficient call, eliminating previous N+1 query issues. A migration script has successfully populated the database, activating the  layer and adding  and  to all .
--   **Frontend**: The foundation for the new enterprise product page has been laid. A new route () exists, along with the necessary API service calls and TypeScript types. The page currently builds successfully but is just a skeleton, awaiting the implementation of the UI components.
--   The previously implemented Enterprise Subscription Model is complete and fully functional.
+The application has a robust backend and a modern frontend.
+-   **Backend**: The backend architecture is sophisticated, featuring an enterprise-grade product search system with denormalized data and optimized MongoDB aggregation pipelines. It includes a complete subscription management service, a deterministic ranking engine, a behavior-based boost system, and a unified subscription engine ready for payment integration. The initial files for the new Hybrid Quotation System have been created.
+-   **Frontend**: A fully functional Enterprise Product Page () exists, which leverages the new backend architecture. It includes dynamic filters, sortable seller listings (with the new ranking algorithm as default), a product identity block, a seller comparison feature, and a floating compare bar. The UI is responsive and tested.
 
 **Last working item**:
--   Last item agent was working: The agent was working on the initial setup of the **Frontend Enterprise Product Page**. It created the new page file at , added the corresponding API functions in , updated type definitions, and resolved build errors. The goal was to create a stable starting point before building the UI components.
+-   Last item agent was working: The agent started implementing the **Hybrid Seller Quotation Model**. It successfully completed the first phase, which involved defining the database schema for the  collection and creating the initial router file at .
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? frontend testing agent
+-   Which testing method agent to use? backend testing agent
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Build the Frontend UI for the Enterprise Product Page (P0)**
-    -   Description: The backend architecture is complete, but the frontend needs to be built to utilize it. The task is to implement the user's detailed vision for the enterprise product page, which includes a product identity block, a dynamic specification filter panel, and structured seller listing cards.
+-   **Issue 1: Implement the Hybrid Seller Quotation System (P0)**
+    -   Description: The initial database structure and router file are in place. The next steps involve building the full backend logic and frontend UI for the quotation system as per the user's detailed blueprint.
     -   Status: IN PROGRESS
     -   Is recurring issue? N
-    -   Should Test frontend/backend/both after fix? Frontend
+    -   Should Test frontend/backend/both after fix? Both
 
     **Issues Detail:**
     -   **Issue 1:**
-        -   **Attempted fixes:** The agent has created the file structure, API calls, and types for the new page (). The application builds without errors.
+        -   **Attempted fixes:** The agent created the  file and the necessary database models and indexes for the  collection.
         -   **Next debug checklist**:
-            1.  In , fetch the complete product data using the new  function.
-            2.  Create and implement the **Enterprise Identity Block** component to display the main product information (name, seller/variant counts, spec summary table).
-            3.  Create and implement the **Sticky Filter Panel** component. It should dynamically render filters (sliders, dropdowns) based on the data from the  endpoint.
-            4.  Create and implement the **Enterprise Seller Listing Card** component. It must display the denormalized  from the listing data.
-            5.  Wire up the state management so that interacting with the filter panel calls the  endpoint and updates the displayed list of sellers.
-            6.  Implement the Comparison Mode and Fallback UI as requested by the user.
-        -   **Why fix this issue and what will be achieved with the fix?** This is the crucial final step to deliver the enterprise architecture feature. It will provide a fast, powerful, and user-friendly interface for industrial buyers to find and compare products based on detailed specifications.
+            1.  **(Phase 2)** Implement the seller-side quote creation form UI, which appears after an inquiry is accepted.
+            2.  **(Phase 3)** Build the backend endpoint () to validate and save the new quote. It should generate a unique .
+            3.  **(Phase 4)** Implement the logic to generate a structured WhatsApp preview message and a secure link to the quote page.
+            4.  **(Phase 5)** Create the buyer-facing quote view page () and the corresponding backend endpoint to fetch quote details, ensuring access control.
+            5.  **(Phase 6)** Implement the Accept and Reject backend endpoints and update the quote status accordingly.
+            6.  **(Phase 7)** Set up a cron job to handle auto-expiry of quotes based on their .
+            7.  **(Phase 8 & 9)** Ensure security/leak prevention and add analytics tracking for quote lifecycle events.
+        -   **Why fix this issue and what will be achieved with the fix?** This will build a core communication and transaction-facilitating feature for the B2B marketplace, increasing platform value, control, and data capture. It bridges the convenience of WhatsApp with the structure of an in-app system.
 
 **In progress Task List**:
--   **Task 1: Build Enterprise Product Page UI (P0)**
-    -   **Where to resume**: . Focus on fetching data and building out the three main UI sections: Identity Block, Filter Panel, and Seller Cards.
-    -   **What will be achieved with this?** A fully functional, enterprise-grade product page that leverages the new backend architecture, offering structured attribute filtering and a clear, professional user experience.
+-   **Task 1: Build the Hybrid Seller Quotation System (P0)**
+    -   **Where to resume**: . Begin implementing the endpoints for Phase 2-9 of the user's plan, starting with the seller's quote submission form and the backend logic to create a quote.
+    -   **What will be achieved with this?** A complete, end-to-end quotation system that allows sellers to create quotes, buyers to view and accept/reject them on the platform, with notifications handled via WhatsApp.
     -   **Status**: IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Should Test frontend/backend/both after fix?** Both
     -   **Blocked on something**: None
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks:**
-    - **P1: Performance & Load Testing**: After the frontend is complete, conduct load testing (10k, 50k, 100k listings) on the new backend endpoints to validate performance against the <200ms target.
-    - **P1: Deprecate Old Product Page**: Once the new enterprise page is stable and verified, plan the removal of the old product page () and its backend dependencies.
-    - **P1: Usage Analytics**: Implement analytics to track user interactions with the new filter panel to gather data for future improvements.
+    - **P1: Gradual Traffic Migration**: Redirect a percentage of traffic from the old product page () to the new enterprise page () and monitor performance and user behavior analytics.
+    - **P1: Admin Weight Control UI**: Build a simple admin interface to manage the weights used in the deterministic ranking engine.
 
 - **Future Tasks:**
-    - **P2: AI Semantic Search Layer**: Once the structured search foundation is stable, enhance it with an AI layer using vector embeddings for semantic search (similar products) and NLP-based query understanding.
-    - **P2: Banned Seller Status**: Implement a  field in the user schema to allow admins to suspend or ban sellers, blocking them from application features.
+    - **P2: AI Semantic Search Layer**: Enhance the search functionality with vector embeddings for semantic search (similar products) and NLP-based query understanding.
+    - **P2: Online Payments for Quotes**: Integrate a payment gateway (e.g., Stripe/Razorpay) to allow buyers to pay for accepted quotes directly on the platform.
+    - **P2: Counter-Offer System**: Allow buyers to make counter-offers on quotes received.
+    - **P2: Banned Seller Status**: Implement a  field to allow admins to suspend or ban sellers.
 
 **Completed work in this session**
--   **Backend Enterprise Architecture (Phase 1 Complete):**
-    -   Created a new, dedicated router for enterprise product endpoints: .
-    -   Implemented a migration script () to activate the  layer and denormalize  and  onto all .
-    -   Launched new, highly-optimized API endpoints that use aggregation and eliminate N+1 queries:
-        -   
-        -   
-        -   
-    -   Created necessary MongoDB text and compound indexes to ensure fast, scalable search.
-    -   Refactored and cleaned  for production safety.
--   **Subscription Logic Refactor (Completed):**
-    -   Fully integrated the  to handle all inquiry acceptance logic, correctly enforcing monthly limits for all plan types (Pro, Free, Expired).
--   **Inquiry Management & Security (Completed):**
-    -   Strengthened backend logic to mask buyer contact details until an inquiry is accepted.
-    -   The  endpoint now returns all necessary contact details, including a pre-formatted WhatsApp link.
-    -   Implemented a polling system with a notification banner on the frontend for new inquiries.
+-   **Enterprise Ranking Engine (Phase 4 - DONE)**:
+    -   Implemented a deterministic, weight-based ranking engine in .
+    -   Weights are configurable in .
+    -   Added an admin endpoint to manage weights.
+    -   Integrated ranking into the  endpoint and made it the default sort option on the frontend.
+-   **Unified Subscription & Behavior Boost (DONE)**:
+    -   Standardized the  schema and created a unified  service.
+    -   Created stub endpoints for a payment gateway flow (, ).
+    -   Implemented a  collection to track views and inquiries.
+    -   Added a capped, rule-based behavior boost to the ranking score.
+-   **Enterprise Product Page UI Enhancements (DONE)**:
+    -   Added a floating Compare Bar to the enterprise product page.
+    -   Added a Best Match (ranking) sort option and made it the default.
+    -   Added a ranking score badge to seller cards.
+-   **Performance Validation (DONE)**:
+    -   Created and executed a load testing suite ().
+    -   Optimized the  endpoint, improving its P95 latency by ~10x to meet performance targets under a 50k listing load.
 
 **Code Architecture**
 
@@ -87,61 +87,63 @@ The application's backend has undergone a significant architectural overhaul to 
 **Key Technical Concepts**
 -   **Backend**: FastAPI, MongoDB (via ), Pydantic
 -   **Frontend**: Next.js, React, TypeScript, Tailwind CSS
--   **Data Architecture**: Data Denormalization for search performance, Single Source of Truth (SSOT).
+-   **Data Architecture**: Data Denormalization, Single Source of Truth (SSOT).
 -   **Database**: MongoDB Aggregation Pipeline, Text & Compound Indexes.
--   **Authentication**: Firebase Authentication (mocked in dev).
+-   **Ranking**: Deterministic, weight-based scoring engine with behavior-based boosts.
+-   **Communication**: Hybrid Model (In-App Control + WhatsApp Notification).
 
 **key DB schema**
--   **users**: 
--   **subscriptions**: 
+-   **subscriptions**:  (Standardized)
 -   **sellerListings**: 
--   **productVariants**: 
--   **products**: 
+-   **buyerInteractions**:  (New)
+-   **quotes**:  (New)
 
 **All files of reference**
--   : **(New)** The core of the new backend architecture.
--   : **(New & In-Progress)** The new frontend page to be built.
--   : Contains the new API functions (, ).
--   : Contains the new TypeScript types for the enterprise endpoints.
--   : Refactored to enforce new variant logic on listing creation.
--   : Contains the detailed product requirements and changelog.
+-   : **(New & In-Progress)** The router for the new quotation system.
+-   : **(New)** Contains the core logic for the deterministic ranking engine.
+-   : **(Updated)** Contains the unified logic for subscription activation and extension.
+-   : **(Updated)** Integrated with the ranking and behavior boost services.
+-   : **(New)** The load testing script used to validate backend performance.
+-   : **(Updated)** The main enterprise product page, now with ranking sort and compare bar.
 
 **Areas that need refactoring**:
--   The old product page () and its corresponding backend logic are now considered technical debt and should be deprecated and removed once the new enterprise page is fully functional and tested.
+-   The old product page () and its backend dependencies should be deprecated and removed after the new enterprise page usage is stable.
 
 **key api endpoints**
--   ****: (New) Fetches all data for the enterprise product page in a single call.
--   ****: (New) Returns available filter options for a product.
--   ****: (New) Filters seller listings based on structured attributes.
--   ****: Core seller action, governed by subscription limits.
--   ****: Provides subscription status to the frontend.
+-   ****: (Updated) Now accepts  and incorporates behavior boost for authenticated users.
+-   ****: (New) Endpoint to view and update ranking weights.
+-   ****: (New) Stub endpoint to begin a subscription payment flow.
+-   ****: (New) Idempotent webhook to process subscription payments.
+-   ****: (New) Tracks buyer product views for the behavior boost system.
+-   **(Upcoming)** Endpoints for the quotation system: , , , etc.
 
 **Critical Info for New Agent**
-1.  **You are building the Frontend.** The backend Enterprise Architecture (Phase 1) is complete, tested, and working. Your primary task is to build the frontend UI on the new page () to match the user's detailed requirements.
-2.  **Use the New Endpoints.** All data for the new product page should come from the new , , and  endpoints. Do not use the old product detail endpoints.
-3.  **Follow the UI Blueprint.** The user has provided a clear, three-section blueprint for the new page: 1) Identity Block, 2) Sticky Filter Panel, 3) Enterprise Seller Cards. Implement this structure precisely.
-4.  **Data is Denormalized.** Remember that all filterable and displayable specifications on the seller cards should come from the  field in the  documents. There is no need to join with  on the frontend.
+1.  **Focus on the Hybrid Quotation System.** This is the current P0 task. Follow the user's multi-phase blueprint sequentially. The backend implementation (Phases 1-9) is the priority.
+2.  **The Backend is Scalable.** The performance-critical endpoints have been load-tested and optimized. The new ranking and subscription logic is designed to be efficient.
+3.  **Maintain Control and Transparency.** A core principle of the quotation system is keeping acceptance/rejection within the platform while using WhatsApp for notification only. No contact details should be leaked prematurely. All pricing components must be transparent to the buyer.
+4.  **Use the Unified Services.** When implementing the quote flow, leverage the existing  for any subscription checks and follow the pattern of the  for any new business logic.
 
 **documents and test reports created in this job**
--   : Updated with the enterprise architecture implementation details.
--   : The last test report confirmed the subscription logic was working. No new reports have been generated for the enterprise backend.
+-   : Updated with details on the ranking engine, unified subscription model, and the new quotation system requirements.
 
 **Last 10 User Messages and any pending HUMAN messages**
-- The last series of messages focused on building out the new enterprise product page on the frontend (). The user provided a detailed, multi-phase plan for this page. The agent created the necessary files, API calls, and types, and successfully fixed several build errors to get a stable, empty page component. The user's latest prompt is a detailed set of instructions for the **Phase 2 Frontend Implementation**, outlining the three main sections to be built (Identity Block, Filter Panel, Seller Cards) and the desired enterprise-grade UX. This is the immediate next task.
+- The user has provided a highly detailed, multi-phase blueprint for a **Hybrid Seller Quotation Model.** The agent has acknowledged this and started Phase 1. The key instructions are to build a system where quotes are created and managed on the platform but a notification preview is sent via WhatsApp. The plan covers database schema, seller/buyer UI/UX, backend logic, auto-expiry, and security considerations. The agent is to proceed step-by-step through the provided phases.
 
 **Project Health Check:**
--   **Broken**: The new enterprise product page at  is a non-functional skeleton. The old product page at  is now architecturally obsolete.
--   **Mocked**: Firebase authentication is not configured.
+-   **Broken**: The new quotation system is in its infancy and is not functional.
+-   **Mocked**: Firebase authentication is not configured. Payment gateway integration consists of non-functional stub endpoints.
 
 **3rd Party Integrations**
 -   Firebase (Authentication)
 -   MongoDB (Database)
+-   (Planned) WhatsApp for notifications
+-   (Planned) Payment Gateway (e.g., Stripe, Razorpay)
 
 **Testing status**
--   Testing agent used after significant changes: NO (not since the latest backend enterprise refactor).
+-   Testing agent used after significant changes: YES, the frontend enterprise page was successfully tested.
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: []
--   Known regressions: The old product page is now misaligned with the database's new -centric structure and should be considered deprecated.
+-   Known regressions: None. The old product page is considered deprecated but not a regression.
 
 **Credentials to test flow:**
--   Testing relies on the hardcoded developer token within the backend's  dependency for authenticated API calls.</analysis>
+-   Backend API calls are authenticated using a hardcoded developer token in the  dependency.</analysis>

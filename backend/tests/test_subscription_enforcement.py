@@ -23,7 +23,7 @@ from datetime import datetime, timezone, timedelta
 import time
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://product-variants-2.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://quote-system-19.preview.emergentagent.com').rstrip('/')
 DEV_TOKEN = "dev-test-token"
 
 # Test user ID from the review request

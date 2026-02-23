@@ -83,7 +83,7 @@
   "context_for_next_testing_agent": "Product ↔ SpecTemplate architectural fix fully implemented and tested. Key features: validate_spec_template_ids() validates existence/active/category match, template delete auto-cleans products, cleanup endpoint removes invalid refs. All using specTemplateIds (array) and camelCase.",
 
   "test_environment": {
-    "api_url": "https://product-variants-2.preview.emergentagent.com",
+    "api_url": "https://quote-system-19.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"
   }
