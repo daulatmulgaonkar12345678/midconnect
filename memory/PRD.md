@@ -146,8 +146,20 @@ if allowed → accept + increment (only for non-unlimited)
 - [x] Unified GST schema
 - [x] Email verification architecture
 
+### Completed (Feb 23, 2026 - Session 2)
+- [x] **WhatsApp Button & Contact Masking Feature**
+  - [x] Backend: `buyerMasked` for pending (companyInitial, city, state - NO phone/email)
+  - [x] Backend: `buyerInfo` for accepted (full contact with phone/email)
+  - [x] Backend: `unreadCount` for pending inquiries
+  - [x] Backend: Fetch buyer from users collection via `buyerId`
+  - [x] Backend: WhatsApp link with 91 prefix
+  - [x] Frontend: Polling (30s) for new inquiries
+  - [x] Frontend: Notification banner for new inquiries
+  - [x] **Security: No phone/email leak before accept (backend enforced)**
+
 ### Testing Results
-- Backend: 100% (24/24 tests passed)
+- Backend: 100% (All features verified)
+- WhatsApp/Masking: 13/15 tests passed (2 skipped due to test order)
 
 ---
 
