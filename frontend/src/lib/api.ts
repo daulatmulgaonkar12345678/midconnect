@@ -1510,10 +1510,23 @@ export interface ProductFacetsResponse {
 
 export interface FilterRequest {
   attributes?: Record<string, unknown>;
-  sortBy?: 'price' | 'leadTime' | 'stock' | 'updatedAt';
+  sortBy?: 'price' | 'leadTime' | 'stock' | 'updatedAt' | 'ranking';
   order?: 'asc' | 'desc';
   page?: number;
   limit?: number;
+  // Buyer context for location-based ranking
+  buyerCity?: string;
+  buyerState?: string;
+  // Debug mode for ranking breakdown
+  debug?: boolean;
+}
+
+export interface RankingBreakdown {
+  listing_id: string;
+  raw_score: number;
+  normalized_score: number;
+  components: Record<string, number>;
+  factors: Record<string, unknown>;
 }
 
 export interface FilterResponse {
@@ -1524,6 +1537,7 @@ export interface FilterResponse {
   fallbackLevel: number;
   fallbackMessage?: string;
   appliedFilters: Record<string, unknown>;
+  sortedBy?: string;
 }
 
 // Get enterprise product page data (single aggregation)
