@@ -1578,9 +1578,8 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             new_used_count = await increment_enquiry_usage(db, seller_oid)
         # For unlimited plans (pro/enterprise), we do NOT increment enquiriesUsed
         
-        # Step 6: Get updated inquiry and buyer info
+        # Step 6: Get updated inquiry
         updated_inquiry = await db.inquiries.find_one({"_id": ObjectId(inquiry_id)})
-        buyer_info = updated_inquiry.get("buyerInfo", {})
         
         # Get product name from inquiry or listing
         product_name = updated_inquiry.get("productName", "")
