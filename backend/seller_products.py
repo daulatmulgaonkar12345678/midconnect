@@ -307,7 +307,11 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             "createdAt": now,
             "updatedAt": now,
             "publishedAt": None,
-            "priceHistory": []
+            "priceHistory": [],
+            # ENTERPRISE: Denormalized search fields
+            "searchableAttributes": variant.get("attributes", {}),
+            "searchableText": await _build_searchable_text(db, product, category_oid, variant, seller, data.description),
+            "attributeLabels": await _get_attribute_labels(db, product)
         }
         
         await db.sellerListings.insert_one(listing_doc)
