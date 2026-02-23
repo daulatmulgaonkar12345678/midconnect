@@ -124,11 +124,20 @@ async def run_load_test(listing_count: int):
             created += len(listings)
             print(f"  Progress: {created:,}/{listing_count:,}")
         
-        # Ensure indexes
-        print("Creating indexes...")
-        await db.sellerListings.create_index([('productId', 1), ('status', 1)], name=f'perf_test_{timestamp}_ps')
-        await db.sellerListings.create_index([('productId', 1), ('searchableAttributes.power', 1)], name=f'perf_test_{timestamp}_pp')
-        await db.sellerListings.create_index([('productId', 1), ('searchableAttributes.voltage', 1)], name=f'perf_test_{timestamp}_pv')
+        # Ensure indexes (use existing if available)
+        print("Ensuring indexes exist...")
+        try:
+            await db.sellerListings.create_index([('productId', 1), ('status', 1)])
+        except:
+            pass  # Index exists
+        try:
+            await db.sellerListings.create_index([('productId', 1), ('searchableAttributes.power', 1)])
+        except:
+            pass
+        try:
+            await db.sellerListings.create_index([('productId', 1), ('searchableAttributes.voltage', 1)])
+        except:
+            pass
         
         # Wait for indexes
         await asyncio.sleep(2)
