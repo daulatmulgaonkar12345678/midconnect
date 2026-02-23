@@ -337,6 +337,7 @@ export interface SellerInquiry {
     city?: string;
     state?: string;
   };
+  sellerBusinessName?: string;
   quote?: InquiryQuote;
   createdAt: string;
 }
