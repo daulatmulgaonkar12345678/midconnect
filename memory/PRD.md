@@ -308,15 +308,18 @@ if allowed → accept + increment (only for non-unlimited)
 
 ### P1 - High Priority
 1. ~~Performance & Load Testing~~ ✅ DONE - Passes benchmarks at 50k
-2. Deprecate old product page (`/product/[slug]`) after enterprise page validation in production
-3. AI Enterprise Ranking Layer - Prepare for semantic search integration
-4. Payment integration for subscription upgrades
+2. ~~Enterprise Ranking Engine~~ ✅ DONE - Deterministic weight-based ranking
+3. Deprecate old product page (`/product/[slug]`) after production validation
+4. Payment integration for subscription upgrades (affects ranking via subscription tier)
 
 ### P2 - Medium Priority
-1. Usage analytics for filter interactions on enterprise page
-2. Email notifications
-3. Implement "Banned Seller" Status with `sellerStatus` field
+1. Behavior-based ranking boosts (recently viewed, past inquiries, click-through)
+2. Usage analytics for filter interactions on enterprise page
+3. Email notifications
+4. Implement "Banned Seller" Status with `sellerStatus` field
 
-### P3 - Future
-1. AI Semantic Search Layer with vector embeddings
-2. NLP-based query understanding for search
+### P3 - Future (AI Semantic Layer - Phase 5)
+1. Vector embeddings for search query understanding
+2. NLP-based query parsing
+3. Similar product suggestions
+4. ML feedback loop for ranking optimization
