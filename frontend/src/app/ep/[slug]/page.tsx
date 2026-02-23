@@ -66,8 +66,8 @@ export default function EnterpriseProductPage() {
 
   // Filter and sort states
   const [activeFilters, setActiveFilters] = useState<Record<string, unknown>>({});
-  const [sortBy, setSortBy] = useState<SortOption>('price');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [sortBy, setSortBy] = useState<SortOption>('ranking');  // Default to ranking
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc'); // Ranking is desc by default
   const [currentPage, setCurrentPage] = useState(1);
 
   // Parse URL params into filters on mount
