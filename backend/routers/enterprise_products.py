@@ -663,4 +663,58 @@ def create_enterprise_product_router(db):
             "currentConfig": ranking_config.get_weights_dict()
         }
     
+    # ==========================================
+    # BUYER INTERACTION TRACKING
+    # ==========================================
+    
+    @router.post("/{product_id}/track-view")
+    async def track_product_view(
+        product_id: str,
+        seller_id: str = Query(..., description="Seller ID"),
+        buyer_id: str = Query(None, description="Buyer ID (from auth)")
+    ):
+        """
+        Track a product view for behavior-based ranking boost.
+        
+        Called when buyer views a seller's listing on the product page.
+        Only tracks if buyer_id is provided (authenticated user).
+        """
+        if not buyer_id or not ObjectId.is_valid(buyer_id):
+            return {"tracked": False, "reason": "No authenticated buyer"}
+        
+        if not ObjectId.is_valid(product_id) or not ObjectId.is_valid(seller_id):
+            return {"tracked": False, "reason": "Invalid IDs"}
+        
+        try:
+            from services.buyer_interaction_service import BuyerInteractionService
+            interaction_service = BuyerInteractionService(db)
+            await interaction_service.track_view(
+                buyer_id=ObjectId(buyer_id),
+                seller_id=ObjectId(seller_id),
+                product_id=ObjectId(product_id)
+            )
+            return {"tracked": True}
+        except Exception as e:
+            logger.warning(f"Failed to track view: {e}")
+            return {"tracked": False, "reason": "Internal error"}
+    
+    @router.get("/behavior/stats")
+    async def get_behavior_stats(
+        buyer_id: str = Query(..., description="Buyer ID")
+    ):
+        """
+        Get behavior interaction statistics for a buyer.
+        """
+        if not ObjectId.is_valid(buyer_id):
+            raise HTTPException(status_code=400, detail="Invalid buyer ID")
+        
+        try:
+            from services.buyer_interaction_service import BuyerInteractionService
+            interaction_service = BuyerInteractionService(db)
+            stats = await interaction_service.get_interaction_stats(ObjectId(buyer_id))
+            return stats
+        except Exception as e:
+            logger.error(f"Failed to get behavior stats: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get stats")
+    
     return router
