@@ -3,12 +3,16 @@ ENTERPRISE SUBSCRIPTION SERVICE
 SSOT: subscriptions collection
 
 Business Rules:
-- Active pro/enterprise: Unlimited leads
-- Active trial: Defined limit
-- Expired/cancelled/free: 5 leads per month
-- Monthly reset on first of each month
+- Active pro/enterprise: Unlimited leads (enquiriesUsed does NOT increment)
+- Active trial: Defined limit (enquiriesUsed increments)
+- Expired/cancelled/free: 5 leads per month (enquiriesUsed increments)
+- Monthly reset on first of each month via enquiriesResetAt
 
 No legacy fallbacks. No hacks. Production-grade.
+
+IMPORTANT: This is the ONLY source of truth for subscription logic.
+Do NOT use server.py's SUBSCRIPTION_PLANS, get_subscription_status(), 
+count_accepted_inquiries_this_month(), or check_can_accept_inquiry().
 """
 
 from datetime import datetime, timezone, timedelta
@@ -27,53 +31,92 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
     
     SSOT: Uses subscriptions collection ONLY.
     
+    Flow:
+    1. Query subscriptions collection for this user
+    2. If no subscription or status not active/trial → free
+    3. If endDate < now → mark expired in DB, return free
+    4. If pro/enterprise → unlimited
+    5. Otherwise → use enquiryLimit from DB
+    
     Returns:
         {
             "plan": "free" | "trial" | "pro" | "enterprise",
             "limit": int (-1 for unlimited),
             "isUnlimited": bool,
             "status": "free" | "active" | "trial" | "expired" | "cancelled",
-            "subscriptionId": str | None
+            "subscriptionId": str | None,
+            "endDate": datetime | None
         }
     """
     now = datetime.now(timezone.utc)
     
-    # Find active or trial subscription
-    sub = await db.subscriptions.find_one({
-        "userId": user_id,
-        "status": {"$in": ["active", "trial"]}
-    })
+    # Ensure user_id is ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
     
-    # No active subscription → free plan
+    # Find subscription for user (any status - we'll check status ourselves)
+    sub = await db.subscriptions.find_one({"userId": user_id})
+    
+    # No subscription record at all → free plan
     if not sub:
         return {
             "plan": "free",
             "limit": FREE_MONTHLY_LIMIT,
             "isUnlimited": False,
             "status": "free",
-            "subscriptionId": None
+            "subscriptionId": None,
+            "endDate": None
         }
     
-    # Check expiry
+    current_status = sub.get("status", "free")
+    plan = sub.get("planName", "free")
     end_date = sub.get("endDate")
-    if end_date and end_date < now:
-        # Mark as expired in DB
-        await db.subscriptions.update_one(
-            {"_id": sub["_id"]},
-            {"$set": {"status": "expired", "updatedAt": now}}
-        )
-        logger.info(f"Subscription expired for user {user_id}")
-        
-        # Expired → fallback to free (5/month)
+    
+    # If status is already expired/cancelled/suspended → free
+    if current_status in ["expired", "cancelled", "suspended"]:
         return {
             "plan": "free",
             "limit": FREE_MONTHLY_LIMIT,
             "isUnlimited": False,
-            "status": "expired",
-            "subscriptionId": str(sub["_id"])
+            "status": current_status,
+            "subscriptionId": str(sub["_id"]),
+            "endDate": end_date
         }
     
-    plan = sub.get("planName", "free")
+    # If plan is free → return free
+    if plan == "free":
+        return {
+            "plan": "free",
+            "limit": FREE_MONTHLY_LIMIT,
+            "isUnlimited": False,
+            "status": "free",
+            "subscriptionId": str(sub["_id"]),
+            "endDate": None
+        }
+    
+    # For trial/pro/enterprise, check expiry
+    if end_date:
+        # Make timezone aware if needed
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+        
+        if end_date < now:
+            # Mark as expired in DB (don't wait for it)
+            await db.subscriptions.update_one(
+                {"_id": sub["_id"]},
+                {"$set": {"status": "expired", "updatedAt": now}}
+            )
+            logger.info(f"Subscription expired for user {user_id}")
+            
+            # Expired → fallback to free (5/month)
+            return {
+                "plan": "free",
+                "limit": FREE_MONTHLY_LIMIT,
+                "isUnlimited": False,
+                "status": "expired",
+                "subscriptionId": str(sub["_id"]),
+                "endDate": end_date
+            }
     
     # Pro and Enterprise are unlimited
     if plan in ["pro", "enterprise"]:
@@ -82,10 +125,11 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
             "limit": -1,
             "isUnlimited": True,
             "status": "active",
-            "subscriptionId": str(sub["_id"])
+            "subscriptionId": str(sub["_id"]),
+            "endDate": end_date
         }
     
-    # Trial or other plans have defined limits
+    # Trial has defined limit from DB (or default)
     limit = sub.get("enquiryLimit", FREE_MONTHLY_LIMIT)
     
     return {
@@ -93,7 +137,8 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
         "limit": limit,
         "isUnlimited": False,
         "status": sub.get("status", "active"),
-        "subscriptionId": str(sub["_id"])
+        "subscriptionId": str(sub["_id"]),
+        "endDate": end_date
     }
 
 
