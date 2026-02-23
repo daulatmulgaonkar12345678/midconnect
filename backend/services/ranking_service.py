@@ -290,6 +290,7 @@ class EnterpriseRankingService:
         buyer_context: Optional[Dict[str, Any]] = None,
         match_quality: str = "exact",
         subscription_cache: Optional[Dict[str, str]] = None,
+        behavior_boost_cache: Optional[Dict[str, int]] = None,
         debug: bool = False
     ) -> List[Dict[str, Any]]:
         """
@@ -300,6 +301,7 @@ class EnterpriseRankingService:
             buyer_context: Buyer's location info
             match_quality: Match quality level
             subscription_cache: Pre-loaded subscription data
+            behavior_boost_cache: Pre-loaded behavior boosts {seller_id: boost}
             debug: If True, add ranking_breakdown to each listing
         
         Returns:
@@ -316,6 +318,11 @@ class EnterpriseRankingService:
         breakdowns = []
         
         for listing in listings:
+            # Inject behavior boost into listing for scoring
+            seller_id = str(listing.get("sellerId", ""))
+            if behavior_boost_cache and seller_id in behavior_boost_cache:
+                listing["_behaviorBoost"] = behavior_boost_cache[seller_id]
+            
             score, breakdown = self.compute_listing_score(
                 listing=listing,
                 buyer_context=buyer_context,
@@ -327,6 +334,9 @@ class EnterpriseRankingService:
             
             listing_with_score = dict(listing)
             listing_with_score["rankingScore"] = score
+            
+            # Remove internal field
+            listing_with_score.pop("_behaviorBoost", None)
             
             if debug and breakdown:
                 listing_with_score["rankingBreakdown"] = breakdown.to_dict()
