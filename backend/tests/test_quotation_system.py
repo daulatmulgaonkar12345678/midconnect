@@ -65,14 +65,20 @@ class TestQuoteEndpointsHealth:
 class TestExistingQuoteOperations:
     """Tests using the existing test quote QT-M24DO"""
     
-    def test_view_quote_as_seller(self):
-        """Seller can view quote they created"""
+    def _get_quote_from_seller_list(self):
+        """Helper to get quote details from seller's quotes list"""
         headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
-        response = requests.get(f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}", headers=headers)
-        assert response.status_code == 200, f"View quote failed: {response.text}"
+        response = requests.get(f"{BASE_URL}/api/quotes/seller", headers=headers)
+        assert response.status_code == 200
         data = response.json()
-        assert "quote" in data, "Response missing 'quote' field"
-        quote = data["quote"]
+        for quote in data["quotes"]:
+            if quote["quoteId"] == TEST_QUOTE_ID:
+                return quote
+        raise AssertionError(f"Quote {TEST_QUOTE_ID} not found in seller list")
+    
+    def test_seller_list_shows_quote(self):
+        """Seller can view quote they created via seller quotes list"""
+        quote = self._get_quote_from_seller_list()
         
         # Verify quote data structure
         assert quote["quoteId"] == TEST_QUOTE_ID
@@ -85,10 +91,7 @@ class TestExistingQuoteOperations:
     
     def test_quote_id_format_non_sequential(self):
         """Quote ID should be non-sequential format QT-XXXXX"""
-        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
-        response = requests.get(f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}", headers=headers)
-        assert response.status_code == 200
-        quote = response.json()["quote"]
+        quote = self._get_quote_from_seller_list()
         
         # Verify QT-XXXXX format
         quote_id = quote["quoteId"]
@@ -98,10 +101,7 @@ class TestExistingQuoteOperations:
     
     def test_total_price_calculation(self):
         """Verify total price = (unitPrice × requestedQuantity) + packagingCharges"""
-        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
-        response = requests.get(f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}", headers=headers)
-        assert response.status_code == 200
-        quote = response.json()["quote"]
+        quote = self._get_quote_from_seller_list()
         
         unit_price = quote["unitPrice"]
         qty = quote["requestedQuantity"]
@@ -132,11 +132,7 @@ class TestExistingQuoteOperations:
         assert data["quoteId"] == TEST_QUOTE_ID
         
         # Verify flag is set on quote
-        view_response = requests.get(
-            f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}",
-            headers=headers
-        )
-        quote = view_response.json()["quote"]
+        quote = self._get_quote_from_seller_list()
         assert quote["whatsappRedirectUsed"] == True, "whatsappRedirectUsed should be True"
         print(f"✅ WhatsApp redirect works - secureUrl generated, flag set")
     
@@ -404,15 +400,20 @@ class TestQuoteValidation:
 class TestQuoteStatusTransitions:
     """Tests for quote status flow"""
     
+    def _get_quote_from_seller_list(self):
+        """Helper to get quote details from seller's quotes list"""
+        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
+        response = requests.get(f"{BASE_URL}/api/quotes/seller", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        for quote in data["quotes"]:
+            if quote["quoteId"] == TEST_QUOTE_ID:
+                return quote
+        raise AssertionError(f"Quote {TEST_QUOTE_ID} not found in seller list")
+    
     def test_quote_status_is_viewed_after_view(self):
         """Quote status changes to 'viewed' after buyer views"""
-        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
-        response = requests.get(
-            f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}",
-            headers=headers
-        )
-        assert response.status_code == 200
-        quote = response.json()["quote"]
+        quote = self._get_quote_from_seller_list()
         
         # Quote was already viewed based on our setup
         assert quote["status"] in ["sent", "viewed"], f"Unexpected status: {quote['status']}"
@@ -420,12 +421,7 @@ class TestQuoteStatusTransitions:
     
     def test_viewed_quote_has_viewedAt_timestamp(self):
         """Viewed quote should have viewedAt timestamp"""
-        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
-        response = requests.get(
-            f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}",
-            headers=headers
-        )
-        quote = response.json()["quote"]
+        quote = self._get_quote_from_seller_list()
         
         if quote["status"] == "viewed":
             assert quote.get("viewedAt") is not None, "Viewed quote missing viewedAt"
@@ -437,15 +433,20 @@ class TestQuoteStatusTransitions:
 class TestQuoteDataIntegrity:
     """Tests for quote data integrity and field presence"""
     
+    def _get_quote_from_seller_list(self):
+        """Helper to get quote details from seller's quotes list"""
+        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
+        response = requests.get(f"{BASE_URL}/api/quotes/seller", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        for quote in data["quotes"]:
+            if quote["quoteId"] == TEST_QUOTE_ID:
+                return quote
+        raise AssertionError(f"Quote {TEST_QUOTE_ID} not found in seller list")
+    
     def test_quote_has_all_required_fields(self):
         """Quote response contains all required fields"""
-        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
-        response = requests.get(
-            f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}",
-            headers=headers
-        )
-        assert response.status_code == 200
-        quote = response.json()["quote"]
+        quote = self._get_quote_from_seller_list()
         
         required_fields = [
             "quoteId", "inquiryId", "productId", "productName",
@@ -462,12 +463,7 @@ class TestQuoteDataIntegrity:
     
     def test_quote_transport_always_false(self):
         """transportIncluded should always be False (per spec v1)"""
-        headers = {"Authorization": f"Bearer {DEV_TOKEN}"}
-        response = requests.get(
-            f"{BASE_URL}/api/quotes/{TEST_QUOTE_ID}",
-            headers=headers
-        )
-        quote = response.json()["quote"]
+        quote = self._get_quote_from_seller_list()
         
         assert quote.get("transportIncluded") == False, \
             f"transportIncluded should be False, got {quote.get('transportIncluded')}"
