@@ -252,8 +252,14 @@ class EnterpriseRankingService:
         if breakdown:
             breakdown.add_component("quality", quality_score)
         
+        # === BEHAVIOR BOOST (capped at 15) ===
+        behavior_boost = listing.get("_behaviorBoost", 0)
+        
+        if breakdown and behavior_boost > 0:
+            breakdown.add_component("behavior_boost", behavior_boost)
+        
         # === CALCULATE FINAL SCORE ===
-        raw_score = (
+        base_score = (
             stock_score + 
             subscription_score + 
             lead_time_score + 
@@ -263,11 +269,17 @@ class EnterpriseRankingService:
             quality_score
         )
         
-        max_score = self.config.get_max_possible_score()
+        # Add behavior boost (capped at 15)
+        behavior_boost = min(behavior_boost, 15)
+        raw_score = base_score + behavior_boost
+        
+        max_score = self.config.get_max_possible_score() + 15  # Include behavior boost cap
         normalized_score = round((raw_score / max_score) * 100, 2) if max_score > 0 else 0.0
         
         if breakdown:
             breakdown.raw_score = raw_score
+            breakdown.factors["baseScore"] = round(base_score, 2)
+            breakdown.factors["behaviorBoost"] = behavior_boost
             breakdown.normalize(max_score)
         
         return normalized_score, breakdown
