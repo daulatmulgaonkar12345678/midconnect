@@ -611,9 +611,10 @@ export default function EnterpriseProductPage() {
       }
 
       await createInquiry(token, {
+        sellerId: inquiryModal.seller.sellerId,
         listingId: inquiryModal.seller.listingId,
         quantity: inquiryQuantity,
-        requirementNote: inquiryNote || undefined,
+        message: inquiryNote || undefined,
         buyerType
       });
 
