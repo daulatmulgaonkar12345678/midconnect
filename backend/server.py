@@ -8692,6 +8692,11 @@ async def admin_activate_subscription(
     """
     Activate or update subscription with admin-set start date.
     Backend calculates end_date from startDate + durationDays.
+    
+    ENTERPRISE SUBSCRIPTION:
+    - Initializes enquiriesUsed = 0
+    - Initializes enquiriesResetAt to next month's first day
+    - Sets enquiryLimit based on plan (5 for free/expired, unlimited for pro)
     """
     try:
         user_oid = ObjectId(user_id)
@@ -8701,7 +8706,12 @@ async def admin_activate_subscription(
             raise HTTPException(status_code=404, detail="User not found")
 
         now = datetime.now(timezone.utc)
-        plan_config = SUBSCRIPTION_PLANS.get(data.planName, {})
+        
+        # Calculate next month for reset date
+        if now.month == 12:
+            next_reset = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            next_reset = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
 
         # Determine duration
         if data.durationDays:
@@ -8718,6 +8728,15 @@ async def admin_activate_subscription(
             end_date = None
         else:
             end_date = data.startDate + timedelta(days=duration_days)
+        
+        # Determine enquiry limit
+        # Pro/Enterprise = unlimited (-1), Trial/Free = 5
+        if data.planName in ["pro", "enterprise"]:
+            enquiry_limit = -1  # Unlimited
+        elif data.planName == "trial":
+            enquiry_limit = -1  # Trial also unlimited
+        else:
+            enquiry_limit = 5  # Free
 
         old_subscription = await db.subscriptions.find_one({"userId": user_oid})
 
@@ -8728,6 +8747,9 @@ async def admin_activate_subscription(
             "startDate": data.startDate,
             "endDate": end_date,
             "status": "active",
+            "enquiryLimit": enquiry_limit,
+            "enquiriesUsed": 0,  # ENTERPRISE: Reset counter on activation
+            "enquiriesResetAt": next_reset,  # ENTERPRISE: Initialize reset date
             "lastUpdatedBy": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],
             "updatedAt": now,
             "notes": data.notes or "",
@@ -8740,11 +8762,12 @@ async def admin_activate_subscription(
             upsert=True
         )
 
+        # Legacy: Update users.subscription for backwards compatibility
         legacy_subscription = {
             "plan": data.planName,
             "startDate": data.startDate,
             "endDate": end_date,
-            "inquiryLimit": plan_config.get("inquiryLimit", 5),
+            "inquiryLimit": enquiry_limit,
             "active": True
         }
 
