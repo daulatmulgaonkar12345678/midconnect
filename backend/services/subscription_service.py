@@ -147,9 +147,16 @@ async def check_and_update_monthly_usage(db, user_id: ObjectId) -> int:
     Check and update monthly usage counter.
     Resets on the first of each month.
     
-    Returns: Current enquiries used this month
+    IMPORTANT: This checks the reset date and resets if needed,
+    but does NOT increment the counter. Use increment_enquiry_usage() for that.
+    
+    Returns: Current enquiries used this month (after any reset)
     """
     now = datetime.now(timezone.utc)
+    
+    # Ensure user_id is ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
     
     sub = await db.subscriptions.find_one({"userId": user_id})
     
@@ -176,6 +183,10 @@ async def check_and_update_monthly_usage(db, user_id: ObjectId) -> int:
             }}
         )
         return 0
+    
+    # Make reset_date timezone aware if needed
+    if reset_date.tzinfo is None:
+        reset_date = reset_date.replace(tzinfo=timezone.utc)
     
     # If month reset passed → reset counter
     if reset_date < now:
