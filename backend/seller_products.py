@@ -1672,6 +1672,9 @@ Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
         else:
             remaining = max(0, limit - new_used_count)
         
+        # Get seller business name for frontend
+        seller_business_name = seller.get("profile", {}).get("businessName") or seller_name
+        
         return {
             "success": True,
             "message": "Inquiry accepted successfully",
@@ -1682,6 +1685,9 @@ Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
                 "phone": buyer_phone,
                 "email": buyer_email,
                 "company": buyer_company
+            },
+            "sellerContact": {
+                "businessName": seller_business_name
             },
             "quote": {
                 "price": data.quotedPrice,
