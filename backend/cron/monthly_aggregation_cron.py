@@ -147,7 +147,7 @@ async def aggregate_seller_monthly_stats(db):
             logger.error(f"Error aggregating seller {seller_id}: {e}")
             continue
     
-    logger.info(f"Seller monthly stats aggregation complete")
+    logger.info("Seller monthly stats aggregation complete")
 
 
 async def aggregate_product_monthly_stats(db):
