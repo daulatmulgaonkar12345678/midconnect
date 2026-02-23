@@ -239,20 +239,42 @@ async def can_accept_inquiry(db, user_id: ObjectId) -> Dict[str, Any]:
     """
     Check if seller can accept a new inquiry.
     
+    ENTERPRISE SUBSCRIPTION FLOW:
+    1. get_effective_subscription() → determines plan and limits
+    2. check_and_update_monthly_usage() → gets current usage (handles reset)
+    3. If unlimited → canAccept: True
+    4. If used >= limit → canAccept: False with detailed error
+    5. Otherwise → canAccept: True
+    
     Returns:
         {
             "canAccept": bool,
-            "reason": str | None,
+            "reason": str | None (error code like "LIMIT_REACHED"),
             "subscription": {...},
             "usage": {
                 "used": int,
                 "limit": int,
-                "remaining": int
-            }
+                "remaining": int (-1 for unlimited)
+            },
+            "notification": str | None (user-friendly message),
+            "upgradeUrl": str | None
         }
     """
+    # Ensure user_id is ObjectId
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    
     subscription = await get_effective_subscription(db, user_id)
     used = await check_and_update_monthly_usage(db, user_id)
+    
+    # Calculate next reset date for error messages
+    now = datetime.now(timezone.utc)
+    if now.month == 12:
+        next_reset = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        next_reset = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+    
+    reset_days = (next_reset - now).days
     
     # Unlimited plans can always accept
     if subscription["isUnlimited"]:
@@ -264,7 +286,9 @@ async def can_accept_inquiry(db, user_id: ObjectId) -> Dict[str, Any]:
                 "used": used,
                 "limit": -1,
                 "remaining": -1
-            }
+            },
+            "notification": None,
+            "upgradeUrl": None
         }
     
     # Check limit
@@ -274,13 +298,16 @@ async def can_accept_inquiry(db, user_id: ObjectId) -> Dict[str, Any]:
     if used >= limit:
         return {
             "canAccept": False,
-            "reason": "Monthly enquiry limit reached",
+            "reason": "LIMIT_REACHED",
             "subscription": subscription,
             "usage": {
                 "used": used,
                 "limit": limit,
                 "remaining": 0
-            }
+            },
+            "notification": f"You've reached your monthly limit of {limit} leads. Upgrade to Pro for unlimited access.",
+            "upgradeUrl": "/seller/subscription",
+            "resetsInDays": reset_days
         }
     
     return {
@@ -291,7 +318,9 @@ async def can_accept_inquiry(db, user_id: ObjectId) -> Dict[str, Any]:
             "used": used,
             "limit": limit,
             "remaining": remaining
-        }
+        },
+        "notification": None,
+        "upgradeUrl": None
     }
 
 
