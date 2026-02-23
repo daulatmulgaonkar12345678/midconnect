@@ -156,7 +156,7 @@ async def can_accept_lead(db, seller_id: ObjectId) -> Dict[str, Any]:
         return {
             "canAccept": False,
             "reason": "LIMIT_REACHED",
-            "message": f"Lead limit reached. Upgrade to unlock unlimited leads.",
+            "message": "Lead limit reached. Upgrade to unlock unlimited leads.",
             "notification": f"You've reached your monthly limit of {limit} accepted inquiries. Upgrade to Pro for unlimited access.",
             "subscription": subscription,
             "usage": usage,
