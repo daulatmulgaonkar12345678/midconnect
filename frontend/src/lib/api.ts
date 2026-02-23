@@ -1532,18 +1532,18 @@ export const getEnterpriseProduct = (
   page: number = 1,
   limit: number = 20
 ): Promise<EnterpriseProductResponse> =>
-  fetchApi(`/products/${encodeURIComponent(productId)}/enterprise?page=${page}&limit=${limit}`);
+  fetchAPI(`/products/${encodeURIComponent(productId)}/enterprise?page=${page}&limit=${limit}`);
 
 // Get product facets for filtering
 export const getProductFacets = (productId: string): Promise<ProductFacetsResponse> =>
-  fetchApi(`/products/${encodeURIComponent(productId)}/facets`);
+  fetchAPI(`/products/${encodeURIComponent(productId)}/facets`);
 
 // Filter product listings with fallback
 export const filterProductListings = (
   productId: string,
   filters: FilterRequest
 ): Promise<FilterResponse> =>
-  fetchApi(`/products/${encodeURIComponent(productId)}/filter`, {
+  fetchAPI(`/products/${encodeURIComponent(productId)}/filter`, {
     method: 'POST',
     body: JSON.stringify(filters),
     headers: { 'Content-Type': 'application/json' }
