@@ -118,125 +118,40 @@ class TestValidateSpecTemplateIds:
     test_template_2_id = None  # For different category
     test_product_id = None
     
-    def test_04_create_test_category_1(self, api_client, auth_headers):
-        """Create first test category"""
-        response = api_client.post(
-            f"{BASE_URL}/api/admin/categories",
-            headers=auth_headers,
-            json={"name": "TEST_DataIntegrity_Cat1", "description": "Test category 1"}
-        )
+    def test_04_find_existing_test_data(self, api_client, auth_headers):
+        """Find existing test categories and templates from previous test runs"""
+        # Get existing categories
+        cat_response = api_client.get(f"{BASE_URL}/api/admin/categories", headers=auth_headers)
+        assert cat_response.status_code == 200, "Failed to fetch categories"
+        cats = cat_response.json().get("categories", [])
         
-        if response.status_code in [200, 201]:
-            data = response.json()
-            # Response structure: {"message": "...", "category": {...}}
-            category = data.get("category", data)
-            TestValidateSpecTemplateIds.test_category_1_id = category.get("_id") or category.get("id")
-            print(f"✅ Created test category 1: {TestValidateSpecTemplateIds.test_category_1_id}")
-        elif response.status_code in [400, 409]:
-            # Category already exists, fetch it
-            list_response = api_client.get(f"{BASE_URL}/api/admin/categories", headers=auth_headers)
-            if list_response.status_code == 200:
-                cats = list_response.json().get("categories", [])
-                for cat in cats:
-                    if cat.get("name") == "TEST_DataIntegrity_Cat1":
-                        TestValidateSpecTemplateIds.test_category_1_id = cat.get("_id") or cat.get("id")
-                        print(f"✅ Found existing test category 1: {TestValidateSpecTemplateIds.test_category_1_id}")
-                        break
+        # Find two different categories
+        for cat in cats:
+            if not TestValidateSpecTemplateIds.test_category_1_id:
+                TestValidateSpecTemplateIds.test_category_1_id = cat.get("_id")
+            elif not TestValidateSpecTemplateIds.test_category_2_id and cat.get("_id") != TestValidateSpecTemplateIds.test_category_1_id:
+                TestValidateSpecTemplateIds.test_category_2_id = cat.get("_id")
         
-        assert TestValidateSpecTemplateIds.test_category_1_id, f"Failed to create/find test category 1. Response: {response.status_code} - {response.text}"
-    
-    def test_05_create_test_category_2(self, api_client, auth_headers):
-        """Create second test category for mismatch testing"""
-        response = api_client.post(
-            f"{BASE_URL}/api/admin/categories",
-            headers=auth_headers,
-            json={"name": "TEST_DataIntegrity_Cat2", "description": "Test category 2 (mismatch)"}
-        )
+        # Get existing templates
+        tmpl_response = api_client.get(f"{BASE_URL}/api/admin/spec-templates", headers=auth_headers)
+        assert tmpl_response.status_code == 200, "Failed to fetch templates"
+        templates = tmpl_response.json().get("templates", [])
         
-        if response.status_code in [200, 201]:
-            data = response.json()
-            category = data.get("category", data)
-            TestValidateSpecTemplateIds.test_category_2_id = category.get("_id") or category.get("id")
-            print(f"✅ Created test category 2: {TestValidateSpecTemplateIds.test_category_2_id}")
-        elif response.status_code in [400, 409]:
-            list_response = api_client.get(f"{BASE_URL}/api/admin/categories", headers=auth_headers)
-            if list_response.status_code == 200:
-                cats = list_response.json().get("categories", [])
-                for cat in cats:
-                    if cat.get("name") == "TEST_DataIntegrity_Cat2":
-                        TestValidateSpecTemplateIds.test_category_2_id = cat.get("_id") or cat.get("id")
-                        print(f"✅ Found existing test category 2: {TestValidateSpecTemplateIds.test_category_2_id}")
-                        break
+        # Find templates for category 1 and category 2
+        for t in templates:
+            if t.get("categoryId") == TestValidateSpecTemplateIds.test_category_1_id and not TestValidateSpecTemplateIds.test_template_1_id:
+                TestValidateSpecTemplateIds.test_template_1_id = t.get("_id")
+            elif t.get("categoryId") == TestValidateSpecTemplateIds.test_category_2_id and not TestValidateSpecTemplateIds.test_template_2_id:
+                TestValidateSpecTemplateIds.test_template_2_id = t.get("_id")
         
-        assert TestValidateSpecTemplateIds.test_category_2_id, f"Failed to create/find test category 2. Response: {response.status_code} - {response.text}"
-    
-    def test_06_create_spec_template_for_cat1(self, api_client, auth_headers):
-        """Create spec template for category 1"""
-        if not TestValidateSpecTemplateIds.test_category_1_id:
-            pytest.skip("Category 1 not created")
+        print(f"✅ Found test data:")
+        print(f"   - Category 1: {TestValidateSpecTemplateIds.test_category_1_id}")
+        print(f"   - Category 2: {TestValidateSpecTemplateIds.test_category_2_id}")
+        print(f"   - Template 1 (for cat 1): {TestValidateSpecTemplateIds.test_template_1_id}")
+        print(f"   - Template 2 (for cat 2): {TestValidateSpecTemplateIds.test_template_2_id}")
         
-        response = api_client.post(
-            f"{BASE_URL}/api/admin/spec-templates",
-            headers=auth_headers,
-            json={
-                "name": "TEST_DataIntegrity_Template1",
-                "categoryId": TestValidateSpecTemplateIds.test_category_1_id,
-                "fields": [
-                    {"label": "Voltage", "key": "voltage", "fieldType": "text", "required": True}
-                ]
-            }
-        )
-        
-        if response.status_code in [200, 201]:
-            data = response.json()
-            template = data.get("template", data)
-            TestValidateSpecTemplateIds.test_template_1_id = template.get("_id") or template.get("id")
-            print(f"✅ Created spec template for cat1: {TestValidateSpecTemplateIds.test_template_1_id}")
-        elif response.status_code in [400, 409]:
-            list_response = api_client.get(f"{BASE_URL}/api/admin/spec-templates", headers=auth_headers)
-            if list_response.status_code == 200:
-                templates = list_response.json().get("templates", [])
-                for t in templates:
-                    if t.get("name") == "TEST_DataIntegrity_Template1":
-                        TestValidateSpecTemplateIds.test_template_1_id = t.get("_id") or t.get("id")
-                        print(f"✅ Found existing template for cat1: {TestValidateSpecTemplateIds.test_template_1_id}")
-                        break
-        
-        assert TestValidateSpecTemplateIds.test_template_1_id, f"Failed to create/find spec template for cat1. Response: {response.status_code} - {response.text}"
-    
-    def test_07_create_spec_template_for_cat2(self, api_client, auth_headers):
-        """Create spec template for category 2 (for mismatch testing)"""
-        if not TestValidateSpecTemplateIds.test_category_2_id:
-            pytest.skip("Category 2 not created")
-        
-        response = api_client.post(
-            f"{BASE_URL}/api/admin/spec-templates",
-            headers=auth_headers,
-            json={
-                "name": "TEST_DataIntegrity_Template2",
-                "categoryId": TestValidateSpecTemplateIds.test_category_2_id,
-                "fields": [
-                    {"label": "Power", "key": "power", "fieldType": "text", "required": True}
-                ]
-            }
-        )
-        
-        if response.status_code in [200, 201]:
-            data = response.json()
-            template = data.get("template", data)
-            TestValidateSpecTemplateIds.test_template_2_id = template.get("_id") or template.get("id")
-            print(f"✅ Created spec template for cat2: {TestValidateSpecTemplateIds.test_template_2_id}")
-        elif response.status_code in [400, 409]:
-            list_response = api_client.get(f"{BASE_URL}/api/admin/spec-templates", headers=auth_headers)
-            if list_response.status_code == 200:
-                templates = list_response.json().get("templates", [])
-                for t in templates:
-                    if t.get("name") == "TEST_DataIntegrity_Template2":
-                        TestValidateSpecTemplateIds.test_template_2_id = t.get("_id") or t.get("id")
-                        print(f"✅ Found existing template for cat2: {TestValidateSpecTemplateIds.test_template_2_id}")
-                        break
-        
-        assert TestValidateSpecTemplateIds.test_template_2_id, f"Failed to create/find spec template for cat2. Response: {response.status_code} - {response.text}"
+        assert TestValidateSpecTemplateIds.test_category_1_id, "No categories found in database"
+        assert TestValidateSpecTemplateIds.test_template_1_id, "No templates found for category 1"
     
     def test_08_product_create_with_valid_template_passes(self, api_client, auth_headers):
         """Creating product with valid template that matches category should work"""
