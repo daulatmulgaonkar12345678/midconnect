@@ -337,6 +337,7 @@ export default function EnterpriseProductPage() {
             }}
             className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
           >
+            <option value="ranking-desc">Best Match</option>
             <option value="price-asc">Price: Low to High</option>
             <option value="price-desc">Price: High to Low</option>
             <option value="leadTime-asc">Lead Time: Shortest</option>
