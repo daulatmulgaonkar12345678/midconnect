@@ -353,8 +353,8 @@ class AbuseMonitoringService:
         # Pattern 2: Multiple warnings
         warned_sellers = await self.db.users.find({
             "roles": "seller",
-            "warnings": {"$exists": True},
-            "$expr": {"$gte": [{"$size": "$warnings"}, 2]}
+            "warnings": {"$exists": True, "$ne": []},
+            "$expr": {"$gte": [{"$size": {"$ifNull": ["$warnings", []]}}, 2]}
         }).to_list(20)
         
         for s in warned_sellers:
