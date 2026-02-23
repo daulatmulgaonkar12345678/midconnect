@@ -1381,6 +1381,12 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 .limit(limit)\
                 .to_list(limit)
             
+            # Count unread (pending) inquiries
+            unread_count = await db.inquiries.count_documents({
+                "sellerId": seller_oid,
+                "status": "pending"
+            })
+            
             result = []
             for inq in inquiries:
                 try:
@@ -1389,6 +1395,7 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                     
                     # Get listing info - SAFE handling
                     listing_id = inq.get("listingId")
+                    listing_name = ""
                     if listing_id:
                         try:
                             lid = listing_id if isinstance(listing_id, ObjectId) else ObjectId(str(listing_id))
@@ -1401,7 +1408,8 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                                     pid = product_id if isinstance(product_id, ObjectId) else ObjectId(str(product_id))
                                     product = await db.products.find_one({"_id": pid})
                                     if product:
-                                        serialized["listingName"] = product.get("name", "")
+                                        listing_name = product.get("name", "")
+                                        serialized["listingName"] = listing_name
                                 
                                 # Get first image safely
                                 images = listing.get("images") or []
@@ -1409,18 +1417,57 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                         except Exception as e:
                             logger.warning(f"Error fetching listing {listing_id}: {e}")
                     
-                    # Mask buyer info unless accepted
-                    if serialized.get("status") != "accepted":
-                        buyer_info = serialized.get("buyerInfo") or {}
-                        company_name = buyer_info.get("companyName") or ""
-                        
-                        serialized["buyerMasked"] = {
-                            "city": buyer_info.get("city"),
-                            "state": buyer_info.get("state"),
-                            "buyerType": serialized.get("buyerType"),
-                            "companyInitial": company_name[0].upper() if company_name else "?"
-                        }
-                        serialized.pop("buyerInfo", None)
+                    # STRICT CONTACT UNLOCK: Fetch buyer from users collection
+                    buyer_id = inq.get("buyerId")
+                    buyer_info = None
+                    buyer_masked = None
+                    
+                    if buyer_id:
+                        try:
+                            bid = buyer_id if isinstance(buyer_id, ObjectId) else ObjectId(str(buyer_id))
+                            buyer = await db.users.find_one({"_id": bid})
+                            
+                            if buyer:
+                                buyer_profile = buyer.get("profile") or {}
+                                
+                                if serialized.get("status") == "accepted":
+                                    # UNLOCKED: Full buyer contact visible
+                                    buyer_info = {
+                                        "name": buyer_profile.get("businessName") or buyer.get("email", "").split("@")[0],
+                                        "phone": buyer_profile.get("phone"),
+                                        "email": buyer.get("email"),
+                                        "companyName": buyer_profile.get("businessName"),
+                                        "city": buyer_profile.get("city"),
+                                        "state": buyer_profile.get("state"),
+                                    }
+                                else:
+                                    # LOCKED: Only masked info (NO phone, NO email)
+                                    company_name = buyer_profile.get("businessName") or ""
+                                    buyer_masked = {
+                                        "companyInitial": company_name[0].upper() if company_name else "?",
+                                        "city": buyer_profile.get("city"),
+                                        "state": buyer_profile.get("state"),
+                                    }
+                        except Exception as e:
+                            logger.warning(f"Error fetching buyer {buyer_id}: {e}")
+                    
+                    # Fallback to embedded buyerInfo if no buyerId (legacy inquiries)
+                    if not buyer_info and not buyer_masked:
+                        embedded_buyer = inq.get("buyerInfo") or {}
+                        if serialized.get("status") == "accepted":
+                            buyer_info = embedded_buyer
+                        else:
+                            company_name = embedded_buyer.get("companyName") or ""
+                            buyer_masked = {
+                                "companyInitial": company_name[0].upper() if company_name else "?",
+                                "city": embedded_buyer.get("city"),
+                                "state": embedded_buyer.get("state"),
+                            }
+                    
+                    # Set buyer fields - NEVER leak phone/email before accept
+                    serialized["buyerInfo"] = buyer_info
+                    serialized["buyerMasked"] = buyer_masked
+                    serialized["buyerType"] = inq.get("buyerType")
                     
                     result.append(serialized)
                 except Exception as e:
@@ -1430,6 +1477,7 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             return {
                 "inquiries": result,
                 "total": total,
+                "unreadCount": unread_count,
                 "page": page,
                 "pages": max(1, (total + limit - 1) // limit)
             }
