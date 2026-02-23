@@ -275,7 +275,12 @@ if allowed → accept + increment (only for non-unlimited)
 └── ranking_config.py     # Configurable ranking weights
 
 /app/backend/services/
-└── ranking_service.py    # Enterprise ranking engine
+├── ranking_service.py           # Enterprise ranking engine
+├── subscription_engine.py       # Unified subscription management
+└── buyer_interaction_service.py # Behavior tracking service
+
+/app/backend/routers/
+└── subscription_payment_router.py # Payment integration
 ```
 
 ### Ranking API Endpoints
