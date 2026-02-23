@@ -203,10 +203,14 @@ export default function EnterpriseProductPage() {
   // Handle sort change
   const handleSortChange = useCallback((newSort: SortOption) => {
     if (newSort === sortBy) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+      // For ranking, don't toggle - it's always desc
+      if (newSort !== 'ranking') {
+        setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+      }
     } else {
       setSortBy(newSort);
-      setSortOrder('asc');
+      // Ranking defaults to desc, others to asc
+      setSortOrder(newSort === 'ranking' ? 'desc' : 'asc');
     }
     setCurrentPage(1);
   }, [sortBy]);
