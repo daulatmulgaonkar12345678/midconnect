@@ -1206,81 +1206,38 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
     async def get_subscription_status(
         seller: dict = Depends(require_verified_seller)
     ):
-        """Get seller's subscription status"""
-        from server import get_subscription_status as get_sub_status, count_accepted_inquiries_this_month, SUBSCRIPTION_PLANS
+        """
+        Get seller's subscription status.
         
-        seller_id_str = str(seller["_id"])
+        SSOT: Uses subscription_service which reads from subscriptions collection.
+        """
+        from services.subscription_service import get_subscription_status_for_seller
         
-        subscription = seller.get("subscription", {"plan": "free"})
-        plan = subscription.get("plan", "free")
-        end_date = subscription.get("endDate")
-        start_date = subscription.get("startDate")
+        seller_oid = ObjectId(seller["_id"]) if isinstance(seller["_id"], str) else seller["_id"]
         
-        plan_config = SUBSCRIPTION_PLANS.get(plan, SUBSCRIPTION_PLANS["free"])
+        status_data = await get_subscription_status_for_seller(db, seller_oid)
         
-        status = get_sub_status(subscription)
-        is_unlimited = status == "unlimited"
-        is_active = status != "expired"
-        
-        days_remaining = 0
-        if end_date:
-            if isinstance(end_date, str):
-                try:
-                    end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                except:
-                    end_date = None
-            if end_date and end_date.tzinfo is None:
-                end_date = end_date.replace(tzinfo=timezone.utc)
-            if end_date and end_date > datetime.now(timezone.utc):
-                days_remaining = (end_date - datetime.now(timezone.utc)).days
-        
-        accepted_this_month = await count_accepted_inquiries_this_month(db, seller_id_str)
-        
-        inquiry_limit = plan_config.get("inquiryLimit", 5)
-        
-        if is_unlimited:
-            limit_display = "Unlimited"
-            remaining = -1
-        else:
-            limit_display = str(inquiry_limit)
-            remaining = max(0, inquiry_limit - accepted_this_month)
-        
-        now = datetime.now(timezone.utc)
-        if now.month == 12:
-            next_reset = datetime(now.year + 1, 1, 1)
-        else:
-            next_reset = datetime(now.year, now.month + 1, 1)
-        
-        return {
-            "subscription": {
-                "status": plan,
-                "planName": plan_config.get("name", plan.title()),
-                "isActive": is_active,
-                "endDate": end_date.isoformat() if isinstance(end_date, datetime) else end_date,
-                "startDate": start_date.isoformat() if isinstance(start_date, datetime) else start_date,
-                "daysRemaining": days_remaining if is_active else 0
-            },
-            "usage": {
-                "acceptedThisMonth": accepted_this_month,
-                "monthlyLimit": inquiry_limit,
-                "limitDisplay": limit_display,
-                "remaining": remaining,
-                "resetsOn": next_reset.strftime("%Y-%m-%d")
-            },
-            "benefits": {
-                "unlimitedInquiries": is_unlimited,
-                "instantApproval": is_unlimited,
-                "prioritySupport": plan == "pro",
-                "verifiedBadge": plan in ["trial", "pro"],
-                "analyticsAccess": plan == "pro",
-                "autoWhatsappUnlock": plan == "pro"
-            },
-            "upgradeInfo": {
-                "showUpgrade": plan == "free",
-                "upgradeUrl": "/seller/subscription",
-                "priceQuarterly": SUBSCRIPTION_PLANS.get("pro", {}).get("priceQuarterly", 999)
-            }
+        # Add upgrade info
+        status_data["upgradeInfo"] = {
+            "showUpgrade": status_data.get("showUpgradeCta", False),
+            "upgradeUrl": "/seller/subscription",
+            "priceQuarterly": 999
         }
+        
+        # Add benefits (for backwards compatibility)
+        plan = status_data["subscription"]["planName"]
+        is_unlimited = status_data["subscription"]["isUnlimited"]
+        
+        status_data["benefits"] = {
+            "unlimitedInquiries": is_unlimited,
+            "instantApproval": is_unlimited,
+            "prioritySupport": plan == "pro",
+            "verifiedBadge": plan in ["trial", "pro"],
+            "analyticsAccess": plan == "pro",
+            "autoWhatsappUnlock": plan == "pro"
+        }
+        
+        return status_data
     
     @router.get("/status")
     async def get_seller_status_endpoint(
