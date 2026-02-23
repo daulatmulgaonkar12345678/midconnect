@@ -559,7 +559,7 @@ const validDate = inquiry.quote?.validTill
 let msg =
   `Hello ${buyerName},\n\n` +
   `Greetings from B2B Market Place.\n\n` +
-  `This is ${sellerName} from ${sellerBusiness}.\n\n` +
+  `This is ${sellerBusiness}.\n\n` +
   `We are pleased to share our quotation for your inquiry regarding "${productName}".\n\n` +
   `Requested Quantity: ${quantity}\n` +
   `Quoted Price: ₹${price} per unit\n`;
@@ -571,7 +571,6 @@ if (validDate) msg += `Quotation Valid Till: ${validDate}\n`;
 msg +=
   `\nPlease feel free to reach out for any further clarification.\n\n` +
   `Best Regards,\n` +
-  `${sellerName}\n` +
   `${sellerBusiness}\n` +
   `B2B Market Place`;
                             

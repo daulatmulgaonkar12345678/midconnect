@@ -1345,157 +1345,228 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         
         return result
     
-    # ==================== INQUIRY MANAGEMENT ====================
-    
-    @router.get("/inquiries")
-    async def get_seller_inquiries(
-        seller: dict = Depends(require_verified_seller),
-        status: Optional[str] = Query(None),
-        page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=100)
-    ):
-        """Get all inquiries for this seller - STRICT camelCase with safe error handling"""
-        import traceback
-        
-        try:
-            # CRITICAL: Query must use ObjectId, not string
+        # ==================== INQUIRY MANAGEMENT ====================
+
+        @router.get("/inquiries")
+        async def get_seller_inquiries(
+            seller: dict = Depends(require_verified_seller),
+            status: Optional[str] = Query(None),
+            page: int = Query(1, ge=1),
+            limit: int = Query(20, ge=1, le=100)
+        ):
             seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
-            
-            # Build query - sellerId as ObjectId
+
             query = {"sellerId": seller_oid}
-            if status and status in ["pending", "accepted", "rejected", "reported", "new"]:
-                query["status"] = status
-            
-            # Safe pagination
-            page = max(1, page)
-            limit = min(100, max(1, limit))
-            skip = (page - 1) * limit
-            
-            # Count and fetch
-            total = await db.inquiries.count_documents(query)
-            logger.info(f"[SELLER INQUIRIES] sellerId={seller_oid}, status={status}, total={total}")
-            
-            inquiries = await db.inquiries.find(query)\
-                .sort("createdAt", -1)\
-                .skip(skip)\
-                .limit(limit)\
-                .to_list(limit)
-            
-            # Count unread (pending) inquiries
-            unread_count = await db.inquiries.count_documents({
-                "sellerId": seller_oid,
-                "status": "pending"
-            })
-            
-            result = []
-            for inq in inquiries:
-                try:
-                    # Serialize ObjectIds safely
-                    serialized = serialize_mongo_doc(inq)
-                    
-                    # Get listing info - SAFE handling
-                    listing_id = inq.get("listingId")
-                    listing_name = ""
-                    if listing_id:
-                        try:
-                            lid = listing_id if isinstance(listing_id, ObjectId) else ObjectId(str(listing_id))
-                            listing = await db.sellerListings.find_one({"_id": lid})
-                            
-                            if listing:
-                                # Get product name
-                                product_id = listing.get("productId")
-                                if product_id:
-                                    pid = product_id if isinstance(product_id, ObjectId) else ObjectId(str(product_id))
-                                    product = await db.products.find_one({"_id": pid})
-                                    if product:
-                                        listing_name = product.get("name", "")
-                                        serialized["listingName"] = listing_name
-                                
-                                # Get first image safely
-                                images = listing.get("images") or []
-                                serialized["listingImage"] = images[0] if images else None
-                        except Exception as e:
-                            logger.warning(f"Error fetching listing {listing_id}: {e}")
-                    
-                    # STRICT CONTACT UNLOCK: Fetch buyer from users collection
-                    buyer_id = inq.get("buyerId")
-                    buyer_info = None
-                    buyer_masked = None
-                    
-                    if buyer_id:
-                        try:
-                            bid = buyer_id if isinstance(buyer_id, ObjectId) else ObjectId(str(buyer_id))
-                            buyer = await db.users.find_one({"_id": bid})
-                            
-                            if buyer:
-                                buyer_profile = buyer.get("profile") or {}
-                                
-                                if serialized.get("status") == "accepted":
-                                    # UNLOCKED: Full buyer contact visible
-                                    buyer_info = {
-                                        "name": buyer_profile.get("businessName") or buyer.get("email", "").split("@")[0],
-                                        "phone": buyer_profile.get("phone"),
-                                        "email": buyer.get("email"),
-                                        "companyName": buyer_profile.get("businessName"),
-                                        "city": buyer_profile.get("city"),
-                                        "state": buyer_profile.get("state"),
-                                    }
-                                else:
-                                    # LOCKED: Only masked info (NO phone, NO email)
-                                    company_name = buyer_profile.get("businessName") or ""
-                                    buyer_masked = {
-                                        "companyInitial": company_name[0].upper() if company_name else "?",
-                                        "city": buyer_profile.get("city"),
-                                        "state": buyer_profile.get("state"),
-                                    }
-                        except Exception as e:
-                            logger.warning(f"Error fetching buyer {buyer_id}: {e}")
-                    
-                    # Fallback to embedded buyerInfo if no buyerId (legacy inquiries)
-                    if not buyer_info and not buyer_masked:
-                        embedded_buyer = inq.get("buyerInfo") or {}
-                        if serialized.get("status") == "accepted":
-                            buyer_info = embedded_buyer
-                        else:
-                            company_name = embedded_buyer.get("companyName") or ""
-                            buyer_masked = {
-                                "companyInitial": company_name[0].upper() if company_name else "?",
-                                "city": embedded_buyer.get("city"),
-                                "state": embedded_buyer.get("state"),
-                            }
-                    
-                    # Set buyer fields - NEVER leak phone/email before accept
-                    serialized["buyerInfo"] = buyer_info
-                    serialized["buyerMasked"] = buyer_masked
-                    serialized["buyerType"] = inq.get("buyerType")
-                    
-                    result.append(serialized)
-                except Exception as e:
-                    logger.warning(f"Error processing inquiry {inq.get('_id')}: {e}")
-                    continue
-            
-            return {
-                "inquiries": result,
-                "total": total,
-                "unreadCount": unread_count,
-                "page": page,
-                "pages": max(1, (total + limit - 1) // limit)
+        if status and status in ["pending", "accepted", "rejected", "reported", "new"]:
+           query["status"] = status
+
+        skip = (page - 1) * limit
+
+    total = await db.inquiries.count_documents(query)
+    inquiries = await db.inquiries.find(query)\
+        .sort("createdAt", -1)\
+        .skip(skip)\
+        .limit(limit)\
+        .to_list(limit)
+
+    unread = await db.inquiries.count_documents({
+        "sellerId": seller_oid,
+        "status": "pending"
+    })
+
+    return {
+        "inquiries": serialize_mongo_doc(inquiries),
+        "total": total,
+        "unreadCount": unread,
+        "page": page,
+        "pages": max(1, (total + limit - 1) // limit)
+    }
+
+
+@router.post("/inquiries/{inquiry_id}/accept")
+async def accept_inquiry(
+    inquiry_id: str,
+    data: InquiryAccept,
+    seller: dict = Depends(require_verified_seller)
+):
+    from services.subscription_service import (
+        can_accept_inquiry as check_can_accept,
+        increment_enquiry_usage
+    )
+    import urllib.parse
+
+    seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
+
+    # Subscription Check
+    can_accept = await check_can_accept(db, seller_oid)
+    if not can_accept["canAccept"]:
+        raise HTTPException(status_code=403, detail=can_accept)
+
+    # Fetch inquiry
+    inquiry = await db.inquiries.find_one({
+        "_id": ObjectId(inquiry_id),
+        "sellerId": seller_oid
+    })
+
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+
+    if inquiry.get("status") not in ["pending", "new"]:
+        raise HTTPException(status_code=400, detail="Inquiry already processed")
+
+    now = datetime.now(timezone.utc)
+    validity_date = now + timedelta(days=data.validityDays)
+    formatted_date = validity_date.strftime("%d %b %Y")
+
+    # Update inquiry
+    await db.inquiries.update_one(
+        {"_id": ObjectId(inquiry_id)},
+        {"$set": {
+            "status": "accepted",
+            "sellerResponse": {
+                "quotedPrice": data.quotedPrice,
+                "moq": data.moq,
+                "leadTimeDays": data.leadTimeDays,
+                "validTill": validity_date,
+                "sellerNote": data.sellerNote
+            },
+            "acceptedAt": now,
+            "updatedAt": now
+        }}
+    )
+
+    subscription = can_accept["subscription"]
+    used_count = can_accept["usage"]["used"]
+
+    if not subscription["isUnlimited"]:
+        used_count = await increment_enquiry_usage(db, seller_oid)
+
+    # Fetch buyer
+    buyer_name = "Customer"
+    buyer_phone = ""
+    buyer_id = inquiry.get("buyerId")
+
+    if buyer_id:
+        buyer = await db.users.find_one({"_id": ObjectId(str(buyer_id))})
+        if buyer:
+            profile = buyer.get("profile", {})
+            buyer_name = profile.get("businessName") or buyer.get("email", "").split("@")[0]
+            buyer_phone = profile.get("phone", "")
+
+    product_name = inquiry.get("productName", "Product")
+    quantity = inquiry.get("quantity", 1)
+
+    seller_name = seller.get("profile", {}).get("businessName") or "Your Business"
+
+    # Professional WhatsApp Format
+    whatsapp_message = f"""Hello {buyer_name},
+
+Greetings from B2B Market Place.
+
+This is {seller_name}.
+
+We are pleased to share our quotation for your inquiry regarding "{product_name}".
+
+Requested Quantity: {quantity}
+Quoted Price: ₹{data.quotedPrice} per unit
+Minimum Order Quantity (MOQ): {data.moq if data.moq else 1}
+Quotation Valid Till: {formatted_date}
+
+Please feel free to reach out for any further clarification.
+
+Best Regards,
+{seller_name}
+B2B Market Place"""
+
+    if data.sellerNote:
+        whatsapp_message += f"\n\n{data.sellerNote}"
+
+    whatsapp_link = None
+    if buyer_phone:
+        clean_phone = "".join(filter(str.isdigit, buyer_phone))
+        if not clean_phone.startswith("91"):
+            clean_phone = "91" + clean_phone
+
+        encoded_message = urllib.parse.quote(whatsapp_message)
+        whatsapp_link = f"https://wa.me/{clean_phone}?text={encoded_message}"
+
+    return {
+        "success": True,
+        "message": "Inquiry accepted successfully",
+        "whatsappLink": whatsapp_link,
+        "subscriptionUsage": {
+            "used": used_count,
+            "limit": subscription["limit"],
+            "remaining": -1 if subscription["isUnlimited"]
+            else max(0, subscription["limit"] - used_count),
+            "isUnlimited": subscription["isUnlimited"]
+        }
+    }
+
+
+@router.post("/inquiries/{inquiry_id}/reject")
+async def reject_inquiry(
+    inquiry_id: str,
+    data: InquiryReject,
+    seller: dict = Depends(require_verified_seller)
+):
+    seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
+
+    inquiry = await db.inquiries.find_one({
+        "_id": ObjectId(inquiry_id),
+        "sellerId": seller_oid
+    })
+
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+
+    await db.inquiries.update_one(
+        {"_id": ObjectId(inquiry_id)},
+        {"$set": {
+            "status": "rejected",
+            "rejection": {
+                "reason": data.reason,
+                "note": data.note,
+                "rejectedAt": datetime.now(timezone.utc)
             }
-            
-        except Exception as e:
-            logger.error(f"SELLER INQUIRY ERROR: {str(e)}")
-            logger.error(traceback.format_exc())
-            raise HTTPException(status_code=500, detail="Failed to fetch inquiries")
-    
-    @router.post("/inquiries/{inquiry_id}/accept")
-    async def accept_inquiry(
-        inquiry_id: str,
-        data: InquiryAccept,
-        seller: dict = Depends(require_verified_seller)
-    ):
-        """
-        Accept an inquiry with a quote and generate WhatsApp redirect link.
+        }}
+    )
+
+        return {"message": "Inquiry rejected"}
+
+
+        @router.post("/inquiries/{inquiry_id}/report")
+        async def report_inquiry(
+            inquiry_id: str,
+            data: InquiryReport,
+            seller: dict = Depends(require_verified_seller)
+        ):
+    seller_oid = seller["_id"] if isinstance(seller["_id"], ObjectId) else ObjectId(seller["_id"])
+
+    inquiry = await db.inquiries.find_one({
+        "_id": ObjectId(inquiry_id),
+        "sellerId": seller_oid
+    })
+
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+
+    await db.inquiries.update_one(
+        {"_id": ObjectId(inquiry_id)},
+        {"$set": {
+            "status": "reported",
+            "report": {
+                "type": data.reportType,
+                "details": data.details,
+                "reportedAt": datetime.now(timezone.utc)
+            }
+        }}
+    )
+
+    return {"message": "Inquiry reported"}
         
+        
+        """
         ENTERPRISE SUBSCRIPTION FLOW:
         1. can_accept_inquiry() → checks subscription limits from subscriptions collection (SSOT)
         2. If cannot accept → 403 with detailed error
@@ -1642,11 +1713,11 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         # Generate WhatsApp message
         whatsapp_message = f"""Hello {buyer_name},
 
-This is {seller_name} from B2B Market.
+			This is {seller_name} from B2B Market.
 
-We received your inquiry for {product_name}, Qty {quantity}.
+			We received your inquiry for {product_name}, Qty {quantity}.
 
-Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
+			Our quoted price is ₹{data.quotedPrice}, valid till {formatted_date}."""
         
         # Add seller note if provided
         if data.sellerNote:
