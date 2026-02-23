@@ -1139,11 +1139,14 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
     async def get_seller_stats(
         seller: dict = Depends(require_verified_seller)
     ):
-        """Get seller statistics"""
-        from server import get_subscription_status as get_sub_status, count_accepted_inquiries_this_month, SUBSCRIPTION_PLANS
+        """
+        Get seller statistics.
         
-        seller_oid = ObjectId(seller["_id"])
-        seller_id_str = str(seller["_id"])
+        USES: subscription_service for subscription data (SSOT)
+        """
+        from services.subscription_service import get_effective_subscription, check_and_update_monthly_usage
+        
+        seller_oid = ObjectId(seller["_id"]) if isinstance(seller["_id"], str) else seller["_id"]
         
         try:
             # Count listings - STRICT: sellerListings only
@@ -1154,24 +1157,21 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 "status": "active"
             })
             
-            # Inquiry stats - STRICT: sellerId only
-            total_enquiries = await db.inquiries.count_documents({"sellerId": seller_id_str})
+            # Inquiry stats - STRICT: sellerId as ObjectId
+            total_enquiries = await db.inquiries.count_documents({"sellerId": seller_oid})
             
             pending_enquiries = await db.inquiries.count_documents({
-                "sellerId": seller_id_str,
+                "sellerId": seller_oid,
                 "status": "pending"
             })
             
-            this_month_enquiries = await count_accepted_inquiries_this_month(db, seller_id_str)
+            # SSOT: Use subscription service
+            subscription = await get_effective_subscription(db, seller_oid)
+            this_month_enquiries = await check_and_update_monthly_usage(db, seller_oid)
             
-            # Subscription
-            subscription = seller.get("subscription", {"plan": "free"})
-            plan = subscription.get("plan", "free")
-            plan_config = SUBSCRIPTION_PLANS.get(plan, SUBSCRIPTION_PLANS["free"])
-            subscription_status = get_sub_status(subscription)
-            
-            inquiry_limit = plan_config.get("inquiryLimit", 5)
-            is_unlimited = subscription_status == "unlimited"
+            plan = subscription["plan"]
+            is_unlimited = subscription["isUnlimited"]
+            inquiry_limit = subscription["limit"]
             
             return {
                 "totalListings": total_listings,
