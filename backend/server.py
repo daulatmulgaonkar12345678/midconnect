@@ -7735,17 +7735,20 @@ async def admin_update_product(
     if updates.description is not None:
         update_data["description"] = updates.description
     
-    # Handle multiple spec templates - SSOT: camelCase
+    # ARCHITECTURAL FIX: Strict validation of specTemplateIds
     if updates.specTemplateIds is not None:
-        # Verify all templates exist
-        for template_id in updates.specTemplateIds:
-            try:
-                template = await db.specTemplates.find_one({"_id": ObjectId(template_id)})
-                if not template:
-                    raise HTTPException(status_code=400, detail=f"Spec template not found: {template_id}")
-            except Exception:
-                raise HTTPException(status_code=400, detail=f"Invalid template ID: {template_id}")
-        update_data["specTemplateIds"] = [ObjectId(tid) for tid in updates.specTemplateIds]
+        # Get the product's category for validation
+        product_category_id = existing.get("categoryId")
+        if not product_category_id:
+            raise HTTPException(status_code=400, detail="Product has no category assigned")
+        
+        # Validate all templates: exist, active, matching category
+        validated_template_oids = await validate_spec_template_ids(
+            updates.specTemplateIds,
+            str(product_category_id),
+            db
+        )
+        update_data["specTemplateIds"] = validated_template_oids
     
     if updates.family is not None:
         update_data["family"] = updates.family
