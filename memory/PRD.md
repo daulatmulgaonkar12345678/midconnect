@@ -13,6 +13,63 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## ENTERPRISE PRODUCT ARCHITECTURE (Phase 1 Activated)
+
+### 4-Layer Model (Now Enforced)
+```
+Category → SpecTemplate → Product → ProductVariant → SellerListing
+                                         ↓
+                              searchableAttributes (denormalized)
+                              searchableText (full-text ready)
+```
+
+### New Collections Activated
+```json
+// productVariants collection
+{
+  "_id": ObjectId,
+  "productId": ObjectId,
+  "attributes": { "power": 45, "voltage": "415" },
+  "attributeHash": "abc123...",  // For deduplication
+  "templateVersions": [...],
+  "isActive": true
+}
+```
+
+### Denormalized Fields in sellerListings
+```json
+{
+  "variantId": ObjectId,              // Required - links to productVariants
+  "searchableAttributes": {...},       // Denormalized from variant
+  "searchableText": "motor 45kw...",   // For text search
+  "attributeLabels": {...}             // Human-readable labels
+}
+```
+
+### Enterprise Indexes Created
+- `enterprise_text_search` - Weighted text index on searchableText + description
+- `product_variant_idx` - Compound index for product/variant queries
+- `product_attrs_idx` - Attribute filtering index
+- `variant_dedup_idx` - Unique index preventing duplicate variants
+
+### New Enterprise Endpoints
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /products/{id}/enterprise` | Single aggregation product page |
+| `GET /products/{id}/facets` | Dynamic filter values |
+| `POST /products/{id}/filter` | Structured attribute filtering with fallback |
+| `GET /admin/enterprise/status` | Migration status |
+| `POST /admin/enterprise/migrate` | Run enterprise migration |
+| `POST /admin/enterprise/indexes` | Create enterprise indexes |
+
+### Fallback Logic (4 Levels)
+1. Remove lowest priority filter
+2. Expand numeric range ±10%
+3. Show other variants same product
+4. Show related category products
+
+---
+
 ## ENTERPRISE SUBSCRIPTION ARCHITECTURE (Final)
 
 ### Single Source of Truth (SSOT)
