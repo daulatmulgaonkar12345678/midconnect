@@ -7490,6 +7490,91 @@ async def admin_get_product(
     
     return {"product": serialized}
 
+
+# ==================== SPEC TEMPLATE VALIDATION HELPER ====================
+
+async def validate_spec_template_ids(
+    template_ids: List[str],
+    category_id: str,
+    db_instance
+) -> List[ObjectId]:
+    """
+    ARCHITECTURAL FIX: Strict validation of spec template IDs.
+    
+    Validates that each template:
+    1. Exists in specTemplates collection
+    2. Is active (isActive != false)
+    3. Has matching categoryId
+    
+    Returns list of validated ObjectIds.
+    Raises HTTPException if any validation fails.
+    """
+    if not template_ids:
+        return []
+    
+    validated_oids = []
+    category_oid = ObjectId(category_id) if isinstance(category_id, str) else category_id
+    category_id_str = str(category_oid)
+    
+    for template_id in template_ids:
+        # Step 1: Convert to ObjectId safely
+        try:
+            template_oid = ObjectId(template_id)
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Invalid template ID format",
+                    "templateId": template_id,
+                    "message": f"Template ID '{template_id}' is not a valid ObjectId"
+                }
+            )
+        
+        # Step 2: Fetch template from DB
+        template = await db_instance.specTemplates.find_one({"_id": template_oid})
+        
+        if not template:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Template not found",
+                    "templateId": template_id,
+                    "message": f"Spec template '{template_id}' does not exist"
+                }
+            )
+        
+        # Step 3: Check if template is active
+        if template.get("isActive") == False:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Template is inactive",
+                    "templateId": template_id,
+                    "message": f"Spec template '{template_id}' has been deactivated"
+                }
+            )
+        
+        # Step 4: Check category match
+        template_category = template.get("categoryId")
+        template_category_str = str(template_category) if template_category else None
+        
+        if template_category_str != category_id_str:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Category mismatch",
+                    "templateId": template_id,
+                    "templateCategory": template_category_str,
+                    "productCategory": category_id_str,
+                    "message": f"Spec template '{template_id}' belongs to a different category"
+                }
+            )
+        
+        validated_oids.append(template_oid)
+    
+    return validated_oids
+
+
 @api_router.post("/admin/products")
 async def admin_create_product(
     product: AdminProductCreate,
