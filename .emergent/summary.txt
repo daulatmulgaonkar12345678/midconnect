@@ -1,118 +1,79 @@
 <analysis>original_problem_statement:
-The user wants to implement a new role-based registration flow for an existing B2B marketplace application named midconnect. The project uses FastAPI, Next.js, MongoDB, and Firebase.
+The user wants to build and refactor a B2B marketplace application named midconnect. The project has evolved through several phases of implementation and architectural improvement.
 
-**PRODUCT REQUIREMENTS (Summary of 10 Phases):**
+**Initial Goal**: Implement a new role-based registration flow where users sign up via Firebase, complete their profile (Buyer or Seller), and then have a corresponding user created in MongoDB with specific roles and permissions.
 
-1.  **Frontend Registration Flow**:
-    *   **Step 1 (Sign Up)**: User signs up with email/password. This creates a Firebase user and sends a verification email. **No MongoDB user is created at this stage.**
-    *   **Step 2 (Post-Verification)**: On login, if the user's email is verified, they are redirected to a Profile Completion page.
-    *   **Profile Completion**: The user must select an account type: Buyer or Seller.
-        *   **Buyer**: Fills out Name, Mobile, Address, City, State, Pincode.
-        *   **Seller**: Fills out the same fields as a buyer, PLUS a GST Number.
-
-2.  **Backend Database Structure**:
-    *   A new endpoint will handle the profile completion data and create the user in MongoDB.
-    *   The MongoDB user document must strictly adhere to a specific schema, including fields like ,  (e.g.,  or ), ,  object,  details, etc.
-    *   The  object status will be  for new sellers.
-    *   The pincode will be validated, and latitude/longitude will be fetched and stored in  and .
-
-3.  **Seller State & Permissions**:
-    *   A seller's status is *derived*, not stored. It depends on  containing seller and the value of .
-    *   **Not a Seller**: Cannot create or publish products.
-    *   **Seller (GST Pending)**: Can create/edit product drafts but cannot publish them.
-    *   **Seller (GST Verified)**: Has full permissions (draft, publish, edit, delete).
-
-4.  **Backend Endpoint Logic**:
-    *   Product creation/publishing endpoints must enforce the new permission rules.
-
-5.  **Frontend Seller Dashboard**:
-    *   Display a banner indicating GST verification in progress if the seller's GST is pending.
-
-6.  **Atomic Registration**:
-    *   If the MongoDB user creation fails after Firebase user creation, the corresponding Firebase user must be deleted to prevent orphan accounts.
+**Subsequent Architectural Goals (Implemented & In Progress):**
+1.  **Clean Email Verification**: Create the MongoDB user immediately on signup (status: pending) and use a background job to clean up unverified users, preventing orphan Firebase accounts.
+2.  **Unified GST System**: Refactor the database and application logic to use a single  object () as the single source of truth (SSOT), removing all legacy GST-related fields.
+3.  **Data Integrity & Consistency**: Fix numerous data inconsistencies, including  vs  variables, and standardize data types (e.g., ensuring all  fields referencing other collections are stored as ).
+4.  **Product Listing Validation**: Enforce strict server-side validation to prevent incomplete product listings from being published.
+5.  **Product ↔ SpecTemplate Architecture**: Perform a major data migration and architectural refactor to ensure products can only reference valid, active  that belong to the same category. This involved cleaning up orphan references and adding strict backend validation.
+6.  **Enterprise Subscription Enforcement**: Refactor the subscription logic to use the  collection as the SSOT, correctly handle plan expirations (e.g., a Pro plan falling back to a Free tier), and enforce monthly usage limits. This is the current task.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The agent has cloned the user's existing  project from GitHub. It has implemented significant changes on both the backend and frontend to support the new role-based registration flow. This includes creating new API endpoints, new frontend pages (, ), updating authentication logic (), and adding permission checks.
+The agent has successfully executed a series of significant refactoring and feature implementation tasks on the  application. The codebase is now more robust, with a clearer separation of concerns and improved data integrity.
 
-However, the development process was severely hampered by multiple environment resets (), which caused the loss of frontend files. The agent spent considerable time restoring files from a temporary backup and re-applying the necessary code changes. The project is currently in a non-working state due to a TypeScript build error on the frontend.
+- A new, multi-step registration flow is in place.
+- The email verification process is atomic and includes cleanup for unverified users.
+- GST and Subscription systems have been refactored to rely on dedicated MongoDB collections as the single source of truth, with legacy fields removed.
+- Data integrity between  and  has been enforced through backend validation and a one-time data migration.
+- A new backend service, , has been created to centralize all subscription-related business logic.
+
+The application was in a stable, tested state before the current Enterprise Subscription Enforcement task began.
 
 **Last working item**:
-- Last item agent was working: The agent was attempting to resolve a critical TypeScript build error in the Next.js frontend. The error, , prevents the application from compiling and running. The user provided a detailed, step-by-step guide to fix this by explicitly exporting the  type and correcting its usage in .
+- Last item agent was working: The agent was implementing the user's detailed plan for an Enterprise Subscription Model. This involves refactoring the logic that checks a seller's ability to accept new inquiries. The agent created the new file  containing the core logic and started integrating it into the  endpoint in .
 - Status: IN PROGRESS
 - Agent Testing Done: N
-- Which testing method agent to use? Frontend testing agent
+- Which testing method agent to use? both
 - User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: TypeScript Build Error (P0)**
-    -   Description: The Vercel/Next.js build is failing with the error: . This is because the frontend type definitions are not perfectly aligned with the MongoDB schema, and there might be a module export/resolution issue. The user has provided a precise fix.
+-   **Issue 1: Complete Enterprise Subscription Enforcement (P0)**
+    -   Description: The agent has started but not finished refactoring the subscription logic. The goal is to use the new  to correctly determine a user's monthly lead limit based on their subscription status (active, expired, free) and enforce it when they try to accept an inquiry.
     -   Status: IN PROGRESS
-    -   Is recurring issue? Y (The agent has struggled with type definitions throughout the session).
-    -   Should Test frontend/backend/both after fix? Both (Frontend to confirm the build passes and UI works as expected, Backend to ensure frontend changes didn't break API communication).
+    -   Is recurring issue? N
+    -   Should Test frontend/backend/both after fix? Both
 
--   **Issue 2: Environment Instability (P1)**
-    -   Description: The agent's environment has reset multiple times, causing a complete loss of the  directory. This forced the agent to repeatedly restore files from a backup () and re-apply all frontend code changes. This is a high-risk environmental problem.
-    -   Status: RESOLVED (by platform, but recurrence is possible)
-    -   Is recurring issue? Y
-    -   Should Test frontend/backend/both after fix? NA
+    **Issues Detail:**
+    -   **Issue 1:**
+        -   **Attempted fixes:** The agent successfully created  and began modifying the  endpoint in .
+        -   **Next debug checklist**:
+            1.  In , complete the replacement of the old subscription check logic inside the  endpoint with calls to  and  from the new service.
+            2.  After a lead is successfully accepted, ensure the logic to increment the  counter in the  collection is correctly implemented ().
+            3.  Update the  endpoint in  to use the new subscription service and return the unified data structure for plan, status, and usage.
+            4.  Update the admin panel endpoints for activating subscriptions to ensure  and  are correctly initialized.
+            5.  Update the seller frontend to properly handle the new detailed  error response and display an informative notification.
+        -   **Why fix this issue and what will be achieved with the fix?** This will fix a critical bug where sellers on expired plans were being incorrectly blocked. The fix will create a robust, scalable subscription system that correctly handles different plan states and enforces usage limits, aligning the application with the user's business rules.
 
 **In progress Task List**:
--   **Task 1: Implement Role-Based Registration Flow (P0)**
-    -   Description: This is the main task requested by the user. The agent has made changes to the backend (models, endpoints) and frontend (pages, context, API calls) but is blocked by the TypeScript build error.
-    -   Where to resume: The agent must first apply the user-provided fix for the TypeScript error. After the fix, a full end-to-end test of the new registration flow is required.
-    -   What will be achieved with this? A complete, working, and testable implementation of the new user registration and permission system.
-    -   Status: BLOCKED
-    -   Should Test frontend/backend/both after fix? Both
-    -   Blocked on something: Issue 1: TypeScript Build Error.
+-   **Task 1: Implement Enterprise Subscription Enforcement (P0)**
+    -   **Where to resume**: Continue editing the  function within  to fully integrate the new subscription service logic.
+    -   **What will be achieved with this?** A production-grade subscription system where plan limits are correctly enforced, expirations are handled gracefully, and both sellers and admins have a clear view of subscription status.
+    -   **Status**: IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Both
+    -   **Blocked on something**: None.
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks:**
-  - **P0: Full End-to-End Testing**: Once the build error is fixed, perform a comprehensive test of the entire new flow:
-      1. Register a new user.
-      2. Verify the email verification step (mock or manual).
-      3. Log in and get redirected to the  page.
-      4. Complete the profile as a Buyer and verify correct data is saved and no GST field is shown.
-      5. Complete the profile as a Seller and verify GST field is present and data is saved correctly.
-      6. Verify the seller dashboard shows the GST pending banner.
-      7. Test product creation permissions for a non-seller, a pending seller, and a (manually) verified seller.
-  - **P1: Pincode to Geolocation Logic**: Implement the backend logic to validate a pincode against the  collection and store the corresponding latitude and longitude in the user's profile upon creation/update.
-
+    - **P1: Frontend Subscription UI**: Update the seller dashboard to display the correct subscription status (e.g., Pro Plan, Expired - Free Mode) based on the data from the new  endpoint. Implement UI to show a clear notification when the monthly lead limit is reached.
 - **Future Tasks:**
-  - None specified beyond the initial 10-phase plan.
+    - **P2: Implement Banned Seller Status**: Add a  field ( |  | ) to the user schema. Implement middleware to block actions for banned sellers and display a persistent Account Suspended banner on their dashboard.
 
 **Completed work in this session**
-- **Backend (FastAPI):**
-  - Updated :
-    - Added  Pydantic model for the new profile completion step.
-    - Modified the  endpoint to only create a Firebase user.
-    - Created a new endpoint  to handle profile completion and create the MongoDB user document with the correct structure (, , , etc.).
-    - Implemented atomic registration logic to delete the Firebase user if MongoDB insertion fails.
-    - Created a new endpoint  to provide GST status to the frontend.
-  - Updated :
-    - Added permission checks to product creation () to ensure only sellers can create drafts.
-    - Added permission checks to product publishing/updating endpoints to ensure only sellers with verified GST can publish products.
-
-- **Frontend (Next.js):**
-  - Created new pages:
-    - : A form for users to select their role (Buyer/Seller) and fill in profile details post-email verification.
-    - : A placeholder page to guide users after registration.
-  - Modified existing files:
-    - : Added new functions  and .
-    - : Major updates to handle the new multi-step registration flow, check for email verification, and manage user state.
-    - : Overhauled the registration page UI and logic to only handle the initial Firebase user creation and then direct users to verify their email.
-    - : Updated to handle redirects for users who haven't completed their profile.
-    - : Added logic to display a banner based on the seller's GST verification status.
-  - Updated type definitions in  to include the  property in the  and  interfaces (this is the area of the current bug).
-
-**Earlier issues found/mentioned but not fixed**
-- **Issue 1: Pre-existing Linting Errors**
-  - Description:  reported several pre-existing issues in the original  codebase. The agent correctly identified these as out-of-scope and did not attempt to fix them.
-  - Status: NOT STARTED (and not required)
-
-**Known issue recurrence from previous fork**
-- None.
+- **Architecture & Refactoring:**
+    - Migrated the  relationship to a stable, normalized architecture with strict validation and data integrity, including a database migration script ().
+    - Aligned all backend subscription logic with the MongoDB schema, standardizing on  (ObjectId) and  fields, and removing all legacy queries.
+    - Unified the GST verification system under a single  object schema, removing legacy fields and updating all relevant admin and seller endpoints.
+    - Refactored the email verification flow to be atomic and added a background job to clean up unverified users.
+- **Features & Bug Fixes:**
+    - Added server-side validation to prevent publishing incomplete product listings.
+    - Fixed a critical frontend build error by removing a legacy  function.
+    - Fixed numerous variable naming mismatches ( vs. ) between the frontend and backend.
+    - Implemented the initial role-based registration and profile completion flow.
 
 **Code Architecture**
 
@@ -120,72 +81,68 @@ However, the development process was severely hampered by multiple environment r
 **Key Technical Concepts**
 -   **Backend**: FastAPI, MongoDB (via ), Pydantic
 -   **Frontend**: Next.js, React, TypeScript, Tailwind CSS
--   **Authentication**: Firebase Authentication (for user creation, email verification, and token management)
--   **Architecture**: Monorepo-like structure with separate  and  directories. State management on the frontend is handled via React Context ().
+-   **Authentication**: Firebase Authentication
+-   **Architecture**: Monorepo-like structure, Service-oriented backend logic (), React Context for frontend state.
 
 **key DB schema**
-- **users** collection:
-  
-
-**changes in tech stack**
-- None.
+-   **users**: 
+-   **subscriptions**: 
+-   **products**: 
+-   **specTemplates**: 
 
 **All files of reference**
-- : Modified to split registration and profile completion logic.
-- : Modified to add role-based permission checks.
-- : Modified to add new API call functions.
-- : Heavily modified to orchestrate the new auth flow.
-- : Modified to update user type definitions; contains the current bug.
-- : New file for the profile completion form.
-- : Overwritten with new registration logic.
-- : Modified to handle redirection.
-- : Modified to show GST status.
+-   : **(New)** Contains the new centralized logic for subscription status and limits.
+-   : **(Being Modified)** Contains the  endpoint that needs to be updated.
+-   : Contains numerous endpoints that were refactored (auth, admin, GST, subscription status).
+-   : Contains the product requirements and changelog.
+-   : The seller dashboard UI that will need updating for subscription status.
+-   : Contains all frontend API call definitions.
 
 **Areas that need refactoring**:
-- The entire  directory should be considered fragile due to the repeated file loss and restoration. A clean  or restoration might be safer than continuing with the current state if more issues arise.
-- The user-provided fix for the TypeScript issue involves creating an  in the  directory. The agent should ensure this is the correct pattern and doesn't conflict with existing structure.
+- The main  file is still very large and handles many responsibilities (authentication, admin panels, user profiles, etc.). It could be broken down into more specific routers (e.g., , ) to improve maintainability.
 
 **key api endpoints**
-- : (Modified) Now only creates a Firebase user.
-- : (New) Creates the MongoDB user after email verification and profile submission.
-- : (New) Fetches the seller's GST and verification status.
-- : (Modified) Permission check added.
-- : (Modified) Permission check added for publishing.
+-   : **(Being Refactored)** Core seller action, getting new subscription enforcement logic.
+-   : **(To be Refactored)** Provides subscription and usage details to the seller frontend.
+-   : Admin endpoint to approve/reject a seller's GST.
+-   : Validates and publishes a product listing.
+-   : One-off endpoint created to clean up production data integrity issues.
 
 **Critical Info for New Agent**
-1.  **You are fixing a TypeScript build error.** The user has provided very specific, step-by-step instructions in the last message (). You MUST follow this plan exactly to fix the error: .
-2.  **The environment is unstable.** The previous agent experienced multiple pod terminations that resulted in the complete loss of the  directory. It had to be restored from a backup. Be prepared for this possibility and verify file integrity frequently.
-3.  **The goal is a complex, multi-step registration flow.** Do not treat this as a simple auth change. Review the full 10-phase plan in the .
-4.  **After the build fix, comprehensive testing is mandatory.** The previous agent was unable to perform a full end-to-end test. You must verify the entire flow from registration to product publishing permissions.
+1.  **You are mid-implementation.** The immediate task is to complete the subscription logic refactor outlined in the last user message. Resume work in  to integrate the new .
+2.  **The Database is the Single Source of Truth (SSOT).** All recent architectural changes enforce this principle. Do not use derived values; new logic must query the appropriate collection (, , etc.) for authoritative data.
+3.  **Follow the User's Plan Exactly.** The user provides detailed, enterprise-grade architectural instructions. Your primary goal is to implement their latest plan for the Enterprise Subscription Model without deviation.
+4.  **Firebase Auth is Mocked.** The environment is not configured with Firebase credentials. This is a known limitation. Test backend logic by calling API endpoints directly with a valid token (e.g., the dev token from  dependency).
 
 **documents and test reports created in this job**
-- None. The agent was about to create  but was interrupted.
+-   : Updated regularly with completed tasks and future plans.
+-   : Multiple test reports were generated by the testing agent. The last run before the current task began showed all tests passing.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User**: Provides detailed instructions to fix the TypeScript build error () by fixing type exports and imports. (PENDING IMPLEMENTATION)
-2.  **User**: Provides analysis of why the build is failing, pointing to the  type not having the  property on the frontend.
-3.  **User**: Provides git clone URL for the  project.
-4.  **User**: Asks the agent to confirm that it will only update the project and not delete anything.
-5.  **User**: Clarifies that  is their project with data, emphasizing the risk of deletion.
+1.  **User (Chat 503):** Provided a detailed plan to implement an Enterprise Subscription Model using the  collection as the SSOT, handling expired plans, and enforcing monthly lead limits. **This is the current, in-progress task.**
+2.  **User (Chat 461):** Instructed to perform a final data integrity migration for the  relationship, converting all  fields to  and cleaning up any remaining mismatches. (DONE)
+3.  **User (Chat 420):** Provided a long-term architectural fix for the  relationship, focusing on strict validation and automatic cleanup of orphan references. (DONE)
+4.  **User (Chat 381):** Instructed to fix a frontend build failure by removing a legacy  function. (DONE)
+5.  **User (Chat 346):** Instructed to add server-side validation to prevent the publication of incomplete product listings. (DONE)
+6.  **User (Chat 289):** Instructed to align backend subscription code with the MongoDB schema, standardizing on  and  for . (DONE)
+7.  **User (Chat 232):** Provided instructions to fix subscription-related variable mismatches between the frontend and backend. (DONE)
+8.  **User (Chat 163):** Instructed to unify the GST system under a single  object, removing all legacy fields. (DONE)
+9.  **User (Chat 74):** Provided a plan for a clean email verification architecture with background cleanup jobs. (DONE)
+10. **User (Chat 5):** Provided the initial fix for a TypeScript build error and laid out the first set of tasks for the session. (DONE)
 
 **Project Health Check:**
-- **Broken**: The frontend has a critical TypeScript build error that prevents it from compiling and running.
+- **In Progress**: The enterprise subscription feature is partially implemented. The application is not in a runnable state for end-to-end testing until this feature is complete.
+- **Mocked**: Firebase authentication is not configured in the environment, which prevents a true end-to-end test of the registration flow.
 
 **3rd Party Integrations**
 -   Firebase (Authentication)
 -   MongoDB (Database)
 
 **Testing status**
--   Testing agent used after significant changes: YES (but it failed due to a URL configuration issue, which was later resolved).
+-   Testing agent used after significant changes: YES. The agent was used successfully after each major architectural change. The last full run passed before the current subscription task began.
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: []
--   Known regressions: The frontend is currently not building due to a TypeScript error introduced during the implementation.
+-   Known regressions: None from previous work, but the current in-progress changes to subscription logic will temporarily break inquiry acceptance until fully implemented and tested.
 
 **Credentials to test flow:**
-- None provided. The agent noted that the Firebase Admin SDK is not configured, which will likely prevent backend API calls that interact with Firebase from working. This needs to be addressed for full testing.
-
-**What agent forgot to execute**
-- The agent was interrupted by environment failures and then the final build error. It did not forget, but was blocked from:
-    1.  Fully implementing the user's latest instructions to fix the TypeScript bug ().
-    2.  Performing a full end-to-end test of the new registration flow.
-    3.  Creating the  file as part of the  step.</analysis>
+-   None provided. Testing relies on the hardcoded developer token within the backend's  dependency for authenticated API calls.</analysis>

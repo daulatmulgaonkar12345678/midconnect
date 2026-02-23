@@ -19,7 +19,7 @@ import os
 import json
 
 # Use public URL from environment
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://buyer-seller-flow-1.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://enterprise-subs-1.preview.emergentagent.com")
 
 class TestHealthEndpoint:
     """Test /api/health endpoint"""

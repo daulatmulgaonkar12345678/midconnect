@@ -29,7 +29,7 @@ with open('/app/frontend/.env', 'r') as f:
             BASE_URL = line.strip().split('=', 1)[1].strip()
             break
     else:
-        BASE_URL = "https://buyer-seller-flow-1.preview.emergentagent.com"
+        BASE_URL = "https://enterprise-subs-1.preview.emergentagent.com"
 
 API_URL = BASE_URL.rstrip('/')
 

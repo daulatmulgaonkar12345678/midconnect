@@ -12,7 +12,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://buyer-seller-flow-1.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://enterprise-subs-1.preview.emergentagent.com').rstrip('/')
 DEV_TOKEN = "dev-test-token"
 
 class TestHealthAndBasics:

@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://buyer-seller-flow-1.preview.emergentagent.com/api')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://enterprise-subs-1.preview.emergentagent.com/api')
 
 # Test data storage
 test_data = {
