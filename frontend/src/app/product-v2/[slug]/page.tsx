@@ -548,7 +548,7 @@ export default function EnterpriseProductPage() {
         limit: 50
       };
 
-      const result = await filterProductListings(productId, filterRequest);
+      const result = await filterProductListings(productId as string, filterRequest);
       setSellers(result.results);
       setFallbackMessage(result.fallbackMessage || null);
     } catch (err) {
