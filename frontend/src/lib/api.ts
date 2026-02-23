@@ -1381,6 +1381,9 @@ export const acceptInquiry = (
     email?: string;
     company?: string;
   };
+  sellerContact?: {
+    businessName?: string;
+  };
   quote: {
     price: number;
     validTill: string;
