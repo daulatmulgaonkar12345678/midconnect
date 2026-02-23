@@ -10703,6 +10703,18 @@ from routers.quotation_router import create_quotation_router
 quotation_router = create_quotation_router(db, get_current_user)
 app.include_router(quotation_router, prefix="/api")
 
+# ================== ADMIN ANALYTICS ROUTER ==================
+# Marketplace Control Center - Admin only
+from routers.admin_analytics_router import create_admin_analytics_router
+admin_analytics_router = create_admin_analytics_router(db, require_admin)
+app.include_router(admin_analytics_router, prefix="/api")
+
+# ================== SELLER PERFORMANCE ROUTER ==================
+# Seller Growth Optimization Console
+from routers.seller_performance_router import create_seller_performance_router
+seller_performance_router = create_seller_performance_router(db, get_current_user)
+app.include_router(seller_performance_router, prefix="/api")
+
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health
 # @app.get("/")
