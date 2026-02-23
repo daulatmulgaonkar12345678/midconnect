@@ -9016,77 +9016,61 @@ async def seller_get_subscription_status(user: dict = Depends(get_current_user))
     """
     Get seller's subscription status from dedicated subscriptions collection.
     
-    SINGLE SOURCE OF TRUTH: subscriptions collection
+    SINGLE SOURCE OF TRUTH: subscriptions collection via subscription_service
     
     Returns:
     - All subscription fields
     - Calculated: days_remaining, is_expiring_soon
     - Feature access flags
     """
-    user_id = str(user["_id"])
-    subscription = await get_or_create_subscription(user_id)
+    from services.subscription_service import get_subscription_status_for_seller
     
-    # CRITICAL: Serialize entire subscription to convert all ObjectIds
-    serialized_sub = serialize_mongo_doc(subscription)
-    
-    # Determine feature access
-    isActive = serialized_sub.get("status") == "active"
-    plan = serialized_sub.get("planName", "free")
-    
-    # Get this month's inquiry acceptances
-    now = datetime.now(timezone.utc)
-    month_start = datetime(now.year, now.month, 1)
-    next_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
-    
-    # SSOT: Use ObjectId for query
     user_oid = user["_id"] if isinstance(user["_id"], ObjectId) else ObjectId(user["_id"])
-    accepted_this_month = await db.inquiries.count_documents({
-        "sellerId": user_oid,
-        "status": "accepted",
-        "acceptedAt": {"$gte": month_start}
-    })
     
-    # Calculate limits and remaining
-    plan_config = SUBSCRIPTION_PLANS.get(plan, {})
-    inquiry_limit = plan_config.get("inquiryLimit", 5)
+    # Use the centralized subscription service (SSOT)
+    status_data = await get_subscription_status_for_seller(db, user_oid)
     
-    if inquiry_limit == -1:  # Unlimited
-        remaining = -1
-        limit_reached = False
+    # Get subscription info
+    sub_info = status_data["subscription"]
+    usage_info = status_data["usage"]
+    
+    plan = sub_info["planName"]
+    is_active = sub_info["status"] == "active"
+    is_unlimited = sub_info["isUnlimited"]
+    
+    # Calculate next reset
+    now = datetime.now(timezone.utc)
+    if now.month == 12:
+        next_month = datetime(now.year + 1, 1, 1)
     else:
-        remaining = max(0, inquiry_limit - accepted_this_month)
-        limit_reached = remaining == 0
-    
-    # Extract dates from serialized subscription (already ISO strings)
-    start_date = serialized_sub.get("startDate")
-    end_date = serialized_sub.get("endDate")
+        next_month = datetime(now.year, now.month + 1, 1)
     
     return {
         "subscription": {
             "planName": plan,
-            "status": serialized_sub.get("status"),
-            "startDate": start_date,
-            "endDate": end_date,
-            "daysRemaining": serialized_sub.get("daysRemaining"),
-            "isExpiringSoon": serialized_sub.get("isExpiringSoon"),
-            "isActive": isActive
+            "status": sub_info["status"],
+            "startDate": None,  # Not stored in new service
+            "endDate": sub_info.get("endDate"),
+            "daysRemaining": sub_info["daysRemaining"],
+            "isExpiringSoon": sub_info["isExpiringSoon"],
+            "isActive": is_active
         },
         "usage": {
-            "accepted_this_month": accepted_this_month,
-            "monthlyLimit": inquiry_limit,
-            "remaining": remaining,
-            "limitReached": limit_reached,
-            "resetsOn": next_month.strftime("%B 1, %Y")
+            "accepted_this_month": usage_info["used"],
+            "monthlyLimit": usage_info["limit"],
+            "remaining": usage_info["remaining"],
+            "limitReached": usage_info["remaining"] == 0 and not is_unlimited,
+            "resetsOn": usage_info["resetsOn"] or next_month.strftime("%B 1, %Y")
         },
         "features": {
-            "can_accept_inquiries": isActive and (plan in ["trial", "pro"] or not limit_reached),
-            "unlimitedInquiries": plan in ["trial", "pro"] and isActive,
-            "verifiedBadge": plan == "pro" and isActive,
-            "prioritySupport": plan == "pro" and isActive,
-            "analyticsAccess": plan == "pro" and isActive
+            "can_accept_inquiries": is_active or plan == "free",  # Free users can still accept up to limit
+            "unlimitedInquiries": is_unlimited,
+            "verifiedBadge": plan == "pro" and is_active,
+            "prioritySupport": plan == "pro" and is_active,
+            "analyticsAccess": plan == "pro" and is_active
         },
-        "show_expiry_warning": serialized_sub.get("isExpiringSoon", False),
-        "show_upgrade_cta": plan == "free" or serialized_sub.get("status") in ["expired", "suspended"]
+        "show_expiry_warning": sub_info["isExpiringSoon"],
+        "show_upgrade_cta": status_data.get("showUpgradeCta", plan == "free")
     }
 
 
