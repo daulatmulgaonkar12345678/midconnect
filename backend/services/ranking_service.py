@@ -237,14 +237,17 @@ class EnterpriseRankingService:
         # Recently updated
         updated_at = listing.get("updatedAt")
         if updated_at:
-            if isinstance(updated_at, str):
-                try:
+            try:
+                if isinstance(updated_at, str):
                     updated_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-                except:
-                    updated_at = None
-            
-            if updated_at and (datetime.now(timezone.utc) - updated_at) < timedelta(days=7):
-                quality_score += w.recently_updated
+                elif isinstance(updated_at, datetime) and updated_at.tzinfo is None:
+                    # Make naive datetime UTC-aware
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+                
+                if updated_at and (datetime.now(timezone.utc) - updated_at) < timedelta(days=7):
+                    quality_score += w.recently_updated
+            except Exception:
+                pass  # Skip if date parsing fails
         
         if breakdown:
             breakdown.add_component("quality", quality_score)
