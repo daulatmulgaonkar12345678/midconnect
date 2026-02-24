@@ -260,19 +260,50 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         return labels
     
     async def get_product_with_template(product_id: str):
+        """
+        Get product with its specTemplate.
+        
+        ENTERPRISE RULE: Uses specTemplateIds (array) - NOT singular specTemplateId.
+        Falls back to specTemplateId only for legacy data compatibility.
+        """
         try:
             product = await db.products.find_one({"_id": ObjectId(product_id)})
         except Exception:
             return None, None
+        
         if not product:
             return None, None
+        
         template = None
-        template_id = product.get("specTemplateId")
-        if template_id:
+        
+        # ENTERPRISE: Use specTemplateIds (array) as primary source
+        template_ids = product.get("specTemplateIds", [])
+        
+        if template_ids and len(template_ids) > 0:
+            template_id = template_ids[0]
+            
+            # Handle string or ObjectId
+            if isinstance(template_id, str):
+                template_id = ObjectId(template_id)
+            
             try:
-                template = await db.specTemplates.find_one({"_id": ObjectId(template_id)})
+                template = await db.specTemplates.find_one({"_id": template_id})
             except Exception:
                 pass
+        
+        # LEGACY FALLBACK: Check singular specTemplateId if array is empty
+        # TODO: Remove this fallback after full migration
+        if not template:
+            legacy_id = product.get("specTemplateId")
+            if legacy_id:
+                try:
+                    if isinstance(legacy_id, str):
+                        legacy_id = ObjectId(legacy_id)
+                    template = await db.specTemplates.find_one({"_id": legacy_id})
+                    logger.warning(f"Product {product_id} using legacy specTemplateId - should migrate to specTemplateIds")
+                except Exception:
+                    pass
+        
         return product, template
     
     def _get_seller_status_message(status: dict, gst: dict) -> str:
