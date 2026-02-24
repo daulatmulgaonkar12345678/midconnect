@@ -851,16 +851,27 @@ const addPricingTier = () => {
     }
     
     // Check mandatory attribute fields
-    if (specTemplate?.fields) {
+    if (specTemplate?.fields && specTemplate.fields.length > 0) {
       for (const field of specTemplate.fields) {
-        const isMandatory = field.isMandatory === true;
+        const isMandatory = field.isMandatory === true || field.required === true;
         if (isMandatory) {
           const attr = form.attributes[field.key];
           if (!attr || attr.value === '' || attr.value === null || attr.value === undefined) {
-            return `${field.label} is required`;
+            return `${field.label || field.key} is required`;
           }
         }
       }
+    } else {
+      // ENTERPRISE: No specTemplate means we can't create a listing
+      return 'This product does not have technical specifications defined. Please contact admin or choose a different product.';
+    }
+    
+    // ENTERPRISE: At least one attribute must be provided
+    const filledAttributes = Object.entries(form.attributes).filter(([_, val]) => 
+      val.value !== '' && val.value !== null && val.value !== undefined
+    );
+    if (filledAttributes.length === 0) {
+      return 'At least one technical specification is required';
     }
     
     // Validate pricing tiers
