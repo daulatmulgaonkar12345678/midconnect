@@ -488,6 +488,11 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 product = await db.products.find_one({"_id": listing["productId"]})
                 if product:
                     item["productName"] = product.get("name")
+            # Add category name lookup
+            if listing.get("categoryId"):
+                category = await db.categories.find_one({"_id": listing["categoryId"]})
+                if category:
+                    item["categoryName"] = category.get("name")
             enriched.append(item)
         
         return success_response({
