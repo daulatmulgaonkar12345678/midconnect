@@ -424,23 +424,37 @@ export interface SearchResult {
   guidanceDisclaimer?: string;
 }
 
-export const searchProducts = (
+export async function searchProducts(
   query: string,
-  options: { categoryId?: string; city?: string; state?: string; limit?: number; skip?: number } = {}
-): Promise<SearchResult> => {
+  options?: {
+    categoryId?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    lat?: number;
+    lng?: number;
+    radius_km?: number;
+    limit?: number;
+    skip?: number;
+  }
+): Promise<SearchResult> {
   const sanitizedQuery = sanitizeInput(query);
-  return fetchAPI<SearchResult>('/search/products', {
-    method: 'POST',
-    body: {
-      query: sanitizedQuery,
-      categoryId: options.categoryId ? encodeURIComponent(options.categoryId) : undefined,
-      city: options.city || undefined,
-      state: options.state || undefined,
-      limit: Math.min(options.limit || 50, 100),
-      skip: Math.max(options.skip || 0, 0),
-    },
-  });
-};
+  const params = new URLSearchParams();
+
+  params.append("q", sanitizedQuery);
+
+  if (options?.categoryId) params.append("category", options.categoryId);
+  if (options?.city) params.append("city", options.city);
+  if (options?.state) params.append("state", options.state);
+  if (options?.pincode) params.append("pincode", options.pincode);
+  if (options?.lat) params.append("lat", options.lat.toString());
+  if (options?.lng) params.append("lng", options.lng.toString());
+  if (options?.radius_km) params.append("radius_km", options.radius_km.toString());
+  if (options?.limit) params.append("limit", Math.min(options.limit, 100).toString());
+  if (options?.skip) params.append("skip", Math.max(options.skip, 0).toString());
+
+  return fetchAPI<SearchResult>(`/search?${params.toString()}`);
+}
 
 // ==================== User API ====================
 
