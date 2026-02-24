@@ -3,25 +3,16 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Search, Menu, X, User, LogOut, ShoppingBag, Settings, Package, ChevronDown, LayoutDashboard } from 'lucide-react';
+import { Menu, X, User, LogOut, ShoppingBag, Settings, Package, ChevronDown, LayoutDashboard } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { APP_NAME } from '@/lib/config';
+import EnterpriseSearchBar from './EnterpriseSearchBar';
 
 export default function Header() {
   const { user, profile, signOut, loading, isAdmin, isSeller, role } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const sanitizedQuery = searchQuery.trim().slice(0, 100);
-    if (sanitizedQuery) {
-      router.push(`/search?q=${encodeURIComponent(sanitizedQuery)}`);
-      setSearchQuery('');
-    }
-  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -32,32 +23,25 @@ export default function Header() {
   return (
     <header className="bg-white shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
             <ShoppingBag className="h-8 w-8 text-blue-600" />
-            <span className="text-xl font-bold text-gray-900">{APP_NAME}</span>
+            <span className="text-xl font-bold text-gray-900 hidden sm:inline">{APP_NAME}</span>
           </Link>
 
-          {/* Search Bar - Desktop */}
-          <form onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-lg mx-8">
-            <div className="relative w-full">
-              <input
-                type="text"
-                placeholder="Search products, categories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                maxLength={100}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-            </div>
-          </form>
+          {/* Enterprise Search Bar - Desktop */}
+          <div className="hidden md:block flex-1 max-w-2xl">
+            <EnterpriseSearchBar 
+              variant="header" 
+              showLocationFilter={true}
+            />
+          </div>
 
           {/* Navigation - Desktop */}
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/products" className="text-gray-600 hover:text-gray-900">Products</Link>
-            <Link href="/categories" className="text-gray-600 hover:text-gray-900">Categories</Link>
+          <nav className="hidden md:flex items-center gap-4 flex-shrink-0">
+            <Link href="/products" className="text-gray-600 hover:text-gray-900 text-sm">Products</Link>
+            <Link href="/categories" className="text-gray-600 hover:text-gray-900 text-sm">Categories</Link>
             
             {!loading && (
               user ? (
@@ -69,7 +53,7 @@ export default function Header() {
                     <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                       <User className="h-4 w-4 text-blue-600" />
                     </div>
-                    <span className="text-sm max-w-[120px] truncate">
+                    <span className="text-sm max-w-[100px] truncate">
                       {profile?.businessName || user.email?.split('@')[0]}
                     </span>
                     <ChevronDown className="h-4 w-4" />
