@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 import { User, Store, AlertCircle, CheckCircle, Building2 } from 'lucide-react';
+import LocationSelector from '@/components/LocationSelector';
 import type { ProfileCompleteData } from '@/lib/api';
-
-const INDIAN_STATES = ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Jammu and Kashmir', 'Ladakh'];
 
 export default function CompleteProfilePage() {
   const router = useRouter();
@@ -42,8 +41,8 @@ export default function CompleteProfilePage() {
     if (!formData.businessName.trim()) { setLocalError('Full name / Business name is required'); return false; }
     if (!formData.phone || formData.phone.length !== 10) { setLocalError('Please enter a valid 10-digit phone number'); return false; }
     if (!formData.address.trim() || formData.address.length < 5) { setLocalError('Please enter a valid address'); return false; }
-    if (!formData.city.trim()) { setLocalError('City is required'); return false; }
     if (!formData.state) { setLocalError('State is required'); return false; }
+    if (!formData.city.trim()) { setLocalError('City is required'); return false; }
     if (!formData.pincode || formData.pincode.length !== 6) { setLocalError('Please enter a valid 6-digit PIN code'); return false; }
     if (selectedRole === 'seller') {
       if (!formData.gstNumber) { setLocalError('GST number is required for seller registration'); return false; }
@@ -106,11 +105,18 @@ export default function CompleteProfilePage() {
               <div><label className="block text-sm font-medium text-gray-700 mb-2">Full Name / Business Name *</label><input type="text" value={formData.businessName} onChange={(e) => handleChange('businessName', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Your name or company name" data-testid="input-business-name" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number *</label><div className="flex"><span className="inline-flex items-center px-3 border border-r-0 border-gray-300 bg-gray-50 text-gray-500 rounded-l-lg">+91</span><input type="tel" value={formData.phone} onChange={(e) => handleChange('phone', e.target.value)} className="flex-1 px-4 py-3 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="10-digit mobile number" data-testid="input-phone" /></div></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-2">Address *</label><textarea value={formData.address} onChange={(e) => handleChange('address', e.target.value)} rows={2} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" placeholder="Street address, building, landmark" data-testid="input-address" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-2">City *</label><input type="text" value={formData.city} onChange={(e) => handleChange('city', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="City" data-testid="input-city" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-2">State *</label><select value={formData.state} onChange={(e) => handleChange('state', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" data-testid="select-state"><option value="">Select</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-              </div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-2">PIN Code *</label><input type="text" value={formData.pincode} onChange={(e) => handleChange('pincode', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="6-digit PIN code" data-testid="input-pincode" /></div>
+              
+              {/* Location Selector - Dropdowns for State, City, Pincode */}
+              <LocationSelector
+                state={formData.state}
+                city={formData.city}
+                pincode={formData.pincode}
+                onStateChange={(v) => handleChange('state', v)}
+                onCityChange={(v) => handleChange('city', v)}
+                onPincodeChange={(v) => handleChange('pincode', v)}
+                disabled={isSubmitting}
+              />
+              
               {selectedRole === 'seller' && (<div><label className="block text-sm font-medium text-gray-700 mb-2">GST Number *</label><input type="text" value={formData.gstNumber} onChange={(e) => handleChange('gstNumber', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono" placeholder="27AABCU9603R1ZM" data-testid="input-gst" /><p className="text-xs text-gray-500 mt-1">Your GST will be verified. You can create drafts while verification is pending.</p></div>)}
               <div className="flex items-start gap-2"><input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded" data-testid="checkbox-terms" /><label className="text-sm text-gray-600">I agree to the <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link> and <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link></label></div>
               <div className="flex gap-3 pt-2">
