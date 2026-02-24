@@ -707,16 +707,16 @@ export default function EnterpriseProductPage() {
               <div className="flex flex-wrap gap-3 mb-6">
                 <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg">
                   <Users className="h-4 w-4" />
-                  <span className="font-medium">{product.summary.sellerCount} Sellers</span>
+                  <span className="font-medium">{product.summary.sellerCount} {product.summary.sellerCount === 1 ? 'Seller' : 'Sellers'}</span>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 text-purple-700 rounded-lg">
                   <Layers className="h-4 w-4" />
-                  <span className="font-medium">{product.summary.variantCount} Variants</span>
+                  <span className="font-medium">{product.summary.variantCount} {product.summary.variantCount === 1 ? 'Variant' : 'Variants'}</span>
                 </div>
                 {product.summary.minPrice && (
                   <div className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg">
-                    <DollarSign className="h-4 w-4" />
-                    <span className="font-medium">From ₹{product.summary.minPrice.toLocaleString()}</span>
+                    <span className="font-bold">₹</span>
+                    <span className="font-medium">From ₹{product.summary.minPrice.toLocaleString('en-IN')}</span>
                   </div>
                 )}
               </div>
