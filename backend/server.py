@@ -1130,6 +1130,11 @@ def get_cors_origins():
     Web clients:
     - Need explicit origin list for credentials to work
     """
+    # Check for environment variable first (for production flexibility)
+    env_origins = os.environ.get("CORS_ORIGINS", "")
+    if env_origins:
+        return [o.strip() for o in env_origins.split(",") if o.strip()]
+    
     # FIXED: Always return explicit origins (wildcard + credentials = browser reject)
     ALLOWED_ORIGINS = [
         # Production domains
