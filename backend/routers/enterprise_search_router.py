@@ -157,69 +157,54 @@ def create_enterprise_search_router(db, require_auth=None):
     
     @router.get("")
     async def enterprise_search(
-        q: str = Query(..., min_length=1, description="Search query"),
-        category: Optional[str] = Query(None, description="Category filter"),
+        q: str = Query("", description="Search query"),
+        category: Optional[str] = Query(None, description="Category ID filter"),
+        manufacturer: Optional[str] = Query(None, description="Manufacturer ID filter"),
         # Location filters
-        pincode: Optional[str] = Query(None, description="User's pincode for location search"),
-        radius_km: Optional[int] = Query(None, description="Search radius in km"),
         city: Optional[str] = Query(None, description="Filter by city"),
         state: Optional[str] = Query(None, description="Filter by state"),
-        location_type: Optional[str] = Query(None, description="near_me, city, state, pan_india"),
-        # Attribute filters
-        min_price: Optional[float] = Query(None),
-        max_price: Optional[float] = Query(None),
-        voltage: Optional[float] = Query(None),
-        power_hp: Optional[float] = Query(None),
-        phase: Optional[str] = Query(None),
+        # Price filters
+        min_price: Optional[float] = Query(None, alias="minPrice"),
+        max_price: Optional[float] = Query(None, alias="maxPrice"),
+        # Stock filter
+        in_stock: Optional[bool] = Query(None, alias="inStock", description="Only show in-stock items"),
         # Pagination & sorting
         page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=100),
-        sort_by: str = Query("relevance", description="relevance, price_asc, price_desc, nearest, rating, recent"),
+        limit: int = Query(20, ge=1, le=50),  # HARD LIMIT: 50 max
+        sort_by: str = Query("relevance", alias="sortBy", description="relevance, price_asc, price_desc, rating, recent"),
     ):
         """
-        Enterprise-grade intelligent search.
+        Enterprise-grade search with compound filtering.
+        
+        ARCHITECTURE:
+        - Filter FIRST (structured fields with indexes)
+        - Score SECOND (ranking boosts)
+        - Hard limits: 50 results max, skip ≤ 5000
         
         Supports:
-        - Natural language queries ("half hp motor near me")
-        - Unit normalization
-        - Synonym matching
-        - Geo filtering
-        - Attribute extraction
-        - Intelligent fallback
+        - Text search with normalization
+        - Structured filters (category, manufacturer, location, price)
+        - Ranking boosts (premium, rating, stock, recency)
         """
-        try:
-            # Parse the query
-            parsed = search_normalizer.parse_search_query(q)
-            logger.info(f"Search query parsed: {parsed}")
-            
-            # Build search results using fallback strategy
-            results = await execute_search_with_fallback(
-                db=db,
-                parsed=parsed,
-                category_filter=category,
-                pincode=pincode,
-                radius_km=radius_km,
-                city=city,
-                state=state,
-                location_type=location_type,
-                min_price=min_price,
-                max_price=max_price,
-                voltage=voltage,
-                power_hp=power_hp,
-                phase=phase,
-                page=page,
-                limit=limit,
-                sort_by=sort_by
-            )
-            
-            # Log search for analytics
-            await log_search_analytics(db, q, parsed, len(results.get('listings', [])))
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Search error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+        from services.enterprise_search_service import create_enterprise_search_service
+        
+        search_service = create_enterprise_search_service(db)
+        
+        results = await search_service.search(
+            query=q,
+            category_id=category,
+            manufacturer_id=manufacturer,
+            city=city,
+            state=state,
+            min_price=min_price,
+            max_price=max_price,
+            in_stock_only=in_stock or False,
+            page=page,
+            limit=limit,
+            sort_by=sort_by
+        )
+        
+        return results
     
     @router.get("/autocomplete")
     async def search_autocomplete(
