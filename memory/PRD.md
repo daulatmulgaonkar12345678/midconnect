@@ -410,6 +410,87 @@ Production v1 of the Hybrid RFQ → Quote → WhatsApp → Acceptance System. Ke
 
 ---
 
+## ENTERPRISE ADMIN + SELLER PERFORMANCE SYSTEM (Completed Feb 24, 2026)
+
+### Phase A - Backend Intelligence (Complete)
+1. **Admin Analytics Service** (`/app/backend/services/admin_analytics_service.py`)
+   - Overview metrics (users, sellers, inquiries, quotes)
+   - Revenue analytics (MRR projection, subscription breakdown)
+   - Quote analytics with seller leaderboard
+   - Product analytics (conversion rates, top products)
+   - Lead funnel and response time distribution
+
+2. **Seller Performance Service** (`/app/backend/services/seller_performance_service.py`)
+   - Deterministic scoring (100 points max)
+   - Score breakdown: Response Speed (25) + Acceptance Rate (30) + Expiry Rate (15) + Subscription (10) + Lead Consistency (10) + Quote Completion (10)
+   - Performance tiers: Elite (90+), Strong (70-89), Good (50-69), Needs Improvement (30-49), At Risk (0-29)
+   - Marketplace averages for comparison
+   - Improvement suggestions engine
+
+3. **Monthly Aggregation Cron** (`/app/backend/cron/monthly_aggregation_cron.py`)
+   - Pre-computed stats for sellers, products, platform
+   - Nightly aggregation to reduce runtime load
+
+4. **RBAC + Audit Logging** (`/app/backend/services/admin_audit_service.py`)
+   - Mandatory audit logging for all admin actions
+   - RBAC enforcement helpers
+
+### Phase B - Governance Layer (Complete)
+1. **Seller Governance Service** (`/app/backend/services/seller_governance_service.py`)
+   - Seller status management (active, warned, suspended, banned)
+   - Lead acceptance blocking for suspended sellers
+   - Listing visibility control
+
+2. **Abuse Monitoring Service** (`/app/backend/services/abuse_monitoring_service.py`)
+   - High expiry detection (>40%)
+   - Slow responder detection (>24h)
+   - Zero conversion detection
+   - Suspicious activity patterns
+
+3. **Admin Governance Router** (`/app/backend/routers/admin_governance_router.py`)
+   - Suspend/unsuspend/warn sellers
+   - GST approve/reject with audit
+   - Market health monitoring
+
+### Phase C - Admin UI Layer (Complete)
+1. `/admin/analytics` - Admin Analytics Dashboard
+2. `/admin/ranking-control` - Ranking Weight Control UI
+3. `/admin/market-monitor` - Abuse Monitoring Dashboard
+
+### Phase D - Seller Dashboard (Complete)
+1. `/seller/performance` - Seller Performance Page
+   - Score badge and tier
+   - Score breakdown by category
+   - Lead usage stats
+   - Marketplace comparison
+   - Improvement suggestions
+
+### New API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/analytics/overview` | GET | Marketplace overview metrics |
+| `/api/admin/analytics/revenue` | GET | Revenue & subscription analytics |
+| `/api/admin/analytics/quotes` | GET | Quote analytics with leaderboard |
+| `/api/admin/analytics/leads` | GET | Lead funnel analytics |
+| `/api/admin/analytics/products` | GET | Product conversion analytics |
+| `/api/admin/analytics/audit-logs` | GET | Admin audit trail |
+| `/api/admin/analytics/run-aggregation` | POST | Manual aggregation trigger |
+| `/api/admin/governance/market-health` | GET | Marketplace health score |
+| `/api/admin/governance/abuse-summary` | GET | All abuse indicators |
+| `/api/admin/governance/seller/{id}/suspend` | POST | Suspend seller |
+| `/api/admin/governance/seller/{id}/warn` | POST | Warn seller |
+| `/api/admin/governance/gst/{id}/approve` | POST | Approve GST |
+| `/api/seller/performance` | GET | Seller's performance score |
+| `/api/seller/performance/lead-stats` | GET | Lead usage stats |
+
+### Governance Enforcement ✅
+- [x] Suspended sellers cannot accept leads
+- [x] Suspended sellers cannot create quotes
+- [x] All admin actions audited
+- [x] RBAC enforced on all endpoints
+
+---
+
 ## NEXT STEPS
 
 ### P0 - Critical
@@ -420,8 +501,9 @@ Production v1 of the Hybrid RFQ → Quote → WhatsApp → Acceptance System. Ke
 2. ~~Enterprise Ranking Engine~~ ✅ DONE - Deterministic weight-based ranking
 3. ~~Unified Subscription + Behavior Boost~~ ✅ DONE - Payment flow + behavior tracking
 4. ~~Hybrid Seller Quotation System~~ ✅ DONE - Quote flow with WhatsApp redirect
-5. Integrate actual payment gateway (Razorpay/Stripe) - Currently simulated
-6. Deprecate old product page (`/product/[slug]`) after production validation
+5. ~~Enterprise Admin + Seller Performance~~ ✅ DONE - Analytics + Governance + Performance
+6. Integrate actual payment gateway (Razorpay/Stripe) - Currently simulated
+7. Deprecate old product page (`/product/[slug]`) after production validation
 
 ### P2 - Medium Priority
 1. Email notifications for subscription events
