@@ -381,7 +381,7 @@ def create_enterprise_search_router(db, require_auth=None):
             if results["total"] > 0:
                 results["searchLevel"] = 3
                 results["searchType"] = "category_match"
-                results["suggestion"] = f"No exact matches. Showing all products in this category."
+                results["suggestion"] = "No exact matches. Showing all products in this category."
                 return results
         
         # === LEVEL 4: Trending/Popular products ===
