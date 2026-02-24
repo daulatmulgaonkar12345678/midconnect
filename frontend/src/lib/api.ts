@@ -1090,6 +1090,21 @@ export const getCategorySpecTemplate = (
   note?: string;
 }> => fetchWithAuth(`/seller/categories/${encodeURIComponent(categoryId)}/spec-template`, token);
 
+// NEW: Get spec template directly from product's specTemplateIds (more reliable)
+export const getProductSpecTemplate = (
+  token: string,
+  productId: string
+): Promise<{
+  product: {
+    _id: string;
+    name: string;
+    categoryId: string | null;
+    specTemplateIds: string[];
+  };
+  specTemplate: B2BSpecTemplate | null;
+  note?: string;
+}> => fetchWithAuth(`/seller/products/${encodeURIComponent(productId)}/spec-template`, token);
+
 // ==================== Image Upload ====================
 
 const ALLOWED_IMAGE_TYPES = [
