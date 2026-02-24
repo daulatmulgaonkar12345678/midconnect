@@ -721,8 +721,15 @@ def create_b2b_admin_router(db, require_admin):
         if not template:
             raise HTTPException(status_code=404, detail="Spec template not found")
         
-        # Check if template is in use
-        in_use = await db.products.count_documents({"specTemplateId": template_id})
+        # Check if template is in use (check both array and legacy singular)
+        try:
+            template_oid = ObjectId(template_id)
+        except:
+            template_oid = template_id
+        
+        in_use_array = await db.products.count_documents({"specTemplateIds": template_oid})
+        in_use_singular = await db.products.count_documents({"specTemplateId": template_oid})
+        in_use = in_use_array + in_use_singular
         
         if in_use > 0 and not force:
             raise HTTPException(
