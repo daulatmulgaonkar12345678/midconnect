@@ -540,6 +540,7 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         update_data = {"updatedAt": now}
         variant_changed = False
         new_variant = None
+        new_searchable_attrs = None
         
         if data.attributes is not None:
             current_variant = None
@@ -564,6 +565,8 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                     new_variant_oid = ObjectId(new_variant["_id"])
                     update_data["variantId"] = new_variant_oid
                     variant_changed = True
+                    # ENTERPRISE: Update searchableAttributes when variant changes
+                    new_searchable_attrs = new_variant.get("attributes", {})
                 except ValueError as e:
                     raise HTTPException(status_code=400, detail=str(e))
         
@@ -582,6 +585,29 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if data.leadTime is not None:
             update_data["leadTime"] = data.leadTime
         
+        # ============================================================
+        # ENTERPRISE GUARD: Validate update data
+        # ============================================================
+        try:
+            validated = enterprise_guard.validate_listing_for_update(
+                images=data.images,
+                searchable_attributes=new_searchable_attrs,
+                pricing_tiers=None,  # Pricing is handled separately
+                moq=data.moq,
+                stock=data.stock
+            )
+            # Apply validated values
+            for key, value in validated.items():
+                if key == "searchableAttributes" and value:
+                    update_data["searchableAttributes"] = value
+                elif key in ["images", "moq", "stock"]:
+                    update_data[key] = value
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Enterprise guard update validation failed: {e}")
+            raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}")
+        
         if data.status is not None:
             if data.status == "active":
                 seller_status = get_seller_status(seller)
@@ -594,6 +620,16 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                     raise HTTPException(status_code=400, detail="Cannot activate without pricing tiers")
                 if not moq:
                     raise HTTPException(status_code=400, detail="Cannot activate without MOQ")
+                
+                # ENTERPRISE GUARD: Additional checks for activation
+                current_images = update_data.get("images") or listing.get("images", [])
+                current_attrs = update_data.get("searchableAttributes") or listing.get("searchableAttributes", {})
+                
+                if not current_images:
+                    raise HTTPException(status_code=400, detail="Cannot activate listing without images")
+                if not current_attrs:
+                    raise HTTPException(status_code=400, detail="Cannot activate listing without technical specifications")
+                
                 if not listing.get("publishedAt"):
                     update_data["publishedAt"] = now
             update_data["status"] = data.status
