@@ -374,12 +374,16 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         # ============================================================
         # ENTERPRISE GUARD: Strict Write-Time Validation
         # ============================================================
-        # Get searchableAttributes from variant
+        # Get searchableAttributes ONLY from variant - NO FALLBACK to raw data.attributes
+        # This ensures attributes flow through the proper variant creation flow
         searchable_attributes = variant.get("attributes", {})
         
-        # If variant attributes are empty, check if seller provided attributes directly
-        if not searchable_attributes and data.attributes:
-            searchable_attributes = data.attributes
+        # STRICT: If variant has no attributes, reject the listing
+        if not searchable_attributes or len(searchable_attributes) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Variant has no technical specifications. Please provide attributes when creating the variant."
+            )
         
         # ENTERPRISE GUARD: Validate listing data before insert
         try:
