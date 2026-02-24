@@ -2,678 +2,402 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import type { AdminAnalytics, AdminKPIMetrics } from '@/types';
-import { 
-  getAdminAnalytics, 
-  getAdminKPIMetrics
-} from '@/lib/api';
-import { 
-  ArrowLeft, 
+import Link from 'next/link';
+import {
   Loader2,
-  Users,
-  Crown,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  RefreshCw,
-  XCircle,
-  Percent,
-  AlertTriangle,
-  BarChart3,
-  Activity,
-  Zap,
-  Target,
-  Shield,
-  Database,
-  CheckCircle,
   AlertCircle,
-  Info,
-  ChevronDown,
-  Calendar
+  Users,
+  TrendingUp,
+  FileText,
+  Package,
+  DollarSign,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownRight,
+  BarChart3,
+  RefreshCw
 } from 'lucide-react';
 
-// Brand Colors
-const colors = {
-  primary: '#1E3A8A',
-  accent: { from: '#2563EB', to: '#7C3AED' },
-  success: '#16A34A',
-  warning: '#F59E0B',
-  danger: '#DC2626',
-  background: '#F8FAFC',
-};
-
-// Metric Card Component
-function MetricCard({ 
-  icon: Icon, 
-  label, 
-  value, 
-  subtext, 
-  trend,
-  color = 'primary' 
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  subtext?: string;
-  trend?: { value: number; positive: boolean };
-  color?: 'primary' | 'success' | 'warning' | 'danger';
-}) {
-  const colorMap = {
-    primary: { bg: '#EFF6FF', icon: colors.primary, border: '#BFDBFE' },
-    success: { bg: '#DCFCE7', icon: colors.success, border: '#BBF7D0' },
-    warning: { bg: '#FEF3C7', icon: colors.warning, border: '#FDE68A' },
-    danger: { bg: '#FEE2E2', icon: colors.danger, border: '#FECACA' },
+interface OverviewData {
+  timestamp: string;
+  period: string;
+  users: {
+    total: number;
+    sellers: number;
+    buyers: number;
+    newThisMonth: number;
+    suspended: number;
   };
-  const c = colorMap[color];
-
-  return (
-    <div 
-      className="bg-white rounded-xl p-6 border transition-all duration-200 hover:shadow-md"
-      style={{ borderColor: c.border }}
-    >
-      <div className="flex items-start justify-between mb-4">
-        <div className="p-3 rounded-xl" style={{ backgroundColor: c.bg }}>
-          <Icon className="h-6 w-6" style={{ color: c.icon }} />
-        </div>
-        {trend && (
-          <div className={`flex items-center gap-1 text-sm ${trend.positive ? 'text-green-600' : 'text-red-600'}`}>
-            {trend.positive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-            {trend.value}%
-          </div>
-        )}
-      </div>
-      <p className="text-sm text-gray-500 mb-1">{label}</p>
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
-      {subtext && <p className="text-xs text-gray-400 mt-2">{subtext}</p>}
-    </div>
-  );
-}
-
-// Section Header Component
-function SectionHeader({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
-  return (
-    <div className="mb-6">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="p-2 rounded-lg" style={{ backgroundColor: '#EFF6FF' }}>
-          <Icon className="h-5 w-5" style={{ color: colors.primary }} />
-        </div>
-        <h2 className="text-xl font-bold text-gray-900">{title}</h2>
-      </div>
-      <p className="text-gray-500 text-sm ml-12">{description}</p>
-    </div>
-  );
-}
-
-// Simple Bar Chart Component
-function SimpleBarChart({ data, dataKey, color, label }: { 
-  data: Array<{ month: string; [key: string]: string | number }>;
-  dataKey: string;
-  color: string;
-  label: string;
-}) {
-  const maxValue = Math.max(...data.map(d => Number(d[dataKey]) || 0));
-  
-  return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium text-gray-700 mb-4">{label}</p>
-      {data.map((item, idx) => (
-        <div key={idx} className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 w-16">{item.month}</span>
-          <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-            <div 
-              className="h-full rounded-full transition-all duration-500 flex items-center justify-end pr-2"
-              style={{ 
-                width: `${maxValue > 0 ? (Number(item[dataKey]) / maxValue * 100) : 0}%`,
-                backgroundColor: color,
-                minWidth: Number(item[dataKey]) > 0 ? '30px' : '0'
-              }}
-            >
-              <span className="text-xs text-white font-medium">{item[dataKey]}</span>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Comparison Line Chart (Free vs Pro)
-function ComparisonChart({ data }: { 
-  data: Array<{ month: string; freeSellers: number; proSellers: number }>;
-}) {
-  const maxValue = Math.max(...data.flatMap(d => [d.freeSellers, d.proSellers]));
-  
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-6 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#94A3B8' }}></div>
-          <span className="text-xs text-gray-600">Free Sellers</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors.primary }}></div>
-          <span className="text-xs text-gray-600">Pro Sellers</span>
-        </div>
-      </div>
-      {data.map((item, idx) => (
-        <div key={idx} className="space-y-1">
-          <span className="text-xs text-gray-500">{item.month}</span>
-          <div className="flex gap-2">
-            <div className="flex-1 bg-gray-100 rounded h-4 overflow-hidden">
-              <div 
-                className="h-full rounded transition-all duration-500"
-                style={{ 
-                  width: `${maxValue > 0 ? (item.freeSellers / maxValue * 100) : 0}%`,
-                  backgroundColor: '#94A3B8'
-                }}
-              />
-            </div>
-            <div className="flex-1 bg-gray-100 rounded h-4 overflow-hidden">
-              <div 
-                className="h-full rounded transition-all duration-500"
-                style={{ 
-                  width: `${maxValue > 0 ? (item.proSellers / maxValue * 100) : 0}%`,
-                  backgroundColor: colors.primary
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Insight Badge Component
-function InsightBadge({ type, message }: { type: 'positive' | 'neutral' | 'warning'; message: string }) {
-  const config = {
-    positive: { bg: '#DCFCE7', border: '#BBF7D0', icon: CheckCircle, color: colors.success },
-    neutral: { bg: '#F3F4F6', border: '#E5E7EB', icon: Info, color: '#6B7280' },
-    warning: { bg: '#FEF3C7', border: '#FDE68A', icon: AlertCircle, color: colors.warning },
+  sellers: {
+    total: number;
+    free: number;
+    trial: number;
+    pro: number;
+    enterprise: number;
+    suspended: number;
   };
-  const c = config[type];
-  const Icon = c.icon;
-
-  return (
-    <div 
-      className="flex items-start gap-3 p-4 rounded-xl border"
-      style={{ backgroundColor: c.bg, borderColor: c.border }}
-    >
-      <Icon className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: c.color }} />
-      <p className="text-sm text-gray-700">{message}</p>
-    </div>
-  );
+  inquiries: {
+    total: number;
+    pending: number;
+    accepted: number;
+    thisMonth: number;
+  };
+  quotes: {
+    total: number;
+    sent: number;
+    viewed: number;
+    accepted: number;
+    rejected: number;
+    expired: number;
+    acceptanceRate: number;
+  };
+  performance: {
+    avgResponseTimeHours: number;
+    activeListings: number;
+  };
 }
 
-export default function AdminAnalyticsPage() {
+interface RevenueData {
+  subscriptions: {
+    active: { total: number; trial: number; pro: number; enterprise: number };
+    bySource: { manual: number; payment: number; unknown: number };
+  };
+  revenue: {
+    projectedMRR: number;
+    projectedMRRFormatted: string;
+  };
+  conversion: {
+    upgradesThisMonth: number;
+    conversionRate: number;
+    totalFreeSellers: number;
+  };
+  leadLimits: {
+    freeSellersAtLimit: number;
+    leadLimitForFree: number;
+  };
+}
+
+export default function AdminAnalyticsDashboard() {
   const router = useRouter();
-  const { getIdToken, isAuthenticated, loading: authLoading, user } = useAuth();
+  const { user, getIdToken, loading: authLoading } = useAuth();
   
+  const [overview, setOverview] = useState<OverviewData | null>(null);
+  const [revenue, setRevenue] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
-  const [kpiMetrics, setKpiMetrics] = useState<AdminKPIMetrics | null>(null);
-  const [selectedDays, setSelectedDays] = useState(30);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (authLoading) return;
-    
-    if (!isAuthenticated) {
-      router.push('/login?redirect=/admin/analytics');
-      return;
-    }
-
-    loadData();
-  }, [isAuthenticated, authLoading, selectedDays]);
-
-  async function loadData() {
+  const fetchData = async () => {
     try {
-      setLoading(true);
       const token = await getIdToken();
-      if (!token) throw new Error('Not authenticated');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
       
-      const [analyticsData, kpiData] = await Promise.all([
-        getAdminAnalytics(token, selectedDays),
-        getAdminKPIMetrics(token)
+      const [overviewRes, revenueRes] = await Promise.all([
+        fetch(`${API_URL}/api/admin/analytics/overview`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch(`${API_URL}/api/admin/analytics/revenue`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
       ]);
-      
-      setAnalytics(analyticsData);
-      setKpiMetrics(kpiData);
+
+      if (!overviewRes.ok || !revenueRes.ok) {
+        throw new Error('Failed to fetch analytics');
+      }
+
+      const [overviewData, revenueData] = await Promise.all([
+        overviewRes.json(),
+        revenueRes.json()
+      ]);
+
+      setOverview(overviewData);
+      setRevenue(revenueData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  };
 
-  if (loading || authLoading) {
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        router.push('/login');
+      } else {
+        fetchData();
+      }
+    }
+  }, [user, authLoading]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
+
+  if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.background }}>
-        <div className="text-center">
-          <Loader2 className="h-10 w-10 animate-spin mx-auto" style={{ color: colors.primary }} />
-          <p className="mt-4 text-gray-600">Loading analytics...</p>
-        </div>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.background }}>
-        <div className="text-center max-w-md mx-auto p-8">
-          <AlertTriangle className="h-12 w-12 mx-auto mb-4" style={{ color: colors.danger }} />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Unable to Load Analytics</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <button 
-            onClick={loadData}
-            className="px-6 py-3 rounded-lg font-medium text-white transition-all duration-200 hover:scale-[1.02]"
-            style={{ backgroundColor: colors.primary }}
-          >
-            Retry
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-slate-800 rounded-xl p-8 max-w-md text-center border border-slate-700">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">Error Loading Analytics</h2>
+          <p className="text-slate-400 mb-6">{error}</p>
+          <button onClick={handleRefresh} className="text-blue-400 hover:underline">
+            Try Again
           </button>
         </div>
       </div>
     );
   }
 
-  const kpi = kpiMetrics;
-  const anal = analytics;
-
   return (
-    <div className="min-h-screen" style={{ backgroundColor: colors.background }}>
+    <div className="min-h-screen bg-slate-900 text-white">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
             <div>
-              <Link 
-                href="/admin" 
-                className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm mb-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Dashboard
-              </Link>
-              <h1 className="text-2xl font-bold text-gray-900">Platform Analytics & Revenue Insights</h1>
-              <p className="text-gray-500 mt-1">
-                Real-time visibility into seller growth, subscription performance, and monetization metrics.
-              </p>
+              <h1 className="text-2xl font-bold flex items-center gap-3">
+                <BarChart3 className="h-7 w-7 text-blue-500" />
+                Admin Analytics
+              </h1>
+              <p className="text-slate-400 text-sm mt-1">Marketplace Control Center</p>
             </div>
-            <div className="flex items-center gap-3">
-              <select 
-                value={selectedDays}
-                onChange={(e) => setSelectedDays(Number(e.target.value))}
-                className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white"
-                data-testid="days-selector"
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
+                data-testid="refresh-btn"
               >
-                <option value={7}>Last 7 days</option>
-                <option value={30}>Last 30 days</option>
-                <option value={60}>Last 60 days</option>
-                <option value={90}>Last 90 days</option>
-              </select>
-              <button 
-                onClick={loadData}
-                className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                title="Refresh data"
-              >
-                <RefreshCw className="h-5 w-5 text-gray-500" />
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
               </button>
+              <Link
+                href="/admin/market-monitor"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg text-sm"
+              >
+                Market Monitor
+              </Link>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-10">
-
-        {/* ============== Section 1: Key Performance Overview ============== */}
-        <section data-testid="kpi-overview-section">
-          <SectionHeader 
-            icon={BarChart3} 
-            title="Key Performance Overview" 
-            description="These metrics update automatically based on live platform data."
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <StatCard
+            label="Total Users"
+            value={overview?.users.total || 0}
+            icon={<Users className="h-5 w-5" />}
+            color="blue"
+            subtext={`+${overview?.users.newThisMonth || 0} this month`}
           />
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <MetricCard 
-              icon={Users}
-              label="Total Sellers"
-              value={kpi?.sellerOverview.totalSellers || 0}
-              subtext="All registered sellers (Free + Pro)"
-              color="primary"
-            />
-            <MetricCard 
-              icon={Crown}
-              label="Active Pro Sellers"
-              value={kpi?.sellerOverview.proSellers || 0}
-              subtext="Pro subscriptions generating revenue"
-              color="success"
-            />
-            <MetricCard 
-              icon={TrendingUp}
-              label="Free → Pro Conversion"
-              value={`${kpi?.sellerOverview.conversionRate || 0}%`}
-              subtext="Indicates upgrade effectiveness"
-              color="primary"
-            />
-            <MetricCard 
-              icon={DollarSign}
-              label="Revenue This Quarter"
-              value={`₹${(kpi?.revenue.estimatedQuarterlyRevenue || 0).toLocaleString('en-IN')}`}
-              subtext="Based on Pro subscription payments"
-              color="success"
-            />
-          </div>
-        </section>
-
-        {/* ============== Section 2: Subscription Performance ============== */}
-        <section data-testid="subscription-health-section">
-          <SectionHeader 
-            icon={Activity} 
-            title="Subscription Health" 
-            description="Track subscription lifecycle and renewal performance."
+          <StatCard
+            label="Active Sellers"
+            value={overview?.sellers.total || 0}
+            icon={<TrendingUp className="h-5 w-5" />}
+            color="green"
+            subtext={`${overview?.sellers.suspended || 0} suspended`}
           />
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <MetricCard 
-              icon={RefreshCw}
-              label="Renewals This Quarter"
-              value={kpi?.subscriptionHealth.renewalsThisQuarter || 0}
-              subtext="Pro subscriptions renewed"
-              color="success"
-            />
-            <MetricCard 
-              icon={XCircle}
-              label="Expired Subscriptions"
-              value={kpi?.subscriptionHealth.expiredSubscriptions || 0}
-              subtext="Helps monitor churn risk"
-              color="danger"
-            />
-            <MetricCard 
-              icon={Percent}
-              label="Churn Rate"
-              value={`${kpi?.subscriptionHealth.churnRate || 0}%`}
-              subtext="Lower = stronger perceived value"
-              color={kpi?.subscriptionHealth.churnRate && kpi.subscriptionHealth.churnRate > 10 ? 'warning' : 'success'}
-            />
-            <MetricCard 
-              icon={AlertTriangle}
-              label="Expiring Soon"
-              value={kpi?.subscriptionHealth.expiringSoon || 0}
-              subtext="Subscriptions ending in 7 days"
-              color="warning"
-            />
-          </div>
-        </section>
-
-        {/* ============== Section 3: Usage & Monetization Signals ============== */}
-        <section data-testid="monetization-signals-section">
-          <SectionHeader 
-            icon={Zap} 
-            title="Free Plan Pressure Metrics" 
-            description="These metrics show whether your free limits are driving upgrades."
+          <StatCard
+            label="Total Quotes"
+            value={overview?.quotes.total || 0}
+            icon={<FileText className="h-5 w-5" />}
+            color="purple"
+            subtext={`${overview?.quotes.acceptanceRate || 0}% acceptance`}
           />
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: '#FEF3C7' }}>
-                  <Target className="h-5 w-5" style={{ color: colors.warning }} />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Inquiry Limit Exhaustion Rate</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {kpi?.monetizationSignals.limitExhaustionRate || 0}%
-                  </p>
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">
-                {kpi?.monetizationSignals.freeSellersAtLimit || 0} free sellers hit their {kpi?.monetizationSignals.freeMonthlyLimit || 5}/month limit
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                Higher exhaustion rate increases upgrade probability.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: '#EFF6FF' }}>
-                  <BarChart3 className="h-5 w-5" style={{ color: colors.primary }} />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Trial Sellers</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {kpi?.sellerOverview.trialSellers || 0}
-                  </p>
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">
-                Currently on 90-day trial period
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                Trial users experiencing full Pro benefits.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: '#DCFCE7' }}>
-                  <TrendingUp className="h-5 w-5" style={{ color: colors.success }} />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Free Sellers</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {kpi?.sellerOverview.freeSellers || 0}
-                  </p>
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">
-                Potential upgrade candidates
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                Each limited to {kpi?.monetizationSignals.freeMonthlyLimit || 5} inquiries/month.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ============== Section 4: Growth Trends (Charts) ============== */}
-        <section data-testid="growth-trends-section">
-          <SectionHeader 
-            icon={TrendingUp} 
-            title="Growth Trends" 
-            description="Visualize platform maturity and revenue scaling over time."
+          <StatCard
+            label="Projected MRR"
+            value={revenue?.revenue.projectedMRRFormatted || '₹0'}
+            icon={<DollarSign className="h-5 w-5" />}
+            color="emerald"
+            subtext="Based on active plans"
+            isText
           />
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Seller Growth Chart */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <h3 className="font-semibold text-gray-900 mb-4">Seller Growth Trend</h3>
-              <p className="text-xs text-gray-400 mb-6">Free vs Pro seller growth over time</p>
-              {kpi?.growthTrends && kpi.growthTrends.length > 0 ? (
-                <ComparisonChart data={kpi.growthTrends} />
-              ) : (
-                <p className="text-gray-400 text-sm">No growth data available</p>
-              )}
-            </div>
+        </div>
 
-            {/* Revenue Trend */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100">
-              <h3 className="font-semibold text-gray-900 mb-4">Monthly Revenue</h3>
-              <p className="text-xs text-gray-400 mb-6">Track monetization momentum</p>
-              {kpi?.growthTrends && kpi.growthTrends.length > 0 ? (
-                <SimpleBarChart 
-                  data={kpi.growthTrends} 
-                  dataKey="revenue" 
-                  color={colors.success}
-                  label="Revenue (₹)"
-                />
-              ) : (
-                <p className="text-gray-400 text-sm">No revenue data available</p>
-              )}
+        {/* Seller Breakdown */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700" data-testid="seller-breakdown">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-500" />
+              Seller Breakdown
+            </h3>
+            <div className="space-y-3">
+              <ProgressBar label="Free" value={overview?.sellers.free || 0} total={overview?.sellers.total || 1} color="slate" />
+              <ProgressBar label="Trial" value={overview?.sellers.trial || 0} total={overview?.sellers.total || 1} color="yellow" />
+              <ProgressBar label="Pro" value={overview?.sellers.pro || 0} total={overview?.sellers.total || 1} color="blue" />
+              <ProgressBar label="Enterprise" value={overview?.sellers.enterprise || 0} total={overview?.sellers.total || 1} color="purple" />
             </div>
-
-            {/* Inquiry Activity */}
-            <div className="bg-white rounded-xl p-6 border border-gray-100 lg:col-span-2">
-              <h3 className="font-semibold text-gray-900 mb-4">Inquiry Activity Overview</h3>
-              <p className="text-xs text-gray-400 mb-6">Total inquiries per period ({selectedDays} days)</p>
-              {anal?.leadsPerDay && anal.leadsPerDay.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-lg bg-gray-50">
-                    <p className="text-sm text-gray-500">Total Inquiries</p>
-                    <p className="text-2xl font-bold text-gray-900">{anal.rates.totalInquiries}</p>
-                  </div>
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: '#DCFCE7' }}>
-                    <p className="text-sm text-gray-500">Accepted</p>
-                    <p className="text-2xl font-bold" style={{ color: colors.success }}>{anal.rates.accepted}</p>
-                    <p className="text-xs text-gray-400">{anal.rates.approvalRate}% rate</p>
-                  </div>
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: '#FEE2E2' }}>
-                    <p className="text-sm text-gray-500">Rejected</p>
-                    <p className="text-2xl font-bold" style={{ color: colors.danger }}>{anal.rates.rejected}</p>
-                    <p className="text-xs text-gray-400">{anal.rates.rejectionRate}% rate</p>
-                  </div>
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: '#FEF3C7' }}>
-                    <p className="text-sm text-gray-500">Pending</p>
-                    <p className="text-2xl font-bold" style={{ color: colors.warning }}>
-                      {anal.rates.totalInquiries - anal.rates.accepted - anal.rates.rejected}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-400 text-sm">No inquiry data available</p>
-              )}
+            <div className="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between text-sm">
+              <span className="text-slate-400">At lead limit (free)</span>
+              <span className="text-orange-400 font-medium">{revenue?.leadLimits.freeSellersAtLimit || 0}</span>
             </div>
           </div>
-        </section>
 
-        {/* ============== Section 5: Risk & Fraud Monitoring ============== */}
-        <section data-testid="fraud-monitoring-section">
-          <SectionHeader 
-            icon={Shield} 
-            title="Risk & Fraud Monitoring" 
-            description="Seller risk signals and suspicious activity alerts."
-          />
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* High Rejection Sellers */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              <div className="p-4 border-b border-gray-100 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" style={{ color: colors.danger }} />
-                <h3 className="font-semibold text-gray-900">High Rejection Sellers</h3>
-              </div>
-              <div className="p-4">
-                {anal?.fraudMonitoring.highRejectionSellers && anal.fraudMonitoring.highRejectionSellers.length > 0 ? (
-                  <div className="space-y-3">
-                    {anal.fraudMonitoring.highRejectionSellers.slice(0, 5).map((seller, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900">{seller.seller?.name || 'Unknown'}</p>
-                          <p className="text-xs text-gray-500">{seller.seller?.email}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold" style={{ color: colors.danger }}>{seller.rejectionRatio}%</p>
-                          <p className="text-xs text-gray-400">{seller.rejectedCount}/{seller.totalInquiries} rejected</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <CheckCircle className="h-8 w-8 mx-auto mb-2" style={{ color: colors.success }} />
-                    <p className="text-sm text-gray-500">No high-rejection sellers detected</p>
-                  </div>
-                )}
-                <p className="text-xs text-gray-400 mt-4">
-                  Sellers with &gt;50% rejection rate and &gt;5 inquiries. May indicate low responsiveness.
-                </p>
-              </div>
-            </div>
-
-            {/* Suspicious Activity */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              <div className="p-4 border-b border-gray-100 flex items-center gap-2">
-                <AlertCircle className="h-5 w-5" style={{ color: colors.warning }} />
-                <h3 className="font-semibold text-gray-900">Suspicious Activity Alerts</h3>
-              </div>
-              <div className="p-4">
-                {anal?.fraudMonitoring.potentialSpamBuyers && anal.fraudMonitoring.potentialSpamBuyers.length > 0 ? (
-                  <div className="space-y-3">
-                    {anal.fraudMonitoring.potentialSpamBuyers.slice(0, 5).map((buyer, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                        <div>
-                          <p className="font-medium text-gray-900">{buyer.buyer?.name || 'Unknown Buyer'}</p>
-                          <p className="text-xs text-gray-500">{buyer.date}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold" style={{ color: colors.warning }}>{buyer.inquiryCount}</p>
-                          <p className="text-xs text-gray-400">inquiries/day</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <CheckCircle className="h-8 w-8 mx-auto mb-2" style={{ color: colors.success }} />
-                    <p className="text-sm text-gray-500">No suspicious activity detected</p>
-                  </div>
-                )}
-                <p className="text-xs text-gray-400 mt-4">
-                  Buyers sending &gt;10 inquiries in a single day. May indicate spam or misuse.
-                </p>
-              </div>
+          {/* Quote Funnel */}
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700" data-testid="quote-funnel">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-purple-500" />
+              Quote Funnel
+            </h3>
+            <div className="space-y-3">
+              <FunnelItem label="Sent" value={overview?.quotes.sent || 0} icon={<Clock className="h-4 w-4 text-blue-400" />} />
+              <FunnelItem label="Viewed" value={overview?.quotes.viewed || 0} icon={<CheckCircle className="h-4 w-4 text-purple-400" />} />
+              <FunnelItem label="Accepted" value={overview?.quotes.accepted || 0} icon={<CheckCircle className="h-4 w-4 text-green-400" />} />
+              <FunnelItem label="Rejected" value={overview?.quotes.rejected || 0} icon={<XCircle className="h-4 w-4 text-red-400" />} />
+              <FunnelItem label="Expired" value={overview?.quotes.expired || 0} icon={<AlertTriangle className="h-4 w-4 text-yellow-400" />} />
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* ============== Section 6: Auto-Generated Insights ============== */}
-        {kpi?.insights && kpi.insights.length > 0 && (
-          <section data-testid="insights-section">
-            <SectionHeader 
-              icon={Zap} 
-              title="Monetization Insights Summary" 
-              description="Auto-generated insights based on platform performance."
-            />
-            
-            <div className="space-y-4">
-              {kpi.insights.map((insight, idx) => (
-                <InsightBadge key={idx} type={insight.type} message={insight.message} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ============== Section 7: Data Source Transparency ============== */}
-        <section data-testid="data-integrity-section">
-          <div className="bg-white rounded-xl p-6 border border-gray-100">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-lg bg-gray-100">
-                <Database className="h-5 w-5 text-gray-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Data Integrity Notice</h3>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">All metrics are calculated from:</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {['Seller Collection', 'Subscription Records', 'Inquiry Logs', 'Payment Confirmations'].map((source, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm text-gray-500">
-                  <CheckCircle className="h-4 w-4" style={{ color: colors.success }} />
-                  {source}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-gray-400 mt-4">
-              Data updates in real-time. Last generated: {kpi?.generatedAt ? new Date(kpi.generatedAt).toLocaleString() : 'N/A'}
-            </p>
+        {/* Performance Metrics */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <h4 className="text-sm text-slate-400 mb-2">Avg Response Time</h4>
+            <p className="text-3xl font-bold">{overview?.performance.avgResponseTimeHours.toFixed(1) || 0}h</p>
+            <p className="text-sm text-slate-500 mt-1">Lead acceptance</p>
           </div>
-        </section>
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <h4 className="text-sm text-slate-400 mb-2">Active Listings</h4>
+            <p className="text-3xl font-bold">{overview?.performance.activeListings || 0}</p>
+            <p className="text-sm text-slate-500 mt-1">Seller products</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <h4 className="text-sm text-slate-400 mb-2">Upgrade Rate</h4>
+            <p className="text-3xl font-bold">{revenue?.conversion.conversionRate || 0}%</p>
+            <p className="text-sm text-slate-500 mt-1">{revenue?.conversion.upgradesThisMonth || 0} this month</p>
+          </div>
+        </div>
 
-        {/* Footer */}
-        <div className="text-center py-6 border-t border-gray-200">
-          <p className="text-sm text-gray-500">
-            These insights help administrators make informed decisions about pricing, feature limits, and growth strategy.
-          </p>
+        {/* Quick Links */}
+        <div className="grid md:grid-cols-3 gap-4">
+          <Link
+            href="/admin/ranking-control"
+            className="bg-slate-800 rounded-xl p-5 border border-slate-700 hover:border-blue-500 transition group"
+            data-testid="ranking-control-link"
+          >
+            <h3 className="font-semibold flex items-center gap-2">
+              Ranking Control
+              <ArrowUpRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition" />
+            </h3>
+            <p className="text-sm text-slate-400 mt-1">Manage ranking weights</p>
+          </Link>
+          <Link
+            href="/admin/market-monitor"
+            className="bg-slate-800 rounded-xl p-5 border border-slate-700 hover:border-orange-500 transition group"
+            data-testid="market-monitor-link"
+          >
+            <h3 className="font-semibold flex items-center gap-2">
+              Market Monitor
+              <ArrowUpRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition" />
+            </h3>
+            <p className="text-sm text-slate-400 mt-1">Abuse detection & governance</p>
+          </Link>
+          <Link
+            href="/admin/gst-verification"
+            className="bg-slate-800 rounded-xl p-5 border border-slate-700 hover:border-green-500 transition group"
+          >
+            <h3 className="font-semibold flex items-center gap-2">
+              GST Verification
+              <ArrowUpRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition" />
+            </h3>
+            <p className="text-sm text-slate-400 mt-1">Pending verifications</p>
+          </Link>
         </div>
       </main>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon, color, subtext, isText = false }: {
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  color: string;
+  subtext: string;
+  isText?: boolean;
+}) {
+  const colorClasses: Record<string, string> = {
+    blue: 'bg-blue-500/20 text-blue-400',
+    green: 'bg-green-500/20 text-green-400',
+    purple: 'bg-purple-500/20 text-purple-400',
+    emerald: 'bg-emerald-500/20 text-emerald-400'
+  };
+
+  return (
+    <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+      <div className={`inline-flex p-2 rounded-lg mb-3 ${colorClasses[color]}`}>
+        {icon}
+      </div>
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="text-2xl font-bold mt-1">{isText ? value : value.toLocaleString()}</p>
+      <p className="text-xs text-slate-500 mt-1">{subtext}</p>
+    </div>
+  );
+}
+
+function ProgressBar({ label, value, total, color }: {
+  label: string;
+  value: number;
+  total: number;
+  color: string;
+}) {
+  const pct = total > 0 ? (value / total) * 100 : 0;
+  const colorClasses: Record<string, string> = {
+    slate: 'bg-slate-500',
+    yellow: 'bg-yellow-500',
+    blue: 'bg-blue-500',
+    purple: 'bg-purple-500'
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between text-sm mb-1">
+        <span className="text-slate-300">{label}</span>
+        <span className="text-slate-400">{value}</span>
+      </div>
+      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+        <div 
+          className={`h-full ${colorClasses[color]} rounded-full transition-all`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FunnelItem({ label, value, icon }: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2 px-3 bg-slate-700/50 rounded-lg">
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="text-sm">{label}</span>
+      </div>
+      <span className="font-semibold">{value}</span>
     </div>
   );
 }
