@@ -841,6 +841,17 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             {"$set": {"status": "active", "isActive": True, "publishedAt": now, "updatedAt": now}}
         )
         
+        # Update activeSellerCities count
+        try:
+            location_service = create_seller_location_service(db)
+            profile = seller.get("profile", {})
+            city = profile.get("city")
+            state = profile.get("state")
+            if city and state:
+                await location_service.update_seller_city(city, state, increment=1)
+        except Exception as e:
+            logger.warning(f"Failed to update seller city count: {e}")
+        
         return {"message": "Listing published", "status": "active", "publishedAt": now}
     
     @router.get("/listings/{listing_id}/validate")
