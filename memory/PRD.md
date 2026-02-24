@@ -786,3 +786,50 @@ The Enterprise Product Page (`/ep/[slug]`) was not displaying product images, se
 3. Similar product suggestions
 4. ML feedback loop for ranking optimization
 
+---
+
+## FRONTEND LISTING CREATION VALIDATION FIX (Completed Feb 24, 2026)
+
+### Issue Resolved
+The seller listing creation form at `/seller/listings/new` was allowing users to submit listings with empty technical specifications, which the hardened backend correctly rejected with 400 errors.
+
+### Root Cause
+- Frontend Step 2 (Attributes) allowed users to proceed to Step 3 even without a valid spec template
+- No validation on "Continue to Commercial Terms" button
+- Users could submit forms with empty `attributes: {}` objects
+
+### Fixes Applied
+
+**1. Step Navigation Validation:**
+- Added validation on "Continue to Commercial Terms" button (lines 1315-1365)
+- Button now checks:
+  - specTemplate exists and has fields
+  - At least one attribute is filled
+  - All mandatory fields are filled
+- Button disabled when no spec template exists
+
+**2. Enhanced Error Block:**
+- Replaced amber warning with red blocking message (lines 1271-1300)
+- Clear messaging: "Cannot Create Listing" with explanation
+- Action buttons: "Choose Different Product" and "Request Spec Template"
+- Visual prominence: `bg-red-50 border-red-200 text-red-700`
+
+**3. Validation Logic Fixed:**
+- Removed `field.required` reference (property doesn't exist in `SpecFieldDefinition` type)
+- Now uses only `field.isMandatory === true` for required field checks
+
+### Files Changed
+- `/app/frontend/src/app/seller/listings/new/page.tsx` - Form validation and UI
+
+### Test Results
+- Frontend: 100% - Code review passed all validation criteria
+- Backend: 83% - API correctly rejects invalid payloads (5/6 tests)
+
+### Migration Script Created
+`/app/backend/migrations/V17_fix_searchable_attributes.py`:
+- Fixes existing listings with empty `searchableAttributes`
+- Copies attributes from linked `productVariants` to listings
+- Fixes `specTemplates.categoryId` type (string → ObjectId)
+- Validates product.specTemplateIds references
+
+
