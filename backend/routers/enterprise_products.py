@@ -271,7 +271,8 @@ def create_enterprise_product_router(db):
                 "version": spec_template.get("version", 1) if spec_template else None
             } if spec_template else None,
             "summary": {
-                "sellerCount": total_count,
+                "sellerCount": unique_seller_count,  # FIXED: Count unique sellers, not listings
+                "listingCount": total_count,  # Total listings
                 "minPrice": min_price,
                 "variantCount": variant_count,
                 "totalPages": (total_count + limit - 1) // limit if total_count > 0 else 1
