@@ -491,6 +491,56 @@ Production v1 of the Hybrid RFQ → Quote → WhatsApp → Acceptance System. Ke
 
 ---
 
+## SCHEMA CONSISTENCY FIX (Completed Feb 24, 2026)
+
+### Problem Identified
+- Backend was reading `specTemplateId` (singular) while DB stores `specTemplateIds` (array)
+- This mismatch caused "No attribute template for this category" errors
+
+### Fixes Applied
+
+**Phase 1 - Template Fetch Logic Fix:**
+- Updated `get_product_with_template()` to read `specTemplateIds` (array) as primary source
+- Added legacy fallback with warning log for `specTemplateId` (singular)
+- Updated `b2b_admin.py` to check both array and singular for template usage counts
+
+**Phase 2 - Strict Create Listing:**
+- Removed unsafe fallback `if not searchable_attributes and data.attributes`
+- Now strictly requires `variant.get("attributes")` to be non-empty
+- Raises clear error: "Variant has no technical specifications"
+
+**Phase 3 - Strict Update Listing:**
+- Rejects updates where new variant has empty attributes
+- Properly updates `searchableAttributes` when variant changes
+
+**Phase 4 - Publish Validation:**
+- Added `searchableAttributes` to required fields list
+- Active listings now require: images, pricingTiers, moq, stock, variantId, AND searchableAttributes
+
+**Phase 5 - DB Consistency Check Script:**
+Created `/app/backend/scripts/check_enterprise_consistency.py`:
+- Checks products for missing/empty specTemplateIds
+- Checks listings for missing/empty searchableAttributes
+- Checks variants for orphaned/empty records
+- Creates enterprise indexes
+- Supports `--fix` mode for auto-repair
+
+### Enterprise Schema Alignment
+```
+Layer                 Status
+─────────────────────────────────
+DB products           specTemplateIds (array) ✅
+DB specTemplates      fields[] defined ✅
+productVariants       attributes stored ✅
+sellerListings        searchableAttributes denormalized ✅
+Backend               Uses specTemplateIds (array) ✅
+Create API            Strict validation ✅
+Update API            Strict validation ✅
+Publish               Strict validation ✅
+```
+
+---
+
 ## ENTERPRISE WRITE-TIME DENORMALIZATION GUARDS (Completed Feb 24, 2026)
 
 ### Implementation Overview
