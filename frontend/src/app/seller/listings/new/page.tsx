@@ -15,11 +15,13 @@ import {
   requestCategory,
   requestSpecField,
   getProductById,
+  getManufacturers,
   Category,
   AdminProduct,
   B2BSpecTemplate,
   ListingCreatePayload,
-  PricingTierCreate
+  PricingTierCreate,
+  Manufacturer
 } from '@/lib/api';
 import { 
   ArrowLeft, 
