@@ -353,6 +353,37 @@ class TestFilterEndpoint:
             assert "fallbackMessage" in data
         
         print(f"✅ Fallback level: {data['fallbackLevel']}")
+    
+    def test_filter_results_have_stock_status(self):
+        """Test that filter results include stockStatus computed from stock value"""
+        product_id = "699be9023cbe1a8c31591668"
+        response = requests.post(
+            f"{BASE_URL}/api/products/{product_id}/filter",
+            json={"page": 1, "limit": 20}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        for result in data["results"]:
+            # Check stockStatus exists
+            assert "stockStatus" in result, "Result missing stockStatus"
+            
+            # stockStatus should be string (in_stock, out_of_stock, limited)
+            assert isinstance(result["stockStatus"], str), "stockStatus should be a string"
+            assert result["stockStatus"] in ["in_stock", "out_of_stock", "limited"], \
+                f"Invalid stockStatus: {result['stockStatus']}"
+            
+            # Verify stockStatus is computed correctly from stock value
+            stock = result.get("stock", 0)
+            if stock > 0:
+                assert result["stockStatus"] == "in_stock", \
+                    f"stockStatus should be in_stock when stock={stock}"
+            else:
+                assert result["stockStatus"] == "out_of_stock", \
+                    f"stockStatus should be out_of_stock when stock={stock}"
+            
+            print(f"✅ Filter result stockStatus: {result['stockStatus']} (stock: {stock})")
 
 
 class TestInvalidInputs:
