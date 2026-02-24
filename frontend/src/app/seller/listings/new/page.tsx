@@ -79,6 +79,7 @@ const initialFormState: FormState = {
   categoryId: '',
   productId: '',
   sellerRole: 'distributor',
+  manufacturerId: '',
   attributes: {},
   description: '',
   moq: 1,
