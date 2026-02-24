@@ -469,6 +469,45 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             logger.error(f"Enterprise guard validation failed: {e}")
             raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}")
         
+        # ============================================================
+        # MANUFACTURER VALIDATION (Phase 2 - Dropdown Strategy)
+        # ============================================================
+        manufacturer_id = None
+        manufacturer_name = None
+        
+        if data.manufacturerId:
+            try:
+                manufacturer = await db.manufacturers.find_one({
+                    "_id": ObjectId(data.manufacturerId),
+                    "status": "approved",
+                    "isActive": {"$ne": False}
+                })
+                if not manufacturer:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Invalid manufacturer. Please select from the dropdown."
+                    )
+                manufacturer_id = ObjectId(data.manufacturerId)
+                manufacturer_name = manufacturer.get("brandName")  # Store for display (no join needed)
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid manufacturerId format")
+        
+        # ============================================================
+        # GET SELLER LOCATION (for search fields)
+        # ============================================================
+        seller_profile = seller.get("profile", {})
+        seller_city = seller_profile.get("city")
+        seller_state = seller_profile.get("state")
+        seller_rating = seller.get("rating", 0)
+        
+        # Compute minPrice from first pricing tier
+        min_price = data.pricingTiers[0].pricePerUnit if data.pricingTiers else 0
+        
+        # Compute inStock
+        in_stock = validated["stock"] > 0
+        
         now = datetime.now(timezone.utc)
         
         listing_doc = {
@@ -499,6 +538,23 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             "attributeLabels": await _get_attribute_labels(db, product),
             # ENTERPRISE SEARCH: Normalized tokens for intelligent search
             "normalizedSearchTokens": await _build_normalized_search_tokens(db, product, category_oid, variant, seller, data.description),
+            # ============================================================
+            # PHASE 2 SEARCH OPTIMIZATION FIELDS
+            # ============================================================
+            # Manufacturer (from dropdown - no free text)
+            "manufacturerId": manufacturer_id,
+            "manufacturerName": manufacturer_name,
+            # Seller location (denormalized for search)
+            "city": seller_city,
+            "state": seller_state,
+            "sellerRating": seller_rating,
+            # Search-optimized computed fields
+            "minPrice": min_price,
+            "inStock": in_stock,
+            # Monetization-ready fields
+            "sellerTier": "free",  # free | silver | gold
+            "boostScore": 0,  # Dynamic boost for ranking
+            "isPremiumSeller": False,
         }
         
         await db.sellerListings.insert_one(listing_doc)
