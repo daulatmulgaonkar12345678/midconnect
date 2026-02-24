@@ -426,7 +426,7 @@ export interface SearchResult {
 
 export const searchProducts = (
   query: string,
-  options: { categoryId?: string; limit?: number; skip?: number } = {}
+  options: { categoryId?: string; city?: string; state?: string; limit?: number; skip?: number } = {}
 ): Promise<SearchResult> => {
   const sanitizedQuery = sanitizeInput(query);
   return fetchAPI<SearchResult>('/search/products', {
@@ -434,6 +434,8 @@ export const searchProducts = (
     body: {
       query: sanitizedQuery,
       categoryId: options.categoryId ? encodeURIComponent(options.categoryId) : undefined,
+      city: options.city || undefined,
+      state: options.state || undefined,
       limit: Math.min(options.limit || 50, 100),
       skip: Math.max(options.skip || 0, 0),
     },
