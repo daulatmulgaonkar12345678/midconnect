@@ -855,6 +855,7 @@ export const getSellerListing = (
 
 export interface ListingCreatePayload {
   productId: string;
+  manufacturerId?: string;  // Phase 2: Dropdown selection (no free text)
   attributes: Record<string, string | number | boolean>;
   sellerRole: string;
   description?: string;
