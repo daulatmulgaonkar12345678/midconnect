@@ -335,8 +335,32 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if existing:
             raise HTTPException(status_code=409, detail="Listing already exists for this variant")
         
+        # ============================================================
+        # ENTERPRISE GUARD: Strict Write-Time Validation
+        # ============================================================
+        # Get searchableAttributes from variant
+        searchable_attributes = variant.get("attributes", {})
+        
+        # If variant attributes are empty, check if seller provided attributes directly
+        if not searchable_attributes and data.attributes:
+            searchable_attributes = data.attributes
+        
+        # ENTERPRISE GUARD: Validate listing data before insert
+        try:
+            validated = enterprise_guard.validate_listing_for_create(
+                images=data.images,
+                searchable_attributes=searchable_attributes,
+                pricing_tiers=[{"minQty": t.minQty, "maxQty": t.maxQty, "pricePerUnit": t.pricePerUnit} for t in data.pricingTiers],
+                moq=data.moq,
+                stock=data.stock
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Enterprise guard validation failed: {e}")
+            raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}")
+        
         now = datetime.now(timezone.utc)
-        pricing_tiers = [{"minQty": t.minQty, "maxQty": t.maxQty, "pricePerUnit": t.pricePerUnit} for t in data.pricingTiers]
         
         listing_doc = {
             "_id": ObjectId(),
@@ -348,26 +372,26 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             "isActive": False,
             "sellerRole": data.sellerRole,
             "description": data.description,
-            "images": data.images[:5],
-            "moq": data.moq,
-            "stock": data.stock,
+            "images": validated["images"],  # ENTERPRISE: Validated images
+            "moq": validated["moq"],  # ENTERPRISE: Validated MOQ
+            "stock": validated["stock"],  # ENTERPRISE: Validated stock
             "maxCapacity": data.maxCapacity,
             "leadTime": data.leadTime,
             "currency": data.currency.upper(),
-            "pricingTiers": pricing_tiers,
+            "pricingTiers": validated["pricingTiers"],  # ENTERPRISE: Validated pricing
             "datasheetUrl": data.datasheetUrl,
             "createdAt": now,
             "updatedAt": now,
             "publishedAt": None,
             "priceHistory": [],
-            # ENTERPRISE: Denormalized search fields
-            "searchableAttributes": variant.get("attributes", {}),
+            # ENTERPRISE: Denormalized search fields (VALIDATED)
+            "searchableAttributes": validated["searchableAttributes"],
             "searchableText": await _build_searchable_text(db, product, category_oid, variant, seller, data.description),
             "attributeLabels": await _get_attribute_labels(db, product)
         }
         
         await db.sellerListings.insert_one(listing_doc)
-        logger.info(f"Seller {seller['email']} created listing for variant: {variant['_id']}")
+        logger.info(f"Seller {seller['email']} created listing for variant: {variant['_id']} [ENTERPRISE VALIDATED]")
         
         return success_response({
             "message": "Listing created successfully",
