@@ -268,9 +268,9 @@ export default function SellerListingsPage() {
                             {/* Hover tooltip for full name + attributes */}
                             <div className="absolute left-0 top-full mt-1 z-20 hidden group-hover:block w-72 p-3 bg-gray-900 text-white text-sm rounded-lg shadow-xl">
                               <p className="font-medium mb-1">{listing.productName}</p>
-                              {listing.attributes && Object.keys(listing.attributes).length > 0 && (
+                              {listing.searchableAttributes && Object.keys(listing.searchableAttributes).length > 0 && (
                                 <div className="text-gray-300 text-xs space-y-0.5">
-                                  {Object.entries(listing.attributes).slice(0, 5).map(([key, val]) => (
+                                  {Object.entries(listing.searchableAttributes).slice(0, 5).map(([key, val]) => (
                                     <p key={key}>{key}: {String(val)}</p>
                                   ))}
                                 </div>
