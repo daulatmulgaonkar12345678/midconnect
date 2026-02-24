@@ -26,7 +26,7 @@ import os
 from datetime import datetime
 
 # SSOT: Use the public URL for testing
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://tender-lalande-3.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://midconnect-preview.preview.emergentagent.com').rstrip('/')
 
 # Test credentials from the review request
 DEV_TOKEN = "dev-test-token"
