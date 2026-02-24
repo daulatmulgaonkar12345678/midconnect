@@ -1070,6 +1070,68 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         
         return result
     
+    @router.get("/products/{product_id}/spec-template")
+    async def get_product_spec_template(
+        product_id: str,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """Get the spec template directly from product's specTemplateIds (more reliable)"""
+        try:
+            product_oid = ObjectId(product_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid product ID")
+        
+        product = await db.products.find_one({"_id": product_oid})
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        # Get spec template from product's specTemplateIds
+        spec_template_ids = product.get("specTemplateIds", [])
+        template = None
+        
+        for tid in spec_template_ids:
+            template_oid = ObjectId(str(tid)) if not isinstance(tid, ObjectId) else tid
+            template = await db.specTemplates.find_one({
+                "_id": template_oid,
+                "isActive": {"$ne": False}
+            })
+            if template:
+                break
+        
+        # Fallback to category-based lookup if no template found from specTemplateIds
+        if not template:
+            category_id = product.get("categoryId")
+            if category_id:
+                category_oid = ObjectId(str(category_id)) if not isinstance(category_id, ObjectId) else category_id
+                # Try ObjectId format first
+                template = await db.specTemplates.find_one({
+                    "categoryId": category_oid,
+                    "isActive": {"$ne": False}
+                })
+                # Fallback to string format
+                if not template:
+                    template = await db.specTemplates.find_one({
+                        "categoryId": str(category_id),
+                        "isActive": {"$ne": False}
+                    })
+        
+        result = {
+            "product": {
+                "_id": str(product["_id"]),
+                "name": product.get("name"),
+                "categoryId": str(product.get("categoryId")) if product.get("categoryId") else None,
+                "specTemplateIds": [str(t) for t in spec_template_ids]
+            }
+        }
+        
+        if template:
+            result["specTemplate"] = serialize_objectids(template)
+        else:
+            result["specTemplate"] = None
+            result["note"] = "No spec template found for this product."
+        
+        return result
+    
     # ==================== INQUIRY MANAGEMENT ====================
     
     @router.get("/inquiries")
