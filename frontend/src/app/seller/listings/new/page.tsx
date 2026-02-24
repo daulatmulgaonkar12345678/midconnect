@@ -1269,10 +1269,15 @@ const addPricingTier = () => {
                   })}
                 </div>
               ) : (
-                <div className="py-8 text-center text-gray-500">
-                  <FileText className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                  <p>No attribute template for this category.</p>
-                  <p className="text-sm">You can add a description below.</p>
+                <div className="py-8 text-center">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-3 text-amber-500" />
+                  <p className="text-gray-700 font-medium">No attribute template for this product</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    This product does not have technical specifications defined.
+                  </p>
+                  <p className="text-sm text-amber-600 mt-3">
+                    Please contact admin to add a specification template, or choose a different product.
+                  </p>
                 </div>
               )}
               
