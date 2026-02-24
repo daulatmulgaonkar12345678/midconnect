@@ -15,7 +15,7 @@ import requests
 import os
 
 # Get BASE_URL from environment - DO NOT add default
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://quote-system-19.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://seller-images.preview.emergentagent.com').rstrip('/')
 
 # Canonical camelCase fields that SHOULD be present
 CANONICAL_ID_FIELDS = ['categoryId', 'productId', 'sellerId', 'buyerId', 'listingId', 'inquiryId']

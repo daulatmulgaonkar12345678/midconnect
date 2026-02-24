@@ -158,7 +158,7 @@ def create_quotation_router(db, get_current_user):
                     buyer_phone = buyer.get("profile", {}).get("phone") or buyer.get("phone")
         
         # Generate base URL
-        base_url = os.environ.get("FRONTEND_URL", "https://quote-system-19.preview.emergentagent.com")
+        base_url = os.environ.get("FRONTEND_URL", "https://seller-images.preview.emergentagent.com")
         
         preview = service.generate_whatsapp_preview(quote, base_url)
         
