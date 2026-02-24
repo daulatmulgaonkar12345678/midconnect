@@ -156,19 +156,13 @@ export default function Header() {
         {/* Mobile Menu */}
         {isMenuOpen && (
           <div className="md:hidden py-4 border-t">
-            <form onSubmit={handleSearch} className="mb-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  maxLength={100}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
-                />
-                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-              </div>
-            </form>
+            {/* Mobile Search */}
+            <div className="mb-4">
+              <EnterpriseSearchBar 
+                variant="header" 
+                showLocationFilter={false}
+              />
+            </div>
             <nav className="flex flex-col gap-4">
               <Link href="/products" className="text-gray-600" onClick={() => setIsMenuOpen(false)}>Products</Link>
               <Link href="/categories" className="text-gray-600" onClick={() => setIsMenuOpen(false)}>Categories</Link>
