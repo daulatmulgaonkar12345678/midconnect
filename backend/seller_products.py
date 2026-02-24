@@ -62,6 +62,7 @@ class PricingTier(BaseModel):
 class ListingCreate(BaseModel):
     """Create a new seller listing"""
     productId: str = Field(..., description="Reference to products collection")
+    manufacturerId: Optional[str] = Field(None, description="Reference to manufacturers collection (dropdown)")
     attributes: Dict[str, Any] = Field(..., description="Attribute values matching specTemplate")
     sellerRole: str = Field(..., description="distributor, manufacturer, trader, dealer")
     description: Optional[str] = Field(None, max_length=2000)
