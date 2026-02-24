@@ -201,12 +201,23 @@ def create_enterprise_product_router(db):
             # Convert sets to sorted lists
             facets = {k: sorted(list(v), key=lambda x: (isinstance(x, str), x)) for k, v in facets.items()}
         
-        # Format sellers
+        # Format sellers with safe fallbacks for images and attributes
         sellers = []
         for listing in listings:
             seller_profile = listing.get("sellerProfile", {})
             pricing = listing.get("pricingTiers", [])
             lowest_price = min([t.get("pricePerUnit", 0) for t in pricing]) if pricing else None
+            
+            # Safe image fallback: images[] -> [imageUrl] -> [image] -> []
+            listing_images = listing.get("images") or []
+            if not listing_images:
+                img_url = listing.get("imageUrl") or listing.get("image")
+                if img_url:
+                    listing_images = [img_url] if isinstance(img_url, str) else img_url
+            
+            # Safe attributes fallback: searchableAttributes -> technicalSpecs -> {}
+            searchable_attrs = listing.get("searchableAttributes") or listing.get("technicalSpecs") or {}
+            attribute_labels = listing.get("attributeLabels") or {}
             
             sellers.append({
                 "listingId": str(listing["_id"]),
@@ -215,25 +226,36 @@ def create_enterprise_product_router(db):
                 "companyName": seller_profile.get("businessName") or "Verified Seller",
                 "location": f"{seller_profile.get('city', '')}, {seller_profile.get('state', '')}".strip(", "),
                 "sellerRole": listing.get("sellerRole", "dealer"),
-                "searchableAttributes": listing.get("searchableAttributes", {}),
-                "attributeLabels": listing.get("attributeLabels", {}),
+                "searchableAttributes": searchable_attrs,
+                "attributeLabels": attribute_labels,
                 "pricingTiers": serialize_doc(pricing),
                 "lowestPrice": lowest_price,
                 "moq": listing.get("moq", 1),
                 "stock": listing.get("stock", 0),
                 "leadTimeDays": listing.get("leadTime"),
-                "images": listing.get("images", []),
+                "images": listing_images,
                 "stockStatus": "in_stock" if listing.get("stock", 0) > 0 else "out_of_stock"
             })
         
-        # Build response
+        # Build response with safe image fallbacks
+        # Priority: images[] -> [coverImageUrl] -> [imageUrl] -> []
+        product_images = product.get("images") or []
+        if not product_images:
+            cover_url = product.get("coverImageUrl")
+            if cover_url:
+                product_images = [cover_url]
+            else:
+                image_url = product.get("imageUrl") or product.get("image")
+                if image_url:
+                    product_images = [image_url]
+        
         return serialize_doc({
             "product": {
                 "_id": product["_id"],
                 "name": product.get("name"),
                 "slug": product.get("slug"),
                 "description": product.get("description"),
-                "images": product.get("images", []),
+                "images": product_images,
                 "categoryId": product.get("categoryId"),
                 "categoryName": category.get("name") if category else None
             },
