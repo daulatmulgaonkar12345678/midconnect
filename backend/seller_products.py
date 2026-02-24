@@ -494,7 +494,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             # ENTERPRISE: Denormalized search fields (VALIDATED)
             "searchableAttributes": validated["searchableAttributes"],
             "searchableText": await _build_searchable_text(db, product, category_oid, variant, seller, data.description),
-            "attributeLabels": await _get_attribute_labels(db, product)
+            "attributeLabels": await _get_attribute_labels(db, product),
+            # ENTERPRISE SEARCH: Normalized tokens for intelligent search
+            "normalizedSearchTokens": await _build_normalized_search_tokens(db, product, category_oid, variant, seller, data.description),
         }
         
         await db.sellerListings.insert_one(listing_doc)
