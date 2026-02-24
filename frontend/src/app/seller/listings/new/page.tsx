@@ -853,7 +853,7 @@ const addPricingTier = () => {
     // Check mandatory attribute fields
     if (specTemplate?.fields && specTemplate.fields.length > 0) {
       for (const field of specTemplate.fields) {
-        const isMandatory = field.isMandatory === true || field.required === true;
+        const isMandatory = field.isMandatory === true;
         if (isMandatory) {
           const attr = form.attributes[field.key];
           if (!attr || attr.value === '' || attr.value === null || attr.value === undefined) {
