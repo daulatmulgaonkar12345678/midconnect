@@ -282,7 +282,7 @@ def create_enterprise_search_router(db, require_auth=None):
         if category_filter:
             try:
                 base_query["categoryId"] = ObjectId(category_filter)
-            except:
+            except Exception:
                 pass
         elif parsed.category_hint:
             # Try to find category by name
