@@ -7234,9 +7234,11 @@ async def admin_create_spec_template(
     if not category:
         raise HTTPException(status_code=400, detail="Category not found")
     
+    category_oid = ObjectId(template.categoryId)
+    
     # Check for duplicate name in same category - SSOT: use camelCase
     existing = await db.specTemplates.find_one({
-        "categoryId": template.categoryId,
+        "categoryId": category_oid,
         "name": {"$regex": f"^{template.name}$", "$options": "i"}
     })
     if existing:
@@ -7245,7 +7247,7 @@ async def admin_create_spec_template(
     template_doc = {
         "_id": ObjectId(),
         "name": template.name,
-        "categoryId": template.categoryId,  # SSOT: camelCase
+        "categoryId": category_oid,  # FIXED: Store as ObjectId
         "fields": [field.model_dump() for field in template.fields],
         "isActive": True,  # SSOT: camelCase
         "createdAt": datetime.now(timezone.utc),
