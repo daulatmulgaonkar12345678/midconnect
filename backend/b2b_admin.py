@@ -555,10 +555,14 @@ def create_b2b_admin_router(db, require_admin):
                 category_cache[cat_id] = cat["name"] if cat else "Unknown"
             t["categoryName"] = category_cache.get(cat_id, "Unknown")
             
-            # Count products using this template
-            t["productCount"] = await db.products.count_documents({
+            # Count products using this template (check both array and legacy singular)
+            products_array = await db.products.count_documents({
+                "specTemplateIds": t["_id"]
+            })
+            products_singular = await db.products.count_documents({
                 "specTemplateId": t["_id"]
             })
+            t["productCount"] = products_array + products_singular
         
         return {"templates": templates, "total": len(templates)}
     
