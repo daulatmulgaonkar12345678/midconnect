@@ -7,6 +7,7 @@ import {
   getAllCategories,
   getProductsByCategory,
   getCategorySpecTemplate,
+  getProductSpecTemplate,
   createSellerListing,
   uploadProductImages,
   uploadProductDatasheet,
