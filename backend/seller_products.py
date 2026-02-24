@@ -7,7 +7,7 @@ Category → SpecTemplate (SSOT) → Product → ProductVariant → SellerListin
 
 COLLECTIONS (STRICT - NO LEGACY):
 1. specTemplates - Structure SSOT (admin controlled)
-2. products - Admin catalog (links to specTemplateId)
+2. products - Admin catalog (links to specTemplateIds ARRAY)
 3. productVariants - Attribute combinations (system managed)
 4. sellerListings - Commercial offers (seller controlled)
 5. categories - Product categories
@@ -22,6 +22,11 @@ RULES:
 - No legacy/hybrid mode
 - No snake_case fields
 - No fallback collections
+
+ENTERPRISE SCHEMA:
+- products.specTemplateIds: ObjectId[] (ARRAY, not singular)
+- sellerListings.searchableAttributes: denormalized from productVariants.attributes
+- sellerListings.images: REQUIRED array with at least 1 image
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
