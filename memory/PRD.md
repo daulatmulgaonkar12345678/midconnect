@@ -491,6 +491,76 @@ Production v1 of the Hybrid RFQ → Quote → WhatsApp → Acceptance System. Ke
 
 ---
 
+## ENTERPRISE WRITE-TIME DENORMALIZATION GUARDS (Completed Feb 24, 2026)
+
+### Implementation Overview
+Production-level data governance ensuring clean data at scale.
+
+### Phase 1 - Data Cleanup (Complete)
+- Verified all existing listings have valid `searchableAttributes` and `images`
+- No invalid data found in current database
+- Migration scripts available at `/app/backend/scripts/migrate_enterprise_schema.py`
+
+### Phase 2 - Write-Time Validation Guards (Complete)
+Created `EnterpriseListingGuard` class at `/app/backend/guards/enterprise_listing_guard.py`:
+
+**Validation Methods:**
+- `validate_searchable_attributes()` - Ensures at least 1 attribute exists
+- `validate_images()` - Ensures at least 1 image exists
+- `validate_pricing_tiers()` - Validates tier structure and values
+- `validate_listing_for_create()` - Full validation for new listings
+- `validate_listing_for_update()` - Partial validation for updates
+
+### Phase 3 - API Integration (Complete)
+Updated `/app/backend/seller_products.py`:
+
+**CREATE listing endpoint (`POST /seller/listings`):**
+- Validates images, searchableAttributes, pricingTiers before insert
+- Rejects listings with empty specs or images
+- Logs validation events
+
+**UPDATE listing endpoint (`PATCH /seller/listings/{id}`):**
+- Validates updated fields
+- Blocks activation without images/specs
+- Updates searchableAttributes when variant changes
+
+### Phase 4 - MongoDB Schema Validators (Complete)
+Applied via `/app/backend/scripts/apply_enterprise_validators.py`:
+
+**sellerListings validator:**
+- `images`: array with minItems: 1
+- `searchableAttributes`: required object
+- `pricingTiers`: array with minItems: 1
+- `moq`: minimum 1
+- `stock`: minimum 0
+
+**Validation Level:** moderate (warns on existing data, rejects invalid inserts)
+
+### Data Guarantees Now Active
+```
+✅ No empty searchableAttributes in sellerListings
+✅ No empty images array in sellerListings
+✅ No missing pricingTiers
+✅ No negative stock
+✅ No invalid MOQ (< 1)
+✅ Activation blocked without complete data
+✅ DB-level validation as final safety net
+```
+
+### Enterprise Data Flow (Final)
+```
+WRITE TIME:
+productVariants.attributes → sellerListings.searchableAttributes
+                                  (with validation guards)
+
+READ TIME (Enterprise Page):
+sellerListings.searchableAttributes → Filters/Facets/Ranking
+sellerListings.images → Display
+                                  (NO JOINS, NO N+1)
+```
+
+---
+
 ## ENTERPRISE DATA POPULATION FIX (Completed Feb 24, 2026)
 
 ### Issue Resolved
