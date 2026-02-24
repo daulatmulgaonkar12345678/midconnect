@@ -10746,6 +10746,20 @@ async def startup_db_client():
     # This allows Render to detect the HTTP port quickly
     import asyncio
     
+    async def run_enterprise_integrity_check():
+        """Run enterprise data integrity check in background"""
+        await asyncio.sleep(3)
+        try:
+            from utils.startup_integrity_check import run_startup_integrity_check
+            results = await run_startup_integrity_check(db)
+            if not results["passed"]:
+                logger.error("🚨 ENTERPRISE DATA INTEGRITY CHECK FAILED - Review errors above")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not run integrity check: {e}")
+    
+    # Start integrity check in background
+    asyncio.create_task(run_enterprise_integrity_check())
+    
     async def create_indexes_in_background():
         """Create indexes in background to not block startup"""
         # Wait for server to be fully ready and detected by platform
