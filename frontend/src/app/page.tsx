@@ -2,8 +2,9 @@ import Link from 'next/link';
 import { getCategories, searchProducts } from '@/lib/api';
 import CategoryCard from '@/components/CategoryCard';
 import ProductCard from '@/components/ProductCard';
-import { ArrowRight, Shield, Truck, BadgeCheck, Search } from 'lucide-react';
+import { ArrowRight, Shield, Truck, BadgeCheck } from 'lucide-react';
 import { Category, ProductWithSellers } from '@/types';
+import HeroSearchSection from '@/components/HeroSearchSection';
 
 export const revalidate = 3600; // Revalidate every hour
 
@@ -21,34 +22,8 @@ export default async function HomePage() {
 
   return (
     <div>
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-600 to-blue-800 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-          <div className="max-w-3xl">
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">
-              India's Trusted MidConnect Marketplace for Industrial Products
-            </h1>
-            <p className="text-xl text-blue-100 mb-8">
-              Connect directly with verified manufacturers, dealers, and distributors.
-              No middlemen. Best prices. Trusted quality.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link
-                href="/products"
-                className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition flex items-center justify-center gap-2"
-              >
-                Browse Products <ArrowRight className="h-5 w-5" />
-              </Link>
-              <Link
-                href="/sell"
-                className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition text-center"
-              >
-                Start Selling
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Hero Section with Search */}
+      <HeroSearchSection />
 
       {/* Trust Badges */}
       <section className="bg-gray-50 py-8 border-b">
