@@ -114,7 +114,6 @@ def create_enterprise_search_router(db, require_auth=None):
         """
         try:
             suggestions = []
-            q_lower = q.lower()
             
             # Normalize the query for better matching
             parsed = search_normalizer.parse_search_query(q)
