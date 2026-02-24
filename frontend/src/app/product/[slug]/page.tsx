@@ -29,7 +29,6 @@ import {
   X,
   ChevronRight,
   Layers,
-  DollarSign,
   Box,
   Truck,
   Building2,
