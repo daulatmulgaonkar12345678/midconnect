@@ -1,0 +1,109 @@
+
+============================================================
+LOAD TEST: 10,000 listings
+============================================================
+Created 1000 test sellers
+Generating 10,000 listings...
+  Progress: 5,000/10,000
+  Progress: 10,000/10,000
+Ensuring indexes exist...
+
+--- Enterprise Endpoint (30 iterations) ---
+  Avg: 430.9ms | P95: 434.9ms | P99: 439.4ms
+
+--- Filter Endpoint (30 iterations) ---
+  Avg: 26.0ms | P95: 126.5ms | P99: 126.9ms
+
+--- Facets Endpoint (30 iterations) ---
+  Avg: 18.8ms | P95: 22.6ms | P99: 25.6ms
+
+Cleaning up test data...
+
+10,000 Results: Enterprise P95=434.9ms, Filter P95=126.5ms, Facets P95=22.6ms
+
+============================================================
+LOAD TEST: 50,000 listings
+============================================================
+Created 1000 test sellers
+Generating 50,000 listings...
+  Progress: 5,000/50,000
+  Progress: 10,000/50,000
+  Progress: 15,000/50,000
+  Progress: 20,000/50,000
+  Progress: 25,000/50,000
+  Progress: 30,000/50,000
+  Progress: 35,000/50,000
+  Progress: 40,000/50,000
+  Progress: 45,000/50,000
+  Progress: 50,000/50,000
+Ensuring indexes exist...
+
+--- Enterprise Endpoint (30 iterations) ---
+  Avg: 2182.5ms | P95: 2212.8ms | P99: 2227.8ms
+
+--- Filter Endpoint (30 iterations) ---
+  Avg: 59.7ms | P95: 113.4ms | P99: 113.5ms
+
+--- Facets Endpoint (30 iterations) ---
+  Avg: 97.7ms | P95: 100.8ms | P99: 107.3ms
+
+Cleaning up test data...
+
+50,000 Results: Enterprise P95=2212.8ms, Filter P95=113.4ms, Facets P95=100.8ms
+
+============================================================
+LOAD TEST: 100,000 listings
+============================================================
+Created 1000 test sellers
+Generating 100,000 listings...
+  Progress: 5,000/100,000
+  Progress: 10,000/100,000
+  Progress: 15,000/100,000
+  Progress: 20,000/100,000
+  Progress: 25,000/100,000
+  Progress: 30,000/100,000
+  Progress: 35,000/100,000
+  Progress: 40,000/100,000
+  Progress: 45,000/100,000
+  Progress: 50,000/100,000
+  Progress: 55,000/100,000
+  Progress: 60,000/100,000
+  Progress: 65,000/100,000
+  Progress: 70,000/100,000
+  Progress: 75,000/100,000
+  Progress: 80,000/100,000
+  Progress: 85,000/100,000
+  Progress: 90,000/100,000
+  Progress: 95,000/100,000
+  Progress: 100,000/100,000
+Ensuring indexes exist...
+
+--- Enterprise Endpoint (30 iterations) ---
+  Avg: 4350.5ms | P95: 4384.2ms | P99: 4384.3ms
+
+--- Filter Endpoint (30 iterations) ---
+  Avg: 220.4ms | P95: 642.1ms | P99: 646.6ms
+
+--- Facets Endpoint (30 iterations) ---
+  Avg: 181.9ms | P95: 186.2ms | P99: 186.5ms
+
+Cleaning up test data...
+
+100,000 Results: Enterprise P95=4384.2ms, Filter P95=642.1ms, Facets P95=186.2ms
+
+============================================================
+LOAD TEST SUMMARY
+============================================================
+
+| Scenario | Enterprise P95 | Filter P95 | Facets P95 | Pass |
+|----------|----------------|------------|------------|------|
+| 10k      |          434.9 |      126.5 |       22.6 |   NO |
+| 50k      |         2212.8 |      113.4 |      100.8 |   NO |
+| 100k      |         4384.2 |      642.1 |      186.2 |   NO |
+
+Target benchmarks at 50k:
+  - Filter < 200ms
+  - Enterprise < 250ms
+  - Facets < 150ms
+
+Results saved to /app/test_reports/load_test_results.json
