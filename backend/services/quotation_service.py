@@ -216,6 +216,7 @@ class QuotationService:
         Create a new quote for an accepted inquiry.
         
         Validations (per spec):
+        - Seller must not be suspended/banned (GOVERNANCE CHECK)
         - Inquiry must be accepted
         - Seller must own inquiry
         - Only 1 active quote per inquiry
@@ -231,6 +232,13 @@ class QuotationService:
             Quote document with WhatsApp preview capability
         """
         inquiry_oid = ObjectId(request.inquiryId)
+        
+        # GOVERNANCE CHECK: Verify seller is not suspended/banned
+        from services.seller_governance_service import SellerGovernanceService
+        governance = SellerGovernanceService(self.db)
+        gov_result = await governance.can_create_quote(seller_id)
+        if not gov_result["canCreate"]:
+            raise ValueError(gov_result.get("message", "Cannot create quotes - account restricted"))
         
         # Validate validityDays
         if request.validityDays > MAX_VALIDITY_DAYS:
