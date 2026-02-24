@@ -616,7 +616,7 @@ export default function NewSellerListingPage() {
     }
   }, [token]);
 
-  // Load spec template when product changes - FINAL ARCHITECTURE: Use category-based spec template
+  // Load spec template when product changes - Use product's specTemplateIds first, then category fallback
   const loadSpecTemplateByProduct = useCallback(
   async (productId: string) => {
     if (!productId || !token) return;
@@ -624,25 +624,26 @@ export default function NewSellerListingPage() {
     setLoadingSpecs(true);
 
     try {
-      // 1️⃣ Fetch product to get its categoryId
-      const product = await getProductById(productId);
+      // PRIMARY: Try to get spec template directly from product's specTemplateIds
+      // This is more reliable as it checks product.specTemplateIds array directly
+      const templateData = await getProductSpecTemplate(token, productId);
+      let template = templateData.specTemplate;
 
-      // 2️⃣ Use categoryId to fetch spec template (FINAL ARCHITECTURE)
-      const categoryId = product.categoryId;
-      
-      if (!categoryId) {
-        console.warn('Product has no categoryId, cannot fetch spec template');
-        setSpecTemplate(null);
-        return;
+      // FALLBACK: If no template from product's specTemplateIds, try category-based lookup
+      if (!template) {
+        const product = await getProductById(productId);
+        const categoryId = product.categoryId;
+        
+        if (categoryId) {
+          console.log('No template from specTemplateIds, trying category lookup...');
+          const categoryTemplateData = await getCategorySpecTemplate(token, categoryId);
+          template = categoryTemplateData.specTemplate;
+        }
       }
-
-      // 3️⃣ Fetch template using category-based endpoint (NOT /specTemplates/:id)
-      const templateData = await getCategorySpecTemplate(token, categoryId);
-      const template = templateData.specTemplate;
 
       setSpecTemplate(template);
 
-      // 4️⃣ Initialize attributes from template.fields (SSOT)
+      // Initialize attributes from template.fields (SSOT)
       if (template?.fields) {
         const attrs: Record<string, { value: any; touched: boolean }> = {};
 
