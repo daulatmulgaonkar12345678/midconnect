@@ -1307,8 +1307,39 @@ const addPricingTier = () => {
                 Back
               </button>
               <button
-                onClick={() => setCurrentStep(3)}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                onClick={() => {
+                  // ENTERPRISE: Validate attributes before proceeding
+                  if (!specTemplate?.fields || specTemplate.fields.length === 0) {
+                    setError('This product does not have technical specifications defined. Please contact admin or choose a different product.');
+                    return;
+                  }
+                  
+                  // Check at least one attribute is filled
+                  const filledAttributes = Object.entries(form.attributes).filter(([_, val]) => 
+                    val.value !== '' && val.value !== null && val.value !== undefined
+                  );
+                  if (filledAttributes.length === 0) {
+                    setError('Please fill at least one technical specification');
+                    return;
+                  }
+                  
+                  // Check mandatory fields
+                  for (const field of specTemplate.fields) {
+                    const isMandatory = field.isMandatory === true || field.required === true;
+                    if (isMandatory) {
+                      const attr = form.attributes[field.key];
+                      if (!attr || attr.value === '' || attr.value === null || attr.value === undefined) {
+                        setError(`${field.label || field.key} is required`);
+                        return;
+                      }
+                    }
+                  }
+                  
+                  setError(null);
+                  setCurrentStep(3);
+                }}
+                disabled={!specTemplate?.fields || specTemplate.fields.length === 0}
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 data-testid="next-step-2"
               >
                 Continue to Commercial Terms
