@@ -1045,10 +1045,25 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
     ):
         """Accept an inquiry with a quote"""
         from services.subscription_service import can_accept_inquiry as check_can_accept, increment_enquiry_usage
+        from services.seller_governance_service import SellerGovernanceService
         import urllib.parse
         
         seller_oid = ObjectId(seller["_id"]) if isinstance(seller["_id"], str) else seller["_id"]
         
+        # GOVERNANCE CHECK: Verify seller is not suspended/banned
+        governance_service = SellerGovernanceService(db)
+        governance_result = await governance_service.can_accept_lead(seller_oid)
+        if not governance_result["canAccept"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": governance_result["reason"],
+                    "message": governance_result.get("message", "Cannot accept leads"),
+                    "status": governance_result.get("status", "blocked")
+                }
+            )
+        
+        # SUBSCRIPTION CHECK: Verify lead limit not exceeded
         can_accept_result = await check_can_accept(db, seller_oid)
         if not can_accept_result["canAccept"]:
             raise HTTPException(
