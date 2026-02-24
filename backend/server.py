@@ -7462,29 +7462,6 @@ async def admin_cleanup_template_refs(
     }
 
 
-# TEMPORARY: One-time migration endpoint (DELETE AFTER USE)
-@api_router.post("/fix-categoryid-temp-839271")
-async def temp_fix_categoryid():
-    """TEMPORARY: Fix specTemplates.categoryId - DELETE AFTER USE"""
-    results = {"fixed": 0, "errors": []}
-    try:
-        spec_templates = await db.specTemplates.find({}).to_list(length=None)
-        for template in spec_templates:
-            category_id = template.get("categoryId")
-            if category_id and isinstance(category_id, str):
-                try:
-                    await db.specTemplates.update_one(
-                        {"_id": template["_id"]},
-                        {"$set": {"categoryId": ObjectId(category_id)}}
-                    )
-                    results["fixed"] += 1
-                    logger.info(f"Fixed template: {template.get('name')}")
-                except Exception as e:
-                    results["errors"].append(str(e))
-    except Exception as e:
-        results["errors"].append(str(e))
-    return results
-
 @api_router.post("/admin/data-integrity/migrate")
 async def admin_data_integrity_migration(
     admin: dict = Depends(require_admin)
