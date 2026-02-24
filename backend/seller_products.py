@@ -607,6 +607,13 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                     variant_changed = True
                     # ENTERPRISE: Update searchableAttributes when variant changes
                     new_searchable_attrs = new_variant.get("attributes", {})
+                    
+                    # STRICT: Reject empty attributes in updated variant
+                    if not new_searchable_attrs or len(new_searchable_attrs) == 0:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Updated variant has no technical specifications"
+                        )
                 except ValueError as e:
                     raise HTTPException(status_code=400, detail=str(e))
         
