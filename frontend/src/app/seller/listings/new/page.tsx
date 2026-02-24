@@ -1158,6 +1158,30 @@ const addPricingTier = () => {
                   ))}
                 </select>
               </div>
+              
+              {/* Manufacturer Dropdown (Phase 2 - No Free Text) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Manufacturer / Brand
+                  <span className="text-gray-400 text-xs ml-2">(Optional)</span>
+                </label>
+                <select
+                  value={form.manufacturerId}
+                  onChange={(e) => setForm(prev => ({ ...prev, manufacturerId: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  data-testid="manufacturer-select"
+                >
+                  <option value="">Select Manufacturer (Optional)</option>
+                  {manufacturers.map(mfr => (
+                    <option key={mfr._id} value={mfr._id}>
+                      {mfr.brandName}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Can&apos;t find the brand? Contact admin to add it.
+                </p>
+              </div>
             </div>
             
             {/* Navigation */}
