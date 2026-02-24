@@ -1047,7 +1047,18 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if not category:
             raise HTTPException(status_code=404, detail="Category not found")
         
-        template = await db.specTemplates.find_one({"categoryId": category_oid, "isActive": {"$ne": False}})
+        # Try to find template - handle both ObjectId and string categoryId formats
+        template = await db.specTemplates.find_one({
+            "categoryId": category_oid, 
+            "isActive": {"$ne": False}
+        })
+        
+        # Fallback: try string format if ObjectId lookup failed
+        if not template:
+            template = await db.specTemplates.find_one({
+                "categoryId": category_id,  # Try as string
+                "isActive": {"$ne": False}
+            })
         
         result = {"category": {"_id": str(category["_id"]), "name": category.get("name"), "settings": category.get("settings", {})}}
         
