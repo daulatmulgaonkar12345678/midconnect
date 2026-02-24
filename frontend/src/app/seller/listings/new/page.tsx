@@ -920,6 +920,7 @@ const addPricingTier = () => {
       // Build FINAL ARCHITECTURE payload - camelCase, flat structure
       const payload: ListingCreatePayload = {
         productId: form.productId,
+        manufacturerId: form.manufacturerId || undefined,  // Phase 2: Dropdown selection
         attributes: attributes,
         sellerRole: form.sellerRole,
         description: form.description || undefined,
