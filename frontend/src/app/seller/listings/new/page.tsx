@@ -545,6 +545,7 @@ export default function NewSellerListingPage() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [specTemplate, setSpecTemplate] = useState<B2BSpecTemplate | null>(null);
   const [categorySettings, setCategorySettings] = useState<{ allowedSellerTypes?: string[] } | null>(null);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   
   // Loading states
   const [loading, setLoading] = useState(true);
