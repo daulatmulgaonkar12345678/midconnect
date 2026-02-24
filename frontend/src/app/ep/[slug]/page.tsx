@@ -407,7 +407,7 @@ export default function EnterpriseProductPage() {
             </div>
 
             {/* Fallback Banner */}
-            {filterResults?.fallbackLevel && filterResults.fallbackLevel > 0 && (
+            {filterResults && filterResults.fallbackLevel > 0 && (
               <EmptyState
                 type="no-results"
                 fallbackLevel={filterResults.fallbackLevel}
