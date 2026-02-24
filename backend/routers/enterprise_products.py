@@ -580,18 +580,29 @@ def create_enterprise_product_router(db):
             pricing = listing.get("pricingTiers", [])
             lowest = min([t.get("pricePerUnit", 0) for t in pricing]) if pricing else None
             
+            # Safe image fallback: images[] -> [imageUrl] -> [image] -> []
+            listing_images = listing.get("images") or []
+            if not listing_images:
+                img_url = listing.get("imageUrl") or listing.get("image")
+                if img_url:
+                    listing_images = [img_url] if isinstance(img_url, str) else img_url
+            
+            # Safe attributes fallback: searchableAttributes -> technicalSpecs -> {}
+            searchable_attrs = listing.get("searchableAttributes") or listing.get("technicalSpecs") or {}
+            attribute_labels = listing.get("attributeLabels") or {}
+            
             result_item = serialize_doc({
                 "listingId": listing.get("_id") or listing.get("listingId"),
                 "sellerId": listing["sellerId"],
                 "variantId": listing.get("variantId"),
-                "searchableAttributes": listing.get("searchableAttributes", {}),
-                "attributeLabels": listing.get("attributeLabels", {}),
+                "searchableAttributes": searchable_attrs,
+                "attributeLabels": attribute_labels,
                 "pricingTiers": pricing,
                 "lowestPrice": lowest,
                 "moq": listing.get("moq", 1),
                 "stock": listing.get("stock", 0),
                 "leadTimeDays": listing.get("leadTime"),
-                "images": listing.get("images", [])[:2],
+                "images": listing_images[:2],
                 "sellerRole": listing.get("sellerRole"),
                 "rankingScore": listing.get("rankingScore")  # Include if ranked
             })
