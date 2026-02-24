@@ -591,6 +591,10 @@ def create_enterprise_product_router(db):
             searchable_attrs = listing.get("searchableAttributes") or listing.get("technicalSpecs") or {}
             attribute_labels = listing.get("attributeLabels") or {}
             
+            # Compute stock status from stock value
+            stock_value = listing.get("stock", 0)
+            stock_status = "in_stock" if stock_value > 0 else "out_of_stock"
+            
             result_item = serialize_doc({
                 "listingId": listing.get("_id") or listing.get("listingId"),
                 "sellerId": listing["sellerId"],
@@ -600,7 +604,8 @@ def create_enterprise_product_router(db):
                 "pricingTiers": pricing,
                 "lowestPrice": lowest,
                 "moq": listing.get("moq", 1),
-                "stock": listing.get("stock", 0),
+                "stock": stock_value,
+                "stockStatus": stock_status,
                 "leadTimeDays": listing.get("leadTime"),
                 "images": listing_images[:2],
                 "sellerRole": listing.get("sellerRole"),
