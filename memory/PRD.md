@@ -788,6 +788,100 @@ The Enterprise Product Page (`/ep/[slug]`) was not displaying product images, se
 
 ---
 
+## ENTERPRISE SEARCH SYSTEM (Implemented Feb 24, 2026)
+
+### Architecture Overview
+```
+User Input
+   ↓
+Query Normalizer (unit convert, synonyms)
+   ↓
+Query Parser (extract attributes)
+   ↓
+Build Search Query
+   ↓
+Apply Location Filter (seller-validated cities)
+   ↓
+Apply Ranking Boost
+   ↓
+Return Results + Suggestions
+   ↓
+Log Analytics
+```
+
+### Key Features
+
+**1. Unit Normalization Service** (`/services/search_normalization_service.py`)
+- `half hp` → `0.5 hp`
+- `500w` → `0.67 hp`
+- `1/2 hp` → `0.5 hp`
+- Synonym expansion: `ampr` → `ampere`, `moter` → `motor`
+- Attribute extraction: voltage, power, phase
+- Category detection: motor, pump, compressor
+
+**2. Structured Location System** (`/services/seller_location_service.py`)
+- `activeSellerCities` collection - Only cities where sellers exist
+- Location autocomplete returns seller-validated cities only
+- Nearby suggestions when no sellers in searched city
+- Pincode geocoding for 50+ Indian cities
+
+**3. Search Endpoints**
+```
+GET /api/search?q=half hp motor near me
+GET /api/search/locations?q=pu
+GET /api/search/locations/check?city=Nashik
+GET /api/search/autocomplete?q=mot
+GET /api/search/related?q=motor
+POST /api/search/locations/rebuild
+```
+
+**4. Intelligent Fallback (4 Levels)**
+- Level 1: Exact match with all filters
+- Level 2: Text-only search (remove attribute filters)
+- Level 3: Category search
+- Level 4: Trending products
+
+**5. Location Filter Types**
+| Type | Example |
+|------|---------|
+| City | Pune, Maharashtra |
+| State | Maharashtra |
+| Pincode | 411046 |
+| Radius | Within 50km |
+| Pan India | All locations |
+
+### New Collections
+```json
+// activeSellerCities
+{
+  "city": "Pune",
+  "state": "Maharashtra",
+  "sellerCount": 42,
+  "coordinates": [73.83, 18.46]
+}
+
+// searchAnalytics
+{
+  "query": "half hp motor",
+  "normalizedQuery": "0.5 hp motor",
+  "extractedAttributes": {"power_hp": 0.5},
+  "resultsCount": 15,
+  "timestamp": "2026-02-24T..."
+}
+```
+
+### Files Created
+- `/app/backend/services/search_normalization_service.py`
+- `/app/backend/services/pincode_geocode_service.py`
+- `/app/backend/services/seller_location_service.py`
+- `/app/backend/routers/enterprise_search_router.py`
+
+### Files Modified
+- `/app/backend/seller_products.py` - Added `normalizedSearchTokens` to listings
+- `/app/backend/server.py` - Registered enterprise search router
+
+---
+
 ## FRONTEND LISTING CREATION VALIDATION FIX (Completed Feb 24, 2026)
 
 ### Issue Resolved
