@@ -37,6 +37,7 @@ from bson import ObjectId
 import logging
 
 from guards.enterprise_listing_guard import enterprise_guard
+from services.seller_location_service import create_seller_location_service
 
 logger = logging.getLogger("b2b_seller")
 
