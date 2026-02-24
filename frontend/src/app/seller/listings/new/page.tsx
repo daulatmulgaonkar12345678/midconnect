@@ -54,6 +54,7 @@ interface FormState {
   categoryId: string;
   productId: string;
   sellerRole: string;
+  manufacturerId: string;  // Phase 2: Dropdown selection (no free text)
   
   // Step 2: Attributes (NOT specifications)
   attributes: Record<string, AttributeValue>;
