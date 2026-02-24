@@ -1562,8 +1562,7 @@ export const filterProductListings = (
 ): Promise<FilterResponse> =>
   fetchAPI(`/products/${encodeURIComponent(productId)}/filter`, {
     method: 'POST',
-    body: JSON.stringify(filters),
-    headers: { 'Content-Type': 'application/json' }
+    body: filters  // fetchAPI handles JSON.stringify internally
   });
 
 // ==========================================
