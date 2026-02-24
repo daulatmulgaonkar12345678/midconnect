@@ -1269,15 +1269,29 @@ const addPricingTier = () => {
                   })}
                 </div>
               ) : (
-                <div className="py-8 text-center">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-3 text-amber-500" />
-                  <p className="text-gray-700 font-medium">No attribute template for this product</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    This product does not have technical specifications defined.
+                <div className="py-8 text-center bg-red-50 rounded-lg border-2 border-red-200">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-3 text-red-500" />
+                  <p className="text-red-700 font-semibold text-lg">Cannot Create Listing</p>
+                  <p className="text-sm text-red-600 mt-2 max-w-md mx-auto">
+                    This product does not have technical specifications defined. 
+                    All products require at least one technical attribute.
                   </p>
-                  <p className="text-sm text-amber-600 mt-3">
-                    Please contact admin to add a specification template, or choose a different product.
-                  </p>
+                  <div className="mt-4 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(1)}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+                    >
+                      Choose Different Product
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRequestSpecField(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                    >
+                      Request Spec Template
+                    </button>
+                  </div>
                 </div>
               )}
               
