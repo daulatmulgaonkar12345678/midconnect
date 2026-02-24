@@ -117,6 +117,10 @@ def create_enterprise_product_router(db):
             {"$match": {"productId": product_oid, "status": "active"}},
             {"$facet": {
                 "totalCount": [{"$count": "count"}],
+                "uniqueSellers": [
+                    {"$group": {"_id": "$sellerId"}},
+                    {"$count": "count"}
+                ],
                 "minPrice": [
                     {"$unwind": "$pricingTiers"},
                     {"$group": {"_id": None, "min": {"$min": "$pricingTiers.pricePerUnit"}}}
