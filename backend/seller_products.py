@@ -237,10 +237,12 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             parts.append(product["name"])
         
         # Category name
+        category_name = None
         if category_id:
             category = await db.categories.find_one({"_id": category_id})
             if category and category.get("name"):
                 parts.append(category["name"])
+                category_name = category["name"]
         
         # Variant attributes
         attrs = variant.get("attributes", {})
@@ -249,18 +251,69 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             parts.append(f"{value}")
         
         # Seller location
+        seller_city = None
+        seller_state = None
         if seller:
             profile = seller.get("profile", {})
             if profile.get("city"):
                 parts.append(profile["city"])
+                seller_city = profile["city"]
             if profile.get("state"):
                 parts.append(profile["state"])
+                seller_state = profile["state"]
         
         # Description
         if description:
             parts.append(description)
         
         return " ".join(filter(None, parts)).lower()
+    
+    async def _build_normalized_search_tokens(db, product, category_id, variant, seller, description):
+        """
+        Build normalized search tokens for enterprise search.
+        Includes unit variations, synonyms, and attribute values.
+        """
+        from services.search_normalization_service import search_normalizer
+        
+        # Gather all listing data
+        listing_data = {
+            "productName": product.get("name", ""),
+            "description": description or "",
+            "searchableAttributes": variant.get("attributes", {}),
+            "attributeLabels": {},
+        }
+        
+        # Get attribute labels
+        template_ids = product.get("specTemplateIds", [])
+        if template_ids:
+            try:
+                template_id = template_ids[0] if isinstance(template_ids[0], ObjectId) else ObjectId(str(template_ids[0]))
+                template = await db.specTemplates.find_one({"_id": template_id})
+                if template and template.get("fields"):
+                    for field in template["fields"]:
+                        key = field.get("key")
+                        label = field.get("label")
+                        if key and label:
+                            listing_data["attributeLabels"][key] = label
+            except Exception:
+                pass
+        
+        # Add category name
+        if category_id:
+            category = await db.categories.find_one({"_id": category_id})
+            if category:
+                listing_data["categoryName"] = category.get("name", "")
+        
+        # Add seller location
+        if seller:
+            profile = seller.get("profile", {})
+            listing_data["sellerCity"] = profile.get("city", "")
+            listing_data["sellerState"] = profile.get("state", "")
+        
+        # Generate normalized tokens
+        tokens = search_normalizer.generate_search_tokens(listing_data)
+        
+        return tokens
     
     async def _get_attribute_labels(db, product):
         """Get attribute labels from spec template."""
