@@ -926,4 +926,34 @@ The seller listing creation form at `/seller/listings/new` was allowing users to
 - Fixes `specTemplates.categoryId` type (string → ObjectId)
 - Validates product.specTemplateIds references
 
+---
+
+## UI/UX FIXES (Completed Feb 24, 2026 - Session 2)
+
+### Issues Fixed
+
+**P0 - Location Filter Not Showing Cities with Active Sellers**
+- **Root Cause**: `activeSellerCities` collection was empty
+- **Fix**: Triggered rebuild via `POST /api/search/locations/rebuild`
+- **Result**: Delhi now shows with sellerCount: 1 when searching
+- **Note**: Pune was never available because no sellers exist there (only Delhi)
+
+**P1 - Duplicate Search Bar on /search Page**
+- **Root Cause**: `/search/page.tsx` had its own search form in addition to EnterpriseSearchBar in header
+- **Fix**: Refactored `/search/page.tsx` to remove duplicate search form
+- **Result**: Page now uses unified EnterpriseSearchBar in header, displays results using URL params
+
+### Test Results
+- Backend: 100% (8/8 tests passed)
+- Frontend: 100% (2/2 UI tests passed)
+- Test report: `/app/test_reports/iteration_19.json`
+
+### Files Modified
+- `/app/frontend/src/app/search/page.tsx` - Removed duplicate search form, uses URL params
+
+### API Endpoints Verified
+- `GET /api/search/locations?q=del` - Returns Delhi with sellerCount: 1 ✅
+- `GET /api/search/locations/check?city=Delhi` - Returns hasSellers: true ✅
+- `POST /api/search/locations/rebuild` - Rebuilds activeSellerCities collection ✅
+
 
