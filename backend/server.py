@@ -10728,6 +10728,12 @@ from routers.admin_governance_router import create_admin_governance_router
 admin_governance_router = create_admin_governance_router(db, require_admin)
 app.include_router(admin_governance_router, prefix="/api")
 
+# ================== ENTERPRISE SEARCH ROUTER ==================
+# Intelligent search with unit normalization, synonyms, geo-filtering
+from routers.enterprise_search_router import create_enterprise_search_router
+enterprise_search_router = create_enterprise_search_router(db)
+app.include_router(enterprise_search_router, prefix="/api")
+
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health
 # @app.get("/")
