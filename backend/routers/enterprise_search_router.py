@@ -60,6 +60,99 @@ def create_enterprise_search_router(db, require_auth=None):
     """
     router = APIRouter(prefix="/search", tags=["Enterprise Search"])
     
+    # Initialize seller location service
+    location_service = create_seller_location_service(db)
+    
+    # ==================== LOCATION AUTOCOMPLETE ====================
+    
+    @router.get("/locations")
+    async def location_autocomplete(
+        q: str = Query(..., min_length=1, description="Location query (city, state, or pincode)"),
+        limit: int = Query(10, ge=1, le=20)
+    ):
+        """
+        Location autocomplete for search.
+        
+        ONLY returns cities where sellers are onboarded.
+        
+        Example:
+            GET /api/search/locations?q=pu
+            
+        Returns:
+            [
+                {"label": "Pune, Maharashtra", "type": "city", "sellerCount": 42},
+                {"label": "Punjab", "type": "state"},
+                {"label": "Puri, Odisha", "type": "city", "sellerCount": 5}
+            ]
+        """
+        try:
+            suggestions = await location_service.get_location_suggestions(q, limit)
+            
+            return {
+                "query": q,
+                "suggestions": [
+                    {
+                        "label": s.label,
+                        "type": s.type,
+                        "city": s.city,
+                        "state": s.state,
+                        "pincode": s.pincode,
+                        "coordinates": s.coordinates,
+                        "sellerCount": s.seller_count
+                    }
+                    for s in suggestions
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Location autocomplete error: {e}")
+            return {"query": q, "suggestions": []}
+    
+    @router.get("/locations/check")
+    async def check_location_availability(
+        city: Optional[str] = Query(None),
+        state: Optional[str] = Query(None),
+        pincode: Optional[str] = Query(None)
+    ):
+        """
+        Check if sellers exist in a location.
+        
+        If no sellers, returns nearby alternatives.
+        
+        Example:
+            GET /api/search/locations/check?city=Nashik
+            
+        Returns:
+            {
+                "hasSellers": false,
+                "message": "No sellers onboarded yet in Nashik",
+                "nearbyAlternatives": [
+                    {"label": "Pune, Maharashtra (85 km away)", "sellerCount": 42},
+                    {"label": "Mumbai, Maharashtra (165 km away)", "sellerCount": 78}
+                ]
+            }
+        """
+        try:
+            result = await location_service.check_sellers_in_location(
+                city=city, state=state, pincode=pincode
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Location check error: {e}")
+            return {"hasSellers": False, "error": str(e)}
+    
+    @router.post("/locations/rebuild")
+    async def rebuild_active_seller_cities():
+        """
+        Admin endpoint to rebuild activeSellerCities collection.
+        Call this if data gets out of sync.
+        """
+        try:
+            count = await location_service.rebuild_active_seller_cities()
+            return {"success": True, "citiesWithSellers": count}
+        except Exception as e:
+            logger.error(f"Rebuild error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
     # ==================== SEARCH ENDPOINT ====================
     
     @router.get("")
