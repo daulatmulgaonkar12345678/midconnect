@@ -584,6 +584,10 @@ export default function NewSellerListingPage() {
         
         const cats = await getAllCategories();
         setCategories(cats.filter(c => c.isActive !== false));
+        
+        // Load manufacturers for dropdown (Phase 2 - no free text)
+        const { manufacturers: mfrs } = await getManufacturers('approved');
+        setManufacturers(mfrs);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
