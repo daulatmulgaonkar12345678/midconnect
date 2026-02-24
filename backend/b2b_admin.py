@@ -636,7 +636,7 @@ def create_b2b_admin_router(db, require_admin):
         doc = {
             "_id": ObjectId(),
             "name": data.name,
-            "categoryId": data.categoryId,
+            "categoryId": ObjectId(data.categoryId),  # FIXED: Store as ObjectId
             "description": data.description,
             "fields": fields,
             "version": 1,
