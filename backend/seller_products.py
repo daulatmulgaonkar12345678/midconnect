@@ -161,13 +161,27 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         }
     
     def validate_listing_completeness(listing: dict) -> None:
+        """
+        ENTERPRISE VALIDATION: Ensures listing has all required fields before publish.
+        
+        Strict checks:
+        - pricingTiers: at least 1 tier
+        - moq: greater than 0
+        - stock: greater than 0
+        - maxCapacity: greater than 0
+        - images: at least 1 image
+        - variantId: must be linked
+        - searchableAttributes: must have at least 1 attribute
+        """
         required_fields = {
             "pricingTiers": {"check": lambda v: v and len(v) > 0, "message": "At least one pricing tier required"},
             "moq": {"check": lambda v: v and v > 0, "message": "MOQ must be greater than 0"},
             "stock": {"check": lambda v: v and v > 0, "message": "Stock quantity must be greater than 0"},
             "maxCapacity": {"check": lambda v: v and v > 0, "message": "Maximum capacity must be greater than 0"},
             "images": {"check": lambda v: v and len(v) > 0, "message": "At least one product image required"},
-            "variantId": {"check": lambda v: v is not None, "message": "Product variant must be linked"}
+            "variantId": {"check": lambda v: v is not None, "message": "Product variant must be linked"},
+            # ENTERPRISE: Technical specifications required for searchability
+            "searchableAttributes": {"check": lambda v: v and len(v) > 0, "message": "Technical specifications required"}
         }
         missing_fields = []
         field_errors = {}
