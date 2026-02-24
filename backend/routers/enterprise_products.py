@@ -182,12 +182,13 @@ def create_enterprise_product_router(db):
         summary_result, listings = await asyncio.gather(summary_task, listings_task)
         
         if not summary_result:
-            summary_result = [{"totalCount": [], "minPrice": [], "variantCount": [], "facets": []}]
+            summary_result = [{"totalCount": [], "uniqueSellers": [], "minPrice": [], "variantCount": [], "facets": []}]
         
         agg_result = summary_result[0]
         
         # Extract values
         total_count = agg_result["totalCount"][0]["count"] if agg_result["totalCount"] else 0
+        unique_seller_count = agg_result["uniqueSellers"][0]["count"] if agg_result["uniqueSellers"] else 0
         min_price = agg_result["minPrice"][0]["min"] if agg_result["minPrice"] else None
         variant_count = agg_result["variantCount"][0]["count"] if agg_result["variantCount"] else 0
         
