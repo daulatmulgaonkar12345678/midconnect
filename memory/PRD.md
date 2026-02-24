@@ -491,6 +491,59 @@ Production v1 of the Hybrid RFQ → Quote → WhatsApp → Acceptance System. Ke
 
 ---
 
+## ENTERPRISE ARCHITECTURE CONSISTENCY AUDIT (Completed Feb 24, 2026)
+
+### Audit Scope
+Full 7-step enterprise audit covering:
+- Database type consistency
+- Backend logic consistency
+- Frontend dependency audit
+- API contract validation
+- Data flow simulation
+- Strict rule enforcement
+- Root cause report
+
+### Issues Found & Fixed
+
+**Database Type Issues:**
+| Issue | Count | Fix Applied |
+|-------|-------|-------------|
+| specTemplate.categoryId as STRING | 5 | Converted to ObjectId |
+| specTemplate.isActive != true | 7 | Set to true |
+| products.specTemplateIds EMPTY | 5 | Linked to templates |
+| variant.attributes EMPTY | 1 | Populated from listing |
+
+**Root Cause:**
+- Product "Industrial Electric Motor 5HP" had `specTemplateIds: []` (empty)
+- Category had no linked specTemplate
+- This caused "No attribute template for this category" error
+
+**Fixes Applied:**
+1. Created `Electric Motor Specifications` template with 5 fields (power, voltage, phase, rpm, efficiency)
+2. Linked product to new template via `specTemplateIds`
+3. Updated variant with proper `templateVersions`
+4. Fixed frontend `listing.attributes` → `listing.searchableAttributes`
+
+### Enterprise Schema Alignment (Final)
+```
+Layer                           Status
+────────────────────────────────────────
+specTemplates.categoryId        ObjectId ✅
+specTemplates.isActive          true ✅
+products.specTemplateIds        Array[ObjectId] ✅
+productVariants.attributes      Populated ✅
+productVariants.templateVersions Linked ✅
+sellerListings.searchableAttributes Denormalized ✅
+Frontend                        Uses searchableAttributes ✅
+```
+
+### Verification Results
+- API `/seller/categories/{id}/spec-template` returns template with 5 fields ✅
+- Enterprise page shows labeled specifications ✅
+- Filters use proper labels (Power, Voltage, Phase, etc.) ✅
+
+---
+
 ## SCHEMA CONSISTENCY FIX (Completed Feb 24, 2026)
 
 ### Problem Identified
