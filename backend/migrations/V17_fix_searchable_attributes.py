@@ -47,7 +47,9 @@ async def run_migration():
         return
     
     client = AsyncIOMotorClient(mongo_url)
-    db = client['b2b_marketplace']
+    db_name = os.environ.get('DB_NAME', 'b2b_marketplace')
+    db = client[db_name]
+    print(f"Using database: {db_name}")
     
     print("=" * 70)
     print("V17 FIX SEARCHABLE ATTRIBUTES DATA ALIGNMENT")
