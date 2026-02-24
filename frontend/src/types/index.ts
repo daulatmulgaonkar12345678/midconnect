@@ -249,6 +249,8 @@ export interface SellerListing {
   categoryId: string;
   sellerRole: string;
   attributes: Record<string, string | number | boolean>;
+  searchableAttributes: Record<string, string | number | boolean>;  // ENTERPRISE: Denormalized from variant
+  attributeLabels?: Record<string, string>;  // ENTERPRISE: Human-readable labels
   description?: string;
   images: string[];
   datasheetUrl?: string;
