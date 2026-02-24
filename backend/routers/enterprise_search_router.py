@@ -9,10 +9,12 @@ Intelligent search system with:
 - Geo-radius filtering
 - Intelligent fallback
 - Related suggestions
+- STRUCTURED location autocomplete (seller-validated cities only)
 """
 
 from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timezone
 import re
@@ -20,8 +22,36 @@ import logging
 
 from services.search_normalization_service import search_normalizer, ParsedQuery
 from services.pincode_geocode_service import geocode_service, GeoLocation
+from services.seller_location_service import create_seller_location_service
 
 logger = logging.getLogger(__name__)
+
+
+# ==================== REQUEST/RESPONSE MODELS ====================
+
+class LocationFilter(BaseModel):
+    """Structured location filter from frontend"""
+    areaType: str  # 'city', 'state', 'pincode', 'radius', 'pan_india'
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    coordinates: Optional[List[float]] = None  # [lng, lat]
+    radiusKm: Optional[int] = None
+
+
+class SearchRequest(BaseModel):
+    """Structured search request"""
+    query: str
+    location: Optional[LocationFilter] = None
+    category: Optional[str] = None
+    minPrice: Optional[float] = None
+    maxPrice: Optional[float] = None
+    voltage: Optional[float] = None
+    powerHp: Optional[float] = None
+    phase: Optional[str] = None
+    page: int = 1
+    limit: int = 20
+    sortBy: str = "relevance"
 
 
 def create_enterprise_search_router(db, require_auth=None):
