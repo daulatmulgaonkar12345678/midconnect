@@ -5,11 +5,13 @@ V17 Fix searchableAttributes Data Alignment
 This migration fixes the data alignment issue where:
 1. sellerListings have empty searchableAttributes {}
 2. But the linked productVariants have valid attributes
+3. specTemplates.categoryId stored as string instead of ObjectId
 
 The fix:
 - For each sellerListing with empty searchableAttributes
 - Look up the linked variantId in productVariants
 - Copy the variant's attributes to sellerListing.searchableAttributes
+- Convert specTemplates.categoryId from string to ObjectId
 
 Also ensures:
 - specTemplates.categoryId is stored as ObjectId (not string)
