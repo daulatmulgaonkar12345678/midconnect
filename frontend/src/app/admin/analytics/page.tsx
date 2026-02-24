@@ -102,10 +102,10 @@ export default function AdminAnalyticsDashboard() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
       
       const [overviewRes, revenueRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/analytics/overview`, {
+        fetch(`${API_URL}/admin/analytics/overview`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        fetch(`${API_URL}/api/admin/analytics/revenue`, {
+        fetch(`${API_URL}/admin/analytics/revenue`, {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
