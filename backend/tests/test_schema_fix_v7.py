@@ -21,7 +21,7 @@ import os
 # Get API base URL from environment
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://seller-images.preview.emergentagent.com"
+    BASE_URL = "https://tender-lalande-3.preview.emergentagent.com"
 
 DEV_TOKEN = "dev-test-token"
 
