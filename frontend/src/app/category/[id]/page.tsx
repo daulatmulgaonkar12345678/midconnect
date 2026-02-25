@@ -190,9 +190,9 @@ export default async function CategoryPage({ params }: Props) {
                       </div>
                       
                       {/* Min Price */}
-                      {product.min_price && (
+                      {product.minPrice && (
                         <p className="text-sm text-gray-600 mt-2">
-                          Starting from <span className="font-semibold text-gray-900">₹{product.min_price.toLocaleString('en-IN')}</span>
+                          Starting from <span className="font-semibold text-gray-900">₹{product.minPrice.toLocaleString('en-IN')}</span>
                         </p>
                       )}
                       
