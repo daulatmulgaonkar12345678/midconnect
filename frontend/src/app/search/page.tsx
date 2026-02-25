@@ -9,6 +9,7 @@ import { searchProducts, sanitizeInput, ApiError } from '@/lib/api';
 
 function SearchContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const query = searchParams.get('q') || '';
   const city = searchParams.get('city') || '';
   const state = searchParams.get('state') || '';
