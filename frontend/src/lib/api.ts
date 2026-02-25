@@ -86,11 +86,33 @@ export type {
   TechnicalSpec,
 };
 
-// API Configuration - uses environment variable only
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+// API Configuration - uses environment variable with fallback for Vercel
+const getApiUrl = (): string => {
+  // Check for explicit API URL first
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (apiUrl && apiUrl.startsWith('http')) {
+    return apiUrl;
+  }
+  
+  // Check for backend URL
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+  if (backendUrl && backendUrl.startsWith('http')) {
+    return backendUrl;
+  }
+  
+  // Fallback for Vercel deployment
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return 'https://b2b-marketplace-v2.preview.emergentagent.com';
+  }
+  
+  // Local development - use relative URLs
+  return '';
+};
 
-if (!API_URL && typeof window !== 'undefined') {
-  console.warn('NEXT_PUBLIC_API_URL not configured. API calls will fail.');
+const API_URL = getApiUrl();
+
+if (!API_URL && typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) {
+  console.warn('API URL not configured. Using fallback.');
 }
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
