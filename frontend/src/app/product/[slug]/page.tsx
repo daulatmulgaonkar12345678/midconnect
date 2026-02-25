@@ -525,10 +525,6 @@ export default function EnterpriseProductPage() {
           getProductFacets(productId as string)
         ]);
 
-        console.log('Product data sellers:', JSON.stringify(productData.sellers?.map(s => ({
-          companyName: s.companyName, city: s.city, state: s.state
-        }))));
-
         setProduct(productData);
         setFacets(facetsData);
         setSellers(productData.sellers);
