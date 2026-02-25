@@ -52,6 +52,14 @@ function SearchContent() {
 
   // Build location label for display
   const locationLabel = city ? `${city}${state ? `, ${state}` : ''}` : (state || 'All India');
+  const hasLocationFilter = !!(city || state);
+
+  // Clear location filter
+  const clearLocationFilter = () => {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    router.push(`/search?${params.toString()}`);
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" data-testid="search-results-page">
