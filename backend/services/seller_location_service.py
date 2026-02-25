@@ -157,6 +157,23 @@ class SellerLocationService:
         logger.info(f"Rebuilt activeSellerCities: {count} cities with active sellers")
         return count
     
+    async def get_cities_with_sellers(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        Get all cities with active sellers (no query required).
+        
+        Used by the location dropdown to show options immediately.
+        Returns cities sorted by seller count (most sellers first).
+        """
+        try:
+            cities = await self.db.activeSellerCities.find(
+                {"sellerCount": {"$gt": 0}}
+            ).sort("sellerCount", -1).limit(limit).to_list(limit)
+            
+            return cities
+        except Exception as e:
+            logger.error(f"Error fetching active cities: {e}")
+            return []
+    
     # ==================== LOCATION AUTOCOMPLETE ====================
     
     async def get_location_suggestions(
