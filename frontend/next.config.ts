@@ -23,13 +23,22 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'images.unsplash.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'example.com',
+      },
     ],
   },
 
   // API rewrites to proxy requests to the backend
   // This allows frontend to call /api/* without CORS issues
   async rewrites() {
-    const backendUrl = process.env.VITE_API_BASE_URL || 'http://localhost:8001';
+    // For Vercel deployment, use the production backend URL
+    // For local dev, use localhost
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.VITE_API_BASE_URL || 'http://localhost:8001';
+    
+    console.log('[Next.js Config] Using backend URL for rewrites:', backendUrl);
+    
     return [
       {
         source: '/api/:path*',
