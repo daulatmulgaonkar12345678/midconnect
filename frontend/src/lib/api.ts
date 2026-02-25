@@ -28,6 +28,7 @@ import type {
   PricingSlab,
   PricingTierCreate,
   AdminInquiry,
+  SearchListing,
   AdminProduct,
   AdminSpecTemplate,
   AdminStats,
