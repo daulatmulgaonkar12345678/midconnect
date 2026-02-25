@@ -117,6 +117,33 @@ export interface ProductSeller {
   images: string[];
 }
 
+// Search listing result - flat structure from enterprise search
+export interface SearchListing {
+  _id: string;
+  productId: string;
+  productName: string;
+  sellerId: string;
+  categoryId?: string;
+  categoryName?: string;
+  description?: string;
+  images: string[];
+  price: number;
+  currency: string;
+  moq: number;
+  stock: number;
+  inStock: boolean;
+  leadTime: number;
+  pricingTiers: PricingTier[];
+  city?: string;
+  state?: string;
+  sellerTier?: string;
+  sellerRating?: number;
+  isPremiumSeller?: boolean;
+  manufacturerId?: string;
+  manufacturerName?: string;
+  rankScore?: number;
+}
+
 export interface ProductWithAllSellers {
   productId: string;
   productName: string;
