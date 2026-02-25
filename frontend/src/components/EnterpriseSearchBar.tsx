@@ -389,22 +389,23 @@ export default function EnterpriseSearchBar({
         </button>
       </div>
       
-      {/* Selected Location Tag */}
+      {/* Selected Location Chip - More Prominent */}
       {location && location.type !== 'pan_india' && (
-        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
-          <span className="text-xs text-gray-500">Location:</span>
-          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
-            <MapPin className="h-3 w-3" />
+        <div className="flex items-center gap-2 px-4 py-2 -mx-4 -mb-2 bg-slate-50 border-t border-slate-200 rounded-b-xl">
+          <span className="text-sm font-medium text-slate-600">Filtering by:</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-full shadow-sm">
+            <MapPin className="h-4 w-4" />
             {location.label}
             <button
               onClick={() => {
                 setLocation(null);
-                setLocationSearch('');  // Clear the search field too
+                setLocationSearch('');
               }}
-              className="ml-1 hover:text-blue-900"
+              className="ml-1 hover:bg-blue-700 rounded-full p-0.5 transition-colors"
               data-testid="clear-location-btn"
+              aria-label="Remove location filter"
             >
-              <X className="h-3 w-3" />
+              <X className="h-4 w-4" />
             </button>
           </span>
         </div>
