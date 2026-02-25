@@ -4,15 +4,20 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, MapPin, ChevronDown, X, Loader2, TrendingUp, Package, Folder } from 'lucide-react';
 
-// Use relative URLs - Next.js rewrites will proxy to backend
-// This works both in development and production
-const getApiUrl = () => {
-  // For client-side, use relative URLs (Next.js rewrites handle the proxy)
+// Get API base URL for client-side calls
+// Uses NEXT_PUBLIC_BACKEND_URL for Vercel deployment, or relative URLs for dev
+const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
-    return '';  // Relative URLs like /api/search/autocomplete
+    // Client-side: Use the public backend URL if available (for Vercel)
+    // Otherwise use relative URLs (for local dev with Next.js rewrites)
+    const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (publicUrl && publicUrl !== 'undefined') {
+      return publicUrl;
+    }
+    return ''; // Relative URLs for local development
   }
-  // For server-side rendering, use the configured backend URL
-  return process.env.VITE_API_BASE_URL || '';
+  // Server-side: Use environment variable
+  return process.env.NEXT_PUBLIC_BACKEND_URL || '';
 };
 
 interface LocationSuggestion {
