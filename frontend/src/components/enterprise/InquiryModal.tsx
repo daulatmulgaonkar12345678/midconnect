@@ -259,7 +259,13 @@ export default function InquiryModal({
                 ) : (
                   <>
                     <Send className="h-5 w-5" />
-                    {isAuthenticated ? 'Send Inquiry' : 'Login & Send'}
+                    {!isAuthenticated 
+                      ? 'Login & Send' 
+                      : needsEmailVerification 
+                        ? 'Verify Email' 
+                        : needsProfileCompletion 
+                          ? 'Complete Profile'
+                          : 'Send Inquiry'}
                   </>
                 )}
               </button>
