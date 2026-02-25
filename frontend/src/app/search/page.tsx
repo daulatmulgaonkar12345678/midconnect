@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SearchListing } from '@/types';
-import { Search, Info, AlertCircle, MapPin, X, TrendingUp, Users } from 'lucide-react';
+import { Search, Info, AlertCircle, MapPin, X, TrendingUp } from 'lucide-react';
 import { searchProducts, sanitizeInput, ApiError } from '@/lib/api';
 
 function SearchContent() {
