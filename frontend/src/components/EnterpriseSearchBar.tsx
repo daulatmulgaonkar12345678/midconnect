@@ -98,28 +98,42 @@ export default function EnterpriseSearchBar({
 
   // Fetch location suggestions
   const fetchLocationSuggestions = useCallback(async (searchQuery: string) => {
-    if (searchQuery.length < 1) {
-      // Show default options when no query
-      setLocationSuggestions([
-        { label: 'Pan India (All Locations)', type: 'pan_india' },
-      ]);
-      return;
-    }
-    
     setLocationLoading(true);
     try {
       const apiUrl = API_URL || '';
-      const res = await fetch(`${apiUrl}/api/search/locations?q=${encodeURIComponent(searchQuery)}&limit=10`);
-      if (res.ok) {
-        const data = await res.json();
-        setLocationSuggestions(data.suggestions || []);
+      
+      if (searchQuery.length < 1) {
+        // Fetch all active seller cities when no query
+        const res = await fetch(`${apiUrl}/api/search/locations/active?limit=10`);
+        if (res.ok) {
+          const data = await res.json();
+          const cities = data.cities || [];
+          // Add Pan India option at the start
+          setLocationSuggestions([
+            { label: 'Pan India (All Locations)', type: 'pan_india' },
+            ...cities
+          ]);
+        } else {
+          setLocationSuggestions([
+            { label: 'Pan India (All Locations)', type: 'pan_india' },
+          ]);
+        }
       } else {
-        console.error('Location API error:', res.status, res.statusText);
-        setLocationSuggestions([]);
+        // Search with query
+        const res = await fetch(`${apiUrl}/api/search/locations?q=${encodeURIComponent(searchQuery)}&limit=10`);
+        if (res.ok) {
+          const data = await res.json();
+          setLocationSuggestions(data.suggestions || []);
+        } else {
+          console.error('Location API error:', res.status, res.statusText);
+          setLocationSuggestions([]);
+        }
       }
     } catch (err) {
       console.error('Location fetch error:', err);
-      setLocationSuggestions([]);
+      setLocationSuggestions([
+        { label: 'Pan India (All Locations)', type: 'pan_india' },
+      ]);
     } finally {
       setLocationLoading(false);
     }
