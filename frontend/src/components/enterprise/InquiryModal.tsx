@@ -133,11 +133,33 @@ export default function InquiryModal({
           </div>
         ) : (
           <div className="p-5 space-y-4">
-            {/* Auth Warning */}
+            {/* Auth Warning - Not logged in */}
             {!isAuthenticated && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                 <span>You need to login to send an inquiry</span>
+              </div>
+            )}
+
+            {/* Email Verification Warning */}
+            {needsEmailVerification && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Email verification required</p>
+                  <p className="text-xs mt-1">Please verify your email address before sending inquiries.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Profile Completion Warning */}
+            {needsProfileCompletion && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Profile completion required</p>
+                  <p className="text-xs mt-1">Please complete your profile to send inquiries to sellers.</p>
+                </div>
               </div>
             )}
 
