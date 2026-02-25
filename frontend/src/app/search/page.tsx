@@ -137,7 +137,7 @@ function SearchContent() {
       ) : query ? (
         <div className="text-center py-16 bg-white rounded-xl">
           <Search className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">No products found for "{query}"</p>
+          <p className="text-gray-500 text-lg">No products found for &quot;{query}&quot;</p>
           <p className="text-gray-400 mt-2">Try a different search term or use the search bar above</p>
         </div>
       ) : (
