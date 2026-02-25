@@ -20,11 +20,11 @@ interface ProductWithSellers {
   name: string;
   slug: string;  // SEO-friendly URL identifier
   description?: string;
-  category_id?: string;
-  category_name?: string;
+  categoryId?: string;
+  categoryName?: string;
   images?: string[];
   sellerCount: number;
-  min_price?: number;
+  minPrice?: number;
 }
 
 // Generate static params
