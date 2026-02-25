@@ -93,7 +93,8 @@ export default function EnterpriseSearchBar({
     
     setLoading(true);
     try {
-      const res = await fetch(`/api/search/autocomplete?q=${encodeURIComponent(searchQuery)}&limit=8`);
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/search/autocomplete?q=${encodeURIComponent(searchQuery)}&limit=8`);
       if (res.ok) {
         const data = await res.json();
         setProductSuggestions(data.suggestions || []);
@@ -113,9 +114,10 @@ export default function EnterpriseSearchBar({
   const fetchLocationSuggestions = useCallback(async (searchQuery: string) => {
     setLocationLoading(true);
     try {
+      const apiBase = getApiBaseUrl();
       if (searchQuery.length < 1) {
         // Fetch all active seller cities when no query
-        const res = await fetch(`/api/search/locations/active?limit=10`);
+        const res = await fetch(`${apiBase}/api/search/locations/active?limit=10`);
         if (res.ok) {
           const data = await res.json();
           const cities = data.cities || [];
@@ -131,7 +133,7 @@ export default function EnterpriseSearchBar({
         }
       } else {
         // Search with query
-        const res = await fetch(`/api/search/locations?q=${encodeURIComponent(searchQuery)}&limit=10`);
+        const res = await fetch(`${apiBase}/api/search/locations?q=${encodeURIComponent(searchQuery)}&limit=10`);
         if (res.ok) {
           const data = await res.json();
           setLocationSuggestions(data.suggestions || []);
