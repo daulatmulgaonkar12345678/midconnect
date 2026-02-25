@@ -72,14 +72,14 @@ function SearchContent() {
       )}
 
       {/* Results Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="search-results-title">
             {query ? `Results for "${query}"` : 'Search Products'}
           </h1>
           <p className="text-gray-500">
             {products.length} products found
-            {(city || state) && <span className="ml-1">in {locationLabel}</span>}
+            {hasLocationFilter && <span className="ml-1">in {locationLabel}</span>}
           </p>
         </div>
         
@@ -96,6 +96,31 @@ function SearchContent() {
           </div>
         )}
       </div>
+
+      {/* Active Location Filter Chip - Prominent Display */}
+      {hasLocationFilter && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between" data-testid="active-filter-section">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-blue-800">Filtering by location:</span>
+            <span 
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-full shadow-md"
+              data-testid="location-filter-chip"
+            >
+              <MapPin className="h-4 w-4" />
+              {locationLabel}
+              <button
+                onClick={clearLocationFilter}
+                className="ml-1 hover:bg-blue-700 rounded-full p-1 transition-colors"
+                data-testid="clear-location-filter-btn"
+                aria-label="Remove location filter"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </span>
+          </div>
+          <p className="text-xs text-blue-600">Click X to search all of India</p>
+        </div>
+      )}
 
       {/* Results */}
       {isLoading ? (
