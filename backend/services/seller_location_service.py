@@ -294,10 +294,11 @@ class SellerLocationService:
         return suggestions
     
     async def _get_city_suggestions(self, query: str, limit: int) -> List[LocationSuggestion]:
-        """Get city suggestions from activeSellerCities."""
+        """Get city suggestions from activeSellerCities AND directly from seller listings."""
         suggestions = []
+        seen_cities = set()
         
-        # Search cities matching query
+        # 1. Search cities from activeSellerCities collection
         cities = await self.db.activeSellerCities.find({
             "$or": [
                 {"city": {"$regex": query, "$options": "i"}},
@@ -307,14 +308,62 @@ class SellerLocationService:
         }).sort("sellerCount", -1).limit(limit).to_list(limit)
         
         for c in cities:
-            suggestions.append(LocationSuggestion(
-                label=f"{c['city']}, {c['state']}",
-                type="city",
-                city=c["city"],
-                state=c["state"],
-                coordinates=c.get("coordinates"),
-                seller_count=c["sellerCount"]
-            ))
+            city_key = (c['city'], c['state'])
+            if city_key not in seen_cities:
+                seen_cities.add(city_key)
+                suggestions.append(LocationSuggestion(
+                    label=f"{c['city']}, {c['state']}",
+                    type="city",
+                    city=c["city"],
+                    state=c["state"],
+                    coordinates=c.get("coordinates"),
+                    seller_count=c["sellerCount"]
+                ))
+        
+        # 2. Also search directly in seller listings (in case activeSellerCities is stale)
+        # This ensures new sellers' locations show up immediately
+        listings_pipeline = [
+            {"$match": {
+                "isActive": True,
+                "$or": [
+                    {"city": {"$regex": query, "$options": "i"}},
+                    {"state": {"$regex": query, "$options": "i"}}
+                ]
+            }},
+            {"$group": {
+                "_id": {"city": "$city", "state": "$state"},
+                "count": {"$sum": 1}
+            }},
+            {"$match": {"_id.city": {"$ne": None}}},
+            {"$sort": {"count": -1}},
+            {"$limit": limit}
+        ]
+        
+        listing_cities = await self.db.sellerListings.aggregate(listings_pipeline).to_list(limit)
+        
+        for lc in listing_cities:
+            city = lc["_id"]["city"]
+            state = lc["_id"]["state"]
+            city_key = (city, state)
+            
+            if city and state and city_key not in seen_cities:
+                seen_cities.add(city_key)
+                # Try to get coordinates from known city data
+                coords = None
+                if state and state.lower() in [s.lower() for s in STATE_COORDINATES.keys()]:
+                    for s, c in STATE_COORDINATES.items():
+                        if s.lower() == state.lower():
+                            coords = c
+                            break
+                
+                suggestions.append(LocationSuggestion(
+                    label=f"{city}, {state}",
+                    type="city",
+                    city=city,
+                    state=state,
+                    coordinates=coords,
+                    seller_count=lc["count"]
+                ))
         
         return suggestions
     
