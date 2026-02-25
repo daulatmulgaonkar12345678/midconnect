@@ -276,7 +276,7 @@ function SellerCard({
         <div className="flex items-start justify-between mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-slate-900" data-testid="seller-name">{seller.companyName}</h3>
+              <span className="font-semibold text-slate-900" data-testid="seller-name">{seller.companyName || 'Unknown Seller'}</span>
               <SellerRoleBadge role={seller.sellerRole} />
             </div>
             <div className="flex items-center gap-1 text-sm text-slate-500" data-testid="seller-location">
