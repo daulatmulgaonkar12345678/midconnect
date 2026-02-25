@@ -624,9 +624,9 @@ def create_enterprise_product_router(db):
                 "listingId": listing.get("_id") or listing.get("listingId"),
                 "sellerId": listing["sellerId"],
                 "variantId": listing.get("variantId"),
-                "companyName": listing.get("manufacturerName") or "Verified Seller",  # Phase 2: Add seller name
-                "city": listing.get("city"),  # Phase 2: Add city
-                "state": listing.get("state"),  # Phase 2: Add state
+                "companyName": listing.get("companyName", "Verified Seller"),  # Phase 2: Seller name
+                "city": listing.get("city"),  # Phase 2: City
+                "state": listing.get("state"),  # Phase 2: State
                 "location": f"{listing.get('city', '')}, {listing.get('state', '')}".strip(", ") or "India",
                 "searchableAttributes": searchable_attrs,
                 "attributeLabels": attribute_labels,
