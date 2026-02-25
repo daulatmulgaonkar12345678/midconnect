@@ -192,34 +192,20 @@ export default function EnterpriseSearchBar({
     setShowLocationDropdown(false);
   };
 
-  // Handle suggestion click
+  // Handle suggestion click - ONLY sets query, does NOT auto-search
+  // User must click Search button to perform search
   const handleSuggestionClick = (suggestion: ProductSuggestion) => {
     setQuery(suggestion.text);
     setShowProductDropdown(false);
-    
-    // Auto-search after selection
-    setTimeout(() => {
-      if (onSearch) {
-        onSearch(suggestion.text, location);
-      } else {
-        const params = new URLSearchParams();
-        params.set('q', suggestion.text);
-        // Type-based location filter
-        if (location) {
-          if (location.type === 'city' && location.city) params.set('city', location.city);
-          else if (location.type === 'state' && location.state) params.set('state', location.state);
-          else if (location.type === 'pincode' && location.pincode) params.set('pincode', location.pincode);
-        }
-        router.push(`/search?${params.toString()}`);
-      }
-    }, 100);
+    // NOTE: Removed auto-search - user must click Search button
   };
 
-  // Handle location select
+  // Handle location select - ONLY sets location, does NOT auto-search
   const handleLocationSelect = (loc: LocationSuggestion) => {
     setLocation(loc);
     setShowLocationDropdown(false);
     setLocationSearch('');
+    // NOTE: Removed auto-search - user must click Search button
   };
 
   // Get icon for suggestion type
