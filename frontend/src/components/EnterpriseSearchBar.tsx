@@ -88,8 +88,7 @@ export default function EnterpriseSearchBar({
     
     setLoading(true);
     try {
-      const apiUrl = API_URL || '';
-      const res = await fetch(`${apiUrl}/api/search/autocomplete?q=${encodeURIComponent(searchQuery)}&limit=8`);
+      const res = await fetch(`/api/search/autocomplete?q=${encodeURIComponent(searchQuery)}&limit=8`);
       if (res.ok) {
         const data = await res.json();
         setProductSuggestions(data.suggestions || []);
