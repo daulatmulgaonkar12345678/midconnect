@@ -10611,14 +10611,15 @@ async def admin_migrate_category_ids(admin: dict = Depends(require_admin)):
     }
 
 
-# ================== TEMPORARY MIGRATION ENDPOINT ==================
-# SECURITY: Remove this endpoint immediately after running migration
-# Created: 2024-02-25
-# Purpose: One-time population of city/state in sellerListings
+# ================================================================
+# MIGRATION ENDPOINT REMOVED - 2026-02-25
+# The temporary populate-listing-locations-2024-temp endpoint
+# has been removed for security. Never leave admin/migration
+# endpoints publicly accessible.
 # ================================================================
 
-@api_router.post("/admin/migrate/populate-listing-locations-2024-temp")
-async def admin_populate_listing_locations_temp(admin: dict = Depends(require_admin)):
+# @api_router.post("/admin/migrate/populate-listing-locations-2024-temp")
+async def _REMOVED_admin_populate_listing_locations_temp(admin: dict = Depends(require_admin)):
     """
     TEMPORARY: One-time migration to populate city/state on sellerListings.
     
