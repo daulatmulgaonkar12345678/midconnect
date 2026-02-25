@@ -276,12 +276,14 @@ function SellerCard({
         <div className="flex items-start justify-between mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-slate-900">{seller.companyName}</h3>
+              <h3 className="font-semibold text-slate-900" data-testid="seller-name">{seller.companyName}</h3>
               <SellerRoleBadge role={seller.sellerRole} />
             </div>
-            <div className="flex items-center gap-1 text-sm text-slate-500">
+            <div className="flex items-center gap-1 text-sm text-slate-500" data-testid="seller-location">
               <MapPin className="h-4 w-4" />
-              {seller.location || 'India'}
+              {seller.city && seller.state 
+                ? `${seller.city}, ${seller.state}`
+                : seller.city || seller.state || seller.location || 'India'}
             </div>
           </div>
           
