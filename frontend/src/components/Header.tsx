@@ -31,7 +31,7 @@ export default function Header() {
           </Link>
 
           {/* Enterprise Search Bar - Desktop */}
-          <div className="hidden md:block flex-1 max-w-2xl">
+          <div className="hidden md:block flex-1 max-w-2xl overflow-visible">
             <EnterpriseSearchBar 
               variant="header" 
               showLocationFilter={true}
