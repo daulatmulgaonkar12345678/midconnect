@@ -1,16 +1,15 @@
 import Link from 'next/link';
 import { getCategories, searchProducts } from '@/lib/api';
 import CategoryCard from '@/components/CategoryCard';
-import ProductCard from '@/components/ProductCard';
-import { ArrowRight, Shield, Truck, BadgeCheck } from 'lucide-react';
-import { Category, ProductWithSellers } from '@/types';
+import { ArrowRight, Shield, Truck, BadgeCheck, MapPin, TrendingUp } from 'lucide-react';
+import { Category, SearchListing } from '@/types';
 import HeroSearchSection from '@/components/HeroSearchSection';
 
 export const revalidate = 3600; // Revalidate every hour
 
 export default async function HomePage() {
   let categories: Category[] = [];
-  let featuredProducts: ProductWithSellers[] = [];
+  let featuredProducts: SearchListing[] = [];
 
   try {
     categories = await getCategories();
