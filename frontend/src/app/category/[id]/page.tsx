@@ -155,12 +155,13 @@ export default async function CategoryPage({ params }: Props) {
           {products.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {products.map((product) => {
-                if (!product.name || !product.slug) return null;
+                if (!product.name) return null;
+                const productUrl = product.slug ? `/product/${product.slug}` : `/product/${product._id}`;
                 
                 return (
                   <Link
                     key={product._id}
-                    href={`/product/${product.slug}`}
+                    href={productUrl}
                     className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition group"
                   >
                     <div className="aspect-video bg-gray-100 flex items-center justify-center">
