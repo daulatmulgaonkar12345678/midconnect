@@ -254,11 +254,6 @@ function SellerCard({
   isComparing: boolean;
   compareSelected: boolean;
 }) {
-  console.log('SellerCard rendering with:', JSON.stringify({
-    companyName: seller.companyName,
-    city: seller.city,
-    state: seller.state
-  }));
   const lowestPrice = seller.lowestPrice || (seller.pricingTiers[0]?.pricePerUnit);
 
   return (
