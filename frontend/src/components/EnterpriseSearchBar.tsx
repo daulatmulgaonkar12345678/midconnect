@@ -163,16 +163,16 @@ export default function EnterpriseSearchBar({
     if (onSearch) {
       onSearch(query, location);
     } else {
-      // Navigate to products page with search params
+      // Navigate to search page with search params
       const params = new URLSearchParams();
       if (query) params.set('q', query);
       if (location) {
         if (location.type === 'city' && location.city) params.set('city', location.city);
         if (location.type === 'state' && location.state) params.set('state', location.state);
         if (location.type === 'pincode' && location.pincode) params.set('pincode', location.pincode);
-        if (location.type === 'pan_india') params.set('location', 'pan_india');
+        // Don't add param for pan_india - it's the default
       }
-      router.push(`/products?${params.toString()}`);
+      router.push(`/search?${params.toString()}`);
     }
     setShowProductDropdown(false);
     setShowLocationDropdown(false);
@@ -196,7 +196,7 @@ export default function EnterpriseSearchBar({
           else if (location.type === 'state' && location.state) params.set('state', location.state);
           else if (location.type === 'pincode' && location.pincode) params.set('pincode', location.pincode);
         }
-        router.push(`/products?${params.toString()}`);
+        router.push(`/search?${params.toString()}`);
       }
     }, 100);
   };
