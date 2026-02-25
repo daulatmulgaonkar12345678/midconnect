@@ -14,7 +14,7 @@ function SearchContent() {
   const city = searchParams.get('city') || '';
   const state = searchParams.get('state') || '';
   
-  const [products, setProducts] = useState<ProductWithSellers[]>([]);
+  const [products, setProducts] = useState<SearchListing[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guidanceDisclaimer, setGuidanceDisclaimer] = useState<string>('');
