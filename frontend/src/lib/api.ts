@@ -419,14 +419,14 @@ export const getProductWithSellers = (productIdentifier: string): Promise<Produc
   fetchAPI<ProductWithAllSellers>(`/products/detail/${encodeURIComponent(productIdentifier)}`);
 
 export interface SearchResult {
-  products: ProductWithSellers[];
+  products: SearchListing[];
   total: number;
   guidanceDisclaimer?: string;
 }
 
 // Backend search response has 'listings' key, we need to map it to 'products'
 interface BackendSearchResponse {
-  listings: ProductWithSellers[];
+  listings: SearchListing[];
   total: number;
   guidanceDisclaimer?: string;
 }
