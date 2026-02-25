@@ -110,16 +110,20 @@ export default function SellerCard({
         {/* Header Row */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
+            {/* Seller Name with Verified Badge */}
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-gray-900 truncate">
+              <h3 className="font-semibold text-gray-900 truncate" data-testid="seller-name">
                 {seller.companyName}
               </h3>
               <BadgeCheck className="h-4 w-4 text-blue-500 flex-shrink-0" />
             </div>
-            <div className="flex items-center gap-3 text-sm text-gray-500">
-              <span className="flex items-center gap-1">
+            {/* Location: City, State */}
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500">
+              <span className="flex items-center gap-1" data-testid="seller-location">
                 <MapPin className="h-3.5 w-3.5" />
-                {seller.location || 'India'}
+                {seller.city && seller.state 
+                  ? `${seller.city}, ${seller.state}`
+                  : seller.city || seller.state || seller.location || 'India'}
               </span>
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleConfig.color}`}>
                 {roleConfig.label}
