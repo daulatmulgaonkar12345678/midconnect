@@ -10611,6 +10611,74 @@ async def admin_migrate_category_ids(admin: dict = Depends(require_admin)):
     }
 
 
+@api_router.post("/admin/migrate/populate-listing-locations")
+async def admin_populate_listing_locations(admin: dict = Depends(require_admin)):
+    """
+    Populate city/state on all sellerListings from seller profiles.
+    
+    This ensures all listings have location data for search and display.
+    """
+    updated = 0
+    skipped = 0
+    not_found = 0
+    
+    # Get all listings
+    listings = await db.sellerListings.find({}).to_list(None)
+    
+    # Build seller cache
+    seller_ids = list(set(l.get("sellerId") for l in listings if l.get("sellerId")))
+    
+    # Fetch all seller profiles
+    seller_profiles = {}
+    if seller_ids:
+        sellers = await db.users.find(
+            {"_id": {"$in": seller_ids}},
+            {"profile": 1}
+        ).to_list(None)
+        
+        for s in sellers:
+            profile = s.get("profile", {})
+            seller_profiles[str(s["_id"])] = {
+                "city": profile.get("city"),
+                "state": profile.get("state")
+            }
+    
+    # Update each listing
+    for listing in listings:
+        seller_id = str(listing.get("sellerId", ""))
+        seller_info = seller_profiles.get(seller_id)
+        
+        if not seller_info:
+            not_found += 1
+            continue
+        
+        # Check if update needed
+        if listing.get("city") == seller_info.get("city") and listing.get("state") == seller_info.get("state"):
+            skipped += 1
+            continue
+        
+        # Update listing
+        await db.sellerListings.update_one(
+            {"_id": listing["_id"]},
+            {"$set": {
+                "city": seller_info.get("city"),
+                "state": seller_info.get("state"),
+                "updatedAt": datetime.now(timezone.utc)
+            }}
+        )
+        updated += 1
+    
+    logger.info(f"Admin {admin['email']} ran listing location migration: {updated} updated")
+    
+    return {
+        "message": f"Migration complete. Updated {updated} listings.",
+        "updated": updated,
+        "skipped": skipped,
+        "sellerNotFound": not_found,
+        "totalListings": len(listings)
+    }
+
+
 # ================== ENTERPRISE MIGRATION ENDPOINTS ==================
 
 @api_router.get("/admin/enterprise/status")
