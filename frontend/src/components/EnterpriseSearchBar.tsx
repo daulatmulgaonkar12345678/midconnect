@@ -4,7 +4,16 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, MapPin, ChevronDown, X, Loader2, TrendingUp, Package, Folder } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || '';
+// Use relative URLs - Next.js rewrites will proxy to backend
+// This works both in development and production
+const getApiUrl = () => {
+  // For client-side, use relative URLs (Next.js rewrites handle the proxy)
+  if (typeof window !== 'undefined') {
+    return '';  // Relative URLs like /api/search/autocomplete
+  }
+  // For server-side rendering, use the configured backend URL
+  return process.env.NEXT_PUBLIC_BACKEND_URL || '';
+};
 
 interface LocationSuggestion {
   label: string;
