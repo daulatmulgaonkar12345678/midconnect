@@ -10745,8 +10745,8 @@ async def _REMOVED_admin_populate_listing_locations_temp(admin: dict = Depends(r
         raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
 
 
-# ================== END TEMPORARY MIGRATION ==================
-# TODO: DELETE ABOVE ENDPOINT AFTER RUNNING MIGRATION
+# ================== MIGRATION ENDPOINT REMOVED ==================
+# Endpoint was removed on 2026-02-25 for security
 # ============================================================
 
 
