@@ -19,7 +19,7 @@ import requests
 import os
 
 # Use the public URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://midconnect-preview.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://b2b-marketplace-v2.preview.emergentagent.com')
 AUTH_TOKEN = "dev-test-token"
 
 # Test product IDs
