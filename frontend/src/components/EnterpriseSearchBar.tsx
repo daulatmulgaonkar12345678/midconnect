@@ -79,13 +79,18 @@ export default function EnterpriseSearchBar({
     
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/search/autocomplete?q=${encodeURIComponent(searchQuery)}&limit=8`);
+      const apiUrl = API_URL || '';
+      const res = await fetch(`${apiUrl}/api/search/autocomplete?q=${encodeURIComponent(searchQuery)}&limit=8`);
       if (res.ok) {
         const data = await res.json();
         setProductSuggestions(data.suggestions || []);
+      } else {
+        console.error('Autocomplete API error:', res.status, res.statusText);
+        setProductSuggestions([]);
       }
     } catch (err) {
-      console.error('Autocomplete error:', err);
+      console.error('Autocomplete fetch error:', err);
+      setProductSuggestions([]);
     } finally {
       setLoading(false);
     }
