@@ -424,6 +424,13 @@ export interface SearchResult {
   guidanceDisclaimer?: string;
 }
 
+// Backend search response has 'listings' key, we need to map it to 'products'
+interface BackendSearchResponse {
+  listings: ProductWithSellers[];
+  total: number;
+  guidanceDisclaimer?: string;
+}
+
 export async function searchProducts(
   query: string,
   options?: {
@@ -453,7 +460,14 @@ export async function searchProducts(
   if (options?.limit) params.append("limit", Math.min(options.limit, 100).toString());
   if (options?.skip) params.append("skip", Math.max(options.skip, 0).toString());
 
-  return fetchAPI<SearchResult>(`/search?${params.toString()}`);
+  const response = await fetchAPI<BackendSearchResponse>(`/search?${params.toString()}`);
+  
+  // Transform backend response to expected format
+  return {
+    products: response.listings || [],
+    total: response.total || 0,
+    guidanceDisclaimer: response.guidanceDisclaimer,
+  };
 }
 
 // ==================== User API ====================
