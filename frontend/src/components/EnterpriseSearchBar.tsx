@@ -108,11 +108,9 @@ export default function EnterpriseSearchBar({
   const fetchLocationSuggestions = useCallback(async (searchQuery: string) => {
     setLocationLoading(true);
     try {
-      const apiUrl = API_URL || '';
-      
       if (searchQuery.length < 1) {
         // Fetch all active seller cities when no query
-        const res = await fetch(`${apiUrl}/api/search/locations/active?limit=10`);
+        const res = await fetch(`/api/search/locations/active?limit=10`);
         if (res.ok) {
           const data = await res.json();
           const cities = data.cities || [];
@@ -128,7 +126,7 @@ export default function EnterpriseSearchBar({
         }
       } else {
         // Search with query
-        const res = await fetch(`${apiUrl}/api/search/locations?q=${encodeURIComponent(searchQuery)}&limit=10`);
+        const res = await fetch(`/api/search/locations?q=${encodeURIComponent(searchQuery)}&limit=10`);
         if (res.ok) {
           const data = await res.json();
           setLocationSuggestions(data.suggestions || []);
