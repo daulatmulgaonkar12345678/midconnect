@@ -65,6 +65,33 @@ def create_enterprise_search_router(db, require_auth=None):
     
     # ==================== LOCATION AUTOCOMPLETE ====================
     
+    @router.get("/locations/active")
+    async def get_active_seller_cities(
+        limit: int = Query(20, ge=1, le=50)
+    ):
+        """
+        Get all cities with active sellers (no query required).
+        
+        Used by the location dropdown to show options immediately.
+        """
+        try:
+            cities = await location_service.get_cities_with_sellers(limit)
+            return {
+                "cities": [
+                    {
+                        "label": f"{c.get('city')}, {c.get('state')}",
+                        "type": "city",
+                        "city": c.get("city"),
+                        "state": c.get("state"),
+                        "sellerCount": c.get("sellerCount", 0)
+                    }
+                    for c in cities
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Get active cities error: {e}")
+            return {"cities": []}
+    
     @router.get("/locations")
     async def location_autocomplete(
         q: str = Query(..., min_length=1, description="Location query (city, state, or pincode)"),
