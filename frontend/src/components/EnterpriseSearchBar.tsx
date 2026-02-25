@@ -222,8 +222,8 @@ export default function EnterpriseSearchBar({
   const containerStyles = variant === 'hero' 
     ? 'bg-white rounded-xl shadow-xl border border-gray-200 p-2'
     : variant === 'page'
-    ? 'bg-white rounded-xl shadow-lg border border-gray-200 p-3'
-    : 'bg-white rounded-lg border border-gray-200';
+    ? 'bg-white rounded-xl shadow-lg border border-gray-200 p-3 overflow-hidden'
+    : 'bg-white rounded-lg border border-gray-200 overflow-hidden';
 
   return (
     <div className={`${containerStyles} ${className}`}>
