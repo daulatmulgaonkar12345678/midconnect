@@ -393,8 +393,12 @@ export default function EnterpriseSearchBar({
             <MapPin className="h-3 w-3" />
             {location.label}
             <button
-              onClick={() => setLocation(null)}
+              onClick={() => {
+                setLocation(null);
+                setLocationSearch('');  // Clear the search field too
+              }}
               className="ml-1 hover:text-blue-900"
+              data-testid="clear-location-btn"
             >
               <X className="h-3 w-3" />
             </button>
