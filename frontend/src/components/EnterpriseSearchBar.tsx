@@ -5,16 +5,23 @@ import { useRouter } from 'next/navigation';
 import { Search, MapPin, ChevronDown, X, Loader2, TrendingUp, Package, Folder } from 'lucide-react';
 
 // Get API base URL for client-side calls
-// Uses NEXT_PUBLIC_BACKEND_URL for Vercel deployment, or relative URLs for dev
+// Priority: NEXT_PUBLIC_BACKEND_URL > production fallback > relative URL (dev)
 const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
-    // Client-side: Use the public backend URL if available (for Vercel)
-    // Otherwise use relative URLs (for local dev with Next.js rewrites)
+    // Client-side: Check for environment variable first
     const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-    if (publicUrl && publicUrl !== 'undefined') {
+    if (publicUrl && publicUrl !== 'undefined' && publicUrl.startsWith('http')) {
       return publicUrl;
     }
-    return ''; // Relative URLs for local development
+    
+    // Fallback: Check if we're on Vercel (hostname contains vercel.app)
+    // and use the production backend URL
+    if (window.location.hostname.includes('vercel.app')) {
+      return 'https://b2b-marketplace-v2.preview.emergentagent.com';
+    }
+    
+    // Local development: use relative URLs (Next.js rewrites handle proxy)
+    return '';
   }
   // Server-side: Use environment variable
   return process.env.NEXT_PUBLIC_BACKEND_URL || '';
