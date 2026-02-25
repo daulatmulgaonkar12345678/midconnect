@@ -4027,7 +4027,9 @@ async def create_product_legacy(product: ProductCreate):
         raise
 
 @api_router.get("/products")
-async def get_products(category_id: Optional[str] = None):
+async def get_products(
+    category_id: Optional[str] = Query(None, alias="categoryId"),  # Support both snake_case and camelCase
+):
     """
     Get products that have at least 1 ACTIVE/PUBLISHED seller listing.
     Seller-listing-driven visibility - catalog products without listings are hidden.
