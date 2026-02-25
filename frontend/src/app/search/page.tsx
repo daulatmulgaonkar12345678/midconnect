@@ -2,9 +2,9 @@
 
 import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import ProductCard from '@/components/ProductCard';
-import { ProductWithSellers } from '@/types';
-import { Search, Info, AlertCircle, MapPin, X } from 'lucide-react';
+import Link from 'next/link';
+import { SearchListing } from '@/types';
+import { Search, Info, AlertCircle, MapPin, X, TrendingUp, Users } from 'lucide-react';
 import { searchProducts, sanitizeInput, ApiError } from '@/lib/api';
 
 function SearchContent() {
