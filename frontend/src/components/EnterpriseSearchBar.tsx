@@ -190,8 +190,12 @@ export default function EnterpriseSearchBar({
       } else {
         const params = new URLSearchParams();
         params.set('q', suggestion.text);
-        if (location?.city) params.set('city', location.city);
-        if (location?.state) params.set('state', location.state);
+        // Type-based location filter
+        if (location) {
+          if (location.type === 'city' && location.city) params.set('city', location.city);
+          else if (location.type === 'state' && location.state) params.set('state', location.state);
+          else if (location.type === 'pincode' && location.pincode) params.set('pincode', location.pincode);
+        }
         router.push(`/products?${params.toString()}`);
       }
     }, 100);
