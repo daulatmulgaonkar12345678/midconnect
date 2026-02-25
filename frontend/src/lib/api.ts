@@ -1472,6 +1472,8 @@ export interface EnterpriseProductSeller {
   variantId?: string;
   companyName: string;
   location: string;
+  city?: string;
+  state?: string;
   sellerRole: string;
   searchableAttributes: Record<string, string | number>;
   attributeLabels: Record<string, string>;
