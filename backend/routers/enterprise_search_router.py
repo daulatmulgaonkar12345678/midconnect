@@ -169,17 +169,20 @@ def create_enterprise_search_router(db, require_auth=None):
         # Stock filter
         in_stock: Optional[bool] = Query(None, alias="inStock", description="Only show in-stock items"),
         # Pagination & sorting
-        page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=50),  # HARD LIMIT: 50 max
+        page: int = Query(1, ge=1, le=250),  # HARD LIMIT: max page 250
+        limit: int = Query(20, ge=1, le=50),  # HARD LIMIT: 50 max per page
         sort_by: str = Query("relevance", alias="sortBy", description="relevance, price_asc, price_desc, rating, recent"),
     ):
         """
-        Enterprise-grade search with compound filtering.
+        Enterprise-grade search with compound filtering (Phase 3 Hardened).
         
-        ARCHITECTURE:
-        - Filter FIRST (structured fields with indexes)
-        - Score SECOND (ranking boosts)
-        - Hard limits: 50 results max, skip ≤ 5000
+        PRODUCTION HARDENING:
+        - Minimum query length: 2 characters
+        - Maximum page: 250
+        - Maximum per page: 50
+        - Search timeout: 1.5s
+        - LRU cache for page 1
+        - Slow query logging (>700ms)
         
         Supports:
         - Text search with normalization
@@ -205,6 +208,31 @@ def create_enterprise_search_router(db, require_auth=None):
         )
         
         return results
+    
+    @router.get("/stats")
+    async def search_stats():
+        """
+        Get search service statistics (cache, performance).
+        For monitoring purposes.
+        """
+        from services.enterprise_search_service import create_enterprise_search_service
+        
+        search_service = create_enterprise_search_service(db)
+        cache_stats = search_service.get_cache_stats()
+        
+        # Get popular searches
+        popular = await search_service.get_popular_searches(limit=5)
+        
+        return {
+            "cache": cache_stats,
+            "popularSearches": popular,
+            "config": {
+                "maxResults": 50,
+                "maxPage": 250,
+                "searchTimeoutSec": 1.5,
+                "slowQueryThresholdMs": 700
+            }
+        }
     
     @router.get("/autocomplete")
     async def search_autocomplete(
