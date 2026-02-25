@@ -12,7 +12,7 @@ const getApiUrl = () => {
     return '';  // Relative URLs like /api/search/autocomplete
   }
   // For server-side rendering, use the configured backend URL
-  return process.env.NEXT_PUBLIC_API_URL || '';
+  return process.env.VITE_API_BASE_URL || '';
 };
 
 interface LocationSuggestion {
