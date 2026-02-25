@@ -130,8 +130,62 @@ function SearchContent() {
         </div>
       ) : products.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" data-testid="search-results-grid">
-          {products.map((product) => (
-            <ProductCard key={product.productId} product={product} />
+          {products.map((listing) => (
+            <Link 
+              key={listing._id} 
+              href={`/product/${listing.productId}`}
+              className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+              data-testid="search-result-card"
+            >
+              {/* Image */}
+              <div className="aspect-[4/3] bg-gray-100 relative">
+                {listing.images?.[0] ? (
+                  <img
+                    src={listing.images[0]}
+                    alt={listing.productName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <span className="text-4xl">📦</span>
+                  </div>
+                )}
+                {listing.inStock && (
+                  <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded-full">
+                    In Stock
+                  </div>
+                )}
+              </div>
+
+              {/* Content */}
+              <div className="p-4">
+                <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
+                  {listing.productName}
+                </h3>
+                
+                {/* Price */}
+                {listing.price && (
+                  <div className="flex items-center gap-1 text-lg font-bold text-green-600 mb-2">
+                    <TrendingUp className="h-4 w-4" />
+                    ₹{listing.price.toLocaleString()}
+                    <span className="text-xs text-gray-500 font-normal">per unit</span>
+                  </div>
+                )}
+
+                {/* Location */}
+                {(listing.city || listing.state) && (
+                  <div className="flex items-center gap-1 text-sm text-gray-500">
+                    <MapPin className="h-4 w-4" />
+                    {listing.city}{listing.city && listing.state ? ', ' : ''}{listing.state}
+                  </div>
+                )}
+
+                {/* MOQ */}
+                <div className="text-xs text-gray-400 mt-2">
+                  MOQ: {listing.moq} units
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
       ) : query ? (
