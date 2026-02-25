@@ -1,20 +1,45 @@
 import { Metadata } from 'next';
-import { getCategories } from '@/lib/api';
-import CategoryCard from '@/components/CategoryCard';
-import { Category } from '@/types';
+import { getPublicCategories } from '@/lib/api';
+import Link from 'next/link';
+import { Package, ArrowRight, Zap, Layers, FlaskRound, Building2, Settings, Shield } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'All Categories - MidConnect',
   description: 'Browse all industrial product categories. Electrical equipment, steel & metals, chemicals, building materials, and more.',
 };
 
-export const revalidate = 3600;
+export const revalidate = 60; // 1 minute to reflect seller activity
+
+interface PublicCategory {
+  _id: string;
+  name: string;
+  productCount: number;
+  listingCount: number;
+}
+
+const iconMap: { [key: string]: React.ReactNode } = {
+  'electric': <Zap className="h-8 w-8" />,
+  'layers': <Layers className="h-8 w-8" />,
+  'chemical': <FlaskRound className="h-8 w-8" />,
+  'building': <Building2 className="h-8 w-8" />,
+  'settings': <Settings className="h-8 w-8" />,
+  'shield': <Shield className="h-8 w-8" />,
+};
+
+function getIconForCategory(name: string) {
+  const lowerName = name.toLowerCase();
+  if (lowerName.includes('electric') || lowerName.includes('motor')) return iconMap['electric'];
+  if (lowerName.includes('chemical')) return iconMap['chemical'];
+  if (lowerName.includes('build') || lowerName.includes('construction')) return iconMap['building'];
+  if (lowerName.includes('safety') || lowerName.includes('protect')) return iconMap['shield'];
+  return <Package className="h-8 w-8" />;
+}
 
 export default async function CategoriesPage() {
-  let categories: Category[] = [];
+  let categories: PublicCategory[] = [];
 
   try {
-    categories = await getCategories();
+    categories = await getPublicCategories();
   } catch (error) {
     console.error('Failed to fetch categories:', error);
   }
@@ -26,11 +51,32 @@ export default async function CategoriesPage() {
         <p className="text-gray-500 mt-2">Browse industrial products across {categories.length} categories</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {categories.map((category) => (
-          <CategoryCard key={category._id} category={category} />
-        ))}
-      </div>
+      {categories.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {categories.map((category) => (
+            <Link key={category._id} href={`/category/${category._id}`}>
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all group">
+                <div className="text-blue-600 mb-4 group-hover:scale-110 transition-transform">
+                  {getIconForCategory(category.name)}
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">{category.name}</h3>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">{category.productCount} products</span>
+                  <ArrowRight className="h-4 w-4 text-blue-600 opacity-0 group-hover:opacity-100 transition" />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16 bg-white rounded-xl">
+          <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Categories Yet</h3>
+          <p className="text-gray-500">
+            Categories appear here when sellers list products for sale.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
