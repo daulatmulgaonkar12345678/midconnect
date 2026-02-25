@@ -25,7 +25,7 @@ export default function InquiryModal({
   productName 
 }: InquiryModalProps) {
   const router = useRouter();
-  const { user, getIdToken, isAuthenticated } = useAuth();
+  const { user, getIdToken, isAuthenticated, emailVerified, registrationState } = useAuth();
   
   const [quantity, setQuantity] = useState<number>(seller?.moq || 1);
   const [message, setMessage] = useState('');
@@ -36,9 +36,27 @@ export default function InquiryModal({
 
   if (!isOpen || !seller) return null;
 
+  // Check if buyer is fully verified
+  const isFullyVerified = isAuthenticated && emailVerified && registrationState === 'complete';
+  const needsEmailVerification = isAuthenticated && !emailVerified;
+  const needsProfileCompletion = isAuthenticated && emailVerified && registrationState === 'incomplete';
+
   const handleSubmit = async () => {
+    // Not logged in - redirect to login
     if (!isAuthenticated) {
       router.push(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
+    // Email not verified
+    if (!emailVerified) {
+      router.push('/verify-email');
+      return;
+    }
+
+    // Profile not complete
+    if (registrationState === 'incomplete') {
+      router.push('/user/complete-profile');
       return;
     }
 
