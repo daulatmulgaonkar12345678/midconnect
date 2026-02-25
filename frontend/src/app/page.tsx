@@ -147,7 +147,7 @@ export default async function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Ready to Start Selling?</h2>
           <p className="text-blue-100 mb-8 max-w-2xl mx-auto">
-            Join thousands of verified sellers on India's fastest growing B2B marketplace.
+            Join thousands of verified sellers on India&apos;s fastest growing B2B marketplace.
             List your products and reach buyers across India.
           </p>
           <Link
