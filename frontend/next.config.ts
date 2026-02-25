@@ -29,7 +29,7 @@ const nextConfig: NextConfig = {
   // API rewrites to proxy requests to the backend
   // This allows frontend to call /api/* without CORS issues
   async rewrites() {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
     return [
       {
         source: '/api/:path*',
