@@ -16,44 +16,53 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 ## PHASE A STABILIZATION COMPLETE (Feb 25, 2026)
 
 ### Security Fixes
-- [x] **Migration Endpoint Removed** - The temporary `/api/admin/migrate/populate-listing-locations-2024-temp` endpoint has been removed for security. Never leave admin/migration endpoints publicly accessible.
+- [x] **Migration Endpoint Removed** - Temporary admin endpoint deleted for security
+
+### Search UX Fixes (Latest)
+- [x] **Header Dropdown Fixed** - Removed `overflow-hidden` from search bar container to allow dropdowns to render
+- [x] **Auto-Search Disabled** - Clicking suggestions now only populates the query, does NOT auto-search. User must click Search button
+- [x] **Location Search Improved** - Backend now queries both `activeSellerCities` AND `sellerListings` directly to show all seller locations immediately
 
 ### UI/UX Fixes
-- [x] **Location Filter Chip Visibility** - Fixed the location filter chip on `/search` page to be prominent:
-  - Blue background (`bg-blue-600`) with white text
-  - MapPin icon
-  - Clear X button with hover state
-  - Helper text "Click X to search all of India"
-  
-- [x] **Search Navigation** - EnterpriseSearchBar now correctly redirects to `/search` page (not `/products`)
+- [x] **Location Filter Chip Visibility** - Prominent blue chip with X button
+- [x] **Search Navigation** - EnterpriseSearchBar redirects to `/search` page
 
-- [x] **Search Results Display** - Fixed type mismatch between frontend (expected `products`) and backend (returns `listings`):
-  - Added `SearchListing` type to types/index.ts
-  - Updated `searchProducts` API function to transform response
-  - Updated search page to use inline card layout
+### API Fixes
+- [x] **Vercel Fallback** - Added hardcoded fallback for `*.vercel.app` domains to use production backend URL
 
-### Data Integrity
-- [x] **Seller Listings Location Data** - Verified all listings have `city` and `state` populated
-- [x] **Active Seller Cities** - `activeSellerCities` collection has Delhi with 1 seller
+---
+
+## KEY FIXES SUMMARY
+
+### 1. Header Search Dropdown Not Showing
+**Problem**: Dropdowns were cut off by parent container
+**Fix**: Removed `overflow-hidden` from search bar container styles
+
+### 2. Auto-Search Without Clicking Button
+**Problem**: Clicking a suggestion auto-navigated to search results
+**Fix**: Removed auto-search from `handleSuggestionClick` - now only sets query text
+
+### 3. Pune Not Showing in Location Search
+**Problem**: Location API only searched `activeSellerCities` collection
+**Fix**: Updated `_get_city_suggestions` to ALSO query `sellerListings` directly
 
 ---
 
 ## IMPLEMENTATION STATUS
 
 ### Completed (Feb 25, 2026)
-- [x] Security: Removed temporary migration endpoint
-- [x] UI: Location filter chip now visible and functional
-- [x] UI: Search redirects to /search page
-- [x] Data: Location data populated on all listings
-- [x] Types: Added SearchListing type for search API response
+- [x] Header dropdown visibility fix
+- [x] Auto-search disabled
+- [x] Location search queries seller listings
+- [x] Vercel API fallback
 
 ### In Progress
 - None
 
 ### Upcoming Tasks (P0-P1)
-1. **Atlas Search Index Creation** - Create `enterprise_search_v2` index
-2. **Geo-search & Fallback** - Implement radius-based search
-3. **Admin & Seller Dashboards** - Connect UI scaffolds to backend APIs
+1. **Create MongoDB Atlas Search index** (`enterprise_search_v2`)
+2. **Geo-search & Fallback** - Nearby location suggestions
+3. **Admin & Seller Dashboards**
 
 ### Future Tasks (P2+)
 1. AI Semantic Search Layer
@@ -65,46 +74,16 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 ## KEY FILES REFERENCE
 
 ### Recently Modified
-- `/app/backend/server.py` - Migration endpoint removed
-- `/app/frontend/src/app/search/page.tsx` - Filter chip UI, type fixes
-- `/app/frontend/src/components/EnterpriseSearchBar.tsx` - Navigate to /search
-- `/app/frontend/src/lib/api.ts` - SearchListing type, response transform
-- `/app/frontend/src/types/index.ts` - Added SearchListing interface
+- `/app/frontend/src/components/Header.tsx` - Added overflow-visible
+- `/app/frontend/src/components/EnterpriseSearchBar.tsx` - Removed auto-search, removed overflow-hidden
+- `/app/backend/services/seller_location_service.py` - Query seller listings for locations
+- `/app/frontend/src/lib/api.ts` - Vercel API fallback
 
 ### Key API Endpoints
-- `GET /api/search?q={query}` - Enterprise search (returns `listings`)
+- `GET /api/search?q={query}` - Enterprise search
+- `GET /api/search/autocomplete?q={query}` - Product suggestions
+- `GET /api/search/locations/active` - Cities with sellers
 - `GET /api/search/locations?q={query}` - Location autocomplete
-- `GET /api/search/locations/active` - Active seller cities
-
----
-
-## DATABASE SCHEMA
-
-### sellerListings (Updated)
-```json
-{
-  "_id": ObjectId,
-  "productId": ObjectId,
-  "sellerId": ObjectId,
-  "city": String,           // Denormalized from seller
-  "state": String,          // Denormalized from seller
-  "inStock": Boolean,
-  "minPrice": Number,
-  "searchableText": String,
-  "searchableAttributes": Object
-}
-```
-
-### activeSellerCities
-```json
-{
-  "_id": ObjectId,
-  "city": String,
-  "state": String,
-  "sellerCount": Number,
-  "coordinates": [Number, Number]
-}
-```
 
 ---
 
@@ -115,7 +94,7 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 ---
 
 ## TEST STATUS
-- Backend: Healthy
-- Frontend: Hot reload active
-- Search API: Working (2 listings)
-- Location filter: Working
+- Header dropdown: ✅ Working
+- Location dropdown: ✅ Working
+- Auto-search disabled: ✅ Confirmed
+- TypeScript: ✅ Compiles
