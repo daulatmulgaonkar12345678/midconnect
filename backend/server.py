@@ -10611,72 +10611,142 @@ async def admin_migrate_category_ids(admin: dict = Depends(require_admin)):
     }
 
 
-@api_router.post("/admin/migrate/populate-listing-locations")
-async def admin_populate_listing_locations(admin: dict = Depends(require_admin)):
+# ================== TEMPORARY MIGRATION ENDPOINT ==================
+# SECURITY: Remove this endpoint immediately after running migration
+# Created: 2024-02-25
+# Purpose: One-time population of city/state in sellerListings
+# ================================================================
+
+@api_router.post("/admin/migrate/populate-listing-locations-2024-temp")
+async def admin_populate_listing_locations_temp(admin: dict = Depends(require_admin)):
     """
-    Populate city/state on all sellerListings from seller profiles.
+    TEMPORARY: One-time migration to populate city/state on sellerListings.
     
-    This ensures all listings have location data for search and display.
+    SECURITY:
+    - Admin-only access
+    - Idempotent (only updates missing fields)
+    - Must be removed immediately after execution
+    
+    DELETE THIS ENDPOINT AFTER RUNNING!
     """
-    updated = 0
-    skipped = 0
-    not_found = 0
+    migration_start = datetime.now(timezone.utc)
     
-    # Get all listings
-    listings = await db.sellerListings.find({}).to_list(None)
+    # Log migration attempt
+    logger.warning(f"[MIGRATION] Admin {admin.get('email', 'unknown')} initiated listing location migration at {migration_start.isoformat()}")
     
-    # Build seller cache
-    seller_ids = list(set(l.get("sellerId") for l in listings if l.get("sellerId")))
-    
-    # Fetch all seller profiles
-    seller_profiles = {}
-    if seller_ids:
-        sellers = await db.users.find(
-            {"_id": {"$in": seller_ids}},
-            {"profile": 1}
-        ).to_list(None)
+    try:
+        # Find only listings with missing city/state (idempotent)
+        listings_to_update = await db.sellerListings.find({
+            "$or": [
+                {"city": {"$exists": False}},
+                {"state": {"$exists": False}},
+                {"city": None},
+                {"state": None},
+                {"city": ""},
+                {"state": ""}
+            ]
+        }).to_list(None)
         
-        for s in sellers:
-            profile = s.get("profile", {})
-            seller_profiles[str(s["_id"])] = {
-                "city": profile.get("city"),
-                "state": profile.get("state")
+        total_listings = await db.sellerListings.count_documents({})
+        
+        logger.info(f"[MIGRATION] Found {len(listings_to_update)} listings needing update out of {total_listings} total")
+        
+        if not listings_to_update:
+            return {
+                "status": "success",
+                "message": "No listings need updating. Migration already complete.",
+                "processed": 0,
+                "updated": 0,
+                "skipped": total_listings,
+                "timestamp": migration_start.isoformat()
             }
-    
-    # Update each listing
-    for listing in listings:
-        seller_id = str(listing.get("sellerId", ""))
-        seller_info = seller_profiles.get(seller_id)
         
-        if not seller_info:
-            not_found += 1
-            continue
+        # Collect unique seller IDs
+        seller_ids = list(set(l.get("sellerId") for l in listings_to_update if l.get("sellerId")))
         
-        # Check if update needed
-        if listing.get("city") == seller_info.get("city") and listing.get("state") == seller_info.get("state"):
-            skipped += 1
-            continue
+        # Batch fetch seller profiles
+        seller_profiles = {}
+        if seller_ids:
+            sellers = await db.users.find(
+                {"_id": {"$in": seller_ids}},
+                {"profile.city": 1, "profile.state": 1}
+            ).to_list(None)
+            
+            for s in sellers:
+                profile = s.get("profile", {})
+                seller_profiles[str(s["_id"])] = {
+                    "city": profile.get("city"),
+                    "state": profile.get("state")
+                }
         
-        # Update listing
-        await db.sellerListings.update_one(
-            {"_id": listing["_id"]},
-            {"$set": {
-                "city": seller_info.get("city"),
-                "state": seller_info.get("state"),
-                "updatedAt": datetime.now(timezone.utc)
-            }}
-        )
-        updated += 1
-    
-    logger.info(f"Admin {admin['email']} ran listing location migration: {updated} updated")
-    
-    return {
-        "message": f"Migration complete. Updated {updated} listings.",
-        "updated": updated,
-        "skipped": skipped,
-        "sellerNotFound": not_found,
-        "totalListings": len(listings)
-    }
+        # Build bulk operations
+        from pymongo import UpdateOne
+        operations = []
+        updated_count = 0
+        skipped_count = 0
+        seller_not_found = 0
+        
+        for listing in listings_to_update:
+            seller_id = str(listing.get("sellerId", ""))
+            seller_info = seller_profiles.get(seller_id)
+            
+            if not seller_info:
+                seller_not_found += 1
+                continue
+            
+            # Only update if seller has location data
+            if not seller_info.get("city") and not seller_info.get("state"):
+                skipped_count += 1
+                continue
+            
+            # Prepare update (only set non-empty values)
+            update_fields = {"updatedAt": datetime.now(timezone.utc)}
+            if seller_info.get("city"):
+                update_fields["city"] = seller_info["city"]
+            if seller_info.get("state"):
+                update_fields["state"] = seller_info["state"]
+            
+            operations.append(UpdateOne(
+                {"_id": listing["_id"]},
+                {"$set": update_fields}
+            ))
+            updated_count += 1
+        
+        # Execute bulk write
+        if operations:
+            result = await db.sellerListings.bulk_write(operations, ordered=False)
+            actual_modified = result.modified_count
+        else:
+            actual_modified = 0
+        
+        migration_end = datetime.now(timezone.utc)
+        duration_ms = int((migration_end - migration_start).total_seconds() * 1000)
+        
+        # Log success
+        logger.warning(f"[MIGRATION] COMPLETE - Admin: {admin.get('email')}, Updated: {actual_modified}, Skipped: {skipped_count}, SellerNotFound: {seller_not_found}, Duration: {duration_ms}ms")
+        
+        return {
+            "status": "success",
+            "message": f"Migration complete. Updated {actual_modified} listings.",
+            "processed": len(listings_to_update),
+            "updated": actual_modified,
+            "skipped": skipped_count,
+            "sellerNotFound": seller_not_found,
+            "totalListings": total_listings,
+            "durationMs": duration_ms,
+            "timestamp": migration_start.isoformat(),
+            "adminEmail": admin.get("email"),
+            "reminder": "DELETE THIS ENDPOINT IMMEDIATELY AFTER VERIFYING SUCCESS"
+        }
+        
+    except Exception as e:
+        logger.error(f"[MIGRATION] FAILED - Admin: {admin.get('email')}, Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
+
+
+# ================== END TEMPORARY MIGRATION ==================
+# TODO: DELETE ABOVE ENDPOINT AFTER RUNNING MIGRATION
+# ============================================================
 
 
 # ================== ENTERPRISE MIGRATION ENDPOINTS ==================
