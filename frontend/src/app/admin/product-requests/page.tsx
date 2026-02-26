@@ -315,15 +315,21 @@ export default function ProductRequestsPage() {
           {activeTab === 'categories' && (
             categoryRequests.length > 0 ? (
               <div className="space-y-4">
-                {categoryRequests.map((request) => (
+                {categoryRequests.map((request) => {
+                  // Support both snake_case and camelCase from backend
+                  const categoryName = request.category_name || (request as unknown as { categoryName?: string }).categoryName || 'Unknown Category';
+                  const requestedByEmail = request.requested_by_email || (request as unknown as { requestedByEmail?: string }).requestedByEmail || 'Unknown';
+                  const createdAt = request.created_at || (request as unknown as { createdAt?: string }).createdAt;
+                  
+                  return (
                   <div key={request._id} className="bg-white rounded-xl shadow-sm p-6" data-testid={`category-request-${request._id}`}>
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="font-semibold text-lg">{request.category_name}</h3>
+                        <h3 className="font-semibold text-lg">{categoryName}</h3>
                         <p className="text-sm text-gray-500">
-                          Requested by: {request.requested_by_email}
+                          Requested by: {requestedByEmail}
                         </p>
-                        <p className="text-xs text-gray-400">{formatDate(request.created_at)}</p>
+                        <p className="text-xs text-gray-400">{formatDate(createdAt)}</p>
                       </div>
                       {getStatusBadge(request.status)}
                     </div>
@@ -355,7 +361,8 @@ export default function ProductRequestsPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <EmptyState type="category" />
