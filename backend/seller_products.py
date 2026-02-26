@@ -563,7 +563,10 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             # Seller location (denormalized for search)
             "city": seller_city,
             "state": seller_state,
+            "pincode": seller_pincode,
             "sellerRating": seller_rating,
+            # GEO SEARCH: GeoJSON Point for 2dsphere queries
+            "coordinates": seller_coordinates,
             # Search-optimized computed fields
             "minPrice": min_price,
             "inStock": in_stock,
