@@ -152,6 +152,48 @@ export default function IndustrialHeader() {
     }
   }, []);
 
+  // Fetch product suggestions (autocomplete)
+  const fetchProductSuggestions = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setProductSuggestions([]);
+      return;
+    }
+    
+    setLoadingProducts(true);
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/search/autocomplete?q=${encodeURIComponent(query)}&limit=8`);
+      if (res.ok) {
+        const data = await res.json();
+        setProductSuggestions(data.suggestions || []);
+      } else {
+        setProductSuggestions([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch product suggestions:', err);
+      setProductSuggestions([]);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, []);
+
+  // Debounced search query effect
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    
+    if (searchQuery.length >= 2 && showProductDropdown) {
+      debounceRef.current = setTimeout(() => {
+        fetchProductSuggestions(searchQuery);
+      }, 300);
+    } else {
+      setProductSuggestions([]);
+    }
+    
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery, showProductDropdown, fetchProductSuggestions]);
+
   // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -163,6 +205,9 @@ export default function IndustrialHeader() {
       }
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
+      }
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowProductDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -178,6 +223,7 @@ export default function IndustrialHeader() {
     if (selectedCategory) params.set('category', selectedCategory.id);
     router.push(`/search?${params.toString()}`);
     setIsMenuOpen(false);
+    setShowProductDropdown(false);
   };
 
   const handleSignOut = async () => {
