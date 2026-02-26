@@ -729,9 +729,20 @@ export default function IndustrialHeader() {
 
                 {/* Mobile Category Dropdown */}
                 {showCategoryDropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto" style={{ borderColor: COLORS.borderGrey }}>
+                  <div 
+                    className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto"
+                    style={{ borderColor: COLORS.borderGrey, zIndex: 9999 }}
+                  >
                     <button
-                      onClick={() => {
+                      type="button"
+                      data-dropdown-item="category"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         setSelectedCategory(null);
                         setShowCategoryDropdown(false);
                       }}
@@ -743,7 +754,15 @@ export default function IndustrialHeader() {
                     {categories.map((cat) => (
                       <button
                         key={cat.id}
-                        onClick={() => {
+                        type="button"
+                        data-dropdown-item="category"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setSelectedCategory(cat);
                           setShowCategoryDropdown(false);
                         }}
