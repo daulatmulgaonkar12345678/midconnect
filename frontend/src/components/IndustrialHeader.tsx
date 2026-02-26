@@ -709,8 +709,13 @@ export default function IndustrialHeader() {
                     {locationSuggestions.map((loc, idx) => (
                       <button
                         key={idx}
-                        onMouseDown={(e) => e.preventDefault()}
+                        data-dropdown-item="location"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           handleLocationSelect(loc);
                         }}
