@@ -13,6 +13,38 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## DROPDOWN FIX FOR SINGLE-LINE HEADER (Feb 26, 2026)
+
+### Issue
+Location and Category dropdowns only worked in 2-line (mobile) mode, not in single-line (desktop) mode at full viewport width.
+
+### Root Cause (CRITICAL BUG)
+```javascript
+// BUG: Event listener mismatch
+document.addEventListener('click', handleClickOutside);    // Adding 'click'
+return () => document.removeEventListener('mousedown', handleClickOutside);  // Removing 'mousedown'
+```
+This meant the cleanup never happened and clicks were being caught by the handler immediately.
+
+### Fix Applied
+1. **Fixed event listener mismatch** - Use consistent `'mousedown'` for both add/remove
+2. **Added `data-dropdown-trigger` attribute** to ALL trigger buttons (desktop + mobile)
+3. **Updated click-outside handler** to check for trigger/item attributes before closing:
+```javascript
+if (target.closest('[data-dropdown-trigger]') || target.closest('[data-dropdown-item]')) {
+  return; // Don't close dropdown
+}
+```
+
+### Pattern to Follow (IMPORTANT)
+When creating dropdowns, ALWAYS:
+1. Add `data-dropdown-trigger="type"` to the trigger button
+2. Add `data-dropdown-item="type"` to items inside the dropdown
+3. Add `onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}` to items
+4. Use consistent event type in addEventListener/removeEventListener
+
+---
+
 ## SEARCH AUTOCOMPLETE FIX (Feb 26, 2026)
 
 ### Issue
