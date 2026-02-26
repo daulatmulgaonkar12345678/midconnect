@@ -409,7 +409,7 @@ export default function IndustrialHeader() {
               <button
                 onClick={() => {
                   setShowLocationDropdown(!showLocationDropdown);
-                  if (!showLocationDropdown) fetchLocationSuggestions('');
+                  if (!showLocationDropdown) fetchLocationSuggestionsCallback('');
                 }}
                 className="flex items-center gap-2 px-4 h-10 bg-white border rounded-l-md hover:bg-gray-50 transition-colors min-w-[150px]"
                 style={{ borderColor: COLORS.borderGrey }}
@@ -430,7 +430,7 @@ export default function IndustrialHeader() {
                       value={locationSearch}
                       onChange={(e) => {
                         setLocationSearch(e.target.value);
-                        fetchLocationSuggestions(e.target.value);
+                        fetchLocationSuggestionsCallback(e.target.value);
                       }}
                       placeholder="Search city, state..."
                       className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-1"
@@ -597,7 +597,7 @@ export default function IndustrialHeader() {
                 <button
                   onClick={() => {
                     setShowLocationDropdown(!showLocationDropdown);
-                    if (!showLocationDropdown) fetchLocationSuggestions('');
+                    if (!showLocationDropdown) fetchLocationSuggestionsCallback('');
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 border rounded-md text-sm"
                   style={{ borderColor: COLORS.borderGrey }}
@@ -618,7 +618,7 @@ export default function IndustrialHeader() {
                         value={locationSearch}
                         onChange={(e) => {
                           setLocationSearch(e.target.value);
-                          fetchLocationSuggestions(e.target.value);
+                          fetchLocationSuggestionsCallback(e.target.value);
                         }}
                         placeholder="Search city, state..."
                         className="w-full px-3 py-2 text-sm border rounded-md"
