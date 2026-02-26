@@ -239,7 +239,7 @@ export default function SpecTemplatesPage() {
         {templates.map((template) => {
           // Support both camelCase and snake_case from backend
           const isActive = template.isActive ?? (template as { isActive?: boolean }).isActive ?? true;
-          const categoryName = template.categoryName || (template as { category_name?: string }).category_name || '';
+          const categoryName = template.categoryName || (template as unknown as { category_name?: string }).category_name || 'Unknown';
           return (
           <div key={template._id} className={`bg-white rounded-xl shadow-sm p-6 ${!isActive ? 'opacity-60' : ''}`}>
             <div className="flex items-start justify-between mb-4">
