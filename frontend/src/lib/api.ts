@@ -561,6 +561,11 @@ interface GeoSearchResponse {
     radius_km: number;
   };
   search_time_ms: number;
+  // Smart search fields
+  didYouMean?: string;
+  correctedQuery?: string;
+  originalQuery?: string;
+  autoCorreced?: boolean;
 }
 
 export interface GeoSearchResult {
@@ -569,6 +574,11 @@ export interface GeoSearchResult {
   hasMore: boolean;
   fallbackUsed: 'radius' | 'state' | 'pan_india' | null;
   fallbackMessage: string | null;
+  // Smart search fields
+  didYouMean?: string;
+  correctedQuery?: string;
+  originalQuery?: string;
+  autoCorreced?: boolean;
 }
 
 export async function geoSearchProducts(options: {
