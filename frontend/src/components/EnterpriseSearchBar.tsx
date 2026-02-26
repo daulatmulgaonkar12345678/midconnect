@@ -3,29 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, MapPin, ChevronDown, X, Loader2, TrendingUp, Package, Folder } from 'lucide-react';
-
-// Get API base URL for client-side calls
-// Priority: NEXT_PUBLIC_BACKEND_URL > production fallback > relative URL (dev)
-const getApiBaseUrl = (): string => {
-  if (typeof window !== 'undefined') {
-    // Client-side: Check for environment variable first
-    const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-    if (publicUrl && publicUrl !== 'undefined' && publicUrl.startsWith('http')) {
-      return publicUrl;
-    }
-    
-    // Fallback: Check if we're on Vercel (hostname contains vercel.app)
-    // and use the production backend URL
-    if (window.location.hostname.includes('vercel.app')) {
-      return 'https://header-debug-1.preview.emergentagent.com';
-    }
-    
-    // Local development: use relative URLs (Next.js rewrites handle proxy)
-    return '';
-  }
-  // Server-side: Use environment variable
-  return process.env.NEXT_PUBLIC_BACKEND_URL || '';
-};
+import { getAutocompleteSuggestions, getLocationSuggestions } from '@/lib/api';
 
 interface LocationSuggestion {
   label: string;
@@ -34,6 +12,7 @@ interface LocationSuggestion {
   state?: string;
   pincode?: string;
   sellerCount?: number;
+  seller_count?: number;
 }
 
 interface ProductSuggestion {
