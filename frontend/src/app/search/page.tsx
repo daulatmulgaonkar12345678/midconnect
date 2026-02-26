@@ -22,12 +22,18 @@ function SearchContent() {
   const [error, setError] = useState<string | null>(null);
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
   const [fallbackUsed, setFallbackUsed] = useState<string | null>(null);
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
+  const [autoCorreced, setAutoCorreced] = useState<boolean>(false);
+  const [originalQuery, setOriginalQuery] = useState<string | null>(null);
 
   const handleSearch = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setFallbackMessage(null);
     setFallbackUsed(null);
+    setDidYouMean(null);
+    setAutoCorreced(false);
+    setOriginalQuery(null);
     
     try {
       const result = await geoSearchProducts({
@@ -42,6 +48,15 @@ function SearchContent() {
       setProducts(result.products || []);
       setFallbackMessage(result.fallbackMessage);
       setFallbackUsed(result.fallbackUsed);
+      
+      // Handle "Did you mean?" suggestion
+      if (result.didYouMean) {
+        setDidYouMean(result.didYouMean);
+      }
+      if (result.autoCorreced) {
+        setAutoCorreced(true);
+        setOriginalQuery(result.originalQuery || query);
+      }
     } catch (err) {
       const message = err instanceof ApiError ? err.getUserMessage() : 'Search failed';
       setError(message);
@@ -54,6 +69,24 @@ function SearchContent() {
   useEffect(() => {
     handleSearch();
   }, [handleSearch]);
+
+  // Handle clicking on "Did you mean?" suggestion
+  const handleDidYouMeanClick = () => {
+    if (didYouMean) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('q', didYouMean);
+      router.push(`/search?${params.toString()}`);
+    }
+  };
+
+  // Revert to original query
+  const handleRevertToOriginal = () => {
+    if (originalQuery) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('q', originalQuery);
+      router.push(`/search?${params.toString()}`);
+    }
+  };
 
   // Build location label for display
   const locationLabel = city ? `${city}${state ? `, ${state}` : ''}` : (state || 'All India');
