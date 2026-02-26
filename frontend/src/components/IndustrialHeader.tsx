@@ -826,7 +826,14 @@ export default function IndustrialHeader() {
                         {productSuggestions.map((suggestion, idx) => (
                           <button
                             key={idx}
-                            onClick={() => {
+                            data-dropdown-item="product"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               setSearchQuery(suggestion.text);
                               setShowProductDropdown(false);
                             }}
