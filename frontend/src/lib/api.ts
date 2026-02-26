@@ -493,6 +493,72 @@ export async function searchProducts(
   };
 }
 
+// ==================== GEO SEARCH API ====================
+
+interface GeoSearchResponse {
+  listings: SearchListing[];
+  total: number;
+  hasMore: boolean;
+  fallbackUsed: 'radius' | 'state' | 'pan_india' | null;
+  message: string | null;
+  searchedLocation: {
+    city: string | null;
+    state: string | null;
+    lat: number | null;
+    lng: number | null;
+    radius_km: number;
+  };
+  search_time_ms: number;
+}
+
+export interface GeoSearchResult {
+  products: SearchListing[];
+  total: number;
+  hasMore: boolean;
+  fallbackUsed: 'radius' | 'state' | 'pan_india' | null;
+  fallbackMessage: string | null;
+}
+
+export async function geoSearchProducts(options: {
+  query?: string;
+  city?: string;
+  state?: string;
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
+  categoryId?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  inStock?: boolean;
+  limit?: number;
+  skip?: number;
+}): Promise<GeoSearchResult> {
+  const params = new URLSearchParams();
+
+  if (options.query) params.append("q", sanitizeInput(options.query));
+  if (options.city) params.append("city", options.city);
+  if (options.state) params.append("state", options.state);
+  if (options.lat) params.append("lat", options.lat.toString());
+  if (options.lng) params.append("lng", options.lng.toString());
+  if (options.radiusKm) params.append("radiusKm", options.radiusKm.toString());
+  if (options.categoryId) params.append("category", options.categoryId);
+  if (options.minPrice) params.append("minPrice", options.minPrice.toString());
+  if (options.maxPrice) params.append("maxPrice", options.maxPrice.toString());
+  if (options.inStock) params.append("inStock", "true");
+  if (options.limit) params.append("limit", Math.min(options.limit, 50).toString());
+  if (options.skip) params.append("skip", Math.max(options.skip, 0).toString());
+
+  const response = await fetchAPI<GeoSearchResponse>(`/search/geo?${params.toString()}`);
+  
+  return {
+    products: response.listings || [],
+    total: response.total || 0,
+    hasMore: response.hasMore || false,
+    fallbackUsed: response.fallbackUsed,
+    fallbackMessage: response.message,
+  };
+}
+
 // ==================== User API ====================
 
 export const getUserProfile = (token: string): Promise<UserProfile> =>
