@@ -273,6 +273,26 @@ export default function IndustrialHeader() {
 
             {/* Right: Utility Links */}
             <div className="flex items-center gap-1 sm:gap-3">
+              {/* Products Link - Always visible */}
+              <Link 
+                href="/products"
+                className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-md transition-colors"
+                style={{ color: COLORS.textSecondary }}
+              >
+                <Package className="h-4 w-4" />
+                <span>Products</span>
+              </Link>
+
+              {/* Categories Link - Always visible */}
+              <Link 
+                href="/categories"
+                className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-md transition-colors"
+                style={{ color: COLORS.textSecondary }}
+              >
+                <Grid3X3 className="h-4 w-4" />
+                <span>Categories</span>
+              </Link>
+
               {/* Seller Dashboard Link - Only for sellers */}
               {user && isSeller && (
                 <Link 
@@ -294,7 +314,7 @@ export default function IndustrialHeader() {
                 >
                   <Settings className="h-4 w-4" />
                   <span>Admin</span>
-                </Link>
+              </Link>
               )}
 
               {/* Inquiries Link - ALWAYS visible (left of Login) */}
