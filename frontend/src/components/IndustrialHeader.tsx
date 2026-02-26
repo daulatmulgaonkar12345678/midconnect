@@ -525,6 +525,7 @@ export default function IndustrialHeader() {
             {/* Category Dropdown */}
             <div ref={categoryRef} className="relative">
               <button
+                data-dropdown-trigger="category"
                 onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
                 className="flex items-center gap-2 px-4 h-10 bg-white border-y border-r hover:bg-gray-50 transition-colors min-w-[160px]"
                 style={{ borderColor: COLORS.borderGrey }}
