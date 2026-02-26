@@ -168,24 +168,33 @@ export default function IndustrialHeader() {
     };
   }, [searchQuery, showProductDropdown, fetchProductSuggestionsCallback]);
 
-  // Click outside handlers - use 'pointerdown' for mobile reliability
+  // Click outside handlers - use 'mousedown' with proper timing
   useEffect(() => {
-    const handleClickOutside = (event: PointerEvent) => {
-      if (locationRef.current && !locationRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      
+      // Don't close if clicking on a dropdown item (has data-dropdown-item attribute)
+      if (target.closest('[data-dropdown-item]')) {
+        return;
+      }
+      
+      if (locationRef.current && !locationRef.current.contains(target)) {
         setShowLocationDropdown(false);
       }
-      if (categoryRef.current && !categoryRef.current.contains(event.target as Node)) {
+      if (categoryRef.current && !categoryRef.current.contains(target)) {
         setShowCategoryDropdown(false);
       }
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
         setIsUserMenuOpen(false);
       }
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+      if (searchRef.current && !searchRef.current.contains(target)) {
         setShowProductDropdown(false);
       }
     };
-    document.addEventListener('pointerdown', handleClickOutside);
-    return () => document.removeEventListener('pointerdown', handleClickOutside);
+    
+    // Use 'mousedown' with capture:false to let button clicks register first
+    document.addEventListener('mousedown', handleClickOutside, false);
+    return () => document.removeEventListener('mousedown', handleClickOutside, false);
   }, []);
 
   // Handle search - support city, state, pincode
