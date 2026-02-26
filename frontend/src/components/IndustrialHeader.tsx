@@ -700,14 +700,49 @@ export default function IndustrialHeader() {
             </div>
 
             {/* Row 2: Search Input + Button */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search products, brands..."
-                className="flex-1 px-3 py-2.5 text-sm border rounded-md bg-white"
+            <div className="flex gap-2 relative">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setShowProductDropdown(true)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  placeholder="Search products, brands..."
+                  className="w-full px-3 py-2.5 text-sm border rounded-md bg-white"
+                  style={{ borderColor: COLORS.borderGrey }}
+                  autoComplete="off"
+                />
+
+                {/* Mobile Product Autocomplete */}
+                {showProductDropdown && (productSuggestions.length > 0 || loadingProducts) && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
+                    {loadingProducts ? (
+                      <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>Searching...</div>
+                    ) : (
+                      <div className="max-h-60 overflow-y-auto py-1">
+                        {productSuggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setSearchQuery(suggestion.text);
+                              setShowProductDropdown(false);
+                            }}
+                            className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            {suggestion.type === 'product' ? (
+                              <Package className="h-4 w-4" style={{ color: COLORS.deepBlue }} />
+                            ) : (
+                              <TrendingUp className="h-4 w-4 text-green-600" />
+                            )}
+                            <span className="flex-1" style={{ color: COLORS.textPrimary }}>{suggestion.text}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
                 style={{ borderColor: COLORS.borderGrey }}
               />
               <button
