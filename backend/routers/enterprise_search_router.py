@@ -302,28 +302,39 @@ def create_enterprise_search_router(db, require_auth=None):
         skip: int = Query(0, ge=0, le=5000),
     ):
         """
-        Geo-enabled search with intelligent fallback strategy.
+        Geo-enabled search with intelligent fallback and typo tolerance.
+        
+        SMART SEARCH:
+        - Typo tolerance (moter → motor)
+        - Phonetic matching (motar → motor)
+        - Auto-correction with "Did you mean?"
         
         FALLBACK ORDER:
         1. City exact match → 
         2. Radius search (if coords provided) →
         3. State → 
         4. Pan India
-        
-        RETURNS:
-        - `fallbackUsed`: "radius" | "state" | "pan_india" | null
-        - `message`: User-friendly fallback message
-        - `searchedLocation`: Original search parameters
-        
-        USAGE:
-        - /search/geo?city=Pune&state=Maharashtra → City fallback
-        - /search/geo?lat=18.52&lng=73.85&radiusKm=50 → Radius search
-        - /search/geo?q=motor&city=Amritsar → Text + location search
         """
         from services.enterprise_search_service import create_enterprise_search_service
+        from services.smart_search_service import create_smart_search_service
         
         search_service = create_enterprise_search_service(db)
+        smart_search = create_smart_search_service(db)
         
+        # Get spelling suggestion
+        did_you_mean = None
+        corrected_query = None
+        
+        if q and len(q) >= 2:
+            try:
+                spelling = await smart_search.get_spelling_suggestion(q)
+                if spelling:
+                    did_you_mean = spelling.get("corrected")
+                    corrected_query = did_you_mean
+            except Exception as e:
+                logger.warning(f"Spelling suggestion error in geo_search: {e}")
+        
+        # Perform geo search with original query
         results = await search_service.geo_search(
             query=q,
             lat=lat,
@@ -338,6 +349,35 @@ def create_enterprise_search_router(db, require_auth=None):
             limit=limit,
             skip=skip,
         )
+        
+        # If no results and we have a correction, try with corrected query
+        if results.get("total", 0) == 0 and corrected_query and corrected_query.lower() != q.lower():
+            corrected_results = await search_service.geo_search(
+                query=corrected_query,
+                lat=lat,
+                lng=lng,
+                radius_km=radius_km,
+                city=city,
+                state=state,
+                category_id=category,
+                min_price=min_price,
+                max_price=max_price,
+                in_stock_only=in_stock or False,
+                limit=limit,
+                skip=skip,
+            )
+            
+            # If corrected query found results, use those
+            if corrected_results.get("total", 0) > 0:
+                corrected_results["originalQuery"] = q
+                corrected_results["correctedQuery"] = corrected_query
+                corrected_results["didYouMean"] = corrected_query
+                corrected_results["autoCorreced"] = True
+                return corrected_results
+        
+        # Add "Did you mean?" to response
+        if did_you_mean and did_you_mean.lower() != q.lower():
+            results["didYouMean"] = did_you_mean
         
         return results
     
