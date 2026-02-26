@@ -9255,6 +9255,8 @@ async def admin_get_inquiries(
                 "name": product_name,
                 "listingId": str(listing_id_val) if listing_id_val else None,
             },
+            # SSOT: Also include productName at top level for frontend compatibility
+            "productName": product_name,
             "category": category_name,
             "quantity": inq.get("quantity"),
             "message": inq.get("message") or inq.get("requirementNote"),
@@ -9265,8 +9267,8 @@ async def admin_get_inquiries(
             "quote": inq.get("quote"),
             "rejection": inq.get("rejection"),
             "report": inq.get("report"),
-            # Seller subscription at time of acceptance
-            "seller_subscription_plan": seller_subscription
+            # SSOT: Use camelCase for frontend consistency
+            "sellerSubscriptionPlan": seller_subscription
         })
     
     # DATA INTEGRITY LOG: Verify response structure before sending
