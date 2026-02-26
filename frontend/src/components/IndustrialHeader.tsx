@@ -168,81 +168,36 @@ export default function IndustrialHeader() {
     };
   }, [searchQuery, showProductDropdown, fetchProductSuggestionsCallback]);
 
-  // Click outside handlers - use 'mousedown' with proper timing
+  // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      
-      // Don't close if clicking on a dropdown item (has data-dropdown-item attribute)
-      if (target.closest('[data-dropdown-item]')) {
-        return;
-      }
-      
-      if (locationRef.current && !locationRef.current.contains(target)) {
+      if (locationRef.current && !locationRef.current.contains(event.target as Node)) {
         setShowLocationDropdown(false);
       }
-      if (categoryRef.current && !categoryRef.current.contains(target)) {
+      if (categoryRef.current && !categoryRef.current.contains(event.target as Node)) {
         setShowCategoryDropdown(false);
       }
-      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
       }
-      if (searchRef.current && !searchRef.current.contains(target)) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowProductDropdown(false);
       }
     };
-    
-    // Use 'mousedown' with capture:false to let button clicks register first
-    document.addEventListener('mousedown', handleClickOutside, false);
-    return () => document.removeEventListener('mousedown', handleClickOutside, false);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle search - support city, state, pincode
+  // Handle search
   const handleSearch = () => {
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
-    
-    // Priority: pincode > city > state
-    if (selectedLocation?.pincode) {
-      params.set('pincode', selectedLocation.pincode);
-    } else if (selectedLocation?.city) {
-      params.set('city', selectedLocation.city);
-      if (selectedLocation.state) params.set('state', selectedLocation.state);
-    } else if (selectedLocation?.state && selectedLocation.type === 'state') {
-      params.set('state', selectedLocation.state);
-    }
-    
+    if (selectedLocation?.city) params.set('city', selectedLocation.city);
+    if (selectedLocation?.state && selectedLocation.type === 'state') params.set('state', selectedLocation.state);
     if (selectedCategory) params.set('category', selectedCategory.id);
     router.push(`/search?${params.toString()}`);
     setIsMenuOpen(false);
     setShowProductDropdown(false);
-  };
-
-  // Helper to normalize location selection
-  const handleLocationSelect = (loc: LocationSuggestion) => {
-    if (loc.type === 'pan_india') {
-      setSelectedLocation(null);
-    } else {
-      // Normalize: ensure city/state always exist
-      const labelParts = loc.label.split(',').map(s => s.trim());
-      setSelectedLocation({
-        ...loc,
-        city: loc.city || labelParts[0] || undefined,
-        state: loc.state || labelParts[1] || undefined,
-      });
-    }
-    setShowLocationDropdown(false);
-    setLocationSearch('');
-  };
-
-  // Get icon/badge for location type
-  const getLocationTypeIcon = (type: string) => {
-    switch (type) {
-      case 'city': return '📍';
-      case 'state': return '🗺️';
-      case 'pincode': return '📮';
-      default: return '📍';
-    }
   };
 
   const handleSignOut = async () => {
@@ -477,7 +432,7 @@ export default function IndustrialHeader() {
                         setLocationSearch(e.target.value);
                         fetchLocationSuggestionsCallback(e.target.value);
                       }}
-                      placeholder="Search city, state, pincode..."
+                      placeholder="Search city, state..."
                       className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-1"
                       style={{ borderColor: COLORS.borderGrey }}
                       autoFocus
@@ -490,30 +445,22 @@ export default function IndustrialHeader() {
                       locationSuggestions.map((loc, idx) => (
                         <button
                           key={idx}
-                          data-dropdown-item="location"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleLocationSelect(loc);
+                          onClick={() => {
+                            setSelectedLocation(
+                              loc.type === 'pan_india'
+                              ? null
+                              : {
+                              ...loc,
+        city: loc.city || loc.label.split(',')[0],
+      }
+);
+                            setShowLocationDropdown(false);
+                            setLocationSearch('');
                           }}
                           className="w-full px-4 py-2 text-sm text-left hover:bg-gray-50 flex items-center justify-between"
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">{getLocationTypeIcon(loc.type)}</span>
-                            <div>
-                              <span style={{ color: COLORS.textPrimary }}>{loc.label}</span>
-                              {loc.type !== 'pan_india' && (
-                                <span className="ml-2 text-xs px-1.5 py-0.5 bg-gray-100 rounded capitalize" style={{ color: COLORS.textSecondary }}>
-                                  {loc.type}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          {loc.seller_count !== undefined && loc.seller_count > 0 && (
+                          <span style={{ color: COLORS.textPrimary }}>{loc.label}</span>
+                          {loc.seller_count && (
                             <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
                               {loc.seller_count} sellers
                             </span>
@@ -545,14 +492,7 @@ export default function IndustrialHeader() {
                 <div className="absolute left-0 top-full mt-1 w-64 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
                   <div className="max-h-60 overflow-y-auto py-1">
                     <button
-                      data-dropdown-item="category"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
+                      onClick={() => {
                         setSelectedCategory(null);
                         setShowCategoryDropdown(false);
                       }}
@@ -567,14 +507,7 @@ export default function IndustrialHeader() {
                       categories.map((cat) => (
                         <button
                           key={cat.id}
-                          data-dropdown-item="category"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
+                          onClick={() => {
                             setSelectedCategory(cat);
                             setShowCategoryDropdown(false);
                           }}
@@ -592,46 +525,21 @@ export default function IndustrialHeader() {
 
             {/* Search Input with Autocomplete */}
             <div ref={searchRef} className="flex-1 relative">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSearch();
-                }}
-                className="flex"
-              >
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => setShowProductDropdown(true)}
-                  placeholder="Search industrial products, brands, specifications..."
-                  className="w-full h-10 px-4 text-sm border-y border-r bg-white focus:outline-none focus:ring-1 focus:ring-inset"
-                  style={{ borderColor: COLORS.borderGrey }}
-                  autoComplete="off"
-                />
-
-                {/* Search Button */}
-                <button
-                  type="submit"
-                  className="h-10 px-6 flex items-center gap-2 text-white font-medium text-sm rounded-r-md transition-colors pointer-events-auto"
-                  style={{ backgroundColor: COLORS.deepBlue }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlueHover}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlue}
-                >
-                  <Search className="h-4 w-4" />
-                  <span>Search</span>
-                </button>
-              </form>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowProductDropdown(true)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="Search industrial products, brands, specifications..."
+                className="w-full h-10 px-4 text-sm border-y border-r bg-white focus:outline-none focus:ring-1 focus:ring-inset"
+                style={{ borderColor: COLORS.borderGrey }}
+                autoComplete="off"
+              />
 
               {/* Product Autocomplete Dropdown */}
               {showProductDropdown && (productSuggestions.length > 0 || loadingProducts) && (
-                <div 
-                  className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-xl"
-                  style={{ 
-                    borderColor: COLORS.borderGrey,
-                    zIndex: 9999
-                  }}
-                >
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
                   {loadingProducts ? (
                     <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>
                       <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
@@ -642,15 +550,7 @@ export default function IndustrialHeader() {
                       {productSuggestions.map((suggestion, idx) => (
                         <button
                           key={idx}
-                          type="button"
-                          data-dropdown-item="product"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
+                          onClick={() => {
                             setSearchQuery(suggestion.text);
                             setShowProductDropdown(false);
                           }}
@@ -681,6 +581,18 @@ export default function IndustrialHeader() {
                 </div>
               )}
             </div>
+
+            {/* Search Button */}
+            <button
+              onClick={handleSearch}
+              className="h-10 px-6 flex items-center gap-2 text-white font-medium text-sm rounded-r-md transition-colors"
+              style={{ backgroundColor: COLORS.deepBlue }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlueHover}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlue}
+            >
+              <Search className="h-4 w-4" />
+              <span>Search</span>
+            </button>
           </div>
 
           {/* Mobile/Tablet: Vertical compact layout - ALWAYS VISIBLE */}
@@ -715,7 +627,7 @@ export default function IndustrialHeader() {
                           setLocationSearch(e.target.value);
                           fetchLocationSuggestionsCallback(e.target.value);
                         }}
-                        placeholder="Search city, state, pincode..."
+                        placeholder="Search city, state..."
                         className="w-full px-3 py-2 text-sm border rounded-md"
                         style={{ borderColor: COLORS.borderGrey }}
                       />
@@ -723,29 +635,16 @@ export default function IndustrialHeader() {
                     {locationSuggestions.map((loc, idx) => (
                       <button
                         key={idx}
-                        data-dropdown-item="location"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleLocationSelect(loc);
+                        onClick={() => {
+                          setSelectedLocation(loc.type === 'pan_india' ? null : loc);
+                          setShowLocationDropdown(false);
+                          setLocationSearch('');
                         }}
                         className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 border-b last:border-b-0 flex justify-between items-center"
                         style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }}
                       >
-                        <div className="flex items-center gap-2">
-                          <span>{getLocationTypeIcon(loc.type)}</span>
-                          <span>{loc.label}</span>
-                          {loc.type !== 'pan_india' && (
-                            <span className="text-xs px-1 py-0.5 bg-gray-100 rounded capitalize" style={{ color: COLORS.textSecondary }}>
-                              {loc.type}
-                            </span>
-                          )}
-                        </div>
-                        {loc.seller_count !== undefined && loc.seller_count > 0 && (
+                        <span>{loc.label}</span>
+                        {loc.seller_count && (
                           <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
                             {loc.seller_count}
                           </span>
@@ -774,14 +673,7 @@ export default function IndustrialHeader() {
                 {showCategoryDropdown && (
                   <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto" style={{ borderColor: COLORS.borderGrey }}>
                     <button
-                      data-dropdown-item="category"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
+                      onClick={() => {
                         setSelectedCategory(null);
                         setShowCategoryDropdown(false);
                       }}
@@ -793,14 +685,7 @@ export default function IndustrialHeader() {
                     {categories.map((cat) => (
                       <button
                         key={cat.id}
-                        data-dropdown-item="category"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
+                        onClick={() => {
                           setSelectedCategory(cat);
                           setShowCategoryDropdown(false);
                         }}
@@ -816,72 +701,42 @@ export default function IndustrialHeader() {
             </div>
 
             {/* Row 2: Search Input + Button */}
-            <form 
-              className="flex gap-2 relative"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSearch();
-              }}
-            >
+            <div className="flex gap-2 relative">
               <div className="flex-1 relative">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowProductDropdown(true)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   placeholder="Search products, brands..."
                   className="w-full px-3 py-2.5 text-sm border rounded-md bg-white"
                   style={{ borderColor: COLORS.borderGrey }}
                   autoComplete="off"
                 />
 
-                {/* Mobile Product Autocomplete - Fixed position for visibility */}
+                {/* Mobile Product Autocomplete */}
                 {showProductDropdown && (productSuggestions.length > 0 || loadingProducts) && (
-                  <div 
-                    className="fixed left-3 right-3 bg-white border rounded-lg shadow-xl"
-                    style={{ 
-                      borderColor: COLORS.borderGrey,
-                      top: '140px',
-                      zIndex: 9999,
-                      maxHeight: '60vh'
-                    }}
-                  >
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
                     {loadingProducts ? (
-                      <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>
-                        <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-                        Searching...
-                      </div>
+                      <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>Searching...</div>
                     ) : (
-                      <div className="overflow-y-auto py-1" style={{ maxHeight: 'calc(60vh - 20px)' }}>
+                      <div className="max-h-60 overflow-y-auto py-1">
                         {productSuggestions.map((suggestion, idx) => (
                           <button
                             key={idx}
-                            type="button"
-                            data-dropdown-item="product"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
+                            onClick={() => {
                               setSearchQuery(suggestion.text);
                               setShowProductDropdown(false);
                             }}
-                            className="w-full px-4 py-3 text-sm text-left hover:bg-gray-50 flex items-center gap-3 border-b last:border-b-0"
-                            style={{ borderColor: COLORS.borderGrey }}
+                            className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 flex items-center gap-2"
                           >
                             {suggestion.type === 'product' ? (
-                              <Package className="h-5 w-5 flex-shrink-0" style={{ color: COLORS.deepBlue }} />
-                            ) : suggestion.type === 'category' ? (
-                              <Grid3X3 className="h-5 w-5 flex-shrink-0" style={{ color: COLORS.textSecondary }} />
+                              <Package className="h-4 w-4" style={{ color: COLORS.deepBlue }} />
                             ) : (
-                              <TrendingUp className="h-5 w-5 flex-shrink-0 text-green-600" />
+                              <TrendingUp className="h-4 w-4 text-green-600" />
                             )}
                             <span className="flex-1" style={{ color: COLORS.textPrimary }}>{suggestion.text}</span>
-                            {suggestion.type === 'popular' && (
-                              <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">Popular</span>
-                            )}
                           </button>
                         ))}
                       </div>
@@ -890,13 +745,13 @@ export default function IndustrialHeader() {
                 )}
               </div>
               <button
-                type="submit"
-                className="px-4 py-2.5 flex items-center gap-2 text-white font-medium text-sm rounded-md transition-colors pointer-events-auto"
+                onClick={handleSearch}
+                className="px-4 py-2.5 flex items-center gap-2 text-white font-medium text-sm rounded-md transition-colors"
                 style={{ backgroundColor: COLORS.deepBlue }}
               >
                 <Search className="h-4 w-4" />
               </button>
-            </form>
+            </div>
           </div>
         </div>
       </div>
