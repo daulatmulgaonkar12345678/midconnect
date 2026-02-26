@@ -25,6 +25,18 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: '**.amazonaws.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'storage.googleapis.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'customer-assets.emergentagent.com',
+      },
+      {
+        protocol: 'https',
         hostname: 'example.com',
       },
     ],
