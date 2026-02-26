@@ -3930,6 +3930,8 @@ async def get_public_categories():
         categories.append({
             "_id": cat_id,
             "name": category.get("name") if category else None,
+            "image": category.get("image") if category else None,  # Include category image
+            "icon": category.get("icon") if category else None,    # Include category icon
             "productCount": c.get("productCount", 0),
             "listingCount": c.get("totalListings", 0)
         })
