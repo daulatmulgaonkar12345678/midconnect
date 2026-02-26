@@ -21,27 +21,29 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-white shadow-sm sticky top-0 z-50 overflow-visible">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-visible">
-        <div className="flex items-center justify-between h-16 gap-4 overflow-visible">
-          {/* Logo */}
+    <header className="bg-white shadow-sm sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Fixed height header row */}
+        <div className="flex items-center justify-between h-16 gap-4">
+          {/* Logo - Fixed width */}
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
             <ShoppingBag className="h-8 w-8 text-blue-600" />
             <span className="text-xl font-bold text-gray-900 hidden sm:inline">{APP_NAME}</span>
           </Link>
 
-          {/* Enterprise Search Bar - Desktop */}
-          <div className="hidden md:block flex-1 max-w-2xl overflow-visible">
+          {/* Enterprise Search Bar - Desktop - Fixed container */}
+          <div className="hidden md:flex flex-1 max-w-2xl min-w-0 relative">
             <EnterpriseSearchBar 
               variant="header" 
               showLocationFilter={true}
+              className="w-full"
             />
           </div>
 
-          {/* Navigation - Desktop */}
+          {/* Navigation - Desktop - Fixed width */}
           <nav className="hidden md:flex items-center gap-4 flex-shrink-0">
-            <Link href="/products" className="text-gray-600 hover:text-gray-900 text-sm">Products</Link>
-            <Link href="/categories" className="text-gray-600 hover:text-gray-900 text-sm">Categories</Link>
+            <Link href="/products" className="text-gray-600 hover:text-gray-900 text-sm whitespace-nowrap">Products</Link>
+            <Link href="/categories" className="text-gray-600 hover:text-gray-900 text-sm whitespace-nowrap">Categories</Link>
             
             {!loading && (
               user ? (
@@ -128,13 +130,13 @@ export default function Header() {
                 <div className="flex items-center gap-3">
                   <Link
                     href="/login"
-                    className="text-gray-600 hover:text-gray-900"
+                    className="text-gray-600 hover:text-gray-900 whitespace-nowrap"
                   >
                     Login
                   </Link>
                   <Link
                     href="/register"
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 whitespace-nowrap"
                   >
                     Sign Up
                   </Link>
@@ -153,14 +155,14 @@ export default function Header() {
           </button>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Menu - Full Width with Search */}
         {isMenuOpen && (
           <div className="md:hidden py-4 border-t">
-            {/* Mobile Search */}
+            {/* Mobile Search - WITH location filter */}
             <div className="mb-4">
               <EnterpriseSearchBar 
-                variant="header" 
-                showLocationFilter={false}
+                variant="page"
+                showLocationFilter={true}
               />
             </div>
             <nav className="flex flex-col gap-4">
