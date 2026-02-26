@@ -459,7 +459,13 @@ export default function SellerInquiriesPage() {
                         )}
                         <span className="flex items-center gap-1 text-gray-400">
                           <Clock className="h-3.5 w-3.5" />
-                          {new Date(inquiry.createdAt).toLocaleDateString()}
+                          {new Date(inquiry.createdAt).toLocaleDateString('en-IN', {timeZone: 'Asia/Kolkata',
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit' 
+                            })}
                         </span>
                       </div>
 
