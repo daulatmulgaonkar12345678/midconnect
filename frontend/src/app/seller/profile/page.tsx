@@ -123,7 +123,7 @@ export default function SellerProfilePage() {
                 <Building2 className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div>
                   <p className="text-sm text-gray-500">Business Name</p>
-                  <p className="font-medium text-gray-900">{profile?.businessName || 'Not set'}</p>
+                  <p className="font-medium text-gray-900">{businessName || 'Not set'}</p>
                 </div>
               </div>
 
@@ -139,7 +139,7 @@ export default function SellerProfilePage() {
                 <Phone className="h-5 w-5 text-gray-400 mt-0.5" />
                 <div>
                   <p className="text-sm text-gray-500">Phone</p>
-                  <p className="font-medium text-gray-900">{profile?.phone || 'Not set'}</p>
+                  <p className="font-medium text-gray-900">{phone || 'Not set'}</p>
                 </div>
               </div>
 
@@ -148,9 +148,9 @@ export default function SellerProfilePage() {
                 <div>
                   <p className="text-sm text-gray-500">Location</p>
                   <p className="font-medium text-gray-900">
-                    {profile?.city && profile?.state 
-                      ? `${profile.city}, ${profile.state}` 
-                      : profile?.city || profile?.state || 'Not set'}
+                    {city && state 
+                      ? `${city}, ${state}` 
+                      : city || state || 'Not set'}
                   </p>
                 </div>
               </div>
