@@ -13,6 +13,29 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## ADMIN VARIABLE MISMATCH FIXES (Feb 26, 2026)
+
+### Issues Fixed
+1. **Spec Templates page** - Category showing "Unknown"
+   - Fixed: Added fallback `category_name || categoryName || 'Unknown'`
+
+2. **Leads page** - Product showing "N/A"  
+   - Fixed: Added multiple field fallbacks for `productName`, `listing.name`
+   - Fixed: Added fallbacks for buyer/seller names
+
+3. **Product Requests page** - Empty Category/Type, Invalid Date
+   - Fixed: Date formatter now handles null/undefined properly
+   - Fixed: Added snake_case → camelCase fallbacks
+
+4. **Seller Profile page** - "Not set" for Business Name, Phone, Location
+   - Fixed: Profile data is nested (`profile.profile`) not flat
+   - Added: `profileData = profile?.profile` extraction
+
+### Root Cause
+Backend returns snake_case (`category_name`, `requested_by_email`) but frontend TypeScript types expect camelCase. Also, profile data structure is nested but was being accessed as flat.
+
+---
+
 ## MOBILE SEARCH UX FIXES (Feb 26, 2026)
 
 ### Issue 1: Mobile Autocomplete Visibility - FIXED
