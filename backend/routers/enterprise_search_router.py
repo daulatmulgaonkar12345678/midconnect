@@ -327,22 +327,37 @@ def create_enterprise_search_router(db, require_auth=None):
         limit: int = Query(10, ge=1, le=20)
     ):
         """
-        Autocomplete suggestions for search.
+        Smart autocomplete suggestions with typo tolerance.
         
-        Returns:
-        - Product name suggestions
-        - Category suggestions
-        - Popular searches
-        - Attribute-based suggestions
+        Features:
+        - Direct product/category matches
+        - Fuzzy matching for typos (moter → motor)
+        - Phonetic matching (India-friendly)
+        - "Did you mean?" suggestions
+        - Popular searches ranking
         """
         try:
+            from services.smart_search_service import create_smart_search_service
+            
+            smart_search = create_smart_search_service(db)
             suggestions = []
+            did_you_mean = None
+            corrected_query = None
             
             # Normalize the query for better matching
             parsed = search_normalizer.parse_search_query(q)
             
-            # 1. Product name matches
-            product_regex = {"$regex": q, "$options": "i"}
+            # Get spelling suggestion
+            spelling = await smart_search.get_spelling_suggestion(q)
+            if spelling:
+                did_you_mean = spelling.get("corrected")
+                corrected_query = did_you_mean
+            
+            # Use corrected query for matching
+            search_q = corrected_query or q
+            
+            # 1. Product name matches (direct + fuzzy)
+            product_regex = {"$regex": search_q, "$options": "i"}
             products = await db.products.find(
                 {"name": product_regex, "isActive": True},
                 {"name": 1, "categoryName": 1}
@@ -356,7 +371,19 @@ def create_enterprise_search_router(db, require_auth=None):
                     "icon": "package"
                 })
             
-            # 2. Category matches
+            # 2. If not enough direct matches, try fuzzy
+            if len(suggestions) < 3:
+                fuzzy_result = await smart_search.get_smart_autocomplete(q, limit=5)
+                for s in fuzzy_result.get("suggestions", []):
+                    if s.get("text") not in [x.get("text") for x in suggestions]:
+                        suggestions.append({
+                            "type": "product",
+                            "text": s.get("text"),
+                            "matchType": s.get("matchType", "fuzzy"),
+                            "icon": "package"
+                        })
+            
+            # 3. Category matches
             categories = await db.categories.find(
                 {"name": product_regex, "is_active": True},
                 {"name": 1}
@@ -369,9 +396,9 @@ def create_enterprise_search_router(db, require_auth=None):
                     "icon": "folder"
                 })
             
-            # 3. Popular searches (from analytics)
+            # 4. Popular searches (from analytics)
             popular = await db.searchAnalytics.aggregate([
-                {"$match": {"query": {"$regex": f"^{q}", "$options": "i"}}},
+                {"$match": {"query": {"$regex": f"^{search_q}", "$options": "i"}}},
                 {"$group": {"_id": "$query", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
                 {"$limit": 3}
@@ -386,13 +413,15 @@ def create_enterprise_search_router(db, require_auth=None):
                         "icon": "trending"
                     })
             
-            # 4. Attribute-based suggestions
+            # 5. Attribute-based suggestions
             if parsed.extracted_attributes:
                 attr_suggestions = generate_attribute_suggestions(parsed)
                 suggestions.extend(attr_suggestions[:3])
             
             return {
                 "query": q,
+                "correctedQuery": corrected_query,
+                "didYouMean": did_you_mean if did_you_mean and did_you_mean.lower() != q.lower() else None,
                 "suggestions": suggestions[:limit]
             }
             
