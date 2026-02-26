@@ -545,7 +545,14 @@ export default function IndustrialHeader() {
                 <div className="absolute left-0 top-full mt-1 w-64 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
                   <div className="max-h-60 overflow-y-auto py-1">
                     <button
-                      onClick={() => {
+                      data-dropdown-item="category"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         setSelectedCategory(null);
                         setShowCategoryDropdown(false);
                       }}
@@ -560,7 +567,14 @@ export default function IndustrialHeader() {
                       categories.map((cat) => (
                         <button
                           key={cat.id}
-                          onClick={() => {
+                          data-dropdown-item="category"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setSelectedCategory(cat);
                             setShowCategoryDropdown(false);
                           }}
