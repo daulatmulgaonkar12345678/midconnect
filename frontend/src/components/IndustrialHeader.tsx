@@ -168,23 +168,32 @@ export default function IndustrialHeader() {
     };
   }, [searchQuery, showProductDropdown, fetchProductSuggestionsCallback]);
 
-  // Click outside handlers
+  // Click outside handlers - FIXED: Use consistent event type and proper cleanup
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (locationRef.current && !locationRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+      
+      // Don't close if clicking on a dropdown trigger button or dropdown item
+      if (target.closest('[data-dropdown-trigger]') || target.closest('[data-dropdown-item]')) {
+        return;
+      }
+      
+      if (locationRef.current && !locationRef.current.contains(target)) {
         setShowLocationDropdown(false);
       }
-      if (categoryRef.current && !categoryRef.current.contains(event.target as Node)) {
+      if (categoryRef.current && !categoryRef.current.contains(target)) {
         setShowCategoryDropdown(false);
       }
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
         setIsUserMenuOpen(false);
       }
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+      if (searchRef.current && !searchRef.current.contains(target)) {
         setShowProductDropdown(false);
       }
     };
-    document.addEventListener('click', handleClickOutside);
+    
+    // Use mousedown instead of click for earlier detection
+    document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
