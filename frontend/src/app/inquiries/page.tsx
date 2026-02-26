@@ -41,19 +41,19 @@ export default function InquiriesPage() {
         const data = await getBuyerInquiries(token);
         // Map the response to match the local interface
         const mappedInquiries = (data.inquiries || []).map((inq) => ({
-          _id: inq.inquiryId || inq._id || '',
+          _id: inq._id || '',
           productId: inq.productId || '',
-          productName: inq.productName || '',
-          sellerId: inq.sellerId || '',
-          sellerName: inq.sellerBusinessName || '',
+          productName: inq.productName || inq.listing?.name || '',
+          sellerId: '',
+          sellerName: inq.seller?.businessName || '',
           quantity: inq.quantity || 0,
           message: inq.message || '',
           status: inq.status as 'pending' | 'responded' | 'quoted' | 'closed',
           createdAt: inq.createdAt || '',
-          quotation: inq.quote ? {
-            pricePerUnit: inq.quote.quotedPrice || 0,
-            totalAmount: (inq.quote.quotedPrice || 0) * (inq.quantity || 1),
-            validUntil: inq.quote.validTill || '',
+          quotation: inq.sellerResponse?.quotedPrice ? {
+            pricePerUnit: inq.sellerResponse.quotedPrice || 0,
+            totalAmount: (inq.sellerResponse.quotedPrice || 0) * (inq.quantity || 1),
+            validUntil: '',
           } : undefined,
         }));
         setInquiries(mappedInquiries);
