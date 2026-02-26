@@ -3842,6 +3842,7 @@ async def get_categories():
             "name": 1,
             "description": 1,
             "icon": 1,
+            "image": 1,  # Include category image
             "listingCount": {"$size": "$listings"}
         }}
     ]
