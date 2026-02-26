@@ -624,142 +624,23 @@ export default function IndustrialHeader() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          MOBILE MENU
+          MOBILE MENU (Navigation Only - Search is always visible in Layer 2)
           ═══════════════════════════════════════════════════════════════ */}
       {isMenuOpen && (
-        <div className="lg:hidden fixed inset-0 top-[60px] bg-white z-50 overflow-y-auto">
-          <div className="p-4 space-y-4">
-            {/* Mobile Search */}
-            <div className="space-y-3">
-              {/* Location */}
-              <div ref={locationRef} className="relative">
-                <button
-                  onClick={() => {
-                    setShowLocationDropdown(!showLocationDropdown);
-                    if (!showLocationDropdown) fetchLocationSuggestions('');
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 border rounded-md"
-                  style={{ borderColor: COLORS.borderGrey }}
-                >
-                  <MapPin className="h-4 w-4" style={{ color: COLORS.textSecondary }} />
-                  <span className="text-sm flex-1 text-left" style={{ color: selectedLocation ? COLORS.textPrimary : COLORS.textSecondary }}>
-                    {selectedLocation?.label || 'All India'}
-                  </span>
-                  <ChevronDown className="h-4 w-4" style={{ color: COLORS.textSecondary }} />
-                </button>
-                
-                {showLocationDropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto" style={{ borderColor: COLORS.borderGrey }}>
-                    <div className="p-2 border-b sticky top-0 bg-white" style={{ borderColor: COLORS.borderGrey }}>
-                      <input
-                        type="text"
-                        value={locationSearch}
-                        onChange={(e) => {
-                          setLocationSearch(e.target.value);
-                          fetchLocationSuggestions(e.target.value);
-                        }}
-                        placeholder="Search city, state..."
-                        className="w-full px-3 py-2 text-sm border rounded-md"
-                        style={{ borderColor: COLORS.borderGrey }}
-                      />
-                    </div>
-                    {locationSuggestions.map((loc, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          setSelectedLocation(loc.type === 'pan_india' ? null : loc);
-                          setShowLocationDropdown(false);
-                          setLocationSearch('');
-                        }}
-                        className="w-full px-4 py-3 text-sm text-left hover:bg-gray-50 border-b last:border-b-0"
-                        style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }}
-                      >
-                        {loc.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Category */}
-              <div ref={categoryRef} className="relative">
-                <button
-                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                  className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 border rounded-md"
-                  style={{ borderColor: COLORS.borderGrey }}
-                >
-                  <Grid3X3 className="h-4 w-4" style={{ color: COLORS.textSecondary }} />
-                  <span className="text-sm flex-1 text-left" style={{ color: selectedCategory ? COLORS.textPrimary : COLORS.textSecondary }}>
-                    {selectedCategory?.name || 'All Categories'}
-                  </span>
-                  <ChevronDown className="h-4 w-4" style={{ color: COLORS.textSecondary }} />
-                </button>
-
-                {showCategoryDropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto" style={{ borderColor: COLORS.borderGrey }}>
-                    <button
-                      onClick={() => {
-                        setSelectedCategory(null);
-                        setShowCategoryDropdown(false);
-                      }}
-                      className="w-full px-4 py-3 text-sm text-left hover:bg-gray-50 border-b"
-                      style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }}
-                    >
-                      All Categories
-                    </button>
-                    {categories.map((cat) => (
-                      <button
-                        key={cat.id}
-                        onClick={() => {
-                          setSelectedCategory(cat);
-                          setShowCategoryDropdown(false);
-                        }}
-                        className="w-full px-4 py-3 text-sm text-left hover:bg-gray-50 border-b last:border-b-0"
-                        style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }}
-                      >
-                        {cat.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Search Input */}
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products, brands..."
-                className="w-full px-4 py-3 text-sm border rounded-md"
-                style={{ borderColor: COLORS.borderGrey }}
-              />
-
-              {/* Search Button */}
-              <button
-                onClick={handleSearch}
-                className="w-full py-3 flex items-center justify-center gap-2 text-white font-medium text-sm rounded-md"
-                style={{ backgroundColor: COLORS.deepBlue }}
-              >
-                <Search className="h-4 w-4" />
-                <span>Search</span>
-              </button>
-            </div>
-
+        <div className="md:hidden fixed inset-x-0 top-[117px] bg-white border-b shadow-lg z-40" style={{ borderColor: COLORS.borderGrey }}>
+          <div className="p-4">
             {/* Mobile Navigation */}
-            <nav className="border-t pt-4 space-y-1" style={{ borderColor: COLORS.borderGrey }}>
+            <nav className="space-y-1">
               <Link href="/products" className="block px-4 py-3 text-sm hover:bg-gray-50 rounded-md" style={{ color: COLORS.textPrimary }} onClick={() => setIsMenuOpen(false)}>
                 Products
               </Link>
               <Link href="/categories" className="block px-4 py-3 text-sm hover:bg-gray-50 rounded-md" style={{ color: COLORS.textPrimary }} onClick={() => setIsMenuOpen(false)}>
                 Categories
               </Link>
+              <Link href="/inquiries" className="block px-4 py-3 text-sm hover:bg-gray-50 rounded-md" style={{ color: COLORS.textPrimary }} onClick={() => setIsMenuOpen(false)}>
+                Inquiries {user && inquiryCount > 0 && `(${inquiryCount})`}
+              </Link>
               
-              {user && isBuyer && (
-                <Link href="/buyer/inquiries" className="block px-4 py-3 text-sm hover:bg-gray-50 rounded-md" style={{ color: COLORS.textPrimary }} onClick={() => setIsMenuOpen(false)}>
-                  My Inquiries {inquiryCount > 0 && `(${inquiryCount})`}
-                </Link>
-              )}
-
               {user && isSeller && (
                 <>
                   <Link href="/seller" className="block px-4 py-3 text-sm hover:bg-gray-50 rounded-md" style={{ color: COLORS.textPrimary }} onClick={() => setIsMenuOpen(false)}>
@@ -777,6 +658,8 @@ export default function IndustrialHeader() {
                 </Link>
               )}
 
+              <div className="border-t my-2" style={{ borderColor: COLORS.borderGrey }} />
+
               {!loading && (
                 user ? (
                   <>
@@ -788,7 +671,7 @@ export default function IndustrialHeader() {
                     </button>
                   </>
                 ) : (
-                  <div className="pt-2 space-y-2">
+                  <div className="space-y-2 pt-2">
                     <Link href="/login" className="block px-4 py-3 text-sm text-center border rounded-md hover:bg-gray-50" style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }} onClick={() => setIsMenuOpen(false)}>
                       Login
                     </Link>
