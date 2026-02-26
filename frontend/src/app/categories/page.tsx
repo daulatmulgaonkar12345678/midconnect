@@ -86,9 +86,9 @@ function CategoryCard({ category }: { category: PublicCategory }) {
             </h3>
             <ArrowRight className="h-4 w-4 text-blue-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
           </div>
-          <p className="text-sm text-gray-500 mt-1">
+          {/* <p className="text-sm text-gray-500 mt-1">
             {category.listingCount || 0} sellers
-          </p>
+          </p> */}
         </div>
       </div>
     </Link>
