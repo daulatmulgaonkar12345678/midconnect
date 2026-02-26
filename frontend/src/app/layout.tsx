@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
-import { Geist } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
-import Header from '@/components/Header';
+import IndustrialHeader from '@/components/IndustrialHeader';
 import Footer from '@/components/Footer';
 import { SEO, APP_KEYWORDS } from '@/lib/config';
 
-const geist = Geist({ subsets: ['latin'] });
+// Use Inter font for industrial/corporate look
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] });
 
 export const metadata: Metadata = {
   title: SEO.title,
@@ -31,10 +32,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geist.className} antialiased`}>
+      <body className={`${inter.className} antialiased bg-gray-50`}>
         <AuthProvider>
           <div className="min-h-screen flex flex-col">
-            <Header />
+            <IndustrialHeader />
             <main className="flex-1">{children}</main>
             <Footer />
           </div>
