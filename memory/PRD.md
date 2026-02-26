@@ -13,6 +13,27 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## LOCATION DROPDOWN FIX & SMART SEARCH (Feb 26, 2026)
+
+### Bug Fixes
+- Fixed event listener cleanup (consistent `pointerdown` events for mobile reliability)
+- Fixed premature dropdown closing with `onMouseDown` + `e.preventDefault()`
+- Fixed location selection normalization (ensures city/state always exist)
+
+### Smart Location Search Features
+- **Search by**: City, State, or Pincode (6-digit)
+- **Type indicators**: 📍 City, 🗺️ State, 📮 Pincode
+- **Search priority**: pincode > city > state (sent to backend)
+- **Seller counts**: Shows number of sellers in each location
+
+### Backend Support (Already Exists)
+- `/api/search/locations?q=` - Full location autocomplete
+- `/api/search/locations/active` - Cities with active sellers
+- `/api/search/locations/check` - Check seller availability
+- Supports city, state, pincode parameters in search API
+
+---
+
 ## CENTRALIZED API CLIENT REFACTOR (Feb 26, 2026)
 
 ### Changes Made
