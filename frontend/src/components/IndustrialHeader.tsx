@@ -802,30 +802,47 @@ export default function IndustrialHeader() {
             </div>
 
             {/* Row 2: Search Input + Button */}
-            <div className="flex gap-2 relative">
+            <form 
+              className="flex gap-2 relative"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSearch();
+              }}
+            >
               <div className="flex-1 relative">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowProductDropdown(true)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   placeholder="Search products, brands..."
                   className="w-full px-3 py-2.5 text-sm border rounded-md bg-white"
                   style={{ borderColor: COLORS.borderGrey }}
                   autoComplete="off"
                 />
 
-                {/* Mobile Product Autocomplete */}
+                {/* Mobile Product Autocomplete - Fixed position for visibility */}
                 {showProductDropdown && (productSuggestions.length > 0 || loadingProducts) && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
+                  <div 
+                    className="fixed left-3 right-3 bg-white border rounded-lg shadow-xl"
+                    style={{ 
+                      borderColor: COLORS.borderGrey,
+                      top: '140px',
+                      zIndex: 9999,
+                      maxHeight: '60vh'
+                    }}
+                  >
                     {loadingProducts ? (
-                      <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>Searching...</div>
+                      <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>
+                        <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                        Searching...
+                      </div>
                     ) : (
-                      <div className="max-h-60 overflow-y-auto py-1">
+                      <div className="overflow-y-auto py-1" style={{ maxHeight: 'calc(60vh - 20px)' }}>
                         {productSuggestions.map((suggestion, idx) => (
                           <button
                             key={idx}
+                            type="button"
                             data-dropdown-item="product"
                             onMouseDown={(e) => {
                               e.preventDefault();
@@ -837,14 +854,20 @@ export default function IndustrialHeader() {
                               setSearchQuery(suggestion.text);
                               setShowProductDropdown(false);
                             }}
-                            className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 flex items-center gap-2"
+                            className="w-full px-4 py-3 text-sm text-left hover:bg-gray-50 flex items-center gap-3 border-b last:border-b-0"
+                            style={{ borderColor: COLORS.borderGrey }}
                           >
                             {suggestion.type === 'product' ? (
-                              <Package className="h-4 w-4" style={{ color: COLORS.deepBlue }} />
+                              <Package className="h-5 w-5 flex-shrink-0" style={{ color: COLORS.deepBlue }} />
+                            ) : suggestion.type === 'category' ? (
+                              <Grid3X3 className="h-5 w-5 flex-shrink-0" style={{ color: COLORS.textSecondary }} />
                             ) : (
-                              <TrendingUp className="h-4 w-4 text-green-600" />
+                              <TrendingUp className="h-5 w-5 flex-shrink-0 text-green-600" />
                             )}
                             <span className="flex-1" style={{ color: COLORS.textPrimary }}>{suggestion.text}</span>
+                            {suggestion.type === 'popular' && (
+                              <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">Popular</span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -853,13 +876,13 @@ export default function IndustrialHeader() {
                 )}
               </div>
               <button
-                onClick={handleSearch}
-                className="px-4 py-2.5 flex items-center gap-2 text-white font-medium text-sm rounded-md transition-colors"
+                type="submit"
+                className="px-4 py-2.5 flex items-center gap-2 text-white font-medium text-sm rounded-md transition-colors pointer-events-auto"
                 style={{ backgroundColor: COLORS.deepBlue }}
               >
                 <Search className="h-4 w-4" />
               </button>
-            </div>
+            </form>
           </div>
         </div>
       </div>
