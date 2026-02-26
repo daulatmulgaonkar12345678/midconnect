@@ -527,6 +527,8 @@ export default function IndustrialHeader() {
             <div ref={searchRef} className="flex-1 relative">
               <input
                 type="text"
+                name="search-query-desktop"
+                id="search-query-desktop"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setShowProductDropdown(true)}
@@ -535,11 +537,20 @@ export default function IndustrialHeader() {
                 className="w-full h-10 px-4 text-sm border-y border-r bg-white focus:outline-none focus:ring-1 focus:ring-inset"
                 style={{ borderColor: COLORS.borderGrey }}
                 autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-lpignore="true"
+                data-form-type="other"
+                aria-autocomplete="list"
               />
 
               {/* Product Autocomplete Dropdown */}
               {showProductDropdown && (productSuggestions.length > 0 || loadingProducts) && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
+                <div 
+                  className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-xl"
+                  style={{ borderColor: COLORS.borderGrey, zIndex: 9999 }}
+                >
                   {loadingProducts ? (
                     <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>
                       <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
@@ -550,7 +561,15 @@ export default function IndustrialHeader() {
                       {productSuggestions.map((suggestion, idx) => (
                         <button
                           key={idx}
-                          onClick={() => {
+                          type="button"
+                          data-dropdown-item="product"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setSearchQuery(suggestion.text);
                             setShowProductDropdown(false);
                           }}
