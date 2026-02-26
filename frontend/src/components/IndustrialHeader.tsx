@@ -592,21 +592,46 @@ export default function IndustrialHeader() {
 
             {/* Search Input with Autocomplete */}
             <div ref={searchRef} className="flex-1 relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setShowProductDropdown(true)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search industrial products, brands, specifications..."
-                className="w-full h-10 px-4 text-sm border-y border-r bg-white focus:outline-none focus:ring-1 focus:ring-inset"
-                style={{ borderColor: COLORS.borderGrey }}
-                autoComplete="off"
-              />
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSearch();
+                }}
+                className="flex"
+              >
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setShowProductDropdown(true)}
+                  placeholder="Search industrial products, brands, specifications..."
+                  className="w-full h-10 px-4 text-sm border-y border-r bg-white focus:outline-none focus:ring-1 focus:ring-inset"
+                  style={{ borderColor: COLORS.borderGrey }}
+                  autoComplete="off"
+                />
+
+                {/* Search Button */}
+                <button
+                  type="submit"
+                  className="h-10 px-6 flex items-center gap-2 text-white font-medium text-sm rounded-r-md transition-colors pointer-events-auto"
+                  style={{ backgroundColor: COLORS.deepBlue }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlueHover}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlue}
+                >
+                  <Search className="h-4 w-4" />
+                  <span>Search</span>
+                </button>
+              </form>
 
               {/* Product Autocomplete Dropdown */}
               {showProductDropdown && (productSuggestions.length > 0 || loadingProducts) && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
+                <div 
+                  className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-xl"
+                  style={{ 
+                    borderColor: COLORS.borderGrey,
+                    zIndex: 9999
+                  }}
+                >
                   {loadingProducts ? (
                     <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>
                       <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
@@ -617,6 +642,7 @@ export default function IndustrialHeader() {
                       {productSuggestions.map((suggestion, idx) => (
                         <button
                           key={idx}
+                          type="button"
                           data-dropdown-item="product"
                           onMouseDown={(e) => {
                             e.preventDefault();
@@ -655,18 +681,6 @@ export default function IndustrialHeader() {
                 </div>
               )}
             </div>
-
-            {/* Search Button */}
-            <button
-              onClick={handleSearch}
-              className="h-10 px-6 flex items-center gap-2 text-white font-medium text-sm rounded-r-md transition-colors"
-              style={{ backgroundColor: COLORS.deepBlue }}
-              onMouseOver={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlueHover}
-              onMouseOut={(e) => e.currentTarget.style.backgroundColor = COLORS.deepBlue}
-            >
-              <Search className="h-4 w-4" />
-              <span>Search</span>
-            </button>
           </div>
 
           {/* Mobile/Tablet: Vertical compact layout - ALWAYS VISIBLE */}
