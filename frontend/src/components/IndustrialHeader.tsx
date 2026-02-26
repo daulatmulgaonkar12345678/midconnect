@@ -446,7 +446,14 @@ export default function IndustrialHeader() {
                         <button
                           key={idx}
                           onClick={() => {
-                            setSelectedLocation(loc.type === 'pan_india' ? null : loc);
+                            setSelectedLocation(
+                              loc.type === 'pan_india'
+                              ? null
+                              : {
+                              ...loc,
+                               city: loc.city || loc.label.split(',')[0],
+      }
+);
                             setShowLocationDropdown(false);
                             setLocationSearch('');
                           }}
