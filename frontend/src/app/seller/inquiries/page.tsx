@@ -232,7 +232,7 @@ export default function SellerInquiriesPage() {
 
       // Auto-redirect to WhatsApp if link is available
       if (result.whatsappLink) {
-        window.location.href = result.whatsappLink;
+         setSuccess('Inquiry accepted! Click WhatsApp to contact buyer.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept inquiry');
@@ -580,7 +580,7 @@ msg +=
                             // Add India country code if not present
                             const finalPhone = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
                             
-                            window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                            window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`, '_blank','noopener,noreferrer');
                           }}
                           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                           data-testid={`whatsapp-btn-${inquiry._id}`}
