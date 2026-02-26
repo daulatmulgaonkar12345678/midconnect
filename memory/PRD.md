@@ -6,134 +6,85 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 ## Core Architecture
 
 ### Tech Stack
-- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS, Inter Font
 - **Backend**: FastAPI, Python 3.x
-- **Database**: MongoDB (via Motor async driver)
+- **Database**: MongoDB (via Motor async driver) with 2dsphere geo indexing
 - **Auth**: Firebase Authentication
 
 ---
 
-## GEO SEARCH IMPLEMENTATION COMPLETE (Feb 26, 2026)
+## INDUSTRIAL HEADER REDESIGN COMPLETE (Feb 26, 2026)
 
-### Phase 1: Schema Upgrade ✅
-- Added `coordinates` (GeoJSON Point) to sellerListings
-- Added `pincode` field from seller profile
-- Fixed `minPrice` computation: now uses MIN of all pricing tiers (not first tier)
-- All existing listings updated with coordinates
+### Design Specifications
+- **Color Palette**: Deep Blue (#0B3C5D), Light Grey (#F5F6F7), Border Grey (#E5E7EB)
+- **Typography**: Inter font (professional, corporate look)
+- **Style**: Industrial B2B, enterprise-grade, no gradients/shadows/flashy elements
 
-### Phase 2: 2dsphere Index ✅
-- Created `coordinates_2dsphere` index on sellerListings
-- Enables $geoNear queries and radius-based search
+### 2-Layer Header Structure
 
-### Phase 3: Listing Creation Updated ✅
-- Auto-populates coordinates from seller city using geocode service
-- Uses pre-stored coordinates from seller profile if available
-- Falls back to city lookup for geocoding
+#### Layer 1: Corporate Utility Header (60px height)
+- **Left**: Logo + "B2B Marketplace" badge
+- **Right**: 
+  - My Inquiries (for buyers, with count badge)
+  - Seller Dashboard (for sellers)
+  - Admin Panel (for admins)
+  - Login / Register buttons
 
-### Phase 4: Enterprise Geo Search with Fallback ✅
-New endpoint: `GET /api/search/geo`
+#### Layer 2: Search Engine Header (56px height, Sticky)
+- **Location Dropdown**: "All India" default, shows cities with seller counts
+- **Category Dropdown**: All categories from database
+- **Search Input**: Full-width, placeholder "Search industrial products, brands, specifications..."
+- **Search Button**: Deep blue with white icon
 
-**Fallback Strategy (M0 Compatible):**
+### Mobile Behavior
+- Full-screen mobile menu when hamburger clicked
+- Location + Category + Search input stacked vertically
+- Navigation links below search
+- Search always accessible (never hidden)
+
+### Backend Integration
+- **Buyer Inquiries**: Fetches count from `/api/inquiries/buyer`
+- **Categories**: Fetches from `/api/categories` (limit 10)
+- **Locations**: Fetches from `/api/search/locations/active`
+
+---
+
+## GEO SEARCH IMPLEMENTATION (Feb 26, 2026)
+
+### Schema
+- `coordinates`: GeoJSON Point `[lng, lat]`
+- `pincode`: String
+- `minPrice`: Number (computed from MIN of all pricing tiers)
+- `inStock`: Boolean
+
+### 2dsphere Index
+- Created on `coordinates` field for radius queries
+
+### Fallback Strategy
 1. City exact match → 
-2. Radius search (50km default, if coords provided) →
+2. Radius 50km (if coords provided) →
 3. State → 
 4. Pan India
 
-**Returns:**
-- `fallbackUsed`: "radius" | "state" | "pan_india" | null
-- `message`: User-friendly fallback message
-- `searchedLocation`: Original search parameters
-
-### Phase 5: Frontend Integration ✅
-- New `geoSearchProducts()` API function
-- Search page uses geo search by default
-- Displays fallback message when search expands area
-- Shows "No sellers in [location]. Showing sellers from across India."
-
----
-
-## KEY FILES MODIFIED
-
-### Backend
-- `/app/backend/seller_products.py` - Listing creation with coordinates
-- `/app/backend/services/enterprise_search_service.py` - Added `geo_search()` method
-- `/app/backend/routers/enterprise_search_router.py` - Added `/search/geo` endpoint
-
-### Frontend
-- `/app/frontend/src/lib/api.ts` - Added `geoSearchProducts()` function
-- `/app/frontend/src/app/search/page.tsx` - Uses geo search, shows fallback message
-
-### Database
-- Created `coordinates_2dsphere` index on sellerListings
-- All listings have `coordinates` field populated
-
----
-
-## API ENDPOINTS
-
-### Geo Search
+### API Endpoint
 ```
 GET /api/search/geo
-Parameters:
-  - q: Search query (optional)
-  - city: City filter
-  - state: State filter
-  - lat: User latitude (for radius search)
-  - lng: User longitude (for radius search)
-  - radiusKm: Search radius (default: 50)
-  - category: Category ID
-  - minPrice, maxPrice: Price filters
-  - inStock: Stock filter
-  - limit, skip: Pagination
-
-Response:
-{
-  "listings": [...],
-  "total": 2,
-  "fallbackUsed": "pan_india",
-  "message": "No sellers in Pune. Showing sellers from across India.",
-  "searchedLocation": {...}
-}
+Returns: fallbackUsed, message, listings
 ```
 
 ---
 
-## SELLER LISTINGS SCHEMA (Updated)
+## KEY FILES
 
-```json
-{
-  "_id": ObjectId,
-  "productId": ObjectId,
-  "sellerId": ObjectId,
-  "city": "Delhi",
-  "state": "Delhi",
-  "pincode": "110001",
-  "coordinates": {
-    "type": "Point",
-    "coordinates": [77.1025, 28.7041]  // [lng, lat]
-  },
-  "minPrice": 500,
-  "inStock": true,
-  "searchableText": "...",
-  "searchableAttributes": {...}
-}
-```
+### Frontend
+- `/app/frontend/src/components/IndustrialHeader.tsx` - New enterprise header
+- `/app/frontend/src/app/layout.tsx` - Uses IndustrialHeader
+- `/app/frontend/src/app/search/page.tsx` - Geo search results
 
----
-
-## UPCOMING TASKS
-
-### P1: Near Me Feature
-- Add browser geolocation API to frontend
-- "Use My Location" button in location dropdown
-- Auto-detect user location for radius search
-
-### P2: Atlas Search Index (When upgrading from M0)
-- Create enterprise_search_v2 with geo mappings
-- Enable Atlas Search geo operators (geoWithin, near)
-
-### P3: Distance Display
-- Show "X km away" on product cards when using radius search
+### Backend
+- `/app/backend/services/enterprise_search_service.py` - Geo search with fallback
+- `/app/backend/routers/enterprise_search_router.py` - `/search/geo` endpoint
+- `/app/backend/seller_products.py` - Coordinates on listing creation
 
 ---
 
@@ -143,8 +94,7 @@ Response:
 
 ---
 
-## TEST STATUS
-- Geo search API: ✅ Working
-- Fallback strategy: ✅ Working (City → Radius → State → Pan India)
-- 2dsphere index: ✅ Created
-- Frontend integration: ✅ Complete
+## NEXT TASKS
+- **P1**: Add product autocomplete to header search input
+- **P1**: Create buyer inquiries page (`/buyer/inquiries`)
+- **P2**: Add "Near Me" geolocation button
