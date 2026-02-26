@@ -466,6 +466,8 @@ export const getCategories = (): Promise<Category[]> =>
 export const getPublicCategories = (): Promise<{
   _id: string;
   name: string;
+  image?: string;
+  icon?: string;
   productCount: number;
   listingCount: number;
 }[]> => fetchAPI('/categories/public');
