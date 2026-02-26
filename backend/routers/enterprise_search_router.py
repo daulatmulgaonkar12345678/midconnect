@@ -236,6 +236,66 @@ def create_enterprise_search_router(db, require_auth=None):
         
         return results
     
+    # ==================== GEO SEARCH WITH FALLBACK ====================
+    
+    @router.get("/geo")
+    async def geo_search(
+        q: str = Query("", description="Search query"),
+        # Geo parameters
+        lat: Optional[float] = Query(None, description="User latitude"),
+        lng: Optional[float] = Query(None, description="User longitude"),
+        radius_km: int = Query(50, ge=1, le=500, alias="radiusKm", description="Search radius in km"),
+        city: Optional[str] = Query(None, description="City filter"),
+        state: Optional[str] = Query(None, description="State filter"),
+        # Other filters
+        category: Optional[str] = Query(None, description="Category ID"),
+        min_price: Optional[float] = Query(None, alias="minPrice"),
+        max_price: Optional[float] = Query(None, alias="maxPrice"),
+        in_stock: Optional[bool] = Query(None, alias="inStock"),
+        # Pagination
+        limit: int = Query(20, ge=1, le=50),
+        skip: int = Query(0, ge=0, le=5000),
+    ):
+        """
+        Geo-enabled search with intelligent fallback strategy.
+        
+        FALLBACK ORDER:
+        1. City exact match → 
+        2. Radius search (if coords provided) →
+        3. State → 
+        4. Pan India
+        
+        RETURNS:
+        - `fallbackUsed`: "radius" | "state" | "pan_india" | null
+        - `message`: User-friendly fallback message
+        - `searchedLocation`: Original search parameters
+        
+        USAGE:
+        - /search/geo?city=Pune&state=Maharashtra → City fallback
+        - /search/geo?lat=18.52&lng=73.85&radiusKm=50 → Radius search
+        - /search/geo?q=motor&city=Amritsar → Text + location search
+        """
+        from services.enterprise_search_service import create_enterprise_search_service
+        
+        search_service = create_enterprise_search_service(db)
+        
+        results = await search_service.geo_search(
+            query=q,
+            lat=lat,
+            lng=lng,
+            radius_km=radius_km,
+            city=city,
+            state=state,
+            category_id=category,
+            min_price=min_price,
+            max_price=max_price,
+            in_stock_only=in_stock or False,
+            limit=limit,
+            skip=skip,
+        )
+        
+        return results
+    
     @router.get("/stats")
     async def search_stats():
         """
