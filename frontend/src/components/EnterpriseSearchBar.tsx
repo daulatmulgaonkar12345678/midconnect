@@ -227,7 +227,8 @@ export default function EnterpriseSearchBar({
 
   return (
     <div className={`${containerStyles} ${className}`}>
-      <div className={`flex items-center gap-2 ${variant === 'hero' ? 'flex-col md:flex-row' : ''}`}>
+      {/* Flex container - stacks on mobile for 'page' variant */}
+      <div className={`flex items-stretch gap-2 ${variant === 'hero' || variant === 'page' ? 'flex-col sm:flex-row' : 'flex-row'}`}>
         
         {/* Product Search Input */}
         <div ref={searchRef} className={`relative ${variant === 'hero' ? 'w-full md:flex-1' : 'flex-1'}`}>
