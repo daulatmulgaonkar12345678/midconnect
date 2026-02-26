@@ -64,11 +64,14 @@ export default function IndustrialHeader() {
   // Dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [productSuggestions, setProductSuggestions] = useState<{type: string; text: string; category?: string}[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   // Inquiry count for buyers
   const [inquiryCount, setInquiryCount] = useState(0);
@@ -77,6 +80,10 @@ export default function IndustrialHeader() {
   const locationRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  
+  // Debounce ref for product search
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch buyer inquiries count
   useEffect(() => {
