@@ -468,7 +468,7 @@ export default function IndustrialHeader() {
                         setLocationSearch(e.target.value);
                         fetchLocationSuggestionsCallback(e.target.value);
                       }}
-                      placeholder="Search city, state..."
+                      placeholder="Search city, state, pincode..."
                       className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-1"
                       style={{ borderColor: COLORS.borderGrey }}
                       autoFocus
@@ -481,22 +481,25 @@ export default function IndustrialHeader() {
                       locationSuggestions.map((loc, idx) => (
                         <button
                           key={idx}
-                          onClick={() => {
-                            setSelectedLocation(
-                              loc.type === 'pan_india'
-                              ? null
-                              : {
-                              ...loc,
-                               city: loc.city || loc.label.split(',')[0],
-      }
-);
-                            setShowLocationDropdown(false);
-                            setLocationSearch('');
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLocationSelect(loc);
                           }}
                           className="w-full px-4 py-2 text-sm text-left hover:bg-gray-50 flex items-center justify-between"
                         >
-                          <span style={{ color: COLORS.textPrimary }}>{loc.label}</span>
-                          {loc.seller_count && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{getLocationTypeIcon(loc.type)}</span>
+                            <div>
+                              <span style={{ color: COLORS.textPrimary }}>{loc.label}</span>
+                              {loc.type !== 'pan_india' && (
+                                <span className="ml-2 text-xs px-1.5 py-0.5 bg-gray-100 rounded capitalize" style={{ color: COLORS.textSecondary }}>
+                                  {loc.type}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {loc.seller_count !== undefined && loc.seller_count > 0 && (
                             <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
                               {loc.seller_count} sellers
                             </span>
