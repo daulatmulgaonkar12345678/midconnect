@@ -474,6 +474,51 @@ def create_enterprise_search_router(db, require_auth=None):
             logger.error(f"Autocomplete error: {e}")
             return {"query": q, "suggestions": []}
     
+    @router.get("/spelling")
+    async def check_spelling(
+        q: str = Query(..., min_length=2, description="Query to check")
+    ):
+        """
+        Check spelling and get suggestions.
+        
+        Returns:
+        - corrected: Corrected query (if different)
+        - corrections: List of individual word corrections
+        - type: "typo", "phonetic", or "fuzzy"
+        - confidence: 0.0-1.0
+        
+        Examples:
+        - moter → motor (typo)
+        - motar → motor (phonetic)
+        - elctric → electric (fuzzy)
+        """
+        try:
+            from services.smart_search_service import create_smart_search_service
+            
+            smart_search = create_smart_search_service(db)
+            result = await smart_search.get_spelling_suggestion(q)
+            
+            if result:
+                return {
+                    "query": q,
+                    "corrected": result.get("corrected"),
+                    "didYouMean": result.get("corrected"),
+                    "corrections": result.get("corrections", []),
+                    "type": result.get("type"),
+                    "confidence": result.get("confidence")
+                }
+            else:
+                return {
+                    "query": q,
+                    "corrected": None,
+                    "didYouMean": None,
+                    "message": "No spelling corrections needed"
+                }
+                
+        except Exception as e:
+            logger.error(f"Spelling check error: {e}")
+            return {"query": q, "error": str(e)}
+    
     @router.get("/related")
     async def get_related_searches(
         q: str = Query(..., description="Current search query"),
