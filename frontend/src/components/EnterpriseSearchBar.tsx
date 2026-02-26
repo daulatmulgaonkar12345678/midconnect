@@ -17,7 +17,7 @@ const getApiBaseUrl = (): string => {
     // Fallback: Check if we're on Vercel (hostname contains vercel.app)
     // and use the production backend URL
     if (window.location.hostname.includes('vercel.app')) {
-      return 'https://b2b-marketplace-v2.preview.emergentagent.com';
+      return 'https://header-debug-1.preview.emergentagent.com';
     }
     
     // Local development: use relative URLs (Next.js rewrites handle proxy)

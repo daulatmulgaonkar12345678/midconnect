@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Search, BadgeCheck, MapPin, Package } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://b2b-marketplace-v2.preview.emergentagent.com/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://header-debug-1.preview.emergentagent.com/api';
 
 interface Seller {
   _id: string;

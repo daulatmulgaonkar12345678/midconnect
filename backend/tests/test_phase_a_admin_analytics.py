@@ -33,7 +33,7 @@ import requests
 import os
 
 # API Configuration
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://b2b-marketplace-v2.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://header-debug-1.preview.emergentagent.com').rstrip('/')
 DEV_TOKEN = "dev-test-token"
 
 HEADERS = {

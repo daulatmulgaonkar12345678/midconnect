@@ -102,7 +102,7 @@ const getApiUrl = (): string => {
   
   // Fallback for Vercel deployment
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-    return 'https://b2b-marketplace-v2.preview.emergentagent.com';
+    return 'https://header-debug-1.preview.emergentagent.com';
   }
   
   // Local development - use relative URLs

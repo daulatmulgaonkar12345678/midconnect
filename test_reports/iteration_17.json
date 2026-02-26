@@ -85,7 +85,7 @@
   
   "test_credentials": {
     "test_product_id": "699be9023cbe1a8c31591668",
-    "api_url": "https://b2b-marketplace-v2.preview.emergentagent.com"
+    "api_url": "https://header-debug-1.preview.emergentagent.com"
   },
   
   "seed_data_context": {

@@ -42,7 +42,7 @@ const getApiBaseUrl = (): string => {
     const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     if (publicUrl && publicUrl.startsWith('http')) return publicUrl;
     if (window.location.hostname.includes('vercel.app')) {
-      return 'https://b2b-marketplace-v2.preview.emergentagent.com';
+      return 'https://header-debug-1.preview.emergentagent.com';
     }
     return '';
   }

@@ -85,8 +85,8 @@
   "context_for_next_testing_agent": "Enterprise Product Page fully tested. Key components: IdentityBlock, SellerCard, FilterPanel, InquiryModal, ComparisonTable, MobileFilterDrawer. Test product (699be9023cbe1a8c31591668) has 1 seller with no spec attributes, so filter panel is empty. To test comparison table, need a product with multiple sellers. Backend endpoints: GET /products/{id}/enterprise, GET /products/{id}/facets, POST /products/{id}/filter all working.",
 
   "test_environment": {
-    "api_url": "https://b2b-marketplace-v2.preview.emergentagent.com",
-    "frontend_url": "https://b2b-marketplace-v2.preview.emergentagent.com/ep/699be9023cbe1a8c31591668",
+    "api_url": "https://header-debug-1.preview.emergentagent.com",
+    "frontend_url": "https://header-debug-1.preview.emergentagent.com/ep/699be9023cbe1a8c31591668",
     "backend_status": "WORKING"
   },
 
