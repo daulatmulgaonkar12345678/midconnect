@@ -4,19 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { ClipboardList, Package, Calendar, MapPin, Building2, ArrowRight, Loader2 } from 'lucide-react';
-
-// API base URL
-const getApiBaseUrl = (): string => {
-  if (typeof window !== 'undefined') {
-    const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-    if (publicUrl && publicUrl.startsWith('http')) return publicUrl;
-    if (window.location.hostname.includes('vercel.app')) {
-      return 'https://header-debug-1.preview.emergentagent.com';
-    }
-    return '';
-  }
-  return process.env.NEXT_PUBLIC_BACKEND_URL || '';
-};
+import { getBuyerInquiries } from '@/lib/api';
 
 interface Inquiry {
   _id: string;
@@ -49,18 +37,26 @@ export default function InquiriesPage() {
       }
 
       try {
-        const apiBase = getApiBaseUrl();
         const token = await user.getIdToken();
-        const res = await fetch(`${apiBase}/api/inquiries/buyer`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setInquiries(Array.isArray(data) ? data : []);
-        } else {
-          setError('Failed to fetch inquiries');
-        }
+        const data = await getBuyerInquiries(token);
+        // Map the response to match the local interface
+        const mappedInquiries = (data.inquiries || []).map((inq) => ({
+          _id: inq.inquiryId || inq._id || '',
+          productId: inq.productId || '',
+          productName: inq.productName || '',
+          sellerId: inq.sellerId || '',
+          sellerName: inq.sellerBusinessName || '',
+          quantity: inq.quantity || 0,
+          message: inq.message || '',
+          status: inq.status as 'pending' | 'responded' | 'quoted' | 'closed',
+          createdAt: inq.createdAt || '',
+          quotation: inq.quote ? {
+            pricePerUnit: inq.quote.quotedPrice || 0,
+            totalAmount: (inq.quote.quotedPrice || 0) * (inq.quantity || 1),
+            validUntil: inq.quote.validTill || '',
+          } : undefined,
+        }));
+        setInquiries(mappedInquiries);
       } catch (err) {
         console.error('Error fetching inquiries:', err);
         setError('Failed to load inquiries');
