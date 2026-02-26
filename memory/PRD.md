@@ -13,6 +13,28 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## MOBILE SEARCH UX FIXES (Feb 26, 2026)
+
+### Issue 1: Mobile Autocomplete Visibility - FIXED
+- Changed mobile dropdown from `absolute` to `fixed` positioning
+- Set `top: 140px` and `z-index: 9999` for maximum visibility
+- Made dropdown full width with `left: 12px; right: 12px`
+- Added scrollable container with `max-height: 60vh`
+
+### Issue 2: Mobile Search Button - FIXED
+- Wrapped search input + button in `<form>` with `onSubmit` handler
+- Added `type="submit"` to search buttons
+- Added `pointer-events-auto` to ensure button is clickable
+- Removed duplicate click handlers (Enter key now handled by form)
+
+### Issue 3: Spell Correction Message - FIXED
+- Fixed logic to show corrected query correctly:
+  - "Showing results for **motor**" (the corrected term)
+  - "Search instead for 'motr'" (the original term)
+- Added responsive layout for mobile (stacks vertically)
+
+---
+
 ## SMART SEARCH ENGINE (Feb 26, 2026)
 
 ### Features Implemented
