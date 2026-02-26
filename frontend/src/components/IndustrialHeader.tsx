@@ -690,6 +690,7 @@ export default function IndustrialHeader() {
               {/* Location */}
               <div ref={locationRef} className="relative flex-1">
                 <button
+                  data-dropdown-trigger="location"
                   onClick={() => {
                     setShowLocationDropdown(!showLocationDropdown);
                     if (!showLocationDropdown) fetchLocationSuggestionsCallback('');
@@ -706,7 +707,10 @@ export default function IndustrialHeader() {
 
                 {/* Mobile Location Dropdown */}
                 {showLocationDropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto" style={{ borderColor: COLORS.borderGrey }}>
+                  <div 
+                    className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto"
+                    style={{ borderColor: COLORS.borderGrey, zIndex: 9999 }}
+                  >
                     <div className="p-2 border-b sticky top-0 bg-white" style={{ borderColor: COLORS.borderGrey }}>
                       <input
                         type="text"
@@ -715,9 +719,10 @@ export default function IndustrialHeader() {
                           setLocationSearch(e.target.value);
                           fetchLocationSuggestionsCallback(e.target.value);
                         }}
-                        placeholder="Search city, state..."
+                        placeholder="Search city, state, pincode..."
                         className="w-full px-3 py-2 text-sm border rounded-md"
                         style={{ borderColor: COLORS.borderGrey }}
+                        autoComplete="off"
                       />
                     </div>
                     {locationSuggestions.map((loc, idx) => (
