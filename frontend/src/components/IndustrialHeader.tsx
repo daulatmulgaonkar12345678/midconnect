@@ -6,10 +6,16 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { 
   Menu, X, User, LogOut, Settings, Package, ChevronDown, 
-  LayoutDashboard, MapPin, Search, FileText, ClipboardList,
+  LayoutDashboard, MapPin, Search, ClipboardList,
   Grid3X3, Loader2, TrendingUp
 } from 'lucide-react';
 import { APP_NAME } from '@/lib/config';
+import { 
+  getAutocompleteSuggestions, 
+  getLocationSuggestions, 
+  getPublicCategoriesList,
+  fetchWithAuth 
+} from '@/lib/api';
 
 // Industrial color palette
 const COLORS = {
@@ -35,19 +41,6 @@ interface CategoryOption {
   name: string;
   slug: string;
 }
-
-// Get API base URL
-const getApiBaseUrl = (): string => {
-  if (typeof window !== 'undefined') {
-    const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-    if (publicUrl && publicUrl.startsWith('http')) return publicUrl;
-    if (window.location.hostname.includes('vercel.app')) {
-      return 'https://header-debug-1.preview.emergentagent.com';
-    }
-    return '';
-  }
-  return process.env.NEXT_PUBLIC_BACKEND_URL || '';
-};
 
 export default function IndustrialHeader() {
   const { user, profile, signOut, loading, isAdmin, isSeller, role } = useAuth();
