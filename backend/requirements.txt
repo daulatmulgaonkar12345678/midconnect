@@ -1,26 +1,23 @@
-# Core API framework
-fastapi>=0.110
 
 # ASGI server & process manager
-uvicorn>=0.27
-gunicorn>=21.2
-
-# Environment variables
-python-dotenv>=1.0
-
 # Authentication & identity
-firebase-admin>=6.4
-email-validator>=2.1
-
+# Core API framework
 # Database (MongoDB)
-pymongo>=4.6
-motor>=3.4
-
+# Environment variables
 # File uploads & security
-python-multipart>=0.0.9
-
-# Rate limiting & abuse protection
-slowapi>=0.1.8
-
 # Image processing (STABLE for Python 3.12)
+# Rate limiting & abuse protection
+Levenshtein==0.27.3
 Pillow>=10.2,<11
+email-validator>=2.1
+fastapi>=0.110
+firebase-admin>=6.4
+fuzzywuzzy==0.18.0
+gunicorn>=21.2
+motor>=3.4
+pymongo>=4.6
+python-Levenshtein==0.27.3
+python-dotenv>=1.0
+python-multipart>=0.0.9
+slowapi>=0.1.8
+uvicorn>=0.27
