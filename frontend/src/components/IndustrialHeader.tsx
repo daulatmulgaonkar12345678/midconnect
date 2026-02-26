@@ -168,9 +168,9 @@ export default function IndustrialHeader() {
     };
   }, [searchQuery, showProductDropdown, fetchProductSuggestionsCallback]);
 
-  // Click outside handlers
+  // Click outside handlers - use 'pointerdown' for mobile reliability
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: PointerEvent) => {
       if (locationRef.current && !locationRef.current.contains(event.target as Node)) {
         setShowLocationDropdown(false);
       }
@@ -184,20 +184,56 @@ export default function IndustrialHeader() {
         setShowProductDropdown(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, []);
 
-  // Handle search
+  // Handle search - support city, state, pincode
   const handleSearch = () => {
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
-    if (selectedLocation?.city) params.set('city', selectedLocation.city);
-    if (selectedLocation?.state && selectedLocation.type === 'state') params.set('state', selectedLocation.state);
+    
+    // Priority: pincode > city > state
+    if (selectedLocation?.pincode) {
+      params.set('pincode', selectedLocation.pincode);
+    } else if (selectedLocation?.city) {
+      params.set('city', selectedLocation.city);
+      if (selectedLocation.state) params.set('state', selectedLocation.state);
+    } else if (selectedLocation?.state && selectedLocation.type === 'state') {
+      params.set('state', selectedLocation.state);
+    }
+    
     if (selectedCategory) params.set('category', selectedCategory.id);
     router.push(`/search?${params.toString()}`);
     setIsMenuOpen(false);
     setShowProductDropdown(false);
+  };
+
+  // Helper to normalize location selection
+  const handleLocationSelect = (loc: LocationSuggestion) => {
+    if (loc.type === 'pan_india') {
+      setSelectedLocation(null);
+    } else {
+      // Normalize: ensure city/state always exist
+      const labelParts = loc.label.split(',').map(s => s.trim());
+      setSelectedLocation({
+        ...loc,
+        city: loc.city || labelParts[0] || undefined,
+        state: loc.state || labelParts[1] || undefined,
+      });
+    }
+    setShowLocationDropdown(false);
+    setLocationSearch('');
+  };
+
+  // Get icon/badge for location type
+  const getLocationTypeIcon = (type: string) => {
+    switch (type) {
+      case 'city': return '📍';
+      case 'state': return '🗺️';
+      case 'pincode': return '📮';
+      default: return '📍';
+    }
   };
 
   const handleSignOut = async () => {
