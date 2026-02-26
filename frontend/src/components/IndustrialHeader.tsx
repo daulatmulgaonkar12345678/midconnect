@@ -444,6 +444,7 @@ export default function IndustrialHeader() {
             {/* Location Selector */}
             <div ref={locationRef} className="relative">
               <button
+                data-dropdown-trigger="location"
                 onClick={() => {
                   setShowLocationDropdown(!showLocationDropdown);
                   if (!showLocationDropdown) fetchLocationSuggestionsCallback('');
