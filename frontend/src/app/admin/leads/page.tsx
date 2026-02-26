@@ -245,7 +245,27 @@ export default function AdminLeadsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {inquiries.map((inquiry) => (
+                {inquiries.map((inquiry) => {
+                  // Support multiple field name formats from backend
+                  const productName = inquiry.product?.name || 
+                    (inquiry as unknown as { productName?: string }).productName ||
+                    (inquiry as unknown as { listing?: { name?: string } }).listing?.name ||
+                    'N/A';
+                  const categoryName = inquiry.category ||
+                    (inquiry as unknown as { categoryName?: string }).categoryName ||
+                    (inquiry as unknown as { listing?: { category?: string } }).listing?.category ||
+                    'N/A';
+                  const buyerName = inquiry.buyer?.name ||
+                    (inquiry as unknown as { buyerName?: string }).buyerName ||
+                    inquiry.buyer?.email?.split('@')[0] ||
+                    'N/A';
+                  const sellerName = inquiry.seller?.name ||
+                    (inquiry as unknown as { sellerName?: string }).sellerName ||
+                    (inquiry as unknown as { seller?: { businessName?: string } }).seller?.businessName ||
+                    inquiry.seller?.email?.split('@')[0] ||
+                    'N/A';
+                  
+                  return (
                   <tr key={inquiry._id} className="hover:bg-gray-50" data-testid={`lead-row-${inquiry._id}`}>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[inquiry.status] || 'bg-gray-100 text-gray-800'}`}>
@@ -255,22 +275,22 @@ export default function AdminLeadsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-gray-900 max-w-[200px] truncate">
-                        {inquiry.product?.name || 'N/A'}
+                        {productName}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      {inquiry.category || 'N/A'}
+                      {categoryName}
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm">
-                        <p className="font-medium text-gray-900">{inquiry.buyer?.name || 'N/A'}</p>
-                        <p className="text-gray-500 text-xs">{inquiry.buyer?.city}, {inquiry.buyer?.state}</p>
+                        <p className="font-medium text-gray-900">{buyerName}</p>
+                        <p className="text-gray-500 text-xs">{inquiry.buyer?.city || ''}{inquiry.buyer?.city && inquiry.buyer?.state ? ', ' : ''}{inquiry.buyer?.state || ''}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm">
-                        <p className="font-medium text-gray-900">{inquiry.seller?.name || 'N/A'}</p>
-                        <p className="text-gray-500 text-xs">{inquiry.seller?.city}, {inquiry.seller?.state}</p>
+                        <p className="font-medium text-gray-900">{sellerName}</p>
+                        <p className="text-gray-500 text-xs">{inquiry.seller?.city || ''}{inquiry.seller?.city && inquiry.seller?.state ? ', ' : ''}{inquiry.seller?.state || ''}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -289,7 +309,8 @@ export default function AdminLeadsPage() {
                       {inquiry.createdAt ? new Date(inquiry.createdAt).toLocaleDateString() : 'N/A'}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
