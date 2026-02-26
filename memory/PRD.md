@@ -306,10 +306,45 @@ All frontend API calls now use the centralized API client (`/lib/api.ts`) instea
 - ✅ **"Did you mean?"** suggestions on search page
 - ✅ **Phonetic matching** - India-friendly (motar → motor)
 - ✅ **Auto-correction** - Searches with corrected query when no results
+- ✅ **Admin Leads Page Data Fix** - Product name now displays correctly (Feb 26, 2026)
+
+---
+
+## ADMIN LEADS PAGE - PRODUCTNAME FIX (Feb 26, 2026)
+
+### Issue
+In the admin panel's "Leads / Inquiries" page, the "Product" column displayed "N/A" even though data existed.
+
+### Root Cause
+1. Backend returned `product.name` (nested) but frontend also expected `productName` (top-level)
+2. Backend returned `seller_subscription_plan` (snake_case) but frontend expected `sellerSubscriptionPlan` (camelCase)
+
+### Fix Applied
+Updated `/app/backend/server.py` in `admin_get_inquiries()` endpoint:
+1. Added `productName` at top level for frontend compatibility:
+```python
+"productName": product_name,
+```
+2. Fixed snake_case to camelCase:
+```python
+"sellerSubscriptionPlan": seller_subscription  # Was: "seller_subscription_plan"
+```
+
+### API Response Now Returns
+- `product.name` - for TypeScript interface compatibility
+- `productName` - for direct access
+- `sellerSubscriptionPlan` - in camelCase
+
+### Note on Seller Data
+Some inquiries show `null` for seller info because they reference deleted/non-existent sellers (test data). This is expected behavior - the backend handles missing data gracefully.
+
+---
 
 ## NEXT TASKS
-- **P0**: Verify changes on Vercel deployment
+- **P0**: Verify admin leads page fix on Vercel deployment
 - **P1**: Complete Admin & Seller Dashboard Integration
+- **P2**: Enterprise Search Atlas Indexing (Phase 2)
 - **P2**: Add inquiry submission from product page
 - **P2**: Fix number formatting in product attributes (Pydantic validation)
 - **P2**: Cleanup remaining ESLint warnings
+- **P3**: Remove obsolete components (EnterpriseSearchBar.tsx, Header.tsx)
