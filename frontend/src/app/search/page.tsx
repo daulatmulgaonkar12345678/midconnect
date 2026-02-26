@@ -4,8 +4,8 @@ import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SearchListing } from '@/types';
-import { Search, Info, AlertCircle, MapPin, X, TrendingUp } from 'lucide-react';
-import { searchProducts, sanitizeInput, ApiError } from '@/lib/api';
+import { Search, Info, AlertCircle, MapPin, X, TrendingUp, Navigation } from 'lucide-react';
+import { geoSearchProducts, sanitizeInput, ApiError } from '@/lib/api';
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -13,30 +13,35 @@ function SearchContent() {
   const query = searchParams.get('q') || '';
   const city = searchParams.get('city') || '';
   const state = searchParams.get('state') || '';
+  const lat = searchParams.get('lat');
+  const lng = searchParams.get('lng');
+  const radiusKm = searchParams.get('radiusKm');
   
   const [products, setProducts] = useState<SearchListing[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [guidanceDisclaimer, setGuidanceDisclaimer] = useState<string>('');
+  const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
+  const [fallbackUsed, setFallbackUsed] = useState<string | null>(null);
 
   const handleSearch = useCallback(async () => {
-    if (!query) {
-      setProducts([]);
-      return;
-    }
-    
     setIsLoading(true);
     setError(null);
+    setFallbackMessage(null);
+    setFallbackUsed(null);
     
     try {
-      const sanitizedQuery = sanitizeInput(query);
-      const result = await searchProducts(sanitizedQuery, {
+      const result = await geoSearchProducts({
+        query: query ? sanitizeInput(query) : undefined,
         city: city || undefined,
         state: state || undefined,
+        lat: lat ? parseFloat(lat) : undefined,
+        lng: lng ? parseFloat(lng) : undefined,
+        radiusKm: radiusKm ? parseInt(radiusKm) : 50,
         limit: 50,
       });
       setProducts(result.products || []);
-      setGuidanceDisclaimer(result.guidanceDisclaimer || '');
+      setFallbackMessage(result.fallbackMessage);
+      setFallbackUsed(result.fallbackUsed);
     } catch (err) {
       const message = err instanceof ApiError ? err.getUserMessage() : 'Search failed';
       setError(message);
@@ -44,7 +49,7 @@ function SearchContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [query, city, state]);
+  }, [query, city, state, lat, lng, radiusKm]);
 
   useEffect(() => {
     handleSearch();
