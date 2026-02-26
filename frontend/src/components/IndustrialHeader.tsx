@@ -157,7 +157,7 @@ export default function IndustrialHeader() {
     
     if (searchQuery.length >= 2 && showProductDropdown) {
       debounceRef.current = setTimeout(() => {
-        fetchProductSuggestions(searchQuery);
+        fetchProductSuggestionsCallback(searchQuery);
       }, 300);
     } else {
       setProductSuggestions([]);
@@ -166,7 +166,7 @@ export default function IndustrialHeader() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [searchQuery, showProductDropdown, fetchProductSuggestions]);
+  }, [searchQuery, showProductDropdown, fetchProductSuggestionsCallback]);
 
   // Click outside handlers
   useEffect(() => {
