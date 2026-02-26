@@ -382,7 +382,7 @@ export default function EnterpriseSearchBar({
         {/* Search Button */}
         <button
           onClick={handleSearch}
-          className={`flex items-center gap-2 px-5 ${variant === 'header' ? 'py-2.5' : 'py-3.5'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium ${variant === 'hero' ? 'w-full md:w-auto justify-center' : ''}`}
+          className={`flex items-center justify-center gap-2 px-5 ${variant === 'header' ? 'py-2' : 'py-3'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium flex-shrink-0 ${variant === 'hero' || variant === 'page' ? 'w-full sm:w-auto' : ''}`}
           data-testid="search-submit-btn"
         >
           <Search className="h-5 w-5" />
@@ -390,9 +390,9 @@ export default function EnterpriseSearchBar({
         </button>
       </div>
       
-      {/* Selected Location Chip - More Prominent */}
-      {location && location.type !== 'pan_india' && (
-        <div className="flex items-center gap-2 px-4 py-2 -mx-4 -mb-2 bg-slate-50 border-t border-slate-200 rounded-b-xl">
+      {/* Selected Location Chip - More Prominent - Only show on hero/page variants */}
+      {location && location.type !== 'pan_india' && variant !== 'header' && (
+        <div className="flex items-center gap-2 px-4 py-2 mt-2 bg-slate-50 border border-slate-200 rounded-lg">
           <span className="text-sm font-medium text-slate-600">Filtering by:</span>
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-full shadow-sm">
             <MapPin className="h-4 w-4" />
