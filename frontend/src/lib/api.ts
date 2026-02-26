@@ -408,6 +408,58 @@ export async function waitForBackend(maxWaitMs: number = 30000): Promise<boolean
 // Alias for public API calls without auth
 export const fetchBase = fetchAPI;
 
+// ==================== SEARCH HELPERS ====================
+
+interface AutocompleteSuggestion {
+  type: 'product' | 'category' | 'popular' | 'attribute';
+  text: string;
+  category?: string;
+  icon?: string;
+}
+
+interface AutocompleteResponse {
+  suggestions: AutocompleteSuggestion[];
+}
+
+interface LocationSuggestion {
+  label: string;
+  type: 'city' | 'state' | 'pincode' | 'pan_india';
+  city?: string;
+  state?: string;
+  pincode?: string;
+  seller_count?: number;
+  sellerCount?: number;
+}
+
+interface LocationSearchResponse {
+  suggestions?: LocationSuggestion[];
+  cities?: LocationSuggestion[];
+}
+
+interface PublicCategory {
+  _id: string;
+  id: string;
+  name: string;
+  slug: string;
+  productCount?: number;
+  listingCount?: number;
+}
+
+export const getAutocompleteSuggestions = (query: string): Promise<AutocompleteResponse> =>
+  fetchAPI<AutocompleteResponse>(`/search/autocomplete?q=${encodeURIComponent(query)}&limit=8`);
+
+export const getLocationSuggestions = (query?: string): Promise<LocationSearchResponse> =>
+  fetchAPI<LocationSearchResponse>(
+    query && query.length > 0
+      ? `/search/locations?q=${encodeURIComponent(query)}&limit=8`
+      : `/search/locations/active?limit=8`
+  );
+
+export const getPublicCategoriesList = (): Promise<PublicCategory[]> =>
+  fetchAPI<PublicCategory[]>('/categories');
+
+// ==================== CATEGORIES ====================
+
 export const getCategories = (): Promise<Category[]> => 
   fetchAPI<Category[]>('/categories/all');
 
