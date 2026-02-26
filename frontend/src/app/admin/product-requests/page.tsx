@@ -410,7 +410,7 @@ export default function ProductRequestsPage() {
                           ))}
                         </div>
                       </div>
-                    )}}
+                    )}
 
                     {request.status === 'pending' && (
                       <div className="flex gap-3">
@@ -432,7 +432,8 @@ export default function ProductRequestsPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <EmptyState type="spec field" />
