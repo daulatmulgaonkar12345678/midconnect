@@ -13,6 +13,29 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## CATEGORY IMAGE DISPLAY (Feb 26, 2026)
+
+### Changes Made
+- **CategoryCard component**: Now displays admin-uploaded images when available
+  - Falls back to category icon if no image
+  - Added hover zoom effect on images
+  - Responsive 64px image container
+
+- **Categories page**: Updated to show category images
+  - Uses Next.js Image component for optimization
+  - Supports multiple image hostnames (cloudinary, firebase, S3, etc.)
+
+- **Backend APIs updated**:
+  - `GET /api/categories` - Now returns `image` field
+  - `GET /api/categories/public` - Now returns `image` and `icon` fields
+
+### Image Priority
+1. Category uploaded image (if available)
+2. Category icon from iconMap (if available)
+3. Default Package icon
+
+---
+
 ## ADMIN VARIABLE MISMATCH FIXES (Feb 26, 2026)
 
 ### Issues Fixed
