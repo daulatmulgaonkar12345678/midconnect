@@ -37,7 +37,10 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ### Layer 1 - Corporate Utility (60px)
 - Logo + "B2B Marketplace" badge
-- Dashboard (sellers) + Admin (admins)
+- **Products** link (for all users) - NEW
+- **Categories** link (for all users) - NEW
+- Dashboard (sellers only)
+- Admin (admins only)
 - **Inquiries** link (for all users)
 - Login + Register
 
@@ -78,8 +81,11 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 - ✅ Category dropdown loads from database
 - ✅ Both headers visible on all screen sizes
 - ✅ Inquiries link visible for all users
+- ✅ Products and Categories navigation links visible for all users (Feb 26, 2026)
 
 ## NEXT TASKS
-- **P0**: Deploy to Vercel (will connect to your `b2b_marketplace` database)
-- **P1**: Verify Pune, Maharashtra shows in location dropdown on Vercel
+- **P0**: Verify header changes on Vercel deployment
+- **P1**: Complete Admin & Seller Dashboard Integration
 - **P2**: Add inquiry submission from product page
+- **P2**: Fix number formatting in product attributes (Pydantic validation)
+- **P2**: Cleanup linting warnings
