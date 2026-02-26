@@ -495,15 +495,31 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 raise HTTPException(status_code=400, detail="Invalid manufacturerId format")
         
         # ============================================================
-        # GET SELLER LOCATION (for search fields)
+        # GET SELLER LOCATION + GEO COORDINATES (for geo search)
         # ============================================================
         seller_profile = seller.get("profile", {})
         seller_city = seller_profile.get("city")
         seller_state = seller_profile.get("state")
+        seller_pincode = seller_profile.get("pincode")
         seller_rating = seller.get("rating", 0)
         
-        # Compute minPrice from first pricing tier
-        min_price = data.pricingTiers[0].pricePerUnit if data.pricingTiers else 0
+        # Get coordinates from seller profile or geocode from city
+        seller_coordinates = None
+        if seller_profile.get("coordinates"):
+            # Use pre-stored coordinates from seller profile
+            seller_coordinates = seller_profile["coordinates"]
+        elif seller_city:
+            # Geocode from city name
+            from services.pincode_geocode_service import geocode_service
+            location = geocode_service.get_coordinates_by_city(seller_city)
+            if location:
+                seller_coordinates = {
+                    "type": "Point",
+                    "coordinates": [location.longitude, location.latitude]  # GeoJSON: [lng, lat]
+                }
+        
+        # Compute minPrice from MINIMUM of all pricing tiers (NOT first tier)
+        min_price = min(t.pricePerUnit for t in data.pricingTiers) if data.pricingTiers else 0
         
         # Compute inStock
         in_stock = validated["stock"] > 0
