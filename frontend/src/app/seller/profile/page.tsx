@@ -90,7 +90,7 @@ export default function SellerProfilePage() {
                 <User className="h-10 w-10 text-blue-600" />
               </div>
               <div className="text-white">
-                <h2 className="text-2xl font-bold">{profile?.businessName || user?.email?.split('@')[0] || 'Seller'}</h2>
+                <h2 className="text-2xl font-bold">{businessName || user?.email?.split('@')[0] || 'Seller'}</h2>
                 <p className="text-blue-100">{user?.email}</p>
                 <div className="flex items-center gap-2 mt-2">
                   {isSeller && (
