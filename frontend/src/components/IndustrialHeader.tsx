@@ -219,28 +219,8 @@ export default function IndustrialHeader() {
             </div>
 
             {/* Right: Utility Links */}
-            <div className="flex items-center gap-1 sm:gap-4">
-              {/* Buyer Inquiries - Only for logged in buyers */}
-              {user && isBuyer && (
-                <Link 
-                  href="/buyer/inquiries"
-                  className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-md transition-colors"
-                  style={{ color: COLORS.textSecondary }}
-                >
-                  <ClipboardList className="h-4 w-4" />
-                  <span>My Inquiries</span>
-                  {inquiryCount > 0 && (
-                    <span 
-                      className="text-xs font-medium px-1.5 py-0.5 rounded-full text-white"
-                      style={{ backgroundColor: COLORS.deepBlue }}
-                    >
-                      {inquiryCount}
-                    </span>
-                  )}
-                </Link>
-              )}
-
-              {/* Seller Dashboard Link */}
+            <div className="flex items-center gap-1 sm:gap-3">
+              {/* Seller Dashboard Link - Only for sellers */}
               {user && isSeller && (
                 <Link 
                   href="/seller"
@@ -248,11 +228,11 @@ export default function IndustrialHeader() {
                   style={{ color: COLORS.textSecondary }}
                 >
                   <LayoutDashboard className="h-4 w-4" />
-                  <span>Seller Dashboard</span>
+                  <span>Dashboard</span>
                 </Link>
               )}
 
-              {/* Admin Panel Link */}
+              {/* Admin Panel Link - Only for admins */}
               {user && isAdmin && (
                 <Link 
                   href="/admin"
@@ -263,6 +243,24 @@ export default function IndustrialHeader() {
                   <span>Admin</span>
                 </Link>
               )}
+
+              {/* Inquiries Link - ALWAYS visible (left of Login) */}
+              <Link 
+                href="/inquiries"
+                className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 rounded-md transition-colors"
+                style={{ color: COLORS.textSecondary }}
+              >
+                <ClipboardList className="h-4 w-4" />
+                <span>Inquiries</span>
+                {user && inquiryCount > 0 && (
+                  <span 
+                    className="text-xs font-medium px-1.5 py-0.5 rounded-full text-white"
+                    style={{ backgroundColor: COLORS.deepBlue }}
+                  >
+                    {inquiryCount}
+                  </span>
+                )}
+              </Link>
 
               {/* Divider */}
               <div className="hidden sm:block w-px h-6 bg-gray-200" />
