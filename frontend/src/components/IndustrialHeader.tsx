@@ -352,11 +352,12 @@ export default function IndustrialHeader() {
       </header>
 
       {/* ═══════════════════════════════════════════════════════════════
-          LAYER 2: Search Engine Header (Sticky)
+          LAYER 2: Search Engine Header (Always Visible, Sticky)
           ═══════════════════════════════════════════════════════════════ */}
       <div className="bg-white border-b sticky top-0 z-40" style={{ borderColor: COLORS.borderGrey }}>
-        <div className="max-w-[1280px] mx-auto px-6 lg:px-10">
-          <div className="hidden lg:flex items-center h-[56px] gap-0">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10">
+          {/* Desktop: Horizontal layout */}
+          <div className="hidden md:flex items-center h-[56px] gap-0">
             
             {/* Location Selector */}
             <div ref={locationRef} className="relative">
@@ -494,6 +495,132 @@ export default function IndustrialHeader() {
               <Search className="h-4 w-4" />
               <span>Search</span>
             </button>
+          </div>
+
+          {/* Mobile/Tablet: Vertical compact layout - ALWAYS VISIBLE */}
+          <div className="md:hidden py-3 space-y-2">
+            {/* Row 1: Location + Category */}
+            <div className="flex gap-2">
+              {/* Location */}
+              <div ref={locationRef} className="relative flex-1">
+                <button
+                  onClick={() => {
+                    setShowLocationDropdown(!showLocationDropdown);
+                    if (!showLocationDropdown) fetchLocationSuggestions('');
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 border rounded-md text-sm"
+                  style={{ borderColor: COLORS.borderGrey }}
+                >
+                  <MapPin className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.textSecondary }} />
+                  <span className="truncate flex-1 text-left" style={{ color: selectedLocation ? COLORS.textPrimary : COLORS.textSecondary }}>
+                    {selectedLocation?.label || 'All India'}
+                  </span>
+                  <ChevronDown className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.textSecondary }} />
+                </button>
+
+                {/* Mobile Location Dropdown */}
+                {showLocationDropdown && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto" style={{ borderColor: COLORS.borderGrey }}>
+                    <div className="p-2 border-b sticky top-0 bg-white" style={{ borderColor: COLORS.borderGrey }}>
+                      <input
+                        type="text"
+                        value={locationSearch}
+                        onChange={(e) => {
+                          setLocationSearch(e.target.value);
+                          fetchLocationSuggestions(e.target.value);
+                        }}
+                        placeholder="Search city, state..."
+                        className="w-full px-3 py-2 text-sm border rounded-md"
+                        style={{ borderColor: COLORS.borderGrey }}
+                      />
+                    </div>
+                    {locationSuggestions.map((loc, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setSelectedLocation(loc.type === 'pan_india' ? null : loc);
+                          setShowLocationDropdown(false);
+                          setLocationSearch('');
+                        }}
+                        className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 border-b last:border-b-0 flex justify-between items-center"
+                        style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }}
+                      >
+                        <span>{loc.label}</span>
+                        {loc.seller_count && (
+                          <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
+                            {loc.seller_count}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Category */}
+              <div ref={categoryRef} className="relative flex-1">
+                <button
+                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 border rounded-md text-sm"
+                  style={{ borderColor: COLORS.borderGrey }}
+                >
+                  <Grid3X3 className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.textSecondary }} />
+                  <span className="truncate flex-1 text-left" style={{ color: selectedCategory ? COLORS.textPrimary : COLORS.textSecondary }}>
+                    {selectedCategory?.name || 'Category'}
+                  </span>
+                  <ChevronDown className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.textSecondary }} />
+                </button>
+
+                {/* Mobile Category Dropdown */}
+                {showCategoryDropdown && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto" style={{ borderColor: COLORS.borderGrey }}>
+                    <button
+                      onClick={() => {
+                        setSelectedCategory(null);
+                        setShowCategoryDropdown(false);
+                      }}
+                      className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 border-b"
+                      style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }}
+                    >
+                      All Categories
+                    </button>
+                    {categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setSelectedCategory(cat);
+                          setShowCategoryDropdown(false);
+                        }}
+                        className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 border-b last:border-b-0"
+                        style={{ borderColor: COLORS.borderGrey, color: COLORS.textPrimary }}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: Search Input + Button */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="Search products, brands..."
+                className="flex-1 px-3 py-2.5 text-sm border rounded-md bg-white"
+                style={{ borderColor: COLORS.borderGrey }}
+              />
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2.5 flex items-center gap-2 text-white font-medium text-sm rounded-md transition-colors"
+                style={{ backgroundColor: COLORS.deepBlue }}
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
