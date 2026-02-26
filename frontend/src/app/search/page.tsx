@@ -113,7 +113,11 @@ function SearchContent() {
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="search-results-title">
-            {query ? `Results for "${query}"` : 'Browse Products'}
+            {autoCorreced && originalQuery ? (
+              <>Showing results for &quot;{query}&quot;</>
+            ) : (
+              query ? `Results for "${query}"` : 'Browse Products'
+            )}
           </h1>
           <p className="text-gray-500">
             {products.length} products found
@@ -121,6 +125,59 @@ function SearchContent() {
           </p>
         </div>
       </div>
+
+      {/* Auto-corrected Query Notice */}
+      {autoCorreced && originalQuery && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between" data-testid="auto-corrected-notice">
+          <div className="flex items-center gap-3">
+            <Search className="h-5 w-5 text-green-600" />
+            <span className="text-green-800">
+              Showing results for <strong>&quot;{query}&quot;</strong> instead of <em>&quot;{originalQuery}&quot;</em>
+            </span>
+          </div>
+          <button
+            onClick={handleRevertToOriginal}
+            className="text-sm text-green-700 hover:text-green-900 underline"
+          >
+            Search for &quot;{originalQuery}&quot; instead
+          </button>
+        </div>
+      )}
+
+      {/* "Did you mean?" Suggestion */}
+      {didYouMean && !autoCorreced && products.length === 0 && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3" data-testid="did-you-mean">
+          <Search className="h-5 w-5 text-blue-600" />
+          <span className="text-blue-800">
+            Did you mean:{' '}
+            <button
+              onClick={handleDidYouMeanClick}
+              className="font-semibold text-blue-700 hover:text-blue-900 underline"
+              data-testid="did-you-mean-link"
+            >
+              {didYouMean}
+            </button>
+            ?
+          </span>
+        </div>
+      )}
+
+      {/* "Did you mean?" as a hint when results ARE found */}
+      {didYouMean && !autoCorreced && products.length > 0 && (
+        <div className="mb-4 text-sm text-gray-600 flex items-center gap-2">
+          <Info className="h-4 w-4" />
+          <span>
+            Did you mean:{' '}
+            <button
+              onClick={handleDidYouMeanClick}
+              className="text-blue-600 hover:text-blue-800 underline"
+            >
+              {didYouMean}
+            </button>
+            ?
+          </span>
+        </div>
+      )}
 
       {/* Fallback Message - Shows when search fell back to wider area */}
       {fallbackMessage && (
