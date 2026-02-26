@@ -248,15 +248,23 @@ export default function ProductRequestsPage() {
           {activeTab === 'products' && (
             productRequests.length > 0 ? (
               <div className="space-y-4">
-                {productRequests.map((request) => (
+                {productRequests.map((request) => {
+                  // Support both snake_case and camelCase from backend
+                  const productName = request.product_name || (request as unknown as { productName?: string }).productName || 'Unknown Product';
+                  const requestedByEmail = request.requested_by_email || (request as unknown as { requestedByEmail?: string }).requestedByEmail || 'Unknown';
+                  const createdAt = request.created_at || (request as unknown as { createdAt?: string }).createdAt;
+                  const categoryId = request.suggested_category_id || (request as unknown as { suggestedCategoryId?: string }).suggestedCategoryId || '';
+                  
+                  return (
                   <div key={request._id} className="bg-white rounded-xl shadow-sm p-6" data-testid={`product-request-${request._id}`}>
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="font-semibold text-lg">{request.product_name}</h3>
+                        <h3 className="font-semibold text-lg">{productName}</h3>
                         <p className="text-sm text-gray-500">
-                          Requested by: {request.requested_by_email}
+                          Requested by: {requestedByEmail}
                         </p>
-                        <p className="text-xs text-gray-400">{formatDate(request.created_at)}</p>
+                        <p className="text-xs text-gray-400">{formatDate(createdAt)}</p>
+                        {categoryId && <p className="text-xs text-gray-400 mt-1">Category ID: {categoryId}</p>}
                       </div>
                       {getStatusBadge(request.status)}
                     </div>
@@ -295,7 +303,8 @@ export default function ProductRequestsPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <EmptyState type="product" />
