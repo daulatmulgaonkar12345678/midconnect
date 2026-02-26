@@ -13,78 +13,56 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
-## INDUSTRIAL HEADER REDESIGN COMPLETE (Feb 26, 2026)
+## HEADER SEARCH AUTOCOMPLETE COMPLETE (Feb 26, 2026)
 
-### Design Specifications
-- **Color Palette**: Deep Blue (#0B3C5D), Light Grey (#F5F6F7), Border Grey (#E5E7EB)
-- **Typography**: Inter font (professional, corporate look)
-- **Style**: Industrial B2B, enterprise-grade, no gradients/shadows/flashy elements
+### Product Autocomplete Added
+- Debounced search (300ms) triggers after 2+ characters
+- Shows product names with category context ("in Electric Motors")
+- Shows "Popular" badge for trending searches
+- Works on both desktop and mobile layouts
 
-### 2-Layer Header Structure
+### API Integration
+- **Product autocomplete**: `GET /api/search/autocomplete?q={query}&limit=8`
+- **Location suggestions**: `GET /api/search/locations/active?limit=8`
+- **Categories**: `GET /api/categories`
 
-#### Layer 1: Corporate Utility Header (60px height)
-- **Left**: Logo + "B2B Marketplace" badge
-- **Right**: 
-  - My Inquiries (for buyers, with count badge)
-  - Seller Dashboard (for sellers)
-  - Admin Panel (for admins)
-  - Login / Register buttons
-
-#### Layer 2: Search Engine Header (56px height, Sticky)
-- **Location Dropdown**: "All India" default, shows cities with seller counts
-- **Category Dropdown**: All categories from database
-- **Search Input**: Full-width, placeholder "Search industrial products, brands, specifications..."
-- **Search Button**: Deep blue with white icon
-
-### Mobile Behavior
-- Full-screen mobile menu when hamburger clicked
-- Location + Category + Search input stacked vertically
-- Navigation links below search
-- Search always accessible (never hidden)
-
-### Backend Integration
-- **Buyer Inquiries**: Fetches count from `/api/inquiries/buyer`
-- **Categories**: Fetches from `/api/categories` (limit 10)
-- **Locations**: Fetches from `/api/search/locations/active`
+### Database Connection
+- **Preview environment**: `midconnect` database (local)
+- **Vercel deployment**: Your MongoDB Atlas `b2b_marketplace` database
+- Data shown depends on which database the environment is connected to
 
 ---
 
-## GEO SEARCH IMPLEMENTATION (Feb 26, 2026)
+## INDUSTRIAL HEADER STRUCTURE
 
-### Schema
-- `coordinates`: GeoJSON Point `[lng, lat]`
-- `pincode`: String
-- `minPrice`: Number (computed from MIN of all pricing tiers)
-- `inStock`: Boolean
+### Layer 1 - Corporate Utility (60px)
+- Logo + "B2B Marketplace" badge
+- Dashboard (sellers) + Admin (admins)
+- **Inquiries** link (for all users)
+- Login + Register
 
-### 2dsphere Index
-- Created on `coordinates` field for radius queries
+### Layer 2 - Search Engine (56px, Sticky)
+- **Location Dropdown**: All India → cities with seller counts
+- **Category Dropdown**: All Categories from database
+- **Search Input**: With product autocomplete (debounced)
+- **Search Button**: Deep blue
 
-### Fallback Strategy
-1. City exact match → 
-2. Radius 50km (if coords provided) →
-3. State → 
-4. Pan India
-
-### API Endpoint
-```
-GET /api/search/geo
-Returns: fallbackUsed, message, listings
-```
+### Responsive Behavior
+- **Desktop (≥768px)**: Horizontal layout
+- **Mobile (<768px)**: Stacked layout, both layers always visible
 
 ---
 
 ## KEY FILES
 
 ### Frontend
-- `/app/frontend/src/components/IndustrialHeader.tsx` - New enterprise header
-- `/app/frontend/src/app/layout.tsx` - Uses IndustrialHeader
+- `/app/frontend/src/components/IndustrialHeader.tsx` - Full header with autocomplete
+- `/app/frontend/src/app/inquiries/page.tsx` - Buyer inquiries page
 - `/app/frontend/src/app/search/page.tsx` - Geo search results
 
 ### Backend
 - `/app/backend/services/enterprise_search_service.py` - Geo search with fallback
-- `/app/backend/routers/enterprise_search_router.py` - `/search/geo` endpoint
-- `/app/backend/seller_products.py` - Coordinates on listing creation
+- `/app/backend/routers/enterprise_search_router.py` - Search endpoints
 
 ---
 
@@ -94,7 +72,14 @@ Returns: fallbackUsed, message, listings
 
 ---
 
+## VERIFIED WORKING
+- ✅ Product autocomplete in header (desktop + mobile)
+- ✅ Location dropdown shows cities from database
+- ✅ Category dropdown loads from database
+- ✅ Both headers visible on all screen sizes
+- ✅ Inquiries link visible for all users
+
 ## NEXT TASKS
-- **P1**: Add product autocomplete to header search input
-- **P1**: Create buyer inquiries page (`/buyer/inquiries`)
-- **P2**: Add "Near Me" geolocation button
+- **P0**: Deploy to Vercel (will connect to your `b2b_marketplace` database)
+- **P1**: Verify Pune, Maharashtra shows in location dropdown on Vercel
+- **P2**: Add inquiry submission from product page
