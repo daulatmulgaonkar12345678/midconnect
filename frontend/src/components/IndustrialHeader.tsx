@@ -760,6 +760,7 @@ export default function IndustrialHeader() {
               {/* Category */}
               <div ref={categoryRef} className="relative flex-1">
                 <button
+                  data-dropdown-trigger="category"
                   onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
                   className="w-full flex items-center gap-2 px-3 py-2.5 bg-gray-50 border rounded-md text-sm"
                   style={{ borderColor: COLORS.borderGrey }}
