@@ -13,23 +13,35 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
-## HEADER SEARCH AUTOCOMPLETE COMPLETE (Feb 26, 2026)
+## CENTRALIZED API CLIENT REFACTOR (Feb 26, 2026)
 
-### Product Autocomplete Added
-- Debounced search (300ms) triggers after 2+ characters
-- Shows product names with category context ("in Electric Motors")
-- Shows "Popular" badge for trending searches
-- Works on both desktop and mobile layouts
+### Changes Made
+All frontend API calls now use the centralized API client (`/lib/api.ts`) instead of direct `fetch()` calls.
 
-### API Integration
-- **Product autocomplete**: `GET /api/search/autocomplete?q={query}&limit=8`
-- **Location suggestions**: `GET /api/search/locations/active?limit=8`
-- **Categories**: `GET /api/categories`
+#### Removed
+- `getApiBaseUrl()` function from all components
+- Direct `NEXT_PUBLIC_BACKEND_URL` usage
+- Manual `/api/` prefix handling
 
-### Database Connection
-- **Preview environment**: `midconnect` database (local)
-- **Vercel deployment**: Your MongoDB Atlas `b2b_marketplace` database
-- Data shown depends on which database the environment is connected to
+#### Added to lib/api.ts
+- `getAutocompleteSuggestions(query)` - Product autocomplete
+- `getLocationSuggestions(query?)` - Location dropdown data  
+- `getPublicCategoriesList()` - Categories dropdown data
+
+### Updated Components
+- `IndustrialHeader.tsx` - Uses centralized API helpers
+- `EnterpriseSearchBar.tsx` - Uses centralized API helpers
+- `inquiries/page.tsx` - Uses `getBuyerInquiries()`
+
+### Environment Variable
+- Uses `NEXT_PUBLIC_API_URL` (primary)
+- Fallback to `NEXT_PUBLIC_BACKEND_URL` for backwards compatibility
+
+### Benefits
+- ✅ Consistent API configuration
+- ✅ Cold start retry logic
+- ✅ Timeout handling
+- ✅ Works in both local and production
 
 ---
 
@@ -37,8 +49,8 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ### Layer 1 - Corporate Utility (60px)
 - Logo + "B2B Marketplace" badge
-- **Products** link (for all users) - NEW
-- **Categories** link (for all users) - NEW
+- **Products** link (for all users)
+- **Categories** link (for all users)
 - Dashboard (sellers only)
 - Admin (admins only)
 - **Inquiries** link (for all users)
@@ -59,9 +71,10 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 ## KEY FILES
 
 ### Frontend
-- `/app/frontend/src/components/IndustrialHeader.tsx` - Full header with autocomplete
+- `/app/frontend/src/lib/api.ts` - Centralized API client (SSOT)
+- `/app/frontend/src/components/IndustrialHeader.tsx` - Main header
+- `/app/frontend/src/components/EnterpriseSearchBar.tsx` - Reusable search bar
 - `/app/frontend/src/app/inquiries/page.tsx` - Buyer inquiries page
-- `/app/frontend/src/app/search/page.tsx` - Geo search results
 
 ### Backend
 - `/app/backend/services/enterprise_search_service.py` - Geo search with fallback
@@ -81,11 +94,12 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 - ✅ Category dropdown loads from database
 - ✅ Both headers visible on all screen sizes
 - ✅ Inquiries link visible for all users
-- ✅ Products and Categories navigation links visible for all users (Feb 26, 2026)
+- ✅ Products and Categories navigation links visible for all users
+- ✅ Centralized API client for all search/dropdown calls (Feb 26, 2026)
 
 ## NEXT TASKS
-- **P0**: Verify header changes on Vercel deployment
+- **P0**: Verify changes on Vercel deployment
 - **P1**: Complete Admin & Seller Dashboard Integration
 - **P2**: Add inquiry submission from product page
 - **P2**: Fix number formatting in product attributes (Pydantic validation)
-- **P2**: Cleanup linting warnings
+- **P2**: Cleanup remaining ESLint warnings
