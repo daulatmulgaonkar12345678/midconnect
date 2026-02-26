@@ -113,8 +113,8 @@ function SearchContent() {
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="search-results-title">
-            {autoCorreced && originalQuery ? (
-              <>Showing results for &quot;{query}&quot;</>
+            {autoCorreced && didYouMean ? (
+              <>Showing results for &quot;{didYouMean}&quot;</>
             ) : (
               query ? `Results for "${query}"` : 'Browse Products'
             )}
@@ -126,28 +126,28 @@ function SearchContent() {
         </div>
       </div>
 
-      {/* Auto-corrected Query Notice */}
-      {autoCorreced && originalQuery && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center justify-between" data-testid="auto-corrected-notice">
+      {/* Auto-corrected Query Notice - Shows when auto-corrected AND has results */}
+      {autoCorreced && originalQuery && didYouMean && products.length > 0 && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid="auto-corrected-notice">
           <div className="flex items-center gap-3">
-            <Search className="h-5 w-5 text-green-600" />
+            <Search className="h-5 w-5 text-green-600 flex-shrink-0" />
             <span className="text-green-800">
-              Showing results for <strong>&quot;{query}&quot;</strong> instead of <em>&quot;{originalQuery}&quot;</em>
+              Showing results for <strong>&quot;{didYouMean}&quot;</strong>
             </span>
           </div>
           <button
             onClick={handleRevertToOriginal}
-            className="text-sm text-green-700 hover:text-green-900 underline"
+            className="text-sm text-green-700 hover:text-green-900 underline whitespace-nowrap"
           >
-            Search for &quot;{originalQuery}&quot; instead
+            Search instead for &quot;{originalQuery}&quot;
           </button>
         </div>
       )}
 
-      {/* "Did you mean?" Suggestion */}
+      {/* "Did you mean?" Suggestion - Shows when NO results and have suggestion */}
       {didYouMean && !autoCorreced && products.length === 0 && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3" data-testid="did-you-mean">
-          <Search className="h-5 w-5 text-blue-600" />
+          <Search className="h-5 w-5 text-blue-600 flex-shrink-0" />
           <span className="text-blue-800">
             Did you mean:{' '}
             <button
@@ -162,10 +162,10 @@ function SearchContent() {
         </div>
       )}
 
-      {/* "Did you mean?" as a hint when results ARE found */}
+      {/* "Did you mean?" as a hint when results ARE found but not auto-corrected */}
       {didYouMean && !autoCorreced && products.length > 0 && (
         <div className="mb-4 text-sm text-gray-600 flex items-center gap-2">
-          <Info className="h-4 w-4" />
+          <Info className="h-4 w-4 flex-shrink-0" />
           <span>
             Did you mean:{' '}
             <button
