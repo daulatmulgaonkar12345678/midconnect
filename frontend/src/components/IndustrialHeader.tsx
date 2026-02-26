@@ -522,17 +522,63 @@ export default function IndustrialHeader() {
               )}
             </div>
 
-            {/* Search Input */}
-            <div className="flex-1">
+            {/* Search Input with Autocomplete */}
+            <div ref={searchRef} className="flex-1 relative">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowProductDropdown(true)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 placeholder="Search industrial products, brands, specifications..."
                 className="w-full h-10 px-4 text-sm border-y border-r bg-white focus:outline-none focus:ring-1 focus:ring-inset"
                 style={{ borderColor: COLORS.borderGrey }}
+                autoComplete="off"
               />
+
+              {/* Product Autocomplete Dropdown */}
+              {showProductDropdown && (productSuggestions.length > 0 || loadingProducts) && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-md shadow-lg z-50" style={{ borderColor: COLORS.borderGrey }}>
+                  {loadingProducts ? (
+                    <div className="px-4 py-3 text-sm text-center" style={{ color: COLORS.textSecondary }}>
+                      <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                      Searching...
+                    </div>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto py-1">
+                      {productSuggestions.map((suggestion, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setSearchQuery(suggestion.text);
+                            setShowProductDropdown(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-sm text-left hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          {suggestion.type === 'product' ? (
+                            <Package className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.deepBlue }} />
+                          ) : suggestion.type === 'category' ? (
+                            <Grid3X3 className="h-4 w-4 flex-shrink-0" style={{ color: COLORS.textSecondary }} />
+                          ) : (
+                            <TrendingUp className="h-4 w-4 flex-shrink-0 text-green-600" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <span style={{ color: COLORS.textPrimary }}>{suggestion.text}</span>
+                            {suggestion.category && (
+                              <span className="ml-2 text-xs" style={{ color: COLORS.textSecondary }}>
+                                in {suggestion.category}
+                              </span>
+                            )}
+                          </div>
+                          {suggestion.type === 'popular' && (
+                            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">Popular</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Search Button */}
