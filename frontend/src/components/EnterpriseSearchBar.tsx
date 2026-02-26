@@ -284,14 +284,14 @@ export default function EnterpriseSearchBar({
           )}
         </div>
 
-        {/* Divider */}
+        {/* Divider - Hide on mobile, show on larger screens */}
         {showLocationFilter && (
-          <div className={`hidden md:block w-px h-8 bg-gray-200 ${variant === 'hero' ? 'md:block' : ''}`} />
+          <div className={`hidden sm:block w-px h-8 bg-gray-200 self-center`} />
         )}
 
         {/* Location Dropdown */}
         {showLocationFilter && (
-          <div ref={locationRef} className={`relative ${variant === 'hero' ? 'w-full md:w-64' : 'w-48'}`}>
+          <div ref={locationRef} className={`relative ${variant === 'hero' || variant === 'page' ? 'w-full sm:w-56' : 'w-44'}`}>
             <button
               type="button"
               onClick={() => {
@@ -300,7 +300,7 @@ export default function EnterpriseSearchBar({
                   fetchLocationSuggestions(locationSearch);
                 }
               }}
-              className={`w-full flex items-center gap-2 px-3 ${variant === 'header' ? 'py-2.5' : 'py-3.5'} bg-gray-50 rounded-lg hover:bg-gray-100 transition text-left`}
+              className={`w-full flex items-center gap-2 px-3 ${variant === 'header' ? 'py-2' : 'py-3'} bg-gray-50 rounded-lg hover:bg-gray-100 transition text-left`}
               data-testid="search-location-dropdown"
             >
               <MapPin className="h-5 w-5 text-gray-400 flex-shrink-0" />
