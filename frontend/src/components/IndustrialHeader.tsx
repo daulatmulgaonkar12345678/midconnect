@@ -200,6 +200,34 @@ export default function IndustrialHeader() {
     setShowProductDropdown(false);
   };
 
+  // Helper to normalize location selection
+  const handleLocationSelect = (loc: LocationSuggestion) => {
+    if (loc.type === 'pan_india') {
+      setSelectedLocation(null);
+    } else {
+      // Normalize: ensure city/state always exist
+      const labelParts = loc.label.split(',').map(s => s.trim());
+      setSelectedLocation({
+        ...loc,
+        city: loc.city || labelParts[0] || undefined,
+        state: loc.state || labelParts[1] || undefined,
+      });
+    }
+    setShowLocationDropdown(false);
+    setLocationSearch('');
+  };
+
+  // Get icon/badge for location type
+  const getLocationTypeIcon = (type: string) => {
+    switch (type) {
+      case 'city': return '📍';
+      case 'state': return '🗺️';
+      case 'pincode': return '📮';
+      case 'pan_india': return '🇮🇳';
+      default: return '📍';
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut();
     setIsUserMenuOpen(false);
