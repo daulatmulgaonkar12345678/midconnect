@@ -83,15 +83,9 @@ export default function IndustrialHeader() {
     const fetchInquiryCount = async () => {
       if (!user || !isBuyer) return;
       try {
-        const apiBase = getApiBaseUrl();
         const token = await user.getIdToken();
-        const res = await fetch(`${apiBase}/api/inquiries/buyer`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setInquiryCount(Array.isArray(data) ? data.length : 0);
-        }
+        const data = await fetchWithAuth<{ inquiries?: unknown[]; total?: number }>('/buyer/inquiries?limit=1', token);
+        setInquiryCount(data.total || 0);
       } catch (err) {
         console.error('Failed to fetch inquiries:', err);
       }
@@ -104,12 +98,13 @@ export default function IndustrialHeader() {
     const fetchCategories = async () => {
       setLoadingCategories(true);
       try {
-        const apiBase = getApiBaseUrl();
-        const res = await fetch(`${apiBase}/api/categories`);
-        if (res.ok) {
-          const data = await res.json();
-          setCategories(data.slice(0, 10)); // Limit to 10 categories
-        }
+        const data = await getPublicCategoriesList();
+        const mappedCategories = data.slice(0, 10).map((cat) => ({
+          id: cat._id || cat.id,
+          name: cat.name,
+          slug: cat.slug,
+        }));
+        setCategories(mappedCategories);
       } catch (err) {
         console.error('Failed to fetch categories:', err);
       } finally {
@@ -120,23 +115,15 @@ export default function IndustrialHeader() {
   }, []);
 
   // Fetch location suggestions
-  const fetchLocationSuggestions = useCallback(async (query: string) => {
+  const fetchLocationSuggestionsCallback = useCallback(async (query: string) => {
     setLoadingLocations(true);
     try {
-      const apiBase = getApiBaseUrl();
-      const endpoint = query.length > 0 
-        ? `${apiBase}/api/search/locations?q=${encodeURIComponent(query)}&limit=8`
-        : `${apiBase}/api/search/locations/active?limit=8`;
-      
-      const res = await fetch(endpoint);
-      if (res.ok) {
-        const data = await res.json();
-        const suggestions = query.length > 0 ? (data.suggestions || []) : (data.cities || []);
-        setLocationSuggestions([
-          { label: 'All India', type: 'pan_india' },
-          ...suggestions
-        ]);
-      }
+      const data = await getLocationSuggestions(query);
+      const suggestions = query.length > 0 ? (data.suggestions || []) : (data.cities || []);
+      setLocationSuggestions([
+        { label: 'All India', type: 'pan_india' },
+        ...suggestions
+      ]);
     } catch (err) {
       console.error('Failed to fetch locations:', err);
       setLocationSuggestions([{ label: 'All India', type: 'pan_india' }]);
@@ -146,7 +133,7 @@ export default function IndustrialHeader() {
   }, []);
 
   // Fetch product suggestions (autocomplete)
-  const fetchProductSuggestions = useCallback(async (query: string) => {
+  const fetchProductSuggestionsCallback = useCallback(async (query: string) => {
     if (query.length < 2) {
       setProductSuggestions([]);
       return;
@@ -154,14 +141,8 @@ export default function IndustrialHeader() {
     
     setLoadingProducts(true);
     try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/api/search/autocomplete?q=${encodeURIComponent(query)}&limit=8`);
-      if (res.ok) {
-        const data = await res.json();
-        setProductSuggestions(data.suggestions || []);
-      } else {
-        setProductSuggestions([]);
-      }
+      const data = await getAutocompleteSuggestions(query);
+      setProductSuggestions(data.suggestions || []);
     } catch (err) {
       console.error('Failed to fetch product suggestions:', err);
       setProductSuggestions([]);
