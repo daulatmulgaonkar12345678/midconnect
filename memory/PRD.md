@@ -13,6 +13,36 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## SEARCH AUTOCOMPLETE FIX (Feb 26, 2026)
+
+### Issue
+Browser's native autocomplete was interfering with our custom dropdown, especially at full viewport width. DevTools or smaller windows worked because viewport changes trigger different behavior.
+
+### Root Cause
+- Browser's native autocomplete was showing instead of custom dropdown
+- Missing autocomplete disable attributes on input
+- Dropdown buttons missing proper event handlers
+
+### Fix Applied
+1. **Input attributes** - Added comprehensive autocomplete disabling:
+   - `autocomplete="off"`
+   - `autoCorrect="off"`
+   - `autoCapitalize="off"`
+   - `spellCheck="false"`
+   - `data-lpignore="true"` (LastPass)
+   - `data-form-type="other"`
+   - `aria-autocomplete="list"`
+   - Unique `name` and `id` attributes
+
+2. **Dropdown buttons** - Added proper event handlers:
+   - `type="button"` on all dropdown buttons
+   - `onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}`
+   - `data-dropdown-item` attribute for click-outside detection
+
+3. **Z-index** - Increased to `z-index: 9999` for all dropdowns
+
+---
+
 ## CATEGORY CARD SIZE UPGRADE (Feb 26, 2026)
 
 ### Visual Improvements
