@@ -373,34 +373,44 @@ export default function ProductRequestsPage() {
           {activeTab === 'spec-fields' && (
             specFieldRequests.length > 0 ? (
               <div className="space-y-4">
-                {specFieldRequests.map((request) => (
+                {specFieldRequests.map((request) => {
+                  // Support both snake_case and camelCase from backend
+                  const fieldName = request.field_name || (request as unknown as { fieldName?: string }).fieldName || 'Unknown Field';
+                  const fieldType = request.field_type || (request as unknown as { fieldType?: string }).fieldType || 'text';
+                  const categoryName = request.category_name || (request as unknown as { categoryName?: string }).categoryName || request.category_id || 'Unknown';
+                  const requestedByEmail = request.requested_by_email || (request as unknown as { requestedByEmail?: string }).requestedByEmail || 'Unknown';
+                  const createdAt = request.created_at || (request as unknown as { createdAt?: string }).createdAt;
+                  const unit = request.unit || '';
+                  const suggestedOptions = request.suggested_options || (request as unknown as { suggestedOptions?: string[] }).suggestedOptions || [];
+                  
+                  return (
                   <div key={request._id} className="bg-white rounded-xl shadow-sm p-6" data-testid={`spec-field-request-${request._id}`}>
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="font-semibold text-lg">{request.field_name}</h3>
+                        <h3 className="font-semibold text-lg">{fieldName}</h3>
                         <p className="text-sm text-gray-500">
-                          Category: {request.category_name || request.category_id}
+                          Category: {categoryName}
                         </p>
                         <p className="text-sm text-gray-500">
-                          Type: {request.field_type} {request.unit && `(${request.unit})`}
+                          Type: {fieldType} {unit && `(${unit})`}
                         </p>
                         <p className="text-xs text-gray-400">
-                          Requested by: {request.requested_by_email} • {formatDate(request.created_at)}
+                          Requested by: {requestedByEmail} • {formatDate(createdAt)}
                         </p>
                       </div>
                       {getStatusBadge(request.status)}
                     </div>
                     
-                    {request.suggested_options && request.suggested_options.length > 0 && (
+                    {suggestedOptions.length > 0 && (
                       <div className="bg-gray-50 rounded-lg p-4 mb-4">
                         <p className="text-sm font-medium text-gray-700 mb-1">Suggested Options:</p>
                         <div className="flex flex-wrap gap-2">
-                          {request.suggested_options.map((opt, i) => (
+                          {suggestedOptions.map((opt, i) => (
                             <span key={i} className="px-2 py-1 bg-white border rounded text-sm">{opt}</span>
                           ))}
                         </div>
                       </div>
-                    )}
+                    )}}
 
                     {request.status === 'pending' && (
                       <div className="flex gap-3">
