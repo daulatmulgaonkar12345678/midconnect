@@ -13,6 +13,36 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## SMART SEARCH ENGINE (Feb 26, 2026)
+
+### Features Implemented
+- **Typo Tolerance**: Automatically corrects common typos (moter → motor)
+- **Phonetic Matching**: India-friendly sound-based matching (motar → motor)
+- **"Did you mean?" Suggestions**: Shows clickable suggestions when no results
+- **Auto-correction**: Searches with corrected query when original returns no results
+- **Smart Autocomplete**: Fuzzy matching in autocomplete dropdown
+
+### Technical Implementation
+- `SmartSearchService` in `/app/backend/services/smart_search_service.py`
+- Uses `fuzzywuzzy` for fuzzy string matching
+- Uses `metaphone` for phonetic matching (Double Metaphone algorithm)
+- Product/category name caching for performance (5-min TTL)
+- Known typo dictionary for common Indian English typos
+
+### API Endpoints
+- `GET /api/search/spelling?q={query}` - Check spelling and get suggestions
+- `GET /api/search/autocomplete?q={query}` - Smart autocomplete with fuzzy matching
+- `GET /api/search?q={query}` - Main search with "didYouMean" field
+- `GET /api/search/geo?q={query}` - Geo search with typo tolerance
+
+### Performance (M0 Optimized)
+- Fuzzy logic runs only when results are empty
+- Product names cached in memory (not queried every request)
+- Suggestions limited to prevent timeout
+- No Atlas Search index required (uses regex + in-memory matching)
+
+---
+
 ## LOCATION DROPDOWN FIX & SMART SEARCH (Feb 26, 2026)
 
 ### Bug Fixes
