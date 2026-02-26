@@ -116,7 +116,10 @@ All frontend API calls now use the centralized API client (`/lib/api.ts`) instea
 - ✅ Both headers visible on all screen sizes
 - ✅ Inquiries link visible for all users
 - ✅ Products and Categories navigation links visible for all users
-- ✅ Centralized API client for all search/dropdown calls (Feb 26, 2026)
+- ✅ Centralized API client for all search/dropdown calls
+- ✅ Location dropdown click fixed (single-click selection)
+- ✅ Smart location search with city/state/pincode support
+- ✅ Location type indicators (📍📮🗺️) in dropdown
 
 ## NEXT TASKS
 - **P0**: Verify changes on Vercel deployment
