@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { 
   Menu, X, User, LogOut, Settings, Package, ChevronDown, 
   LayoutDashboard, MapPin, Search, FileText, ClipboardList,
-  Grid3X3
+  Grid3X3, Loader2, TrendingUp
 } from 'lucide-react';
 import { APP_NAME } from '@/lib/config';
 
