@@ -743,8 +743,6 @@ export default function IndustrialHeader() {
                   </div>
                 )}
               </div>
-                style={{ borderColor: COLORS.borderGrey }}
-              />
               <button
                 onClick={handleSearch}
                 className="px-4 py-2.5 flex items-center gap-2 text-white font-medium text-sm rounded-md transition-colors"
