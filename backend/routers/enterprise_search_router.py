@@ -201,7 +201,13 @@ def create_enterprise_search_router(db, require_auth=None):
         sort_by: str = Query("relevance", alias="sortBy", description="relevance, price_asc, price_desc, rating, recent"),
     ):
         """
-        Enterprise-grade search with compound filtering (Phase 3 Hardened).
+        Enterprise-grade search with typo tolerance and compound filtering.
+        
+        SMART SEARCH FEATURES:
+        - Typo tolerance (moter → motor)
+        - Phonetic matching (motar → motor)
+        - "Did you mean?" suggestions
+        - Auto-correction for common typos
         
         PRODUCTION HARDENING:
         - Minimum query length: 2 characters
@@ -210,16 +216,27 @@ def create_enterprise_search_router(db, require_auth=None):
         - Search timeout: 1.5s
         - LRU cache for page 1
         - Slow query logging (>700ms)
-        
-        Supports:
-        - Text search with normalization
-        - Structured filters (category, manufacturer, location, price)
-        - Ranking boosts (premium, rating, stock, recency)
         """
         from services.enterprise_search_service import create_enterprise_search_service
+        from services.smart_search_service import create_smart_search_service
         
         search_service = create_enterprise_search_service(db)
+        smart_search = create_smart_search_service(db)
         
+        # Get spelling suggestion first
+        did_you_mean = None
+        corrected_query = None
+        
+        if q and len(q) >= 2:
+            try:
+                spelling = await smart_search.get_spelling_suggestion(q)
+                if spelling:
+                    did_you_mean = spelling.get("corrected")
+                    corrected_query = did_you_mean
+            except Exception as e:
+                logger.warning(f"Spelling suggestion error: {e}")
+        
+        # Perform search with original query
         results = await search_service.search(
             query=q,
             category_id=category,
@@ -233,6 +250,34 @@ def create_enterprise_search_router(db, require_auth=None):
             limit=limit,
             sort_by=sort_by
         )
+        
+        # If no results and we have a spelling correction, try with corrected query
+        if results.get("total", 0) == 0 and corrected_query and corrected_query.lower() != q.lower():
+            corrected_results = await search_service.search(
+                query=corrected_query,
+                category_id=category,
+                manufacturer_id=manufacturer,
+                city=city,
+                state=state,
+                min_price=min_price,
+                max_price=max_price,
+                in_stock_only=in_stock or False,
+                page=page,
+                limit=limit,
+                sort_by=sort_by
+            )
+            
+            # If corrected query found results, use those
+            if corrected_results.get("total", 0) > 0:
+                corrected_results["originalQuery"] = q
+                corrected_results["correctedQuery"] = corrected_query
+                corrected_results["didYouMean"] = corrected_query
+                corrected_results["autoCorreected"] = True
+                return corrected_results
+        
+        # Add "Did you mean?" suggestion to response
+        if did_you_mean and did_you_mean.lower() != q.lower():
+            results["didYouMean"] = did_you_mean
         
         return results
     
