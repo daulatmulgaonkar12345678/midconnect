@@ -13,6 +13,28 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
+## CATEGORY CARD SIZE UPGRADE (Feb 26, 2026)
+
+### Visual Improvements
+- **Image container**: Increased from 64px to responsive h-32/h-36/h-40/h-44
+- **Product count badge**: Now displays in top-right corner of image
+- **Gradient overlay**: Subtle hover effect on images
+- **Arrow indicator**: Appears on hover pointing to category page
+- **Image fallback**: Shows icon when no image, handles broken images
+
+### Responsive Heights
+| Device  | Height |
+|---------|--------|
+| Mobile  | 128px  |
+| Tablet  | 144px  |
+| Desktop | 160-176px |
+
+### Components Updated
+- `CategoryCard.tsx` - Reusable card with state for image error handling
+- `categories/page.tsx` - Grid layout with new card design
+
+---
+
 ## CATEGORY IMAGE DISPLAY (Feb 26, 2026)
 
 ### Changes Made
