@@ -79,15 +79,8 @@ export default function EnterpriseSearchBar({
     
     setLoading(true);
     try {
-      const apiBase = getApiBaseUrl();
-      const res = await fetch(`${apiBase}/api/search/autocomplete?q=${encodeURIComponent(searchQuery)}&limit=8`);
-      if (res.ok) {
-        const data = await res.json();
-        setProductSuggestions(data.suggestions || []);
-      } else {
-        console.error('Autocomplete API error:', res.status, res.statusText);
-        setProductSuggestions([]);
-      }
+      const data = await getAutocompleteSuggestions(searchQuery);
+      setProductSuggestions(data.suggestions || []);
     } catch (err) {
       console.error('Autocomplete fetch error:', err);
       setProductSuggestions([]);
@@ -100,33 +93,19 @@ export default function EnterpriseSearchBar({
   const fetchLocationSuggestions = useCallback(async (searchQuery: string) => {
     setLocationLoading(true);
     try {
-      const apiBase = getApiBaseUrl();
+      const data = await getLocationSuggestions(searchQuery);
+      
       if (searchQuery.length < 1) {
         // Fetch all active seller cities when no query
-        const res = await fetch(`${apiBase}/api/search/locations/active?limit=10`);
-        if (res.ok) {
-          const data = await res.json();
-          const cities = data.cities || [];
-          // Add Pan India option at the start
-          setLocationSuggestions([
-            { label: 'Pan India (All Locations)', type: 'pan_india' },
-            ...cities
-          ]);
-        } else {
-          setLocationSuggestions([
-            { label: 'Pan India (All Locations)', type: 'pan_india' },
-          ]);
-        }
+        const cities = data.cities || [];
+        // Add Pan India option at the start
+        setLocationSuggestions([
+          { label: 'Pan India (All Locations)', type: 'pan_india' },
+          ...cities
+        ]);
       } else {
         // Search with query
-        const res = await fetch(`${apiBase}/api/search/locations?q=${encodeURIComponent(searchQuery)}&limit=10`);
-        if (res.ok) {
-          const data = await res.json();
-          setLocationSuggestions(data.suggestions || []);
-        } else {
-          console.error('Location API error:', res.status, res.statusText);
-          setLocationSuggestions([]);
-        }
+        setLocationSuggestions(data.suggestions || []);
       }
     } catch (err) {
       console.error('Location fetch error:', err);
