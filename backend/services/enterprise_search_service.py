@@ -676,6 +676,343 @@ class EnterpriseSearchService:
             "max_size": _search_cache.max_size,
             "ttl_seconds": _search_cache.ttl
         }
+    
+    # ============================================================
+    # GEO SEARCH WITH FALLBACK STRATEGY (M0 Compatible)
+    # ============================================================
+    
+    async def geo_search(
+        self,
+        query: str = "",
+        # Geo parameters
+        lat: Optional[float] = None,
+        lng: Optional[float] = None,
+        radius_km: int = 50,
+        city: Optional[str] = None,
+        state: Optional[str] = None,
+        # Other filters
+        category_id: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        in_stock_only: bool = False,
+        # Pagination
+        limit: int = 20,
+        skip: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        Execute geo search with intelligent fallback strategy.
+        
+        Fallback Order:
+        1. City exact match → 
+        2. Radius search (if coords provided) →
+        3. State → 
+        4. Pan India
+        
+        Returns:
+            {
+                "listings": [...],
+                "total": int,
+                "fallbackUsed": "city"|"radius"|"state"|"pan_india"|null,
+                "searchedLocation": {...},
+                "search_time_ms": int
+            }
+        """
+        start_time = time.time()
+        limit = min(limit, MAX_RESULTS)
+        
+        # Normalize query
+        normalized_query = self.normalizer.normalize(query) if query else ""
+        
+        # Track what fallback was used
+        fallback_used = None
+        searched_location = {
+            "city": city,
+            "state": state,
+            "lat": lat,
+            "lng": lng,
+            "radius_km": radius_km
+        }
+        
+        # Build base filter
+        base_filter = {"isActive": True, "status": "active"}
+        
+        # Add text search if query provided
+        if normalized_query:
+            search_tokens = normalized_query.split()
+            search_pattern = "|".join(re.escape(t) for t in search_tokens)
+            base_filter["$or"] = [
+                {"searchableText": {"$regex": search_pattern, "$options": "i"}},
+                {"normalizedSearchTokens": {"$in": [t.lower() for t in search_tokens]}},
+            ]
+        
+        # Add category filter
+        if category_id:
+            try:
+                base_filter["categoryId"] = ObjectId(category_id)
+            except Exception:
+                pass
+        
+        # Add price filter
+        if min_price is not None or max_price is not None:
+            price_filter = {}
+            if min_price is not None:
+                price_filter["$gte"] = min_price
+            if max_price is not None:
+                price_filter["$lte"] = max_price
+            base_filter["minPrice"] = price_filter
+        
+        # Add stock filter
+        if in_stock_only:
+            base_filter["inStock"] = True
+        
+        results = []
+        
+        # ============================================================
+        # FALLBACK 1: City Exact Match
+        # ============================================================
+        if city:
+            city_filter = {**base_filter, "city": {"$regex": f"^{re.escape(city)}$", "$options": "i"}}
+            results = await self._execute_geo_query(city_filter, None, limit, skip)
+            
+            if results:
+                fallback_used = None  # Primary search worked
+            else:
+                logger.info(f"[GEO_SEARCH] No results for city={city}, trying fallback")
+        
+        # ============================================================
+        # FALLBACK 2: Radius Search (if coordinates provided)
+        # ============================================================
+        if not results and lat is not None and lng is not None:
+            radius_meters = radius_km * 1000
+            
+            # Use $geoNear aggregation (must be first stage)
+            results = await self._execute_geonear_query(
+                base_filter=base_filter,
+                lat=lat,
+                lng=lng,
+                max_distance=radius_meters,
+                limit=limit,
+                skip=skip
+            )
+            
+            if results:
+                fallback_used = "radius"
+                logger.info(f"[GEO_SEARCH] Found {len(results)} results within {radius_km}km")
+            else:
+                logger.info(f"[GEO_SEARCH] No results within {radius_km}km, trying state fallback")
+        
+        # ============================================================
+        # FALLBACK 3: State
+        # ============================================================
+        if not results and state:
+            state_filter = {**base_filter, "state": {"$regex": f"^{re.escape(state)}$", "$options": "i"}}
+            results = await self._execute_geo_query(state_filter, None, limit, skip)
+            
+            if results:
+                fallback_used = "state"
+                logger.info(f"[GEO_SEARCH] Found {len(results)} results in state={state}")
+        
+        # ============================================================
+        # FALLBACK 4: Pan India (No location filter)
+        # ============================================================
+        if not results:
+            results = await self._execute_geo_query(base_filter, None, limit, skip)
+            fallback_used = "pan_india"
+            logger.info(f"[GEO_SEARCH] Pan India fallback: {len(results)} results")
+        
+        # Format results
+        formatted_listings = [self._format_listing(r) for r in results]
+        
+        search_time_ms = int((time.time() - start_time) * 1000)
+        
+        return {
+            "listings": formatted_listings,
+            "total": len(formatted_listings),
+            "hasMore": len(results) >= limit,
+            "query": query,
+            "fallbackUsed": fallback_used,
+            "searchedLocation": searched_location,
+            "message": self._get_fallback_message(fallback_used, city, state, radius_km),
+            "search_time_ms": search_time_ms,
+            "engine_mode": SEARCH_ENGINE_MODE
+        }
+    
+    async def _execute_geo_query(
+        self,
+        filter_query: Dict[str, Any],
+        sort_spec: Optional[Dict[str, Any]],
+        limit: int,
+        skip: int
+    ) -> List[Dict[str, Any]]:
+        """Execute standard geo query without $geoNear."""
+        try:
+            pipeline = [
+                {"$match": filter_query},
+                {"$sort": sort_spec or {"rankScore": -1, "createdAt": -1}},
+                {"$skip": skip},
+                {"$limit": limit},
+                # Minimal projection
+                {
+                    "$lookup": {
+                        "from": "products",
+                        "localField": "productId",
+                        "foreignField": "_id",
+                        "as": "product",
+                        "pipeline": [{"$project": {"name": 1}}]
+                    }
+                },
+                {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
+                {
+                    "$project": {
+                        "_id": 1,
+                        "productId": 1,
+                        "productName": "$product.name",
+                        "categoryId": 1,
+                        "manufacturerId": 1,
+                        "manufacturerName": 1,
+                        "description": {"$substrCP": [{"$ifNull": ["$description", ""]}, 0, 150]},
+                        "images": {"$slice": ["$images", 2]},
+                        "minPrice": 1,
+                        "pricingTiers": {"$slice": ["$pricingTiers", 3]},
+                        "moq": 1,
+                        "stock": 1,
+                        "inStock": 1,
+                        "leadTime": 1,
+                        "currency": 1,
+                        "city": 1,
+                        "state": 1,
+                        "sellerRating": 1,
+                        "isPremiumSeller": 1,
+                        "sellerTier": 1,
+                        "sellerId": 1,
+                        "createdAt": 1,
+                        "coordinates": 1,
+                        "rankScore": {"$ifNull": ["$rankScore", 0]}
+                    }
+                }
+            ]
+            
+            return await asyncio.wait_for(
+                self.db.sellerListings.aggregate(pipeline).to_list(limit),
+                timeout=SEARCH_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            logger.warning("[GEO_SEARCH] Query timeout")
+            return []
+        except Exception as e:
+            logger.error(f"[GEO_SEARCH] Query failed: {e}")
+            return []
+    
+    async def _execute_geonear_query(
+        self,
+        base_filter: Dict[str, Any],
+        lat: float,
+        lng: float,
+        max_distance: float,
+        limit: int,
+        skip: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute $geoNear query for radius search.
+        $geoNear MUST be the first pipeline stage.
+        """
+        try:
+            pipeline = [
+                {
+                    "$geoNear": {
+                        "near": {
+                            "type": "Point",
+                            "coordinates": [lng, lat]
+                        },
+                        "distanceField": "distance",
+                        "maxDistance": max_distance,
+                        "spherical": True,
+                        "query": {
+                            "isActive": True,
+                            "status": "active",
+                            "coordinates": {"$ne": None}  # Only listings with coordinates
+                        }
+                    }
+                },
+                # Apply additional filters after $geoNear
+                {"$match": {k: v for k, v in base_filter.items() if k not in ["isActive", "status"]}},
+                {"$sort": {"distance": 1}},  # Sort by distance (closest first)
+                {"$skip": skip},
+                {"$limit": limit},
+                # Lookup product name
+                {
+                    "$lookup": {
+                        "from": "products",
+                        "localField": "productId",
+                        "foreignField": "_id",
+                        "as": "product",
+                        "pipeline": [{"$project": {"name": 1}}]
+                    }
+                },
+                {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
+                # Projection
+                {
+                    "$project": {
+                        "_id": 1,
+                        "productId": 1,
+                        "productName": "$product.name",
+                        "categoryId": 1,
+                        "manufacturerId": 1,
+                        "manufacturerName": 1,
+                        "description": {"$substrCP": [{"$ifNull": ["$description", ""]}, 0, 150]},
+                        "images": {"$slice": ["$images", 2]},
+                        "minPrice": 1,
+                        "pricingTiers": {"$slice": ["$pricingTiers", 3]},
+                        "moq": 1,
+                        "stock": 1,
+                        "inStock": 1,
+                        "leadTime": 1,
+                        "currency": 1,
+                        "city": 1,
+                        "state": 1,
+                        "sellerRating": 1,
+                        "isPremiumSeller": 1,
+                        "sellerTier": 1,
+                        "sellerId": 1,
+                        "createdAt": 1,
+                        "distance": 1,  # Include distance
+                        "rankScore": {"$ifNull": ["$rankScore", 0]}
+                    }
+                }
+            ]
+            
+            return await asyncio.wait_for(
+                self.db.sellerListings.aggregate(pipeline).to_list(limit),
+                timeout=SEARCH_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            logger.warning("[GEO_NEAR] Query timeout")
+            return []
+        except Exception as e:
+            logger.error(f"[GEO_NEAR] Query failed: {e}")
+            return []
+    
+    def _get_fallback_message(
+        self,
+        fallback_used: Optional[str],
+        city: Optional[str],
+        state: Optional[str],
+        radius_km: int
+    ) -> Optional[str]:
+        """Generate user-friendly fallback message."""
+        if not fallback_used:
+            return None
+        
+        if fallback_used == "radius":
+            return f"No exact city match. Showing results within {radius_km}km."
+        elif fallback_used == "state":
+            location = city or "your location"
+            return f"No sellers in {location}. Showing results from {state}."
+        elif fallback_used == "pan_india":
+            location = city or state or "your location"
+            return f"No sellers in {location}. Showing sellers from across India."
+        
+        return None
 
 
 def create_enterprise_search_service(db):
