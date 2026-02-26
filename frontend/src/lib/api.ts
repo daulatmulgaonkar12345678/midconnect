@@ -618,6 +618,11 @@ export async function geoSearchProducts(options: {
     hasMore: response.hasMore || false,
     fallbackUsed: response.fallbackUsed,
     fallbackMessage: response.message,
+    // Smart search fields
+    didYouMean: response.didYouMean,
+    correctedQuery: response.correctedQuery,
+    originalQuery: response.originalQuery,
+    autoCorreced: response.autoCorreced,
   };
 }
 
