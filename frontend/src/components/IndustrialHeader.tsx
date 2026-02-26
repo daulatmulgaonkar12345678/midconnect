@@ -50,7 +50,8 @@ const getApiBaseUrl = (): string => {
 };
 
 export default function IndustrialHeader() {
-  const { user, profile, signOut, loading, isAdmin, isSeller, isBuyer } = useAuth();
+  const { user, profile, signOut, loading, isAdmin, isSeller, role } = useAuth();
+  const isBuyer = role === 'buyer';
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const router = useRouter();
