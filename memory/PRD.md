@@ -13,88 +13,138 @@ MidConnect is a B2B marketplace platform for industrial products connecting veri
 
 ---
 
-## PHASE A STABILIZATION COMPLETE (Feb 25, 2026)
+## GEO SEARCH IMPLEMENTATION COMPLETE (Feb 26, 2026)
 
-### Security Fixes
-- [x] **Migration Endpoint Removed** - Temporary admin endpoint deleted for security
+### Phase 1: Schema Upgrade ✅
+- Added `coordinates` (GeoJSON Point) to sellerListings
+- Added `pincode` field from seller profile
+- Fixed `minPrice` computation: now uses MIN of all pricing tiers (not first tier)
+- All existing listings updated with coordinates
 
-### Search UX Fixes (Latest)
-- [x] **Header Dropdown Fixed** - Removed `overflow-hidden` from search bar container to allow dropdowns to render
-- [x] **Auto-Search Disabled** - Clicking suggestions now only populates the query, does NOT auto-search. User must click Search button
-- [x] **Location Search Improved** - Backend now queries both `activeSellerCities` AND `sellerListings` directly to show all seller locations immediately
+### Phase 2: 2dsphere Index ✅
+- Created `coordinates_2dsphere` index on sellerListings
+- Enables $geoNear queries and radius-based search
 
-### UI/UX Fixes
-- [x] **Location Filter Chip Visibility** - Prominent blue chip with X button
-- [x] **Search Navigation** - EnterpriseSearchBar redirects to `/search` page
+### Phase 3: Listing Creation Updated ✅
+- Auto-populates coordinates from seller city using geocode service
+- Uses pre-stored coordinates from seller profile if available
+- Falls back to city lookup for geocoding
 
-### API Fixes
-- [x] **Vercel Fallback** - Added hardcoded fallback for `*.vercel.app` domains to use production backend URL
+### Phase 4: Enterprise Geo Search with Fallback ✅
+New endpoint: `GET /api/search/geo`
 
----
+**Fallback Strategy (M0 Compatible):**
+1. City exact match → 
+2. Radius search (50km default, if coords provided) →
+3. State → 
+4. Pan India
 
-## KEY FIXES SUMMARY
+**Returns:**
+- `fallbackUsed`: "radius" | "state" | "pan_india" | null
+- `message`: User-friendly fallback message
+- `searchedLocation`: Original search parameters
 
-### 1. Header Search Dropdown Not Showing
-**Problem**: Dropdowns were cut off by parent container
-**Fix**: Removed `overflow-hidden` from search bar container styles
-
-### 2. Auto-Search Without Clicking Button
-**Problem**: Clicking a suggestion auto-navigated to search results
-**Fix**: Removed auto-search from `handleSuggestionClick` - now only sets query text
-
-### 3. Pune Not Showing in Location Search
-**Problem**: Location API only searched `activeSellerCities` collection
-**Fix**: Updated `_get_city_suggestions` to ALSO query `sellerListings` directly
-
----
-
-## IMPLEMENTATION STATUS
-
-### Completed (Feb 25, 2026)
-- [x] Header dropdown visibility fix
-- [x] Auto-search disabled
-- [x] Location search queries seller listings
-- [x] Vercel API fallback
-
-### In Progress
-- None
-
-### Upcoming Tasks (P0-P1)
-1. **Create MongoDB Atlas Search index** (`enterprise_search_v2`)
-2. **Geo-search & Fallback** - Nearby location suggestions
-3. **Admin & Seller Dashboards**
-
-### Future Tasks (P2+)
-1. AI Semantic Search Layer
-2. Online Payments (Stripe/Razorpay)
-3. Counter-Offer System
+### Phase 5: Frontend Integration ✅
+- New `geoSearchProducts()` API function
+- Search page uses geo search by default
+- Displays fallback message when search expands area
+- Shows "No sellers in [location]. Showing sellers from across India."
 
 ---
 
-## KEY FILES REFERENCE
+## KEY FILES MODIFIED
 
-### Recently Modified
-- `/app/frontend/src/components/Header.tsx` - Added overflow-visible
-- `/app/frontend/src/components/EnterpriseSearchBar.tsx` - Removed auto-search, removed overflow-hidden
-- `/app/backend/services/seller_location_service.py` - Query seller listings for locations
-- `/app/frontend/src/lib/api.ts` - Vercel API fallback
+### Backend
+- `/app/backend/seller_products.py` - Listing creation with coordinates
+- `/app/backend/services/enterprise_search_service.py` - Added `geo_search()` method
+- `/app/backend/routers/enterprise_search_router.py` - Added `/search/geo` endpoint
 
-### Key API Endpoints
-- `GET /api/search?q={query}` - Enterprise search
-- `GET /api/search/autocomplete?q={query}` - Product suggestions
-- `GET /api/search/locations/active` - Cities with sellers
-- `GET /api/search/locations?q={query}` - Location autocomplete
+### Frontend
+- `/app/frontend/src/lib/api.ts` - Added `geoSearchProducts()` function
+- `/app/frontend/src/app/search/page.tsx` - Uses geo search, shows fallback message
+
+### Database
+- Created `coordinates_2dsphere` index on sellerListings
+- All listings have `coordinates` field populated
+
+---
+
+## API ENDPOINTS
+
+### Geo Search
+```
+GET /api/search/geo
+Parameters:
+  - q: Search query (optional)
+  - city: City filter
+  - state: State filter
+  - lat: User latitude (for radius search)
+  - lng: User longitude (for radius search)
+  - radiusKm: Search radius (default: 50)
+  - category: Category ID
+  - minPrice, maxPrice: Price filters
+  - inStock: Stock filter
+  - limit, skip: Pagination
+
+Response:
+{
+  "listings": [...],
+  "total": 2,
+  "fallbackUsed": "pan_india",
+  "message": "No sellers in Pune. Showing sellers from across India.",
+  "searchedLocation": {...}
+}
+```
+
+---
+
+## SELLER LISTINGS SCHEMA (Updated)
+
+```json
+{
+  "_id": ObjectId,
+  "productId": ObjectId,
+  "sellerId": ObjectId,
+  "city": "Delhi",
+  "state": "Delhi",
+  "pincode": "110001",
+  "coordinates": {
+    "type": "Point",
+    "coordinates": [77.1025, 28.7041]  // [lng, lat]
+  },
+  "minPrice": 500,
+  "inStock": true,
+  "searchableText": "...",
+  "searchableAttributes": {...}
+}
+```
+
+---
+
+## UPCOMING TASKS
+
+### P1: Near Me Feature
+- Add browser geolocation API to frontend
+- "Use My Location" button in location dropdown
+- Auto-detect user location for radius search
+
+### P2: Atlas Search Index (When upgrading from M0)
+- Create enterprise_search_v2 with geo mappings
+- Enable Atlas Search geo operators (geoWithin, near)
+
+### P3: Distance Display
+- Show "X km away" on product cards when using radius search
 
 ---
 
 ## 3RD PARTY INTEGRATIONS
 - Firebase (Authentication)
-- MongoDB (Database)
+- MongoDB (Database with 2dsphere indexing)
 
 ---
 
 ## TEST STATUS
-- Header dropdown: ✅ Working
-- Location dropdown: ✅ Working
-- Auto-search disabled: ✅ Confirmed
-- TypeScript: ✅ Compiles
+- Geo search API: ✅ Working
+- Fallback strategy: ✅ Working (City → Radius → State → Pan India)
+- 2dsphere index: ✅ Created
+- Frontend integration: ✅ Complete
