@@ -231,7 +231,7 @@ export default function EnterpriseSearchBar({
       <div className={`flex items-stretch gap-2 ${variant === 'hero' || variant === 'page' ? 'flex-col sm:flex-row' : 'flex-row'}`}>
         
         {/* Product Search Input */}
-        <div ref={searchRef} className={`relative ${variant === 'hero' ? 'w-full md:flex-1' : 'flex-1'}`}>
+        <div ref={searchRef} className={`relative ${variant === 'hero' || variant === 'page' ? 'w-full sm:flex-1' : 'flex-1'}`}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
@@ -241,7 +241,7 @@ export default function EnterpriseSearchBar({
               onFocus={() => setShowProductDropdown(true)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="Search products, categories..."
-              className={`w-full pl-10 pr-4 ${variant === 'header' ? 'py-2.5' : 'py-3.5'} bg-gray-50 border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition`}
+              className={`w-full pl-10 pr-4 ${variant === 'header' ? 'py-2' : 'py-3'} bg-gray-50 border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition`}
               data-testid="search-product-input"
             />
             {loading && (
