@@ -80,27 +80,27 @@ function SearchContent() {
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="search-results-title">
-            {query ? `Results for "${query}"` : 'Search Products'}
+            {query ? `Results for "${query}"` : 'Browse Products'}
           </h1>
           <p className="text-gray-500">
             {products.length} products found
             {hasLocationFilter && <span className="ml-1">in {locationLabel}</span>}
           </p>
         </div>
-        
-        {/* Guidance Disclaimer */}
-        {guidanceDisclaimer && (
-          <div className="group relative">
-            <button className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
-              <Info className="h-4 w-4" />
-              <span>About suggestions</span>
-            </button>
-            <div className="absolute right-0 top-full mt-2 w-72 p-3 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-              {guidanceDisclaimer}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Fallback Message - Shows when search fell back to wider area */}
+      {fallbackMessage && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3" data-testid="fallback-message">
+          <Navigation className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <div>
+            <p className="text-amber-800 font-medium">{fallbackMessage}</p>
+            {fallbackUsed === 'radius' && (
+              <p className="text-amber-600 text-sm mt-1">Results are sorted by distance from your location</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Active Location Filter Chip - Prominent Display */}
       {hasLocationFilter && (
