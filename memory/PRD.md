@@ -121,38 +121,54 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 - [ ] Online Payments for Quotes
 - [ ] Counter-Offer System
 
-## Session: 2026-02-27 (Email Verification Fix)
+## Session: 2026-02-27 (Email Verification - Enterprise Fix)
 
-### Issue Fixed: CORS Errors During Email Verification
-**Root Cause**: Multiple issues were identified:
+### Issue Fixed: Email Verification Loop + 400 Resend Error
 
-1. **Frontend API Prefix Missing**: The `fetchAPI` function was not prepending `/api` to endpoints. All backend routes require this prefix for proper Kubernetes ingress routing.
+**Root Causes Identified**:
+1. **Mixed Verification Sources**: System was mixing Firebase `email_verified` with MongoDB `isEmailVerified`, causing confusion
+2. **Resend Required Body**: `/api/resend-verification` required email in request body but should use auth token
+3. **Firebase Blocking Access**: Backend was using Firebase `email_verified` to block access, should use MongoDB SSOT
 
-2. **Blocking I/O in Async**: The original `send_verification_email()` used synchronous `smtplib.SMTP_SSL()` inside an async endpoint, blocking the event loop.
+**Enterprise Architecture Fix**:
 
-3. **No Mock Mode**: When Zoho SMTP credentials were not configured, the service returned an error instead of gracefully degrading.
+```
+Firebase → Identity Provider ONLY (authentication)
+MongoDB → Single Source of Truth for ALL business logic (verification status, profile, etc.)
+```
 
-4. **Timezone Comparison**: The `verify_token()` function compared naive and aware datetimes, causing a TypeError.
+**Changes Made**:
 
-**Fixes Applied**:
+**Backend (`/app/backend/server.py`)**:
+1. `get_current_user()`: Removed Firebase `email_verified` sync logic. MongoDB `isEmailVerified` is now SSOT
+2. `/api/resend-verification`: Now uses auth token to get user, no body required
+3. `/api/auth/complete-profile`: Uses MongoDB `isEmailVerified` instead of Firebase
+4. `/api/auth/check-registration`: Returns only MongoDB verification status
 
 **Frontend (`/app/frontend/src/lib/api.ts`)**:
-- `fetchAPI()`: Added automatic `/api` prefix for all endpoints
-- Health check URL: Changed `/health` to `/api/health`
-- Admin export URL: Changed `/admin/...` to `/api/admin/...`
+- `resendVerificationEmail()`: Now takes auth token, no email parameter
 
-**Backend (`/app/backend/services/email_verification_service.py`)**:
-- Refactored to use `asyncio.to_thread()` for non-blocking SMTP
-- Added MOCK mode that generates tokens and logs verification links when credentials aren't configured
-- Fixed timezone comparison in `verify_token()` to handle naive datetimes from MongoDB
+**Frontend (`/app/frontend/src/context/AuthContext.tsx`)**:
+- Updated `resendVerificationEmail` signature - no email param
+- Uses auth token from logged-in user
 
-**Backend (`/app/backend/.env`)**:
-- Added `FRONTEND_URL` for proper verification link generation
+**Frontend (`/app/frontend/src/app/verify-email/page.tsx`)**:
+- Updated to call resend without email parameter
 
 **Test Results**:
-- `/api/send-verification`: 200 OK, generates verification link (MOCK mode in preview)
-- `/api/verify-email`: 200 OK, successfully marks user as verified
-- Full flow tested: send → verify → user status updated
+- `/api/resend-verification` (with auth): 200 OK, sends verification email
+- `/api/verify-email`: 200 OK, updates MongoDB `isEmailVerified` to `true`
+- `/api/users/me`: Returns correct `isEmailVerified` from MongoDB
+- `/api/auth/check-registration`: Returns correct verification status
+
+**Expected Flow**:
+1. User registers → stored with `isEmailVerified=false`
+2. Verification email sent (Zoho SMTP or MOCK)
+3. User clicks link → backend sets `isEmailVerified=true`
+4. `/users/me` returns verified status
+5. Access granted
+
+No Firebase verification used in business logic.
 
 ## Technical Decisions
 
