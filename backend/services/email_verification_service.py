@@ -292,11 +292,15 @@ UdyogConnect Team
         
         # Check if token has expired
         expiry = user.get("verificationTokenExpiry")
-        if expiry and expiry < datetime.now(timezone.utc):
-            return {
-                "success": False,
-                "error": "Verification link has expired. Please request a new one."
-            }
+        if expiry:
+            # Handle both naive and aware datetimes from MongoDB
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            if expiry < datetime.now(timezone.utc):
+                return {
+                    "success": False,
+                    "error": "Verification link has expired. Please request a new one."
+                }
         
         # Mark user as verified
         await self.db.users.update_one(
