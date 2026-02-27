@@ -386,7 +386,7 @@ class QuotationService:
         Format (exact per user spec):
         Hello {Buyer Name},
 
-        Greetings from B2B Market Place.
+        Greetings from Udyog connect.
 
         This is {Seller Business Name}.
         We are pleased to share our quotation for your inquiry regarding "{Product Name}".
@@ -407,7 +407,7 @@ class QuotationService:
 
         Best Regards,
         {Seller Business Name}
-        B2B Market Place
+        Udyog connect
         
         SECURITY:
         - NO seller phone number in message
@@ -441,7 +441,7 @@ class QuotationService:
         # Build message per spec format
         message = f"""Hello {buyer_name},
 
-Greetings from B2B Market Place.
+Greetings from Udyog connect.
 
 This is {seller_name}.
 We are pleased to share our quotation for your inquiry regarding "{product_name}".
@@ -462,7 +462,7 @@ Please confirm acceptance via the platform link above.
 
 Best Regards,
 {seller_name}
-B2B Market Place"""
+Udyog connect"""
         
         return {
             "message": message,
