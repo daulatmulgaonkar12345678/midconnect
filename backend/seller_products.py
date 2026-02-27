@@ -1398,7 +1398,6 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         """
         from services.subscription_service import can_accept_inquiry as check_can_accept, increment_enquiry_usage
         from services.seller_governance_service import SellerGovernanceService
-        from services.quotation_service import QuotationService
         import urllib.parse
         
         seller_oid = ObjectId(seller["_id"]) if isinstance(seller["_id"], str) else seller["_id"]
