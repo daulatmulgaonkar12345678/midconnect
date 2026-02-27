@@ -85,7 +85,7 @@ function VerifyEmailContent() {
     setMessage('');
     
     try {
-      await resendVerificationEmail(user?.email);
+      await resendVerificationEmail(user?.email || undefined);
       setResendSuccess(true);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to send email');
