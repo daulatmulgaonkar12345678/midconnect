@@ -1,361 +1,96 @@
-# MidConnect - B2B Marketplace PRD
+# MidConnect B2B Marketplace - Product Requirements Document
 
-## Product Overview
-MidConnect is a B2B marketplace platform for industrial products connecting verified manufacturers, dealers, and distributors with buyers across India.
+## Original Problem Statement
+Build an enterprise-grade B2B marketplace platform ("midconnect") that connects industrial buyers with verified sellers. The platform enables:
+- Product catalog management with technical specifications
+- Buyer inquiry system with seller quotation workflow
+- WhatsApp-based communication for quote delivery
+- Subscription-based seller access control
 
-## Core Architecture
+## Core Requirements
+1. **Multi-layer product architecture**: Category → SpecTemplate → Product → ProductVariant → SellerListing
+2. **Buyer-seller inquiry flow**: Buyers submit RFQs, sellers accept/reject with quotes
+3. **Contact masking**: Buyer details hidden until inquiry accepted
+4. **Subscription limits**: Free tier has lead limits, paid plans for unlimited
 
-### Tech Stack
-- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS, Inter Font
-- **Backend**: FastAPI, Python 3.x
-- **Database**: MongoDB (via Motor async driver) with 2dsphere geo indexing
-- **Auth**: Firebase Authentication
+## What's Been Implemented
 
----
+### Session: 2026-02-27
 
-## DROPDOWN FIX FOR SINGLE-LINE HEADER (Feb 26, 2026)
+#### P0: Quotation SSOT Fix - COMPLETE
+- **Issue**: Duplicate WhatsApp message builders in frontend AND backend causing inconsistent messages
+- **Fix**: 
+  - Removed 45-line frontend message builder from `seller/inquiries/page.tsx`
+  - Backend `accept_inquiry` now generates message and returns `whatsappLink`
+  - Frontend only opens the returned link
+  - Removed hardcoded "Your Business" / "B2B Market Seller" fallbacks
+  - Added price validation to prevent ₹0 quotes
+  - Seller name now comes from DB profile only
 
-### Issue
-Location and Category dropdowns only worked in 2-line (mobile) mode, not in single-line (desktop) mode at full viewport width.
+#### Previous Fixes (Local - Pending Deployment)
+- Admin Panel "N/A" Product Name fix
+- Public Data Visibility fix (flexible aggregation)
+- CORS Policy fix for `udyogconnect.in`
+- Cold Start Prevention (BackendWarmup + GitHub Actions ping)
+- Timezone Display fix
 
-### Root Cause (CRITICAL BUG)
-```javascript
-// BUG: Event listener mismatch
-document.addEventListener('click', handleClickOutside);    // Adding 'click'
-return () => document.removeEventListener('mousedown', handleClickOutside);  // Removing 'mousedown'
+### Architecture
 ```
-This meant the cleanup never happened and clicks were being caught by the handler immediately.
-
-### Fix Applied
-1. **Fixed event listener mismatch** - Use consistent `'mousedown'` for both add/remove
-2. **Added `data-dropdown-trigger` attribute** to ALL trigger buttons (desktop + mobile)
-3. **Updated click-outside handler** to check for trigger/item attributes before closing:
-```javascript
-if (target.closest('[data-dropdown-trigger]') || target.closest('[data-dropdown-item]')) {
-  return; // Don't close dropdown
-}
-```
-
-### Pattern to Follow (IMPORTANT)
-When creating dropdowns, ALWAYS:
-1. Add `data-dropdown-trigger="type"` to the trigger button
-2. Add `data-dropdown-item="type"` to items inside the dropdown
-3. Add `onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}` to items
-4. Use consistent event type in addEventListener/removeEventListener
-
----
-
-## SEARCH AUTOCOMPLETE FIX (Feb 26, 2026)
-
-### Issue
-Browser's native autocomplete was interfering with our custom dropdown, especially at full viewport width. DevTools or smaller windows worked because viewport changes trigger different behavior.
-
-### Root Cause
-- Browser's native autocomplete was showing instead of custom dropdown
-- Missing autocomplete disable attributes on input
-- Dropdown buttons missing proper event handlers
-
-### Fix Applied
-1. **Input attributes** - Added comprehensive autocomplete disabling:
-   - `autocomplete="off"`
-   - `autoCorrect="off"`
-   - `autoCapitalize="off"`
-   - `spellCheck="false"`
-   - `data-lpignore="true"` (LastPass)
-   - `data-form-type="other"`
-   - `aria-autocomplete="list"`
-   - Unique `name` and `id` attributes
-
-2. **Dropdown buttons** - Added proper event handlers:
-   - `type="button"` on all dropdown buttons
-   - `onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}`
-   - `data-dropdown-item` attribute for click-outside detection
-
-3. **Z-index** - Increased to `z-index: 9999` for all dropdowns
-
----
-
-## CATEGORY CARD SIZE UPGRADE (Feb 26, 2026)
-
-### Visual Improvements
-- **Image container**: Increased from 64px to responsive h-32/h-36/h-40/h-44
-- **Product count badge**: Now displays in top-right corner of image
-- **Gradient overlay**: Subtle hover effect on images
-- **Arrow indicator**: Appears on hover pointing to category page
-- **Image fallback**: Shows icon when no image, handles broken images
-
-### Responsive Heights
-| Device  | Height |
-|---------|--------|
-| Mobile  | 128px  |
-| Tablet  | 144px  |
-| Desktop | 160-176px |
-
-### Components Updated
-- `CategoryCard.tsx` - Reusable card with state for image error handling
-- `categories/page.tsx` - Grid layout with new card design
-
----
-
-## CATEGORY IMAGE DISPLAY (Feb 26, 2026)
-
-### Changes Made
-- **CategoryCard component**: Now displays admin-uploaded images when available
-  - Falls back to category icon if no image
-  - Added hover zoom effect on images
-  - Responsive 64px image container
-
-- **Categories page**: Updated to show category images
-  - Uses Next.js Image component for optimization
-  - Supports multiple image hostnames (cloudinary, firebase, S3, etc.)
-
-- **Backend APIs updated**:
-  - `GET /api/categories` - Now returns `image` field
-  - `GET /api/categories/public` - Now returns `image` and `icon` fields
-
-### Image Priority
-1. Category uploaded image (if available)
-2. Category icon from iconMap (if available)
-3. Default Package icon
-
----
-
-## ADMIN VARIABLE MISMATCH FIXES (Feb 26, 2026)
-
-### Issues Fixed
-1. **Spec Templates page** - Category showing "Unknown"
-   - Fixed: Added fallback `category_name || categoryName || 'Unknown'`
-
-2. **Leads page** - Product showing "N/A"  
-   - Fixed: Added multiple field fallbacks for `productName`, `listing.name`
-   - Fixed: Added fallbacks for buyer/seller names
-
-3. **Product Requests page** - Empty Category/Type, Invalid Date
-   - Fixed: Date formatter now handles null/undefined properly
-   - Fixed: Added snake_case → camelCase fallbacks
-
-4. **Seller Profile page** - "Not set" for Business Name, Phone, Location
-   - Fixed: Profile data is nested (`profile.profile`) not flat
-   - Added: `profileData = profile?.profile` extraction
-
-### Root Cause
-Backend returns snake_case (`category_name`, `requested_by_email`) but frontend TypeScript types expect camelCase. Also, profile data structure is nested but was being accessed as flat.
-
----
-
-## MOBILE SEARCH UX FIXES (Feb 26, 2026)
-
-### Issue 1: Mobile Autocomplete Visibility - FIXED
-- Changed mobile dropdown from `absolute` to `fixed` positioning
-- Set `top: 140px` and `z-index: 9999` for maximum visibility
-- Made dropdown full width with `left: 12px; right: 12px`
-- Added scrollable container with `max-height: 60vh`
-
-### Issue 2: Mobile Search Button - FIXED
-- Wrapped search input + button in `<form>` with `onSubmit` handler
-- Added `type="submit"` to search buttons
-- Added `pointer-events-auto` to ensure button is clickable
-- Removed duplicate click handlers (Enter key now handled by form)
-
-### Issue 3: Spell Correction Message - FIXED
-- Fixed logic to show corrected query correctly:
-  - "Showing results for **motor**" (the corrected term)
-  - "Search instead for 'motr'" (the original term)
-- Added responsive layout for mobile (stacks vertically)
-
----
-
-## SMART SEARCH ENGINE (Feb 26, 2026)
-
-### Features Implemented
-- **Typo Tolerance**: Automatically corrects common typos (moter → motor)
-- **Phonetic Matching**: India-friendly sound-based matching (motar → motor)
-- **"Did you mean?" Suggestions**: Shows clickable suggestions when no results
-- **Auto-correction**: Searches with corrected query when original returns no results
-- **Smart Autocomplete**: Fuzzy matching in autocomplete dropdown
-
-### Technical Implementation
-- `SmartSearchService` in `/app/backend/services/smart_search_service.py`
-- Uses `fuzzywuzzy` for fuzzy string matching
-- Uses `metaphone` for phonetic matching (Double Metaphone algorithm)
-- Product/category name caching for performance (5-min TTL)
-- Known typo dictionary for common Indian English typos
-
-### API Endpoints
-- `GET /api/search/spelling?q={query}` - Check spelling and get suggestions
-- `GET /api/search/autocomplete?q={query}` - Smart autocomplete with fuzzy matching
-- `GET /api/search?q={query}` - Main search with "didYouMean" field
-- `GET /api/search/geo?q={query}` - Geo search with typo tolerance
-
-### Performance (M0 Optimized)
-- Fuzzy logic runs only when results are empty
-- Product names cached in memory (not queried every request)
-- Suggestions limited to prevent timeout
-- No Atlas Search index required (uses regex + in-memory matching)
-
----
-
-## LOCATION DROPDOWN FIX & SMART SEARCH (Feb 26, 2026)
-
-### Bug Fixes
-- Fixed event listener cleanup (consistent `pointerdown` events for mobile reliability)
-- Fixed premature dropdown closing with `onMouseDown` + `e.preventDefault()`
-- Fixed location selection normalization (ensures city/state always exist)
-
-### Smart Location Search Features
-- **Search by**: City, State, or Pincode (6-digit)
-- **Type indicators**: 📍 City, 🗺️ State, 📮 Pincode
-- **Search priority**: pincode > city > state (sent to backend)
-- **Seller counts**: Shows number of sellers in each location
-
-### Backend Support (Already Exists)
-- `/api/search/locations?q=` - Full location autocomplete
-- `/api/search/locations/active` - Cities with active sellers
-- `/api/search/locations/check` - Check seller availability
-- Supports city, state, pincode parameters in search API
-
----
-
-## CENTRALIZED API CLIENT REFACTOR (Feb 26, 2026)
-
-### Changes Made
-All frontend API calls now use the centralized API client (`/lib/api.ts`) instead of direct `fetch()` calls.
-
-#### Removed
-- `getApiBaseUrl()` function from all components
-- Direct `NEXT_PUBLIC_BACKEND_URL` usage
-- Manual `/api/` prefix handling
-
-#### Added to lib/api.ts
-- `getAutocompleteSuggestions(query)` - Product autocomplete
-- `getLocationSuggestions(query?)` - Location dropdown data  
-- `getPublicCategoriesList()` - Categories dropdown data
-
-### Updated Components
-- `IndustrialHeader.tsx` - Uses centralized API helpers
-- `EnterpriseSearchBar.tsx` - Uses centralized API helpers
-- `inquiries/page.tsx` - Uses `getBuyerInquiries()`
-
-### Environment Variable
-- Uses `NEXT_PUBLIC_API_URL` (primary)
-- Fallback to `NEXT_PUBLIC_BACKEND_URL` for backwards compatibility
-
-### Benefits
-- ✅ Consistent API configuration
-- ✅ Cold start retry logic
-- ✅ Timeout handling
-- ✅ Works in both local and production
-
----
-
-## INDUSTRIAL HEADER STRUCTURE
-
-### Layer 1 - Corporate Utility (60px)
-- Logo + "B2B Marketplace" badge
-- **Products** link (for all users)
-- **Categories** link (for all users)
-- Dashboard (sellers only)
-- Admin (admins only)
-- **Inquiries** link (for all users)
-- Login + Register
-
-### Layer 2 - Search Engine (56px, Sticky)
-- **Location Dropdown**: All India → cities with seller counts
-- **Category Dropdown**: All Categories from database
-- **Search Input**: With product autocomplete (debounced)
-- **Search Button**: Deep blue
-
-### Responsive Behavior
-- **Desktop (≥768px)**: Horizontal layout
-- **Mobile (<768px)**: Stacked layout, both layers always visible
-
----
-
-## KEY FILES
-
-### Frontend
-- `/app/frontend/src/lib/api.ts` - Centralized API client (SSOT)
-- `/app/frontend/src/components/IndustrialHeader.tsx` - Main header
-- `/app/frontend/src/components/EnterpriseSearchBar.tsx` - Reusable search bar
-- `/app/frontend/src/app/inquiries/page.tsx` - Buyer inquiries page
-
-### Backend
-- `/app/backend/services/enterprise_search_service.py` - Geo search with fallback
-- `/app/backend/routers/enterprise_search_router.py` - Search endpoints
-
----
-
-## 3RD PARTY INTEGRATIONS
-- Firebase (Authentication)
-- MongoDB (Database with 2dsphere indexing)
-
----
-
-## VERIFIED WORKING
-- ✅ Product autocomplete in header (desktop + mobile)
-- ✅ Location dropdown shows cities from database
-- ✅ Category dropdown loads from database
-- ✅ Both headers visible on all screen sizes
-- ✅ Inquiries link visible for all users
-- ✅ Products and Categories navigation links visible for all users
-- ✅ Centralized API client for all search/dropdown calls
-- ✅ Location dropdown click fixed (single-click selection)
-- ✅ Smart location search with city/state/pincode support
-- ✅ Location type indicators (📍📮🗺️) in dropdown
-- ✅ **Smart Search Engine** - Typo tolerance (moter → motor)
-- ✅ **"Did you mean?"** suggestions on search page
-- ✅ **Phonetic matching** - India-friendly (motar → motor)
-- ✅ **Auto-correction** - Searches with corrected query when no results
-- ✅ **Admin Leads Page Data Fix** - Product name now displays correctly (Feb 26, 2026)
-
----
-
-## ADMIN LEADS PAGE - PRODUCTNAME FIX V2 (Feb 27, 2026)
-
-### Issue
-In the admin panel's "Leads / Inquiries" page, the "Product" column displayed "N/A" for many real user inquiries.
-
-### Root Cause (CRITICAL - Found Feb 27)
-The data lookup chain was broken:
-1. **Inquiry document** - Sometimes has `productName` stored, sometimes not
-2. **SellerListing document** - Does NOT store `productName` directly, only has `productId` reference
-3. **Product document** - Has the actual `name` field
-
-The original backend code only looked at:
-- `inquiry.productName` ✓
-- `listing.productName` ✗ (field doesn't exist in listings!)
-
-It **never** looked up the actual product via `listing.productId → product.name`.
-
-### Fix Applied (Backend)
-Updated `/app/backend/server.py` in `admin_get_inquiries()`:
-```python
-# CRITICAL FIX: Get product name from products collection via productId
-product_id_from_listing = listing.get("productId")
-if product_id_from_listing:
-    product_doc = await db.products.find_one({"_id": pid})
-    if product_doc:
-        product_name_from_product = product_doc.get("name")
-
-# Priority order for product name:
-# 1. inquiry.productName (stored at creation)
-# 2. product.name (via listing.productId) - MOST RELIABLE
-# 3. listing.productName (legacy)
+/app/
+├── backend/
+│   ├── seller_products.py      # Seller listing & inquiry management (SSOT for quotes)
+│   ├── services/
+│   │   └── quotation_service.py # Full quote lifecycle (create_quote, generate_whatsapp_preview)
+│   └── server.py               # Main FastAPI app, CORS, admin routes
+├── frontend/
+│   ├── src/app/
+│   │   ├── admin/              # Admin dashboard pages
+│   │   └── seller/
+│   │       └── inquiries/page.tsx  # Seller inquiry management (uses backend whatsappLink)
+│   └── src/types/index.ts      # TypeScript interfaces (SellerInquiry with whatsappLink)
 ```
 
-### Fix Applied (Frontend)
-Updated `/app/frontend/src/app/admin/leads/page.tsx`:
-- Simplified product name access: `inquiry.productName || inquiry.product?.name || 'N/A'`
-- Updated TypeScript interface to include `productName` at top level
-- Fixed timezone: Changed to `toLocaleString` with IST timezone and 12-hour format
+## Prioritized Backlog
 
----
+### P0 (Critical)
+- [x] Quotation SSOT Fix - Completed 2026-02-27
+- [ ] Backend Deployment to Render - Required for all fixes to go live
 
-## NEXT TASKS
-- **P0**: Verify admin leads page fix on production deployment
-- **P1**: Complete Admin & Seller Dashboard integration audit
-- **P2**: Enterprise Search Atlas Indexing (Phase 2)
-- **P2**: Add inquiry submission from product page
-- **P2**: Fix number formatting in product attributes (Pydantic validation)
-- **P2**: Cleanup ESLint warnings
-- **P3**: Remove obsolete components (EnterpriseSearchBar.tsx, Header.tsx)
+### P1 (High Priority)
+- [ ] Enterprise Search - Atlas Indexing (Phase 2)
+- [ ] Admin & Seller Dashboard audit
+
+### P2 (Medium Priority)
+- [ ] Number formatting in product attributes
+- [ ] Code linting warnings cleanup
+- [ ] Remove obsolete components (EnterpriseSearchBar.tsx, Header.tsx)
+- [ ] AI Semantic Search Layer
+- [ ] Online Payments for Quotes
+- [ ] Counter-Offer System
+
+## Technical Decisions
+
+### SSOT for Quotation Messages
+- **Decision**: Backend is the single source of truth for WhatsApp quotation messages
+- **Rationale**: Prevents duplicate/inconsistent messages, ensures seller name always from DB
+- **Implementation**: `accept_inquiry()` returns `whatsappLink`, frontend just opens it
+
+### Data Flow
+```
+Frontend: Accept Inquiry (click)
+    ↓
+Backend: accept_inquiry()
+    ↓
+    ├── Price Validation (> ₹0)
+    ├── DB Lookups (seller, buyer, product)
+    ├── Generate WhatsApp Message
+    └── Return { whatsappLink: "..." }
+    ↓
+Frontend: window.open(whatsappLink)
+```
+
+## Deployment Notes
+- Frontend: Vercel (auto-deploy)
+- Backend: Render (manual deploy required)
+- Database: MongoDB Atlas
+- **CRITICAL**: Backend changes require manual Render deployment
