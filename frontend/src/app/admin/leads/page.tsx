@@ -59,13 +59,6 @@ export default function AdminLeadsPage() {
         limit: 20
       });
       
-      // Debug: Log full API response to verify data structure
-      console.log("ADMIN INQUIRIES API RESPONSE:", JSON.stringify(data, null, 2));
-      if (data?.inquiries?.[0]) {
-        console.log("FIRST INQUIRY productName:", data.inquiries[0].productName);
-        console.log("FIRST INQUIRY product.name:", data.inquiries[0].product?.name);
-      }
-      
       setInquiries(data?.inquiries ?? []);
       setTotalPages(data?.pages ?? 1);
       setTotal(data?.total ?? 0);
