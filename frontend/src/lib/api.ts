@@ -89,7 +89,7 @@ export type {
 // API Configuration - uses environment variable with fallback for Vercel
 const getApiUrl = (): string => {
   // Check for explicit API URL first
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const apiUrl = process.env.VITE_API_BASE_URL;
   if (apiUrl && apiUrl.startsWith('http')) {
     return apiUrl;
   }
@@ -1254,15 +1254,11 @@ export const exportAdminInquiries = (
   if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
   if (options?.dateTo) params.append('dateTo', options.dateTo);
   
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-  return fetch(`${apiUrl}/api/admin/inquiries/export?${params.toString()}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  }).then(res => {
-    if (!res.ok) throw new ApiError('Export failed', res.status);
-    return res.blob();
-  });
+  const sanitizedEndpoint = `/admin/inquiries/export?${params.toString()}`;
+const url = `${API_URL}${sanitizedEndpoint}`;
+
+return fetch(url, {
+  
 };
 
 // Category Spec Template
