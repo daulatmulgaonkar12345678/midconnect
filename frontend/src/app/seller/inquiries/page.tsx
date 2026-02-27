@@ -225,12 +225,12 @@ export default function SellerInquiriesPage() {
               sellerBusinessName: result.sellerContact?.businessName,
               // SSOT: Store whatsappLink from backend - convert null to undefined
               whatsappLink: result.whatsappLink ?? undefined,
-              // Store quote data for display
+              // SSOT: Map quote data from QuotationService format to frontend format
               quote: result.quote ? {
-                price: result.quote.price,
+                price: result.quote.unitPrice,  // QuotationService uses 'unitPrice'
                 moq: result.quote.moq,
                 leadTimeDays: result.quote.leadTimeDays,
-                validTill: result.quote.validTill
+                validTill: result.quote.validityDate || ''  // QuotationService uses 'validityDate'
               } : undefined
             }
           : inq
