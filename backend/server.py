@@ -2218,6 +2218,83 @@ async def register_user(request: Request, user_data: UserCreate):
         logger.error(f"Registration error: {e}")
         raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
 
+# ============== EMAIL VERIFICATION (Custom Zoho SMTP) ==============
+
+class SendVerificationRequest(BaseModel):
+    """Request to send verification email"""
+    email: str
+
+@api_router.post("/send-verification")
+@limiter.limit("3/minute")
+async def send_verification_email(request: Request, data: SendVerificationRequest):
+    """
+    Send verification email via Zoho SMTP.
+    
+    This replaces Firebase email verification with our custom backend-controlled system.
+    Called by frontend after user signs up with Firebase.
+    """
+    from services.email_verification_service import get_email_verification_service
+    
+    # Check if user exists
+    user = await db.users.find_one({"email": data.email})
+    if not user:
+        # Create a minimal user record if it doesn't exist
+        # This can happen if called immediately after Firebase signup before /users/register
+        logger.info(f"User not found for verification, will be created on first login: {data.email}")
+        # Return success anyway to not reveal user existence
+        return {"success": True, "message": "If your email is registered, you will receive a verification link."}
+    
+    if user.get("isEmailVerified"):
+        return {"success": True, "message": "Email is already verified. Please login."}
+    
+    email_service = await get_email_verification_service(db)
+    result = await email_service.send_verification_email(data.email)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to send email"))
+    
+    return result
+
+@api_router.get("/verify-email")
+async def verify_email_token(token: str):
+    """
+    Verify email using token from verification link.
+    
+    Called when user clicks the verification link in their email.
+    Returns redirect URL for frontend.
+    """
+    from services.email_verification_service import get_email_verification_service
+    
+    if not token:
+        raise HTTPException(status_code=400, detail="Invalid verification token")
+    
+    email_service = await get_email_verification_service(db)
+    result = await email_service.verify_token(token)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result.get("error", "Verification failed"))
+    
+    return result
+
+@api_router.post("/resend-verification")
+@limiter.limit("3/minute")
+async def resend_verification_email(request: Request, data: SendVerificationRequest):
+    """
+    Resend verification email.
+    
+    Rate limited to prevent abuse.
+    """
+    from services.email_verification_service import get_email_verification_service
+    
+    email_service = await get_email_verification_service(db)
+    result = await email_service.resend_verification(data.email)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to send email"))
+    
+    return result
+
+
 @api_router.post("/auth/complete-profile")
 @limiter.limit("5/minute")
 async def complete_profile(
