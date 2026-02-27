@@ -185,7 +185,7 @@ export default function InquiriesPage() {
                     {inquiry.status}
                   </span>
                   <Link 
-                    href={`/product/${inquiry.productId}`}
+                    href={`/products/${inquiry.productId}`}
                     className="text-sm text-blue-600 hover:text-blue-700"
                   >
                     View Product →
