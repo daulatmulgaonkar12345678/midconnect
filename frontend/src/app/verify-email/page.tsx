@@ -4,8 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Mail, RefreshCw, CheckCircle, ArrowRight, Loader2, XCircle } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+import { verifyEmailToken } from '@/lib/api';
 
 function VerifyEmailContent() {
   const router = useRouter();
@@ -29,10 +28,9 @@ function VerifyEmailContent() {
       setMessage('Verifying your email...');
       
       try {
-        const response = await fetch(`${API_URL}/api/verify-email?token=${encodeURIComponent(token)}`);
-        const data = await response.json();
+        const data = await verifyEmailToken(token);
         
-        if (response.ok && data.success) {
+        if (data.success) {
           setStatus('success');
           setMessage(data.message || 'Email verified successfully!');
           
@@ -42,11 +40,12 @@ function VerifyEmailContent() {
           }, 2000);
         } else {
           setStatus('error');
-          setMessage(data.detail || data.error || 'Verification failed. Please try again.');
+          setMessage('Verification failed. Please try again.');
         }
-      } catch (error) {
+      } catch (error: unknown) {
         setStatus('error');
-        setMessage('An error occurred during verification. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Verification failed';
+        setMessage(errorMessage || 'An error occurred during verification. Please try again.');
       }
     };
     
