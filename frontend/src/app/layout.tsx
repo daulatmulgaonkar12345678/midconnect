@@ -35,6 +35,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.className} antialiased bg-gray-50`}>
         <AuthProvider>
+          <ServerWarmUp />
           <div className="min-h-screen flex flex-col">
             <IndustrialHeader />
             <main className="flex-1">{children}</main>
