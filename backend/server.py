@@ -9188,14 +9188,31 @@ async def admin_get_inquiries(
         # Get listing/product info
         listing = None
         category_name = None
+        product_name_from_product = None
         if listing_id_val:
             try:
                 listing = await db.sellerListings.find_one(
                     {"_id": ObjectId(listing_id_val) if isinstance(listing_id_val, str) else listing_id_val},
-                    projection={"productName": 1, "categoryName": 1, "productName": 1, "categoryName": 1, "categoryId": 1, "category_id": 1}
+                    projection={"productName": 1, "categoryName": 1, "categoryId": 1, "productId": 1}
                 )
                 if listing:
                     category_name = listing.get("categoryName")
+                    
+                    # CRITICAL FIX: Get product name from products collection via productId
+                    product_id_from_listing = listing.get("productId")
+                    if product_id_from_listing:
+                        try:
+                            pid = ObjectId(product_id_from_listing) if isinstance(product_id_from_listing, str) else product_id_from_listing
+                            product_doc = await db.products.find_one(
+                                {"_id": pid},
+                                projection={"name": 1, "family": 1, "variant": 1}
+                            )
+                            if product_doc:
+                                product_name_from_product = product_doc.get("name")
+                                # If no category from listing, try from product's category
+                        except:
+                            pass
+                    
                     # If no category name, fetch from categories collection
                     if not category_name:
                         cat_id = listing.get("categoryId")
@@ -9216,8 +9233,13 @@ async def admin_get_inquiries(
         if category and category_name and category.lower() not in category_name.lower():
             continue
         
-        # Get product name from various sources
+        # Get product name from various sources (priority order)
+        # 1. Inquiry document (stored at creation time)
+        # 2. Products collection (via listing.productId) - MOST RELIABLE
+        # 3. Listing document (legacy field)
         product_name = inq.get("productName")
+        if not product_name:
+            product_name = product_name_from_product
         if not product_name and listing:
             product_name = listing.get("productName")
         
