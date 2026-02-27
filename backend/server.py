@@ -10917,8 +10917,13 @@ app.include_router(enterprise_search_router, prefix="/api")
 
 @app.get("/health")
 async def root_health_alt():
-    """Alternative root health check endpoint"""
-    return {"status": "healthy", "service": "B2B Marketplace API"}
+    """Alternative root health check endpoint - Used by UptimeRobot/external monitors"""
+    return {
+        "status": "ok",
+        "service": "midconnect-api",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "uptime": "active"
+    }
 
 # ================== APP EVENTS ==================
 
