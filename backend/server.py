@@ -3076,17 +3076,14 @@ def hash_otp(otp: str) -> str:
     """Hash OTP for secure storage"""
     return hashlib.sha256(otp.encode()).hexdigest()
 
-async def send_email_otp(to_email: str, otp: str, purpose: str) -> bool:
+def _send_otp_smtp_blocking(to_email: str, otp: str, purpose: str) -> bool:
     """
-    Send OTP via email using Zoho SMTP.
-    Returns True if sent successfully, False otherwise.
-    In MOCK mode (no credentials), returns True and logs OTP.
-    """
-    # MOCK MODE - if no email credentials configured
-    if not EMAIL_USERNAME or not EMAIL_PASSWORD:
-        logger.info(f"[MOCK EMAIL] OTP {otp} sent to {to_email} for {purpose}")
-        return True
+    Synchronous blocking SMTP send operation for OTP emails.
+    This runs in a thread pool to avoid blocking the async event loop.
     
+    Returns:
+        True if sent successfully, False otherwise
+    """
     try:
         subject_map = {
             "verify_current_email": "Verify Your Current Email - B2B Market",
@@ -3153,7 +3150,7 @@ B2B Market Team
         body = body_map.get(purpose, f"Your OTP is: {otp}\n\nValid for {OTP_VALIDITY_MINUTES} minutes.")
         msg.attach(MIMEText(body, 'plain'))
         
-        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as server:
+        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=30) as server:
             server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
             server.send_message(msg)
         
@@ -3163,6 +3160,25 @@ B2B Market Team
     except Exception as e:
         logger.error(f"Failed to send OTP email to {to_email}: {e}")
         return False
+
+async def send_email_otp(to_email: str, otp: str, purpose: str) -> bool:
+    """
+    Send OTP via email using Zoho SMTP.
+    
+    IMPORTANT: Uses asyncio.to_thread() to run blocking SMTP in thread pool.
+    This prevents the async event loop from blocking and causing timeouts
+    that manifest as CORS errors on the frontend.
+    
+    Returns True if sent successfully, False otherwise.
+    In MOCK mode (no credentials), returns True and logs OTP.
+    """
+    # MOCK MODE - if no email credentials configured
+    if not EMAIL_USERNAME or not EMAIL_PASSWORD:
+        logger.info(f"[MOCK EMAIL] OTP {otp} sent to {to_email} for {purpose}")
+        return True
+    
+    # Run blocking SMTP in thread pool
+    return await asyncio.to_thread(_send_otp_smtp_blocking, to_email, otp, purpose)
 
 # OTP Request Models
 class RequestEmailChangeStep1(BaseModel):
