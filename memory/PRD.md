@@ -310,41 +310,52 @@ All frontend API calls now use the centralized API client (`/lib/api.ts`) instea
 
 ---
 
-## ADMIN LEADS PAGE - PRODUCTNAME FIX (Feb 26, 2026)
+## ADMIN LEADS PAGE - PRODUCTNAME FIX V2 (Feb 27, 2026)
 
 ### Issue
-In the admin panel's "Leads / Inquiries" page, the "Product" column displayed "N/A" even though data existed.
+In the admin panel's "Leads / Inquiries" page, the "Product" column displayed "N/A" for many real user inquiries.
 
-### Root Cause
-1. Backend returned `product.name` (nested) but frontend also expected `productName` (top-level)
-2. Backend returned `seller_subscription_plan` (snake_case) but frontend expected `sellerSubscriptionPlan` (camelCase)
+### Root Cause (CRITICAL - Found Feb 27)
+The data lookup chain was broken:
+1. **Inquiry document** - Sometimes has `productName` stored, sometimes not
+2. **SellerListing document** - Does NOT store `productName` directly, only has `productId` reference
+3. **Product document** - Has the actual `name` field
 
-### Fix Applied
-Updated `/app/backend/server.py` in `admin_get_inquiries()` endpoint:
-1. Added `productName` at top level for frontend compatibility:
+The original backend code only looked at:
+- `inquiry.productName` ✓
+- `listing.productName` ✗ (field doesn't exist in listings!)
+
+It **never** looked up the actual product via `listing.productId → product.name`.
+
+### Fix Applied (Backend)
+Updated `/app/backend/server.py` in `admin_get_inquiries()`:
 ```python
-"productName": product_name,
-```
-2. Fixed snake_case to camelCase:
-```python
-"sellerSubscriptionPlan": seller_subscription  # Was: "seller_subscription_plan"
+# CRITICAL FIX: Get product name from products collection via productId
+product_id_from_listing = listing.get("productId")
+if product_id_from_listing:
+    product_doc = await db.products.find_one({"_id": pid})
+    if product_doc:
+        product_name_from_product = product_doc.get("name")
+
+# Priority order for product name:
+# 1. inquiry.productName (stored at creation)
+# 2. product.name (via listing.productId) - MOST RELIABLE
+# 3. listing.productName (legacy)
 ```
 
-### API Response Now Returns
-- `product.name` - for TypeScript interface compatibility
-- `productName` - for direct access
-- `sellerSubscriptionPlan` - in camelCase
-
-### Note on Seller Data
-Some inquiries show `null` for seller info because they reference deleted/non-existent sellers (test data). This is expected behavior - the backend handles missing data gracefully.
+### Fix Applied (Frontend)
+Updated `/app/frontend/src/app/admin/leads/page.tsx`:
+- Simplified product name access: `inquiry.productName || inquiry.product?.name || 'N/A'`
+- Updated TypeScript interface to include `productName` at top level
+- Fixed timezone: Changed to `toLocaleString` with IST timezone and 12-hour format
 
 ---
 
 ## NEXT TASKS
-- **P0**: Verify admin leads page fix on Vercel deployment
-- **P1**: Complete Admin & Seller Dashboard Integration
+- **P0**: Verify admin leads page fix on production deployment
+- **P1**: Complete Admin & Seller Dashboard integration audit
 - **P2**: Enterprise Search Atlas Indexing (Phase 2)
 - **P2**: Add inquiry submission from product page
 - **P2**: Fix number formatting in product attributes (Pydantic validation)
-- **P2**: Cleanup remaining ESLint warnings
+- **P2**: Cleanup ESLint warnings
 - **P3**: Remove obsolete components (EnterpriseSearchBar.tsx, Header.tsx)
