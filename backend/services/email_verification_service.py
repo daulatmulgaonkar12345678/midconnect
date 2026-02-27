@@ -207,25 +207,32 @@ UdyogConnect Team
         This prevents the async event loop from blocking and causing timeouts
         that manifest as CORS errors on the frontend.
         
+        In MOCK mode (no credentials), generates token and logs the verification link.
+        
         Args:
             email: Recipient email address
             
         Returns:
             dict with success status and message
         """
-        if not self.zoho_password:
-            logger.error("ZOHO_APP_PASSWORD not configured")
-            return {
-                "success": False,
-                "error": "Email service not configured. Please contact support."
-            }
-        
         try:
-            # Generate token (async DB operation)
+            # Generate token (async DB operation) - always generate for testing
             token = await self.generate_verification_token(email)
             
             # Build verification link
             verify_link = f"{self.frontend_url}/verify-email?token={token}"
+            
+            # MOCK MODE - if no Zoho credentials configured
+            if not self.zoho_password:
+                logger.warning(f"[MOCK EMAIL] ZOHO_APP_PASSWORD not configured")
+                logger.info(f"[MOCK EMAIL] Verification link for {email}: {verify_link}")
+                logger.info(f"[MOCK EMAIL] Token: {token}")
+                return {
+                    "success": True,
+                    "message": "Verification email sent. Please check your inbox.",
+                    "_mock": True,
+                    "_verify_link": verify_link  # For testing only
+                }
             
             # Build email message (sync, fast)
             msg = self._build_email_message(email, verify_link)
