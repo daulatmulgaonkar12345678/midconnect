@@ -6217,6 +6217,8 @@ async def get_buyer_inquiries(
         # Get listing/product info - SSOT: listing_id is now ObjectId
         listing_info = None
         listing_id = inq.get("listingId")
+        listing_product_id = None  # To fix missing productId
+        
         if listing_id:
             try:
                 # Handle both ObjectId and string (for backward compatibility)
@@ -6229,6 +6231,12 @@ async def get_buyer_inquiries(
                         "image": listing.get("images", [None])[0] if listing.get("images") else None,
                         "category": listing.get("categoryName")
                     }
+                    # CRITICAL FIX: Get productId from listing for "View Product" link
+                    listing_product_id = listing.get("productId")
+                    if listing_product_id and isinstance(listing_product_id, ObjectId):
+                        listing_product_id = str(listing_product_id)
+                    elif listing_product_id:
+                        listing_product_id = str(listing_product_id)
             except Exception:
                 pass
         
@@ -6256,9 +6264,14 @@ async def get_buyer_inquiries(
                 pass
         
         # SSOT: Serialize ObjectId fields to string for API response
+        # Use productId from inquiry, or fallback to listing's productId
         product_id_val = inq.get("productId")
         if isinstance(product_id_val, ObjectId):
             product_id_val = str(product_id_val)
+        
+        # CRITICAL FIX: If inquiry has no productId, use listing's productId
+        if not product_id_val and listing_product_id:
+            product_id_val = listing_product_id
         
         result.append({
             "_id": inq_id,
