@@ -7,13 +7,18 @@ This provides full control over the verification process and email branding.
 Architecture:
 1. User signs up → Firebase creates auth user
 2. Backend generates verification token
-3. Zoho SMTP sends branded email
+3. Zoho SMTP sends branded email (NON-BLOCKING via thread pool)
 4. User clicks link → Backend marks isEmailVerified = true
 5. Token is invalidated after use
+
+IMPORTANT: SMTP operations are blocking I/O. We use asyncio.to_thread() to 
+run them in a thread pool, preventing the async event loop from blocking.
+This fixes the "CORS error" symptom which was actually a timeout.
 """
 
 import secrets
 import smtplib
+import asyncio
 import os
 import logging
 from datetime import datetime, timezone, timedelta
