@@ -402,9 +402,9 @@ class QuotationService:
         base_url: str
     ) -> Dict[str, Any]:
         """
-        Generate WhatsApp preview message per spec.
+        Generate WhatsApp preview message.
         
-        Format (exact per user spec):
+        Format (per user spec - simplified without secure link):
         Hello {Buyer Name},
 
         Greetings from Udyog connect.
@@ -417,37 +417,28 @@ class QuotationService:
         Minimum Order Quantity (MOQ): {moq}
         Packaging Charges: Not Included
         Transportation Charges: Not Included
-        Total (Excl. Transport): ₹{totalPrice}
+        Total (Excl. Transport and packaging charges): ₹{totalPrice}
 
         Quotation Valid Till: {validityDate}
-
-        You may also view this quotation securely:
-        {secureQuoteLink}
-
-        Please confirm acceptance via the platform link above.
 
         Best Regards,
         {Seller Business Name}
         Udyog connect
-        
-        SECURITY:
-        - NO seller phone number in message
-        - NO buyer phone number in message
-        - NO bank details
-        - Only secure quote link for platform acceptance
         """
-        quote_id = quote.get("quoteId")
-        access_token = quote.get("accessToken")
-        
-        # Secure URL with access token
-        secure_url = f"{base_url}/quote/{quote_id}?token={access_token}"
-        
         # Format validity date
         validity_date = quote.get("validityDate")
         if isinstance(validity_date, datetime):
             validity_str = validity_date.strftime("%d %b %Y")
+        elif validity_date:
+            # Handle ISO string format
+            try:
+                from dateutil import parser
+                parsed_date = parser.parse(str(validity_date))
+                validity_str = parsed_date.strftime("%d %b %Y")
+            except Exception:
+                validity_str = str(validity_date)[:10] if validity_date else "N/A"
         else:
-            validity_str = str(validity_date)[:10] if validity_date else "N/A"
+            validity_str = "N/A"
         
         # Format currency
         def format_inr(amount):
@@ -456,10 +447,10 @@ class QuotationService:
             return f"₹{float(amount):,.2f}"
         
         buyer_name = quote.get("buyerName") or quote.get("buyerCompany") or "Valued Customer"
-        seller_name = quote.get("sellerName") or "B2B Market Seller"
+        seller_name = quote.get("sellerName") or "Seller"
         product_name = quote.get("productName") or "Product"
         
-        # Build message per spec format
+        # Build message per user's exact format
         message = f"""Hello {buyer_name},
 
 Greetings from Udyog connect.
@@ -472,7 +463,7 @@ Quoted Price: {format_inr(quote.get('unitPrice'))} per unit
 Minimum Order Quantity (MOQ): {quote.get('moq', 1)}
 Packaging Charges: Not Included
 Transportation Charges: Not Included
-Total (Excl. Transport): {format_inr(quote.get('totalPrice'))}
+Total (Excl. Transport and packaging charges): {format_inr(quote.get('totalPrice'))}
 
 Quotation Valid Till: {validity_str}
 
