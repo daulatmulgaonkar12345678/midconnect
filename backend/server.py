@@ -4217,6 +4217,13 @@ async def get_products(
         }
     })
     
+    # Filter out products with null names
+    pipeline.append({
+        "$match": {
+            "name": {"$ne": None, "$ne": ""}
+        }
+    })
+    
     # Stage 7: Sort by seller count (most popular first)
     pipeline.append({"$sort": {"sellerCount": -1, "name": 1}})
     
