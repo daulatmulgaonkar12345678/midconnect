@@ -540,53 +540,13 @@ export default function SellerInquiriesPage() {
                           </a>
                         )}
                       </div>
-                      {inquiry.buyerInfo.phone && (
+                      {/* SSOT: WhatsApp button uses pre-built link from backend */}
+                      {inquiry.buyerInfo.phone && inquiry.whatsappLink && (
                         <button
                           onClick={() => {
-                            const buyerName = inquiry.buyerInfo?.name || 'Customer';
-const productName = inquiry.listingName || 'your product';
-const quantity = inquiry.quantity || 0;
-
-// Use sellerBusinessName from API response (set when inquiry was accepted)
-const sellerBusiness = inquiry.sellerBusinessName || 'Your Business';
-const sellerName = sellerBusiness;
-const price = inquiry.quote?.price ?? 0;
-const moq = inquiry.quote?.moq ?? null;
-const leadTime = inquiry.quote?.leadTimeDays ?? null;
-
-const validDate = inquiry.quote?.validTill
-  ? new Date(inquiry.quote.validTill).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
-  : null;
-
-let msg =
-  `Hello ${buyerName},\n\n` +
-  `Greetings from B2B Market Place.\n\n` +
-  `This is ${sellerBusiness}.\n\n` +
-  `We are pleased to share our quotation for your inquiry regarding "${productName}".\n\n` +
-  `Requested Quantity: ${quantity}\n` +
-  `Quoted Price: ₹${price} per unit\n`;
-
-if (moq) msg += `Minimum Order Quantity (MOQ): ${moq}\n`;
-if (leadTime) msg += `Lead Time: ${leadTime} days\n`;
-if (validDate) msg += `Quotation Valid Till: ${validDate}\n`;
-
-msg +=
-  `\nPlease feel free to reach out for any further clarification.\n\n` +
-  `Best Regards,\n` +
-  `${sellerBusiness}\n` +
-  `B2B Market Place`;
-                            
-                            // Clean phone number - remove non-digits
-                            const rawPhone = inquiry.buyerInfo?.phone || '';
-                            const cleaned = rawPhone.replace(/\D/g, '');
-                            // Add India country code if not present
-                            const finalPhone = cleaned.startsWith('91') ? cleaned : `91${cleaned}`;
-                            
-                            window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`, '_blank','noopener,noreferrer');
+                            // SSOT: Use whatsappLink from backend response directly
+                            // NO message building in frontend
+                            window.open(inquiry.whatsappLink, '_blank', 'noopener,noreferrer');
                           }}
                           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                           data-testid={`whatsapp-btn-${inquiry._id}`}
@@ -594,6 +554,17 @@ msg +=
                           <Send className="h-4 w-4" />
                           WhatsApp Buyer
                         </button>
+                      )}
+                      {/* Fallback: If no whatsappLink but phone exists, show call button */}
+                      {inquiry.buyerInfo.phone && !inquiry.whatsappLink && (
+                        <a
+                          href={`tel:${inquiry.buyerInfo.phone}`}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          data-testid={`call-btn-${inquiry._id}`}
+                        >
+                          <Phone className="h-4 w-4" />
+                          Call Buyer
+                        </a>
                       )}
                     </div>
                     {inquiry.quote && (
