@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Building, Users, Target, Award } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'About Us - MidConnect',
+  title: 'About Us - UdyogConnect',
   description: "Learn about India's trusted B2B marketplace for industrial products. Our mission, values, and commitment to connecting buyers and sellers.",
 };
 
@@ -11,7 +11,7 @@ export default function AboutPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">About MidConnect</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">About UdyogConnect</h1>
         <p className="text-xl text-gray-600">
           India's trusted marketplace for industrial products and B2B commerce
         </p>
@@ -77,7 +77,7 @@ export default function AboutPage() {
           </h2>
           <p className="text-gray-600 mb-6">
             Whether you're a buyer looking for quality industrial products or a seller 
-            wanting to reach more customers, MidConnect is the platform for you.
+            wanting to reach more customers, UdyogConnect is the platform for you.
           </p>
           <div className="flex flex-wrap gap-4">
             <Link 

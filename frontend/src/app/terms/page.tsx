@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service - MidConnect',
-  description: 'Terms and conditions for using MidConnect platform. Read our terms of service before using our marketplace.',
+  title: 'Terms of Service - UdyogConnect',
+  description: 'Terms and conditions for using UdyogConnect platform. Read our terms of service before using our marketplace.',
 };
 
 export default function TermsPage() {
@@ -16,7 +16,7 @@ export default function TermsPage() {
         <section className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Acceptance of Terms</h2>
           <p>
-            By accessing and using MidConnect ("the Platform"), you agree to be bound by these 
+            By accessing and using UdyogConnect ("the Platform"), you agree to be bound by these 
             Terms of Service. If you do not agree to these terms, please do not use our services.
           </p>
         </section>
@@ -79,7 +79,7 @@ export default function TermsPage() {
         <section className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">7. Limitation of Liability</h2>
           <p>
-            MidConnect acts as an intermediary platform connecting buyers and sellers. We are not 
+            UdyogConnect acts as an intermediary platform connecting buyers and sellers. We are not 
             responsible for the quality, safety, or legality of products listed, the accuracy of 
             listings, or the ability of sellers to sell products or buyers to pay.
           </p>
