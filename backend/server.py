@@ -6096,24 +6096,36 @@ async def create_inquiry(
     listing_oid = None
     listing = None
     product_name = None
+    product_oid = None  # Initialize here - will be set from listing or direct productId
+    
     if inquiry.listingId:
         try:
             listing_oid = ObjectId(inquiry.listingId)
             listing = await db.sellerListings.find_one({"_id": listing_oid})
             if listing:
                 product_name = listing.get("productName")
+                
+                # CRITICAL FIX: Get productId from listing for "View Product" link
+                listing_product_id = listing.get("productId")
+                if listing_product_id:
+                    product_oid = listing_product_id if isinstance(listing_product_id, ObjectId) else ObjectId(str(listing_product_id))
+                    # Also fetch product name from products collection if not in listing
+                    if not product_name:
+                        product = await db.products.find_one({"_id": product_oid})
+                        if product:
+                            product_name = product.get("name")
+                
                 # Verify listing belongs to seller (compare ObjectIds)
                 listing_seller = listing.get("sellerId")
                 if isinstance(listing_seller, str):
                     listing_seller = ObjectId(listing_seller)
                 if listing_seller != seller_oid:
                     raise HTTPException(status_code=400, detail="Listing does not belong to this seller")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Error processing listingId: {e}")
     
-    # SSOT: Convert productId to ObjectId if provided
-    product_oid = None
-    if inquiry.productId and not product_name:
+    # SSOT: Convert productId to ObjectId if provided directly (fallback if not from listing)
+    if inquiry.productId and not product_oid:
         try:
             product_oid = ObjectId(inquiry.productId)
             product = await db.products.find_one({"_id": product_oid})
