@@ -98,7 +98,7 @@
   "context_for_next_testing_agent": "Subscription system camelCase fix verified. Key findings: (1) /api/seller/subscription/status returns all fields in camelCase matching TypeScript SellerSubscriptionStatus interface, (2) Admin users endpoint returns subscription fields with camelCase naming, (3) Frontend subscription page exists at /seller/subscription/page.tsx with correct imports, (4) Both getSellerSubscription and getSellerSubscriptionStatus API functions correctly use /seller/subscription/status endpoint.",
 
   "test_environment": {
-    "api_url": "https://midconnect-fix.preview.emergentagent.com",
+    "api_url": "https://midconnect-verify.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"
   },
