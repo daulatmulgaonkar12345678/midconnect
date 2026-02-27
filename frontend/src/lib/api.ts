@@ -156,7 +156,7 @@ export async function warmBackend(): Promise<{ ready: boolean; message: string }
     return { ready: true, message: 'Server is ready' };
   }
   
-  const healthUrl = `${API_URL}/health`;
+  const healthUrl = `${API_URL}/api/health`;
   
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
