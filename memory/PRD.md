@@ -105,10 +105,11 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 
 ### P0 (Critical)
 - [x] Quotation SSOT Fix - Completed 2026-02-27
+- [x] Email Verification Blocking I/O Fix - Completed 2026-02-27
 - [ ] Backend Deployment to Render - Required for all fixes to go live
 
 ### P1 (High Priority)
-- [ ] Custom Email Verification (Zoho SMTP) - User requested, awaiting credentials
+- [x] Custom Email Verification (Zoho SMTP) - Architecture complete
 - [ ] Enterprise Search - Atlas Indexing (Phase 2)
 - [ ] Admin & Seller Dashboard audit
 
@@ -119,6 +120,31 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 - [ ] AI Semantic Search Layer
 - [ ] Online Payments for Quotes
 - [ ] Counter-Offer System
+
+## Session: 2026-02-27 (Email Verification Fix)
+
+### Issue Fixed: CORS Errors During Email Verification
+**Root Cause**: The "CORS error" was actually a **timeout symptom** caused by **blocking I/O**.
+
+The `send_verification_email()` function used synchronous `smtplib.SMTP_SSL()` inside an async endpoint. This blocked the event loop, causing:
+1. Request timeout on client side
+2. Browser reports timeout as "CORS error" (misleading)
+3. Sometimes works (when SMTP is fast), sometimes fails (when SMTP is slow)
+
+**Solution**: Refactored to use `asyncio.to_thread()` to run blocking SMTP in a thread pool.
+
+**Files Modified**:
+- `/app/backend/services/email_verification_service.py`:
+  - Added `_build_email_message()` sync helper
+  - Added `_send_smtp_blocking()` sync helper with 30s timeout
+  - Refactored `send_verification_email()` to use `asyncio.to_thread()`
+  
+- `/app/backend/server.py`:
+  - Added `import asyncio`
+  - Added `_send_otp_smtp_blocking()` sync helper
+  - Refactored `send_email_otp()` to use `asyncio.to_thread()`
+
+**Test Result**: Endpoint now responds in ~0.16s (was timing out at 30s+)
 
 ## Technical Decisions
 
