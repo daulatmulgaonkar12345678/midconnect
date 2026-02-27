@@ -1139,16 +1139,17 @@ def get_cors_origins():
     
     # FIXED: Always return explicit origins (wildcard + credentials = browser reject)
     ALLOWED_ORIGINS = [
-        # Production domains
-        "https://midconnect-ten.vercel.app",
+        # Production domains - UdyogConnect
         "https://www.udyogconnect.in",
         "https://udyogconnect.in",
-        "https://www.udyogconnect.in",
-
+        # Production domains - MidConnect legacy
+        "https://midconnect-ten.vercel.app",
         "https://midconnect.vercel.app",
         "https://midconnect.onrender.com",
         # Vercel preview deployments pattern
         "https://midconnect-git-main.vercel.app",
+        "https://midconnect-git-main-daulatmulgaonkargmailcoms-projects.vercel.app",
+        "https://midconnect-e2kzxlgcq-daulatmulgaonkargmailcoms-projects.vercel.app",
         # Development
         "http://localhost:3000",
         "http://localhost:3001",
