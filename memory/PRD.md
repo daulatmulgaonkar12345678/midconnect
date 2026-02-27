@@ -124,27 +124,35 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 ## Session: 2026-02-27 (Email Verification Fix)
 
 ### Issue Fixed: CORS Errors During Email Verification
-**Root Cause**: The "CORS error" was actually a **timeout symptom** caused by **blocking I/O**.
+**Root Cause**: Multiple issues were identified:
 
-The `send_verification_email()` function used synchronous `smtplib.SMTP_SSL()` inside an async endpoint. This blocked the event loop, causing:
-1. Request timeout on client side
-2. Browser reports timeout as "CORS error" (misleading)
-3. Sometimes works (when SMTP is fast), sometimes fails (when SMTP is slow)
+1. **Frontend API Prefix Missing**: The `fetchAPI` function was not prepending `/api` to endpoints. All backend routes require this prefix for proper Kubernetes ingress routing.
 
-**Solution**: Refactored to use `asyncio.to_thread()` to run blocking SMTP in a thread pool.
+2. **Blocking I/O in Async**: The original `send_verification_email()` used synchronous `smtplib.SMTP_SSL()` inside an async endpoint, blocking the event loop.
 
-**Files Modified**:
-- `/app/backend/services/email_verification_service.py`:
-  - Added `_build_email_message()` sync helper
-  - Added `_send_smtp_blocking()` sync helper with 30s timeout
-  - Refactored `send_verification_email()` to use `asyncio.to_thread()`
-  
-- `/app/backend/server.py`:
-  - Added `import asyncio`
-  - Added `_send_otp_smtp_blocking()` sync helper
-  - Refactored `send_email_otp()` to use `asyncio.to_thread()`
+3. **No Mock Mode**: When Zoho SMTP credentials were not configured, the service returned an error instead of gracefully degrading.
 
-**Test Result**: Endpoint now responds in ~0.16s (was timing out at 30s+)
+4. **Timezone Comparison**: The `verify_token()` function compared naive and aware datetimes, causing a TypeError.
+
+**Fixes Applied**:
+
+**Frontend (`/app/frontend/src/lib/api.ts`)**:
+- `fetchAPI()`: Added automatic `/api` prefix for all endpoints
+- Health check URL: Changed `/health` to `/api/health`
+- Admin export URL: Changed `/admin/...` to `/api/admin/...`
+
+**Backend (`/app/backend/services/email_verification_service.py`)**:
+- Refactored to use `asyncio.to_thread()` for non-blocking SMTP
+- Added MOCK mode that generates tokens and logs verification links when credentials aren't configured
+- Fixed timezone comparison in `verify_token()` to handle naive datetimes from MongoDB
+
+**Backend (`/app/backend/.env`)**:
+- Added `FRONTEND_URL` for proper verification link generation
+
+**Test Results**:
+- `/api/send-verification`: 200 OK, generates verification link (MOCK mode in preview)
+- `/api/verify-email`: 200 OK, successfully marks user as verified
+- Full flow tested: send → verify → user status updated
 
 ## Technical Decisions
 
