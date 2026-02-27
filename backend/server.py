@@ -6250,18 +6250,23 @@ async def get_buyer_inquiries(
                     seller_id = ObjectId(seller_id)
                 seller = await db.users.find_one({"_id": seller_id})
                 if seller:
+                    # Get profile data (may be nested in 'profile' object)
+                    profile = seller.get("profile") or {}
+                    
                     seller_info = {
-                        "businessName": seller.get("businessName", "Verified Seller"),
-                        "city": seller.get("city"),
-                        "state": seller.get("state")
+                        "businessName": profile.get("businessName") or seller.get("businessName") or "Verified Seller",
+                        "city": profile.get("city") or seller.get("city"),
+                        "state": profile.get("state") or seller.get("state")
                     }
                     # Include contact info only if inquiry is accepted
                     if inq.get("status") == "accepted":
-                        seller_info["phone"] = seller.get("phone")
+                        # Phone can be in profile or top-level
+                        phone = profile.get("phone") or seller.get("phone")
+                        seller_info["phone"] = phone
                         seller_info["email"] = seller.get("email")
-                        seller_info["whatsapp"] = seller.get("phone")  # Assuming WhatsApp is same as phone
-            except Exception:
-                pass
+                        seller_info["whatsapp"] = phone  # WhatsApp uses same phone
+            except Exception as e:
+                logger.warning(f"Error fetching seller info: {e}")
         
         # SSOT: Serialize ObjectId fields to string for API response
         # Use productId from inquiry, or fallback to listing's productId
