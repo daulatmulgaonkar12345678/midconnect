@@ -51,7 +51,7 @@ export default function SellerProfilePage() {
     );
   }
 
-  const isVerified = profile?.gst?.status === 'verified' || profile?.gst?.verified || profile?.emailVerified;
+  const isVerified = profile?.gst?.status === 'verified' || profile?.gst?.verified || profile?.isEmailVerified;
 
   // Get profile data - it's nested in profile.profile
   const profileData = profile?.profile;
