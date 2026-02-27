@@ -1142,6 +1142,7 @@ def get_cors_origins():
         "https://www.udyogconnect.in",
         "https://udyogconnect.in",
         "https://www.udyogconnect.in",
+        
         "https://midconnect.vercel.app",
         "https://midconnect.onrender.com",
         # Vercel preview deployments pattern
