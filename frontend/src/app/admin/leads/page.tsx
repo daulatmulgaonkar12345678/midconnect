@@ -253,24 +253,11 @@ export default function AdminLeadsPage() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {inquiries.map((inquiry) => {
-                  // Support multiple field name formats from backend
-                  const productName = inquiry.product?.name || 
-                    (inquiry as unknown as { productName?: string }).productName ||
-                    (inquiry as unknown as { listing?: { name?: string } }).listing?.name ||
-                    'N/A';
-                  const categoryName = inquiry.category ||
-                    (inquiry as unknown as { categoryName?: string }).categoryName ||
-                    (inquiry as unknown as { listing?: { category?: string } }).listing?.category ||
-                    'N/A';
-                  const buyerName = inquiry.buyer?.name ||
-                    (inquiry as unknown as { buyerName?: string }).buyerName ||
-                    inquiry.buyer?.email?.split('@')[0] ||
-                    'N/A';
-                  const sellerName = inquiry.seller?.name ||
-                    (inquiry as unknown as { sellerName?: string }).sellerName ||
-                    (inquiry as unknown as { seller?: { businessName?: string } }).seller?.businessName ||
-                    inquiry.seller?.email?.split('@')[0] ||
-                    'N/A';
+                  // Use productName directly from API (backend now provides it at top level)
+                  const productName = inquiry.productName || inquiry.product?.name || 'N/A';
+                  const categoryName = inquiry.category || 'N/A';
+                  const buyerName = inquiry.buyer?.name || inquiry.buyer?.email?.split('@')[0] || 'N/A';
+                  const sellerName = inquiry.seller?.name || inquiry.seller?.email?.split('@')[0] || 'N/A';
                   
                   return (
                   <tr key={inquiry._id} className="hover:bg-gray-50" data-testid={`lead-row-${inquiry._id}`}>
