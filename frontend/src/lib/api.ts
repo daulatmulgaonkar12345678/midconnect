@@ -1590,12 +1590,15 @@ export const acceptInquiry = (
   };
   quote: {
     price: number;
+    moq?: number;
+    leadTimeDays?: number;
     validTill: string;
   };
   subscriptionUsage: {
     used: number;
     limit: number;
     remaining: number;
+    isUnlimited?: boolean;
   };
 }> => fetchWithAuth(`/seller/inquiries/${encodeURIComponent(inquiryId)}/accept`, token, {
   method: 'POST',
