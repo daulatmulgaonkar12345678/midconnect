@@ -186,7 +186,7 @@ export default function InquiriesPage() {
                   </span>
                   {inquiry.productId ? (
                     <Link 
-                      href={`/products/${inquiry.productId}`}
+                      href={`/product/${inquiry.productId}`}
                       className="text-sm text-blue-600 hover:text-blue-700"
                       data-testid={`view-product-${inquiry._id}`}
                     >
