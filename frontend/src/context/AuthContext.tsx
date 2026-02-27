@@ -246,16 +246,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const targetEmail = email || state.user?.email;
     if (!targetEmail) throw new Error('No email address available');
     
-    const response = await fetch(`${API_URL}/api/resend-verification`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: targetEmail })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || 'Failed to send verification email');
-    }
+    const { resendVerificationEmail: resendApi } = await import('@/lib/api');
+    await resendApi(targetEmail);
   };
 
   const signOut = async () => {
