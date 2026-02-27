@@ -17,8 +17,6 @@ export type UserRole = 'guest' | 'buyer' | 'seller' | 'admin';
 export type RegistrationState = 'complete' | 'incomplete' | 'email_not_verified' | 'unknown';
 export type ConnectionState = 'connecting' | 'ready' | 'error';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
-
 interface AuthState {
   user: User | null;
   profile: UserProfile | null;
