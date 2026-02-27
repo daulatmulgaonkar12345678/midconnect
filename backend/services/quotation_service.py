@@ -394,7 +394,7 @@ class QuotationService:
         Requested Quantity: {X}
         Quoted Price: ₹{unitPrice} per unit
         Minimum Order Quantity (MOQ): {moq}
-        Packaging Charges: ₹{packagingCharges}
+        Packaging Charges: Not Included
         Transportation Charges: Not Included
         Total (Excl. Transport): ₹{totalPrice}
 
@@ -449,16 +449,11 @@ We are pleased to share our quotation for your inquiry regarding "{product_name}
 Requested Quantity: {quote.get('requestedQuantity', 0)}
 Quoted Price: {format_inr(quote.get('unitPrice'))} per unit
 Minimum Order Quantity (MOQ): {quote.get('moq', 1)}
-Packaging Charges: {format_inr(quote.get('packagingCharges', 0))}
+Packaging Charges: Not Included
 Transportation Charges: Not Included
 Total (Excl. Transport): {format_inr(quote.get('totalPrice'))}
 
 Quotation Valid Till: {validity_str}
-
-You may also view this quotation securely:
-{secure_url}
-
-Please confirm acceptance via the platform link above.
 
 Best Regards,
 {seller_name}
@@ -466,8 +461,6 @@ Udyog connect"""
         
         return {
             "message": message,
-            "secureUrl": secure_url,
-            "quoteId": quote_id
         }
     
     async def mark_whatsapp_redirect_used(self, quote_id: str) -> bool:
