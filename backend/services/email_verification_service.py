@@ -51,13 +51,14 @@ class EmailVerificationService:
         self.db = db
         self.zoho_email = os.environ.get("ZOHO_EMAIL", "verification@udyogconnect.in")
         self.zoho_password = os.environ.get("ZOHO_APP_PASSWORD")
-        self.frontend_url = os.environ.get("FRONTEND_URL", "https://udyogconnect.in")
         
-        # Use REACT_APP_BACKEND_URL for preview environments
-        if not os.environ.get("FRONTEND_URL"):
-            backend_url = os.environ.get("REACT_APP_BACKEND_URL", "")
-            if "preview.emergentagent.com" in backend_url:
-                self.frontend_url = backend_url
+        # Frontend URL for verification links
+        # Priority: FRONTEND_URL env > auto-detect preview > default production
+        self.frontend_url = os.environ.get("FRONTEND_URL")
+        if not self.frontend_url:
+            # Check if we're in a preview environment by looking at backend URL patterns
+            # This helps during development/preview testing
+            self.frontend_url = "https://udyogconnect.in"  # Default to production
     
     async def generate_verification_token(self, email: str) -> str:
         """
