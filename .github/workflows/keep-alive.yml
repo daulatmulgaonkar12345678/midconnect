@@ -1,0 +1,34 @@
+name: Keep Backend Alive
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Health Endpoint
+        run: |
+          BACKEND_URL="${{ secrets.BACKEND_URL }}"
+          if [ -z "$BACKEND_URL" ]; then
+            BACKEND_URL="https://marketplace-staging-15.preview.emergentagent.com"
+          fi
+          
+          echo "Pinging $BACKEND_URL/api/health"
+          response=$(curl -s -w "\n%{http_code}" "$BACKEND_URL/api/health" || echo "FAILED")
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          
+          echo "Response Code: $http_code"
+          echo "Response Body: $body"
+          
+          if [ "$http_code" = "200" ]; then
+            echo "Health check passed"
+          else
+            echo "Health check failed with code: $http_code"
+            exit 1
+          fi
+        timeout-minutes: 2
