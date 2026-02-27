@@ -2248,19 +2248,35 @@ async def verify_email_token(token: str):
 
 @api_router.post("/resend-verification")
 @limiter.limit("3/minute")
-async def resend_verification_email(request: Request, data: SendVerificationRequest):
+async def resend_verification_email(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     """
     Resend verification email.
     
+    ENTERPRISE FIX: Uses auth token to get user email.
+    No request body required - backend knows user from token.
     Rate limited to prevent abuse.
     """
     from services.email_verification_service import get_email_verification_service
     
+    # Get current user from auth token
+    current_user = await get_current_user(credentials)
+    
+    # Check if already verified - no need to resend
+    if current_user.get("isEmailVerified"):
+        return {"success": True, "message": "Email is already verified. Please login."}
+    
+    email = current_user.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="No email associated with this account")
+    
     email_service = await get_email_verification_service(db)
-    result = await email_service.resend_verification(data.email)
+    result = await email_service.send_verification_email(email)
     
     if not result["success"]:
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to send email"))
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to send email"))
     
     return result
 
