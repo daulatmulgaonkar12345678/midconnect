@@ -184,12 +184,19 @@ export default function InquiriesPage() {
                   <span className={`px-3 py-1 text-xs font-medium rounded-full capitalize ${getStatusColor(inquiry.status)}`}>
                     {inquiry.status}
                   </span>
-                  <Link 
-                    href={`/products/${inquiry.productId}`}
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    View Product →
-                  </Link>
+                  {inquiry.productId ? (
+                    <Link 
+                      href={`/products/${inquiry.productId}`}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                      data-testid={`view-product-${inquiry._id}`}
+                    >
+                      View Product →
+                    </Link>
+                  ) : (
+                    <span className="text-sm text-gray-400">
+                      Product unavailable
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
