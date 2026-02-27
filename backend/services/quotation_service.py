@@ -417,7 +417,6 @@ class QuotationService:
         Minimum Order Quantity (MOQ): {moq}
         Packaging Charges: Not Included
         Transportation Charges: Not Included
-        Total (Excl. Transport and packaging charges): ₹{totalPrice}
 
         Quotation Valid Till: {validityDate}
 
