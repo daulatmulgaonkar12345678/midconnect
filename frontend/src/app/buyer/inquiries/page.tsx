@@ -326,6 +326,25 @@ export default function BuyerInquiriesPage() {
                         The seller has declined this inquiry
                       </p>
                     )}
+                    
+                    {/* View Product Link */}
+                    <div className="pt-3 border-t mt-4">
+                      {inquiry.productId ? (
+                        <Link 
+                          href={`/products/${inquiry.productId}`}
+                          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                          data-testid={`view-product-${inquiry._id}`}
+                        >
+                          <Package className="h-4 w-4" />
+                          View Product →
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-gray-400 flex items-center gap-2">
+                          <Package className="h-4 w-4" />
+                          Product details unavailable
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
