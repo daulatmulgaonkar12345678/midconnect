@@ -10,7 +10,10 @@ import type { ProfileCompleteData } from '@/lib/api';
 
 export default function CompleteProfilePage() {
   const router = useRouter();
-  const { user, emailVerified, needsRegistration, needsEmailVerification, completeRegistration, error, clearError, loading: authLoading, isAuthenticated } = useAuth();
+  const { user, profile, needsRegistration, needsEmailVerification, completeRegistration, error, clearError, loading: authLoading, isAuthenticated } = useAuth();
+
+  // Use backend's isEmailVerified from profile
+  const emailVerified = profile?.isEmailVerified === true;
 
   const [step, setStep] = useState<'role' | 'profile'>('role');
   const [selectedRole, setSelectedRole] = useState<'buyer' | 'seller' | null>(null);
