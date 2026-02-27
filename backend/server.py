@@ -2460,11 +2460,14 @@ async def complete_profile(
 @api_router.get("/auth/check-registration")
 async def check_registration_status(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
-    NEW ARCHITECTURE: Check user registration and profile completion status.
+    ENTERPRISE FIX: Check user registration and profile completion status.
+    
+    MongoDB isEmailVerified is the SINGLE SOURCE OF TRUTH.
+    Firebase email_verified is NOT used for business logic.
     
     Returns:
     - profileComplete: true if user has completed profile
-    - isEmailVerified: true if email is verified  
+    - isEmailVerified: true if email is verified (from MongoDB)
     - needsVerification: true if email needs verification
     - user: MongoDB user profile if exists
     """
@@ -2472,34 +2475,30 @@ async def check_registration_status(credentials: HTTPAuthorizationCredentials = 
         raise HTTPException(status_code=401, detail="Authorization token required")
     
     try:
-        token = credentials.credentials
-        decoded_token = await verify_firebase_token(token)
-        firebase_uid = decoded_token['uid']
-        email = decoded_token.get('email', '')
-        email_verified = decoded_token.get('email_verified', False)
-        
         # Get user (auto-created by get_current_user if not exists)
         user = await get_current_user(credentials)
         
         if user:
             profile_complete = user.get("profileComplete", False)
-            is_email_verified = user.get("isEmailVerified", False) or user.get("emailVerified", False)
+            # SSOT: Use ONLY MongoDB isEmailVerified
+            is_email_verified = user.get("isEmailVerified", False)
             
             return {
                 "profileComplete": profile_complete,
                 "isEmailVerified": is_email_verified,
-                "needsVerification": not email_verified,
+                "needsVerification": not is_email_verified,
                 "needsProfileCompletion": not profile_complete and is_email_verified,
                 "user": user
             }
         else:
+            # This shouldn't happen as get_current_user auto-creates
             return {
                 "profileComplete": False,
-                "isEmailVerified": email_verified,
-                "needsVerification": not email_verified,
-                "needsProfileCompletion": email_verified,
-                "email": email,
-                "firebaseUid": firebase_uid
+                "isEmailVerified": False,
+                "needsVerification": True,
+                "needsProfileCompletion": False,
+                "email": "",
+                "firebaseUid": ""
             }
             
     except HTTPException:
