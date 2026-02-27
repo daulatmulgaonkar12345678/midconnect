@@ -1390,20 +1390,23 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         """
         Accept an inquiry with a quote.
         
-        SSOT ARCHITECTURE:
-        - WhatsApp message generated ONLY by QuotationService
-        - Backend returns whatsappLink
-        - Frontend opens the returned link (no message building)
-        - No hardcoded fallbacks for seller name
+        SSOT ARCHITECTURE (True Single Source of Truth):
+        1. QuotationService creates quote in 'quotes' collection (ONLY source)
+        2. QuotationService generates WhatsApp message (ONLY source)
+        3. Inquiry only stores status + reference to quote
+        4. Backend returns whatsappLink
+        5. Frontend only opens returned link (no message building)
+        6. No hardcoded fallbacks for seller/business names
         """
         from services.subscription_service import can_accept_inquiry as check_can_accept, increment_enquiry_usage
         from services.seller_governance_service import SellerGovernanceService
+        from services.quotation_service import get_quotation_service, QuoteCreateRequest
         import urllib.parse
         
         seller_oid = ObjectId(seller["_id"]) if isinstance(seller["_id"], str) else seller["_id"]
         
         # ============================================================
-        # PRICE VALIDATION: Prevent ₹0 quotes (SSOT requirement)
+        # STEP 1: PRICE VALIDATION - Prevent ₹0 quotes
         # ============================================================
         if data.quotedPrice <= 0:
             raise HTTPException(
@@ -1411,7 +1414,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 detail="Quoted price must be greater than ₹0. Please enter a valid price."
             )
         
-        # GOVERNANCE CHECK: Verify seller is not suspended/banned
+        # ============================================================
+        # STEP 2: GOVERNANCE CHECK - Verify seller not suspended/banned
+        # ============================================================
         governance_service = SellerGovernanceService(db)
         governance_result = await governance_service.can_accept_lead(seller_oid)
         if not governance_result["canAccept"]:
@@ -1424,7 +1429,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 }
             )
         
-        # SUBSCRIPTION CHECK: Verify lead limit not exceeded
+        # ============================================================
+        # STEP 3: SUBSCRIPTION CHECK - Verify lead limit not exceeded
+        # ============================================================
         can_accept_result = await check_can_accept(db, seller_oid)
         if not can_accept_result["canAccept"]:
             raise HTTPException(
@@ -1439,6 +1446,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 }
             )
         
+        # ============================================================
+        # STEP 4: FETCH INQUIRY
+        # ============================================================
         try:
             inquiry = await db.inquiries.find_one({"_id": ObjectId(inquiry_id), "sellerId": seller_oid})
         except Exception:
@@ -1451,102 +1461,15 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             raise HTTPException(status_code=400, detail=f"Cannot accept inquiry with status: {inquiry.get('status')}")
         
         now = datetime.now(timezone.utc)
-        validity_date = now + timedelta(days=data.validityDays)
         
         # ============================================================
-        # GATHER DATA FOR QUOTE (SSOT - all from DB, no hardcoding)
+        # STEP 5: UPDATE INQUIRY STATUS ONLY (No quote data here - SSOT)
         # ============================================================
-        
-        # Get product name from listing -> product chain
-        product_name = inquiry.get("productName", "")
-        if not product_name:
-            listing_id = inquiry.get("listingId")
-            if listing_id:
-                try:
-                    lid = listing_id if isinstance(listing_id, ObjectId) else ObjectId(str(listing_id))
-                    listing = await db.sellerListings.find_one({"_id": lid})
-                    if listing:
-                        product_id = listing.get("productId")
-                        if product_id:
-                            pid = product_id if isinstance(product_id, ObjectId) else ObjectId(str(product_id))
-                            product = await db.products.find_one({"_id": pid})
-                            if product:
-                                product_name = product.get("name", "")
-                except Exception as e:
-                    logger.warning(f"Error fetching product name: {e}")
-        
-        # STRICT: Product name must exist (no generic fallback)
-        if not product_name:
-            product_name = "Product"  # Minimal fallback, never "your product"
-        
-        # Get seller business name from profile (SSOT - DB only, no hardcoding)
-        seller_profile = seller.get("profile") or {}
-        seller_business = seller_profile.get("businessName")
-        
-        # STRICT: If no business name, use company name or email prefix - NEVER hardcode
-        if not seller_business:
-            seller_business = seller_profile.get("companyName") or seller.get("email", "").split("@")[0]
-        
-        # Final fallback to seller email prefix if still empty
-        if not seller_business:
-            seller_business = seller.get("email", "Seller").split("@")[0]
-        
-        # Get buyer information
-        buyer_id = inquiry.get("buyerId")
-        buyer_name = ""
-        buyer_phone = ""
-        buyer_email = ""
-        buyer_company = ""
-        
-        if buyer_id:
-            try:
-                bid = buyer_id if isinstance(buyer_id, ObjectId) else ObjectId(str(buyer_id))
-                buyer = await db.users.find_one({"_id": bid})
-                if buyer:
-                    buyer_profile = buyer.get("profile") or {}
-                    buyer_name = buyer_profile.get("name") or buyer_profile.get("businessName") or ""
-                    buyer_phone = buyer_profile.get("phone") or ""
-                    buyer_email = buyer.get("email") or ""
-                    buyer_company = buyer_profile.get("businessName") or ""
-            except Exception as e:
-                logger.warning(f"Error fetching buyer: {e}")
-        
-        # Fallback to embedded buyer info if DB lookup failed
-        if not buyer_phone:
-            embedded_buyer = inquiry.get("buyerInfo") or {}
-            buyer_name = buyer_name or embedded_buyer.get("name") or embedded_buyer.get("companyName") or ""
-            buyer_phone = embedded_buyer.get("phone") or ""
-            buyer_email = buyer_email or embedded_buyer.get("email") or ""
-            buyer_company = buyer_company or embedded_buyer.get("companyName") or ""
-        
-        # Set display name for buyer
-        if not buyer_name:
-            buyer_name = buyer_company or "Valued Customer"
-        
-        quantity = inquiry.get("quantity", 1)
-        
-        # ============================================================
-        # UPDATE INQUIRY WITH QUOTE DATA
-        # ============================================================
+        # Quote will be stored ONLY in quotes collection via QuotationService
         await db.inquiries.update_one(
             {"_id": ObjectId(inquiry_id)},
             {"$set": {
                 "status": "accepted",
-                "sellerResponse": {
-                    "quotedPrice": data.quotedPrice,
-                    "moq": data.moq,
-                    "leadTimeDays": data.leadTimeDays,
-                    "validTill": validity_date,
-                    "sellerNote": data.sellerNote
-                },
-                "quote": {
-                    "price": data.quotedPrice,
-                    "moq": data.moq,
-                    "leadTimeDays": data.leadTimeDays,
-                    "validTill": validity_date,
-                    "sellerNote": data.sellerNote,
-                    "quotedAt": now
-                },
                 "acceptedAt": now,
                 "updatedAt": now
             }}
@@ -1559,26 +1482,103 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if not subscription["isUnlimited"]:
             used_count = await increment_enquiry_usage(db, seller_oid)
         
-        from services.quotation_service import get_quotation_service, QuoteCreateRequest
-
-quotation_service = await get_quotation_service(db)
-
-quote_result = await quotation_service.create_quote(
-    seller_id=seller_oid,
-    request=QuoteCreateRequest(
-        inquiryId=inquiry_id,
-        unitPrice=data.quotedPrice,
-        moq=data.moq or 1,
-        leadTimeDays=data.leadTimeDays or 1,
-        validityDays=data.validityDays
-    )
-)
-
-preview = quotation_service.generate_whatsapp_preview(
-    quote=quote_result["quote"],
-    base_url="https://udyogconnect.in"
-)
+        # ============================================================
+        # STEP 6: CREATE QUOTE VIA QUOTATION SERVICE (SSOT)
+        # ============================================================
+        quotation_service = await get_quotation_service(db)
         
+        try:
+            quote_result = await quotation_service.create_quote(
+                seller_id=seller_oid,
+                request=QuoteCreateRequest(
+                    inquiryId=inquiry_id,
+                    unitPrice=data.quotedPrice,
+                    moq=data.moq or 1,
+                    leadTimeDays=data.leadTimeDays or 1,
+                    validityDays=data.validityDays
+                )
+            )
+        except ValueError as e:
+            # Rollback inquiry status if quote creation fails
+            await db.inquiries.update_one(
+                {"_id": ObjectId(inquiry_id)},
+                {"$set": {"status": "pending", "acceptedAt": None, "updatedAt": now}}
+            )
+            raise HTTPException(status_code=400, detail=str(e))
+        
+        # Update inquiry with quote reference
+        await db.inquiries.update_one(
+            {"_id": ObjectId(inquiry_id)},
+            {"$set": {"quoteId": quote_result["quote"].get("quoteId")}}
+        )
+        
+        # ============================================================
+        # STEP 7: GENERATE WHATSAPP PREVIEW (SSOT - QuotationService only)
+        # ============================================================
+        preview = quotation_service.generate_whatsapp_preview(
+            quote=quote_result["quote"],
+            base_url="https://udyogconnect.in"
+        )
+        
+        # ============================================================
+        # STEP 8: BUILD WHATSAPP LINK
+        # ============================================================
+        # Get buyer phone from quote_result (already fetched by QuotationService)
+        buyer_phone = quote_result["quote"].get("buyerPhone", "")
+        buyer_name = quote_result["quote"].get("buyerName", "")
+        buyer_company = quote_result["quote"].get("buyerCompany", "")
+        seller_business = quote_result["quote"].get("sellerName", "")
+        
+        # Fallback: fetch buyer info directly if not in quote
+        if not buyer_phone:
+            buyer_id = inquiry.get("buyerId")
+            if buyer_id:
+                try:
+                    bid = buyer_id if isinstance(buyer_id, ObjectId) else ObjectId(str(buyer_id))
+                    buyer = await db.users.find_one({"_id": bid})
+                    if buyer:
+                        buyer_profile = buyer.get("profile") or {}
+                        buyer_name = buyer_name or buyer_profile.get("name") or buyer_profile.get("businessName") or ""
+                        buyer_phone = buyer_profile.get("phone") or ""
+                        buyer_company = buyer_company or buyer_profile.get("businessName") or ""
+                except Exception as e:
+                    logger.warning(f"Error fetching buyer phone: {e}")
+            
+            # Final fallback to embedded buyer info
+            if not buyer_phone:
+                embedded_buyer = inquiry.get("buyerInfo") or {}
+                buyer_phone = embedded_buyer.get("phone") or ""
+                buyer_name = buyer_name or embedded_buyer.get("name") or embedded_buyer.get("companyName") or ""
+                buyer_company = buyer_company or embedded_buyer.get("companyName") or ""
+        
+        # Get buyer email
+        buyer_email = ""
+        buyer_id = inquiry.get("buyerId")
+        if buyer_id:
+            try:
+                bid = buyer_id if isinstance(buyer_id, ObjectId) else ObjectId(str(buyer_id))
+                buyer = await db.users.find_one({"_id": bid})
+                if buyer:
+                    buyer_email = buyer.get("email") or ""
+            except Exception:
+                pass
+        if not buyer_email:
+            embedded_buyer = inquiry.get("buyerInfo") or {}
+            buyer_email = embedded_buyer.get("email") or ""
+        
+        # Build WhatsApp link with message from preview
+        whatsapp_link = None
+        if buyer_phone:
+            clean_phone = "".join(filter(str.isdigit, buyer_phone))
+            if clean_phone and len(clean_phone) >= 10:
+                if not clean_phone.startswith("91"):
+                    clean_phone = "91" + clean_phone
+                encoded_message = urllib.parse.quote(preview["message"])
+                whatsapp_link = f"https://wa.me/{clean_phone}?text={encoded_message}"
+        
+        # ============================================================
+        # STEP 9: RETURN RESPONSE
+        # ============================================================
         limit = subscription["limit"]
         remaining = -1 if subscription["isUnlimited"] else max(0, limit - used_count)
         
@@ -1588,20 +1588,15 @@ preview = quotation_service.generate_whatsapp_preview(
             "inquiryId": inquiry_id,
             "whatsappLink": whatsapp_link,  # SSOT: Frontend uses this link directly
             "buyerContact": {
-                "name": buyer_name,
+                "name": buyer_name or "Customer",
                 "phone": buyer_phone,
                 "email": buyer_email,
                 "company": buyer_company
             },
             "sellerContact": {
-                "businessName": seller_business  # From DB profile, never hardcoded
+                "businessName": seller_business  # From QuotationService (DB lookup)
             },
-            "quote": {
-                "price": data.quotedPrice,
-                "moq": data.moq,
-                "leadTimeDays": data.leadTimeDays,
-                "validTill": validity_date.isoformat()
-            },
+            "quote": quote_result["quote"],  # SSOT: Return quote from QuotationService
             "subscriptionUsage": {
                 "used": used_count,
                 "limit": limit,
