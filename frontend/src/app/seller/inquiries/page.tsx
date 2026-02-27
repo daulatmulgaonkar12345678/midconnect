@@ -190,7 +190,7 @@ export default function SellerInquiriesPage() {
 
   const handleAccept = async () => {
     if (!actionInquiryId || quotedPrice <= 0) {
-      setError('Please enter a valid quoted price');
+      setError('Please enter a valid quoted price (must be greater than ₹0)');
       return;
     }
 
@@ -209,7 +209,8 @@ export default function SellerInquiriesPage() {
         sellerNote: quoteNote || undefined
       });
 
-      // Update local state with buyer contact info and seller business name
+      // SSOT: Update local state with all data from backend response
+      // Including whatsappLink which is the ONLY source for WhatsApp message
       setInquiries(prev => prev.map(inq => 
         inq._id === actionInquiryId 
           ? { 
@@ -221,7 +222,16 @@ export default function SellerInquiriesPage() {
                 phone: result.buyerContact?.phone,
                 email: result.buyerContact?.email
               },
-              sellerBusinessName: result.sellerContact?.businessName
+              sellerBusinessName: result.sellerContact?.businessName,
+              // SSOT: Store whatsappLink from backend - this is the ONLY source
+              whatsappLink: result.whatsappLink,
+              // Store quote data for display
+              quote: result.quote ? {
+                price: result.quote.price,
+                moq: result.quote.moq,
+                leadTimeDays: result.quote.leadTimeDays,
+                validTill: result.quote.validTill
+              } : undefined
             }
           : inq
       ));
@@ -230,9 +240,13 @@ export default function SellerInquiriesPage() {
       closeAction();
       setTimeout(() => setSuccess(null), 5000);
 
-      // Auto-redirect to WhatsApp if link is available
+      // Auto-open WhatsApp if link is available
       if (result.whatsappLink) {
-         setSuccess('Inquiry accepted! Click WhatsApp to contact buyer.');
+        setSuccess('Inquiry accepted! Opening WhatsApp...');
+        // Small delay before opening WhatsApp to let user see the success message
+        setTimeout(() => {
+          window.open(result.whatsappLink, '_blank', 'noopener,noreferrer');
+        }, 500);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept inquiry');
