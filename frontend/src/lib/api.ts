@@ -102,7 +102,7 @@ const getApiUrl = (): string => {
   
   // Fallback for Vercel deployment
   if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-    return 'https://marketplace-staging-15.preview.emergentagent.com';
+    return 'https://midconnect-fix.preview.emergentagent.com';
   }
   
   // Local development - use relative URLs
