@@ -188,15 +188,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Step 2: Call backend to send verification email via Zoho SMTP
       try {
-        const response = await fetch(`${API_URL}/api/send-verification`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email })
-        });
-        
-        if (!response.ok) {
-          console.warn('Failed to send verification email, but signup succeeded');
-        }
+        const { sendVerificationEmail } = await import('@/lib/api');
+        await sendVerificationEmail(email);
       } catch (emailError) {
         // Log but don't fail signup if email sending fails
         console.error('Error sending verification email:', emailError);
