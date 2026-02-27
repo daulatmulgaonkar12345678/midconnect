@@ -84,7 +84,8 @@ function VerifyEmailContent() {
     setMessage('');
     
     try {
-      await resendVerificationEmail(user?.email || undefined);
+      // ENTERPRISE FIX: No email parameter needed - backend gets it from auth token
+      await resendVerificationEmail();
       setResendSuccess(true);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Failed to send email');
