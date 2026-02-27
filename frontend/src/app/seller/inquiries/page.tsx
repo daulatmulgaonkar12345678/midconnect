@@ -223,8 +223,8 @@ export default function SellerInquiriesPage() {
                 email: result.buyerContact?.email
               },
               sellerBusinessName: result.sellerContact?.businessName,
-              // SSOT: Store whatsappLink from backend - this is the ONLY source
-              whatsappLink: result.whatsappLink,
+              // SSOT: Store whatsappLink from backend - convert null to undefined
+              whatsappLink: result.whatsappLink ?? undefined,
               // Store quote data for display
               quote: result.quote ? {
                 price: result.quote.price,
@@ -244,8 +244,9 @@ export default function SellerInquiriesPage() {
       if (result.whatsappLink) {
         setSuccess('Inquiry accepted! Opening WhatsApp...');
         // Small delay before opening WhatsApp to let user see the success message
+        const whatsappUrl = result.whatsappLink;
         setTimeout(() => {
-          window.open(result.whatsappLink, '_blank', 'noopener,noreferrer');
+          window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
         }, 500);
       }
     } catch (err) {
