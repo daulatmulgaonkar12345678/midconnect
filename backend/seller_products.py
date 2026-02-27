@@ -1559,49 +1559,25 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if not subscription["isUnlimited"]:
             used_count = await increment_enquiry_usage(db, seller_oid)
         
-        # ============================================================
-        # GENERATE WHATSAPP MESSAGE (SSOT - Centralized Format)
-        # ============================================================
-        # Generate message using standardized format
-        formatted_date = validity_date.strftime("%d %b %Y")
-        
-        whatsapp_message = f"""Hello {buyer_name},
+        from services.quotation_service import get_quotation_service, QuoteCreateRequest
 
-Greetings from B2B Market Place.
+quotation_service = await get_quotation_service(db)
 
-This is {seller_business}.
-We are pleased to share our quotation for your inquiry regarding "{product_name}".
+quote_result = await quotation_service.create_quote(
+    seller_id=seller_oid,
+    request=QuoteCreateRequest(
+        inquiryId=inquiry_id,
+        unitPrice=data.quotedPrice,
+        moq=data.moq or 1,
+        leadTimeDays=data.leadTimeDays or 1,
+        validityDays=data.validityDays
+    )
+)
 
-Requested Quantity: {quantity}
-Quoted Price: ₹{data.quotedPrice:,.2f} per unit
-Minimum Order Quantity (MOQ): {data.moq if data.moq else 1}"""
-        
-        if data.leadTimeDays:
-            whatsapp_message += f"\nLead Time: {data.leadTimeDays} days"
-        
-        whatsapp_message += f"""
-Quotation Valid Till: {formatted_date}
-
-Please feel free to reach out for any further clarification.
-
-Best Regards,
-{seller_business}
-B2B Market Place"""
-        
-        if data.sellerNote:
-            whatsapp_message += f"\n\nNote: {data.sellerNote}"
-        
-        # ============================================================
-        # BUILD WHATSAPP LINK (Backend returns complete link)
-        # ============================================================
-        whatsapp_link = None
-        if buyer_phone:
-            clean_phone = "".join(filter(str.isdigit, buyer_phone))
-            if clean_phone and len(clean_phone) >= 10:
-                if not clean_phone.startswith("91"):
-                    clean_phone = "91" + clean_phone
-                encoded_message = urllib.parse.quote(whatsapp_message)
-                whatsapp_link = f"https://wa.me/{clean_phone}?text={encoded_message}"
+preview = quotation_service.generate_whatsapp_preview(
+    quote=quote_result["quote"],
+    base_url="https://udyogconnect.in"
+)
         
         limit = subscription["limit"]
         remaining = -1 if subscription["isUnlimited"] else max(0, limit - used_count)
