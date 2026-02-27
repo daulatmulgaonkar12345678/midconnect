@@ -1258,7 +1258,7 @@ export const exportAdminInquiries = async (
   if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
   if (options?.dateTo) params.append('dateTo', options.dateTo);
   
-  const sanitizedEndpoint = `/admin/inquiries/export?${params.toString()}`;
+  const sanitizedEndpoint = `/api/admin/inquiries/export?${params.toString()}`;
   const url = `${API_URL}${sanitizedEndpoint}`;
 
   const response = await fetch(url, {
