@@ -5,6 +5,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import IndustrialHeader from '@/components/IndustrialHeader';
 import Footer from '@/components/Footer';
 import { SEO, APP_KEYWORDS } from '@/lib/config';
+import ServerWarmUp from '@/components/ServerWarmUp';
 
 // Use Inter font for industrial/corporate look
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] });
