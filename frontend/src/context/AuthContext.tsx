@@ -238,14 +238,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /**
    * Resend verification email via backend (Zoho SMTP)
    * 
-   * NEW ARCHITECTURE: Uses backend API instead of Firebase
+   * ENTERPRISE FIX: Uses auth token, no email in body.
+   * Backend gets user email from the Firebase auth token.
    */
-  const resendVerificationEmail = async (email?: string) => {
-    const targetEmail = email || state.user?.email;
-    if (!targetEmail) throw new Error('No email address available');
+  const resendVerificationEmail = async () => {
+    if (!state.user) throw new Error('No user logged in');
     
+    const token = await state.user.getIdToken();
     const { resendVerificationEmail: resendApi } = await import('@/lib/api');
-    await resendApi(targetEmail);
+    await resendApi(token);
   };
 
   const signOut = async () => {
