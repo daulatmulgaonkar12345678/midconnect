@@ -4101,10 +4101,10 @@ async def get_products(
             "foreignField": "_id",
             "as": "product_info"
         }},
-        # Stage 4: Unwind product info (required for valid products)
+        # Stage 4: Unwind product info - ALLOW MISSING to support listing-first workflow
         {"$unwind": {
             "path": "$product_info",
-            "preserveNullAndEmptyArrays": False  # CANONICAL: Require valid product
+            "preserveNullAndEmptyArrays": True  # FLEXIBLE: Show listings even without catalog entry
         }},
         # Stage 5: Lookup category from categories collection
         {"$lookup": {
@@ -4113,9 +4113,20 @@ async def get_products(
             "foreignField": "_id",
             "as": "category_info"
         }},
+        # Stage 5b: Also try to lookup category from listing's categoryId
+        {"$lookup": {
+            "from": "categories",
+            "localField": "firstCategoryId",
+            "foreignField": "_id",
+            "as": "listing_category_info"
+        }},
         # Stage 6: Unwind category info
         {"$unwind": {
             "path": "$category_info",
+            "preserveNullAndEmptyArrays": True
+        }},
+        {"$unwind": {
+            "path": "$listing_category_info",
             "preserveNullAndEmptyArrays": True
         }},
     ]
