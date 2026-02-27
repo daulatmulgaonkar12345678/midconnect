@@ -7,7 +7,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
-  sendEmailVerification,
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -18,6 +17,8 @@ export type UserRole = 'guest' | 'buyer' | 'seller' | 'admin';
 export type RegistrationState = 'complete' | 'incomplete' | 'email_not_verified' | 'unknown';
 export type ConnectionState = 'connecting' | 'ready' | 'error';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+
 interface AuthState {
   user: User | null;
   profile: UserProfile | null;
@@ -26,7 +27,6 @@ interface AuthState {
   registrationState: RegistrationState;
   connectionState: ConnectionState;
   connectionMessage: string;
-  emailVerified: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -45,10 +45,9 @@ interface AuthContextType extends AuthState {
   completeRegistration: (profileData: ProfileCompleteData) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  resendVerificationEmail: () => Promise<void>;
+  resendVerificationEmail: (email?: string) => Promise<void>;
   getIdToken: () => Promise<string | null>;
   refreshProfile: () => Promise<void>;
-  checkEmailVerification: () => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -63,7 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registrationState: 'unknown',
     connectionState: 'connecting',
     connectionMessage: 'Connecting to server...',
-    emailVerified: false,
   });
 
   const warmupBackend = useCallback(async () => {
@@ -85,12 +83,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  /**
+   * NEW ARCHITECTURE: Determine registration state based on backend profile
+   * 
+   * Uses profile.isEmailVerified from backend (NOT Firebase's emailVerified)
+   * This gives us full control over email verification via Zoho SMTP
+   */
   const determineRegistrationState = useCallback((user: User, profile: UserProfile | null): RegistrationState => {
-    // NEW ARCHITECTURE: Check profileComplete flag
-    if (profile && profile.profileComplete) return 'complete';
-    if (!user.emailVerified) return 'email_not_verified';
-    // User exists but profile not completed
-    if (profile && !profile.profileComplete) return 'incomplete';
+    // Check backend's email verification status (not Firebase's)
+    if (!profile?.isEmailVerified) return 'email_not_verified';
+    if (profile?.profileComplete) return 'complete';
     return 'incomplete';
   }, []);
 
@@ -104,21 +106,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           setState(prev => ({
             ...prev, user, profile, loading: false, error: null,
-            registrationState: regState, emailVerified: user.emailVerified,
+            registrationState: regState,
             connectionState: 'ready', connectionMessage: 'Connected',
           }));
         } catch {
           setState(prev => ({
             ...prev, user, profile: null, loading: false,
             error: 'Failed to load profile.', registrationState: 'unknown',
-            emailVerified: user.emailVerified, connectionState: 'error',
+            connectionState: 'error',
             connectionMessage: 'Connection error',
           }));
         }
       } else {
         setState(prev => ({
           ...prev, user: null, profile: null, loading: false,
-          error: null, registrationState: 'unknown', emailVerified: false,
+          error: null, registrationState: 'unknown',
           connectionState: 'ready', connectionMessage: '',
         }));
       }
@@ -126,40 +128,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [fetchProfile, warmupBackend, determineRegistrationState]);
 
+  /**
+   * Sign in with email/password
+   * 
+   * NEW ARCHITECTURE: Check backend's isEmailVerified (not Firebase's emailVerified)
+   */
   const signIn = async (email: string, password: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
       
-      // NEW ARCHITECTURE: Force token refresh to get latest email_verified status
-      await result.user.reload();
-      const freshToken = await result.user.getIdToken(true);
+      // Fetch profile from backend - this is the source of truth for verification status
+      const profile = await fetchProfile(result.user);
       
-      if (!result.user.emailVerified) {
+      // NEW: Check backend's isEmailVerified status
+      if (!profile?.isEmailVerified) {
         setState(prev => ({
-          ...prev, user: result.user, profile: null, loading: false,
-          error: null, registrationState: 'email_not_verified', emailVerified: false,
+          ...prev, user: result.user, profile, loading: false,
+          error: null, registrationState: 'email_not_verified',
         }));
         return { needsRegistration: false, needsEmailVerification: true };
       }
       
-      // Fetch profile - this will auto-create user in MongoDB if needed
-      const profile = await fetchProfile(result.user);
-      
       // Check if profile is complete
-      if (!profile || !profile.profileComplete) {
+      if (!profile?.profileComplete) {
         setState(prev => ({
           ...prev, user: result.user, profile, loading: false,
-          error: null, registrationState: 'incomplete', emailVerified: true,
+          error: null, registrationState: 'incomplete',
         }));
         return { needsRegistration: true, needsEmailVerification: false };
       }
       
       setState(prev => ({
         ...prev, user: result.user, profile, loading: false,
-        error: null, registrationState: 'complete', emailVerified: true,
+        error: null, registrationState: 'complete',
       }));
       return { needsRegistration: false, needsEmailVerification: false };
+      
     } catch (error: unknown) {
       const message = getAuthErrorMessage(error);
       setState(prev => ({ ...prev, loading: false, error: message }));
@@ -167,16 +172,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /**
+   * Sign up with email/password
+   * 
+   * NEW ARCHITECTURE: 
+   * 1. Firebase creates auth user
+   * 2. Backend sends verification email via Zoho SMTP
+   * 3. No Firebase sendEmailVerification call
+   */
   const signUp = async (email: string, password: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
+      // Step 1: Create Firebase auth user
       const result = await createUserWithEmailAndPassword(auth, email, password);
-      await sendEmailVerification(result.user);
+      
+      // Step 2: Call backend to send verification email via Zoho SMTP
+      try {
+        const response = await fetch(`${API_URL}/api/send-verification`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email })
+        });
+        
+        if (!response.ok) {
+          console.warn('Failed to send verification email, but signup succeeded');
+        }
+      } catch (emailError) {
+        // Log but don't fail signup if email sending fails
+        console.error('Error sending verification email:', emailError);
+      }
+      
       setState(prev => ({
         ...prev, user: result.user, profile: null, loading: false,
-        error: null, registrationState: 'email_not_verified', emailVerified: false,
+        error: null, registrationState: 'email_not_verified',
       }));
+      
       return { needsEmailVerification: true };
+      
     } catch (error: unknown) {
       const message = getAuthErrorMessage(error);
       setState(prev => ({ ...prev, loading: false, error: message }));
@@ -184,9 +216,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /**
+   * Complete user registration/profile
+   * 
+   * NEW ARCHITECTURE: Check backend's isEmailVerified instead of Firebase
+   */
   const completeRegistrationHandler = async (profileData: ProfileCompleteData) => {
     if (!state.user) throw new Error('No user logged in');
-    if (!state.user.emailVerified) throw new Error('Email verification required');
+    
+    // Check backend verification status via profile
+    if (!state.profile?.isEmailVerified) {
+      throw new Error('Email verification required. Please check your inbox.');
+    }
     
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
@@ -194,7 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await completeProfile(token, profileData);
       setState(prev => ({
         ...prev, user: state.user, profile: response.user, loading: false,
-        error: null, registrationState: 'complete', emailVerified: true,
+        error: null, registrationState: 'complete',
       }));
     } catch (error: unknown) {
       const message = getAuthErrorMessage(error);
@@ -203,61 +244,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const resendVerificationEmail = async () => {
-    if (!state.user) throw new Error('No user logged in');
-    await sendEmailVerification(state.user);
-  };
-
-  const checkEmailVerification = async (): Promise<boolean> => {
-    if (!state.user) return false;
-    try {
-      // STEP 7 - Force token refresh after email verification
-      await state.user.reload();
-      const verified = state.user.emailVerified;
-      
-      if (verified) {
-        // Force get fresh token with email_verified: true
-        const freshToken = await state.user.getIdToken(true);
-        
-        // Call /api/users/me to sync verification status with backend
-        try {
-          const profile = await getUserProfile(freshToken);
-          
-          // Check if profile is complete
-          if (profile && profile.profileComplete) {
-            setState(prev => ({ 
-              ...prev, 
-              profile,
-              registrationState: 'complete', 
-              emailVerified: true 
-            }));
-          } else {
-            setState(prev => ({ 
-              ...prev, 
-              profile,
-              registrationState: 'incomplete', 
-              emailVerified: true 
-            }));
-          }
-        } catch (error) {
-          // Backend call failed, but email is verified
-          setState(prev => ({ 
-            ...prev, 
-            registrationState: 'incomplete', 
-            emailVerified: true 
-          }));
-        }
-      }
-      
-      return verified;
-    } catch { return false; }
+  /**
+   * Resend verification email via backend (Zoho SMTP)
+   * 
+   * NEW ARCHITECTURE: Uses backend API instead of Firebase
+   */
+  const resendVerificationEmail = async (email?: string) => {
+    const targetEmail = email || state.user?.email;
+    if (!targetEmail) throw new Error('No email address available');
+    
+    const response = await fetch(`${API_URL}/api/resend-verification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: targetEmail })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to send verification email');
+    }
   };
 
   const signOut = async () => {
     try { await firebaseSignOut(auth); } catch {}
     setState(prev => ({
       ...prev, user: null, profile: null, loading: false,
-      error: null, registrationState: 'unknown', emailVerified: false,
+      error: null, registrationState: 'unknown',
     }));
   };
 
@@ -274,7 +286,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!state.user) return;
     try {
       const profile = await fetchProfile(state.user);
-      setState(prev => ({ ...prev, profile, registrationState: profile ? 'complete' : 'incomplete' }));
+      const regState = determineRegistrationState(state.user, profile);
+      setState(prev => ({ ...prev, profile, registrationState: regState }));
     } catch {}
   };
 
@@ -287,7 +300,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = roles.includes('admin') || state.profile?.isAdmin === true;
   
   // UNIFIED GST SCHEMA - SINGLE SOURCE OF TRUTH
-  // gst: { number, status: "pending"|"verified"|"rejected", verified: boolean }
   const isGstVerified = state.profile?.gst?.verified === true;
   const gstStatus = (state.profile?.gst?.status || 'none') as 'none' | 'pending' | 'verified' | 'rejected';
   
@@ -304,7 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...state, isAuthenticated, isAdmin, isSeller, isGstVerified, gstStatus, sellerStatus, role,
       needsRegistration, needsEmailVerification, signIn, signUp,
       completeRegistration: completeRegistrationHandler, signOut, resetPassword,
-      resendVerificationEmail, getIdToken, refreshProfile, checkEmailVerification, clearError,
+      resendVerificationEmail, getIdToken, refreshProfile, clearError,
     }}>
       {children}
     </AuthContext.Provider>
