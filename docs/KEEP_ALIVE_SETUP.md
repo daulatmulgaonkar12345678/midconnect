@@ -10,10 +10,8 @@ This document provides instructions for setting up external monitoring to preven
 **Expected Response:**
 ```json
 {
-  "status": "ok",
-  "service": "midconnect-api",
-  "timestamp": "2026-02-27T05:00:00.000Z",
-  "uptime": "active"
+  "status": "healthy",
+  "timestamp": "2026-02-27T05:00:00.000Z"
 }
 ```
 
