@@ -331,7 +331,7 @@ export default function BuyerInquiriesPage() {
                     <div className="pt-3 border-t mt-4">
                       {inquiry.productId ? (
                         <Link 
-                          href={`/products/${inquiry.productId}`}
+                          href={`/product/${inquiry.productId}`}
                           className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
                           data-testid={`view-product-${inquiry._id}`}
                         >
