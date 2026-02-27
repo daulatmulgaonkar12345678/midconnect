@@ -52,6 +52,12 @@ class EmailVerificationService:
         self.zoho_email = os.environ.get("ZOHO_EMAIL", "verification@udyogconnect.in")
         self.zoho_password = os.environ.get("ZOHO_APP_PASSWORD")
         self.frontend_url = os.environ.get("FRONTEND_URL", "https://udyogconnect.in")
+        
+        # Use REACT_APP_BACKEND_URL for preview environments
+        if not os.environ.get("FRONTEND_URL"):
+            backend_url = os.environ.get("REACT_APP_BACKEND_URL", "")
+            if "preview.emergentagent.com" in backend_url:
+                self.frontend_url = backend_url
     
     async def generate_verification_token(self, email: str) -> str:
         """
