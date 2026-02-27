@@ -248,7 +248,11 @@ async function fetchAPI<T = unknown>(
     throw new ApiError('API URL not configured', 500, 'CONFIG_ERROR');
   }
 
-  const sanitizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  // Ensure endpoint starts with /api for backend routing
+  let sanitizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (!sanitizedEndpoint.startsWith('/api')) {
+    sanitizedEndpoint = `/api${sanitizedEndpoint}`;
+  }
   const url = `${API_URL}${sanitizedEndpoint}`;
 
   let lastError: Error | null = null;
