@@ -81,38 +81,18 @@ class EmailVerificationService:
         logger.info(f"Generated verification token for {email}")
         return token
     
-    async def send_verification_email(self, email: str) -> Dict[str, Any]:
+    def _build_email_message(self, email: str, verify_link: str) -> MIMEMultipart:
         """
-        Generate token and send verification email via Zoho SMTP.
-        
-        Args:
-            email: Recipient email address
-            
-        Returns:
-            dict with success status and message
+        Build the email message (synchronous helper).
+        Separated to keep the async method clean.
         """
-        if not self.zoho_password:
-            logger.error("ZOHO_APP_PASSWORD not configured")
-            return {
-                "success": False,
-                "error": "Email service not configured. Please contact support."
-            }
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Verify your UdyogConnect Account"
+        msg["From"] = f'"UdyogConnect" <{self.zoho_email}>'
+        msg["To"] = email
         
-        try:
-            # Generate token
-            token = await self.generate_verification_token(email)
-            
-            # Build verification link
-            verify_link = f"{self.frontend_url}/verify-email?token={token}"
-            
-            # Create email
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = "Verify your UdyogConnect Account"
-            msg["From"] = f'"UdyogConnect" <{self.zoho_email}>'
-            msg["To"] = email
-            
-            # Plain text version
-            text_content = f"""
+        # Plain text version
+        text_content = f"""
 Welcome to UdyogConnect!
 
 Please verify your email by clicking the link below:
@@ -124,10 +104,10 @@ If you didn't create an account on UdyogConnect, please ignore this email.
 
 Best Regards,
 UdyogConnect Team
-            """
-            
-            # HTML version
-            html_content = f"""
+        """
+        
+        # HTML version
+        html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -187,34 +167,81 @@ UdyogConnect Team
     </div>
 </body>
 </html>
-            """
-            
-            msg.attach(MIMEText(text_content, "plain"))
-            msg.attach(MIMEText(html_content, "html"))
-            
-            # Send via Zoho SMTP
-            with smtplib.SMTP_SSL(self.SMTP_HOST, self.SMTP_PORT) as server:
+        """
+        
+        msg.attach(MIMEText(text_content, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+        return msg
+    
+    def _send_smtp_blocking(self, email: str, msg: MIMEMultipart) -> Dict[str, Any]:
+        """
+        Synchronous blocking SMTP send operation.
+        This runs in a thread pool to avoid blocking the async event loop.
+        
+        Returns:
+            dict with success status and error (if any)
+        """
+        try:
+            with smtplib.SMTP_SSL(self.SMTP_HOST, self.SMTP_PORT, timeout=30) as server:
                 server.login(self.zoho_email, self.zoho_password)
                 server.sendmail(self.zoho_email, email, msg.as_string())
             
             logger.info(f"Verification email sent to {email}")
-            return {
-                "success": True,
-                "message": "Verification email sent. Please check your inbox."
-            }
+            return {"success": True}
             
-        except smtplib.SMTPAuthenticationError:
-            logger.error("SMTP authentication failed")
-            return {
-                "success": False,
-                "error": "Email authentication failed. Please contact support."
-            }
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"SMTP authentication failed: {e}")
+            return {"success": False, "error": "Email authentication failed. Please contact support."}
         except smtplib.SMTPException as e:
             logger.error(f"SMTP error: {e}")
+            return {"success": False, "error": "Failed to send email. Please try again later."}
+        except Exception as e:
+            logger.error(f"Email send error: {e}")
+            return {"success": False, "error": "An error occurred. Please try again later."}
+    
+    async def send_verification_email(self, email: str) -> Dict[str, Any]:
+        """
+        Generate token and send verification email via Zoho SMTP.
+        
+        IMPORTANT: Uses asyncio.to_thread() to run blocking SMTP in thread pool.
+        This prevents the async event loop from blocking and causing timeouts
+        that manifest as CORS errors on the frontend.
+        
+        Args:
+            email: Recipient email address
+            
+        Returns:
+            dict with success status and message
+        """
+        if not self.zoho_password:
+            logger.error("ZOHO_APP_PASSWORD not configured")
             return {
                 "success": False,
-                "error": "Failed to send email. Please try again later."
+                "error": "Email service not configured. Please contact support."
             }
+        
+        try:
+            # Generate token (async DB operation)
+            token = await self.generate_verification_token(email)
+            
+            # Build verification link
+            verify_link = f"{self.frontend_url}/verify-email?token={token}"
+            
+            # Build email message (sync, fast)
+            msg = self._build_email_message(email, verify_link)
+            
+            # Send via SMTP in thread pool (non-blocking)
+            # This is the KEY FIX - prevents blocking the async event loop
+            result = await asyncio.to_thread(self._send_smtp_blocking, email, msg)
+            
+            if result["success"]:
+                return {
+                    "success": True,
+                    "message": "Verification email sent. Please check your inbox."
+                }
+            else:
+                return result
+            
         except Exception as e:
             logger.error(f"Email send error: {e}")
             return {
