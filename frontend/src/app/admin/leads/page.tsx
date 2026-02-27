@@ -300,14 +300,15 @@ export default function AdminLeadsPage() {
                       {inquiry.quantity || '-'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                      {inquiry.createdAt ? new Date(inquiry.createdAt).toLocaleDateString('en-IN', {
+                      {inquiry.createdAt ? new Date(inquiry.createdAt).toLocaleString('en-IN', {
                         timeZone: 'Asia/Kolkata',
-                        day: 'numeric',
+                        day: '2-digit',
                         month: 'short',
                         year: 'numeric',
                         hour: '2-digit',
-                        minute: '2-digit'
-                        }) : 'N/A'}
+                        minute: '2-digit',
+                        hour12: true
+                      }) : 'N/A'}
                     </td>
                   </tr>
                   );
