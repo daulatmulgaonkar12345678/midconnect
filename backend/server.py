@@ -1809,11 +1809,12 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         decoded_token = await verify_firebase_token(token)
         firebaseUid = decoded_token['uid']
         email = decoded_token.get('email', '')
-        email_verified = decoded_token.get('email_verified', False)
+        # NOTE: We DO NOT use Firebase email_verified for business logic
+        # MongoDB isEmailVerified is the SINGLE SOURCE OF TRUTH
         
         # Log firebaseUid for debugging (masked for privacy)
         masked_uid = f"{firebaseUid[:8]}...{firebaseUid[-4:]}" if len(firebaseUid) > 12 else firebaseUid
-        logger.info(f"🔐 Auth: firebaseUid={masked_uid}, email_verified={email_verified}")
+        logger.info(f"🔐 Auth: firebaseUid={masked_uid}")
         
         # Store decoded token for admin claim check
         firebase_admin_claim = decoded_token.get('admin', False)
@@ -1840,8 +1841,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     "status": None,
                     "verified": False
                 },
-                "isEmailVerified": email_verified,
-                "status": "active" if email_verified else "pending",
+                "isEmailVerified": False,  # SSOT: Always start as false, verify via our system
+                "status": "pending",
                 "verificationDeadline": verification_deadline,
                 "accountStatus": "active",
                 "canLogin": True,
@@ -1867,38 +1868,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             logger.info(f"🔐 Auth: Created pending user: {email}")
         else:
             logger.info(f"🔐 Auth: User found in DB for firebaseUid={masked_uid}")
-            
-            # NEW ARCHITECTURE: Sync email verification status from Firebase
-            mongo_verified = user.get("isEmailVerified", False)
-            
-            if email_verified and not mongo_verified:
-                # User verified email in Firebase, update MongoDB
-                await db.users.update_one(
-                    {"_id": user["_id"]},
-                    {
-                        "$set": {
-                            "isEmailVerified": True,
-                            "status": "active",
-                            "emailVerified": True,  # Legacy field for compatibility
-                            "updatedAt": datetime.now(timezone.utc)
-                        },
-                        "$unset": {
-                            "verificationDeadline": ""
-                        }
-                    }
-                )
-                user["isEmailVerified"] = True
-                user["status"] = "active"
-                user["emailVerified"] = True
-                logger.info(f"🔐 Auth: Synced email verification for {email}")
-            
-            # Also sync the legacy emailVerified field
-            if user.get("emailVerified") != email_verified:
-                await db.users.update_one(
-                    {"_id": user["_id"]},
-                    {"$set": {"emailVerified": email_verified, "updatedAt": datetime.now(timezone.utc)}}
-                )
-                user["emailVerified"] = email_verified
         
         # DEV MODE: If dev token, ensure admin role
         if firebaseUid == "dev-test-uid-12345" and not firebase_initialized:
