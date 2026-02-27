@@ -89,7 +89,7 @@ export type {
 // API Configuration - uses environment variable with fallback for Vercel
 const getApiUrl = (): string => {
   // Check for explicit API URL first
-  const apiUrl = process.env.VITE_API_BASE_URL;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   if (apiUrl && apiUrl.startsWith('http')) {
     return apiUrl;
   }
