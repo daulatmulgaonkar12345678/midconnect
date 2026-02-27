@@ -62,12 +62,12 @@ function ProfileContent() {
               </span>
             </div>
 
-            {/* Email Verified */}
+            {/* Email Verified - Use backend's isEmailVerified */}
             <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-              user?.emailVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+              profile?.isEmailVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
             }`}>
               <Mail className="h-4 w-4" />
-              <span>Email {user?.emailVerified ? 'Verified' : 'Not Verified'}</span>
+              <span>Email {profile?.isEmailVerified ? 'Verified' : 'Not Verified'}</span>
             </div>
 
             {/* GST Status */}
