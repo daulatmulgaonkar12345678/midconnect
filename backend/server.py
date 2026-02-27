@@ -4053,18 +4053,24 @@ async def get_products(
     """
     # Debug: Log total listings before filter
     total_listings = await db.sellerListings.count_documents({})
-    logger.info(f"[Products API] Total listings in DB: {total_listings}")
+    active_listings = await db.sellerListings.count_documents({"status": "active", "isActive": True})
+    logger.info(f"[Products API] Total listings: {total_listings}, Active: {active_listings}")
+    
+    # FALLBACK: If no products found via canonical pipeline, try direct listing display
+    # This handles cases where seller created listings without proper product catalog entries
     
     # Build aggregation pipeline - CANONICAL SSOT: ObjectId-only joins
     # Start from seller_listings, group by productId, join with products
     pipeline = [
-        # Stage 1: Only ACTIVE listings (STRICT: single status only)
-        # Valid listing statuses: draft, active, paused, archived
-        # Only "active" is publicly visible
+        # Stage 1: Only ACTIVE listings - case-insensitive status check
         {"$match": {
             "$and": [
-                # Status MUST be "active" - no other status is public
-                {"status": "active"},
+                # Status check - handle both lowercase and potential variations
+                {"$or": [
+                    {"status": "active"},
+                    {"status": "Active"},
+                    {"status": {"$regex": "^active$", "$options": "i"}}
+                ]},
                 # isActive must be true OR not exist (default to active)
                 {"$or": [
                     {"isActive": True},
@@ -4083,7 +4089,10 @@ async def get_products(
             "seller_ids": {"$addToSet": "$sellerId"},
             "allPrices": {"$push": "$pricingTiers"},
             "firstDescription": {"$first": "$description"},
-            "firstImages": {"$first": "$images"}
+            "firstImages": {"$first": "$images"},
+            "firstProductName": {"$first": "$productName"},  # Capture listing's productName
+            "firstCategoryId": {"$first": "$categoryId"},    # Capture listing's categoryId
+            "firstCategoryName": {"$first": "$categoryName"} # Capture listing's categoryName
         }},
         # Stage 3: Lookup product info from products collection
         {"$lookup": {
