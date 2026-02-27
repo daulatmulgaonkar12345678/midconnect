@@ -3878,42 +3878,80 @@ async def get_all_categories():
 @api_router.get("/categories/public")
 async def get_public_categories():
     """
-    Get categories that have at least 1 product with ACTIVE seller listing.
+    Get categories that have at least 1 ACTIVE seller listing.
     Seller-listing-driven visibility - empty categories are hidden from public.
     
-    PRODUCT IDENTITY GOVERNANCE:
-    - Uses productId (ObjectId) as canonical reference
-    - Aggregates unique products per category via products collection (SSOT)
-    - Categories are determined by the product's category, not listing's denormalized field
+    FLEXIBLE: Supports both:
+    1. Canonical flow (listing -> product -> category)
+    2. Direct flow (listing -> category, when product catalog not used)
     """
+    # Debug logging
+    total_listings = await db.sellerListings.count_documents({})
+    active_listings = await db.sellerListings.count_documents({
+        "$or": [
+            {"status": "active"},
+            {"status": "Active"},
+            {"status": {"$regex": "^active$", "$options": "i"}}
+        ],
+        "$or": [
+            {"isActive": True},
+            {"isActive": {"$exists": False}}
+        ]
+    })
+    logger.info(f"[Public Categories] Total listings: {total_listings}, Active: {active_listings}")
+    
     # Get categories with active seller listings
-    # CANONICAL SSOT: Uses ObjectId-only joins, no fallbacks to legacy fields
+    # FLEXIBLE: Support both product-linked and direct-category listings
     pipeline = [
-        # Stage 1: Only active listings with valid isActive
+        # Stage 1: Only active listings - case-insensitive
         {"$match": {
-            "status": "active",
-            "isActive": True
+            "$and": [
+                {"$or": [
+                    {"status": "active"},
+                    {"status": "Active"},
+                    {"status": {"$regex": "^active$", "$options": "i"}}
+                ]},
+                {"$or": [
+                    {"isActive": True},
+                    {"isActive": {"$exists": False}}
+                ]},
+                {"$or": [
+                    {"isDeleted": False},
+                    {"isDeleted": {"$exists": False}}
+                ]}
+            ]
         }},
-        # Stage 2: Group by productId (MUST be ObjectId)
+        # Stage 2: Group by productId to count listings per product
         {"$group": {
-            "_id": "$productId",  # CANONICAL: No fallback to legacy product_id
-            "listingCount": {"$sum": 1}
+            "_id": "$productId",
+            "listingCount": {"$sum": 1},
+            "listingCategoryId": {"$first": "$categoryId"},      # Capture listing's direct categoryId
+            "listingCategoryName": {"$first": "$categoryName"}   # Capture listing's categoryName
         }},
-        # Stage 3: Lookup product to get canonical category_id
+        # Stage 3: Lookup product to get canonical categoryId
         {"$lookup": {
             "from": "products",
             "localField": "_id",
             "foreignField": "_id",
             "as": "product"
         }},
-        {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": False}},
-        # Stage 4: Group by product's canonical categoryId (SSOT: camelCase)
-        {"$group": {
-            "_id": "$product.categoryId",
-            "productCount": {"$sum": 1},
-            "totalListings": {"$sum": "$listing_count"}
+        {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},  # FLEXIBLE: Don't require product
+        # Stage 4: Determine categoryId - prefer product.categoryId, fallback to listing's
+        {"$addFields": {
+            "resolvedCategoryId": {
+                "$ifNull": ["$product.categoryId", "$listingCategoryId"]
+            }
         }},
-        # Stage 5: Lookup category details
+        # Stage 5: Group by resolved categoryId
+        {"$group": {
+            "_id": "$resolvedCategoryId",
+            "productCount": {"$sum": 1},
+            "totalListings": {"$sum": "$listingCount"},
+            "fallbackCategoryName": {"$first": "$listingCategoryName"}
+        }},
+        # Stage 6: Filter out null categories
+        {"$match": {"_id": {"$ne": None}}},
+        # Stage 7: Lookup category details
         {"$lookup": {
             "from": "categories",
             "localField": "_id",
@@ -3922,7 +3960,7 @@ async def get_public_categories():
         }},
         {"$unwind": {"path": "$category", "preserveNullAndEmptyArrays": True}},
         {"$match": {"productCount": {"$gt": 0}}},
-        {"$sort": {"category.name": 1}}
+        {"$sort": {"category.name": 1, "fallbackCategoryName": 1}}
     ]
     
     categories_raw = await db.sellerListings.aggregate(pipeline).to_list(100)
@@ -3935,11 +3973,13 @@ async def get_public_categories():
             cat_id = str(cat_id)
         
         category = c.get("category", {})
+        cat_name = category.get("name") if category else c.get("fallbackCategoryName")
+        
         categories.append({
             "_id": cat_id,
-            "name": category.get("name") if category else None,
-            "image": category.get("image") if category else None,  # Include category image
-            "icon": category.get("icon") if category else None,    # Include category icon
+            "name": cat_name,
+            "image": category.get("image") if category else None,
+            "icon": category.get("icon") if category else None,
             "productCount": c.get("productCount", 0),
             "listingCount": c.get("totalListings", 0)
         })
@@ -3947,7 +3987,7 @@ async def get_public_categories():
     # Debug logging
     logger.info(f"[Public Categories] Found {len(categories)} categories with active sellers")
     for c in categories[:5]:
-        logger.info(f"  - {c.get('name')}: {c.get('product_count')} products, {c.get('listing_count')} listings")
+        logger.info(f"  - {c.get('name')}: {c.get('productCount')} products, {c.get('listingCount')} listings")
     
     return categories
 
