@@ -1139,6 +1139,8 @@ def get_cors_origins():
     ALLOWED_ORIGINS = [
         # Production domains
         "https://midconnect-ten.vercel.app",
+        "https://www.udyogconnect.in",
+        "https://udyogconnect.in",
         "https://midconnect.vercel.app",
         "https://midconnect.onrender.com",
         # Vercel preview deployments pattern
