@@ -2317,14 +2317,6 @@ async def complete_profile(
         decoded_token = await verify_firebase_token(token)
         firebase_uid = decoded_token['uid']
         email = decoded_token.get('email', '')
-        email_verified = decoded_token.get('email_verified', False)
-        
-        # PHASE 1 - REQUIRE EMAIL VERIFICATION
-        if not email_verified:
-            raise HTTPException(
-                status_code=403,
-                detail="Email verification required. Please verify your email before completing registration."
-            )
         
         # Get existing user (should exist from get_current_user auto-creation)
         existing = await db.users.find_one({"firebaseUid": firebase_uid})
@@ -2332,6 +2324,15 @@ async def complete_profile(
         if not existing:
             # Edge case: user doesn't exist yet - create them
             logger.warning(f"User not found during profile completion, creating: {email}")
+        
+        # ENTERPRISE FIX: Use MongoDB isEmailVerified as SINGLE SOURCE OF TRUTH
+        # Do NOT use Firebase email_verified here
+        mongo_verified = existing.get("isEmailVerified", False) if existing else False
+        if not mongo_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="Email verification required. Please check your inbox and verify your email first."
+            )
         
         # Check if profile is already complete
         if existing and existing.get("profileComplete"):
