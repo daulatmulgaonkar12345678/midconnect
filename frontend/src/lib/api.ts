@@ -1237,7 +1237,7 @@ export const getExpiringSubscriptions = (
   fetchWithAuth(`/admin/subscriptions/expiring?days=${days}`, token);
 
 // Admin Inquiries CSV Export
-export const exportAdminInquiries = (
+export const exportAdminInquiries = async (
   token: string,
   options?: {
     status?: string;
@@ -1255,10 +1255,56 @@ export const exportAdminInquiries = (
   if (options?.dateTo) params.append('dateTo', options.dateTo);
   
   const sanitizedEndpoint = `/admin/inquiries/export?${params.toString()}`;
-const url = `${API_URL}${sanitizedEndpoint}`;
+  const url = `${API_URL}${sanitizedEndpoint}`;
 
-return fetch(url, {
-}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'text/csv',
+    },
+  });
+
+  if (!response.ok) {
+    throw new ApiError('Failed to export inquiries', response.status);
+  }
+
+  return response.blob();
+};
+
+// ==================== Email Verification API ====================
+
+/**
+ * Send verification email via backend (Zoho SMTP)
+ * Called after signup or when user requests resend
+ */
+export const sendVerificationEmail = (email: string): Promise<{
+  success: boolean;
+  message: string;
+}> => fetchAPI('/send-verification', {
+  method: 'POST',
+  body: { email },
+});
+
+/**
+ * Verify email token from verification link
+ */
+export const verifyEmailToken = (token: string): Promise<{
+  success: boolean;
+  message: string;
+  redirectUrl?: string;
+}> => fetchAPI(`/verify-email?token=${encodeURIComponent(token)}`);
+
+/**
+ * Resend verification email
+ */
+export const resendVerificationEmail = (email: string): Promise<{
+  success: boolean;
+  message: string;
+}> => fetchAPI('/resend-verification', {
+  method: 'POST',
+  body: { email },
+});
 
 // Category Spec Template
 export const getCategorySpecTemplate = (
