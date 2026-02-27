@@ -1588,11 +1588,19 @@ export const acceptInquiry = (
   sellerContact?: {
     businessName?: string;
   };
+  // SSOT: Quote data from QuotationService
   quote: {
-    price: number;
+    quoteId?: string;
+    unitPrice: number;
     moq?: number;
     leadTimeDays?: number;
-    validTill: string;
+    validityDate?: string;
+    validityDays?: number;
+    totalPrice?: number;
+    productName?: string;
+    sellerName?: string;
+    buyerName?: string;
+    status?: string;
   };
   subscriptionUsage: {
     used: number;
