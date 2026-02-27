@@ -470,6 +470,8 @@ export interface AdminInquiry {
     name: string | null;
     listingId: string | null;
   };
+  // SSOT: productName also returned at top level for direct access
+  productName: string | null;
   category: string | null;
   quantity: number;
   message: string | null;
