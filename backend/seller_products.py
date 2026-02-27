@@ -1561,28 +1561,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             used_count = await increment_enquiry_usage(db, seller_oid)
         
         # ============================================================
-        # GENERATE WHATSAPP MESSAGE (SSOT - QuotationService ONLY)
+        # GENERATE WHATSAPP MESSAGE (SSOT - Centralized Format)
         # ============================================================
-        # Build quote data structure for QuotationService
-        quote_data = {
-            "quoteId": f"INQ-{inquiry_id[-8:].upper()}",  # Use inquiry ID suffix
-            "accessToken": None,  # Not needed for inline quote
-            "buyerName": buyer_name,
-            "buyerCompany": buyer_company,
-            "sellerName": seller_business,
-            "productName": product_name,
-            "requestedQuantity": quantity,
-            "unitPrice": data.quotedPrice,
-            "moq": data.moq or 1,
-            "packagingCharges": 0,
-            "totalPrice": data.quotedPrice * quantity,
-            "validityDate": validity_date,
-        }
-        
-        # Use QuotationService to generate the WhatsApp preview message
-        quotation_service = QuotationService(db)
-        
-        # Generate message using SSOT method (simplified version for accept flow)
+        # Generate message using standardized format
         formatted_date = validity_date.strftime("%d %b %Y")
         
         whatsapp_message = f"""Hello {buyer_name},
