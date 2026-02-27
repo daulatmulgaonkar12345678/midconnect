@@ -1258,8 +1258,7 @@ export const exportAdminInquiries = (
 const url = `${API_URL}${sanitizedEndpoint}`;
 
 return fetch(url, {
-  
-};
+}`;
 
 // Category Spec Template
 export const getCategorySpecTemplate = (
