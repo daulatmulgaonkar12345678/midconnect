@@ -43,7 +43,7 @@ interface AuthContextType extends AuthState {
   completeRegistration: (profileData: ProfileCompleteData) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  resendVerificationEmail: (email?: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;  // ENTERPRISE FIX: No email param needed
   getIdToken: () => Promise<string | null>;
   refreshProfile: () => Promise<void>;
   clearError: () => void;
