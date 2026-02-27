@@ -1301,13 +1301,14 @@ export const verifyEmailToken = (token: string): Promise<{
 
 /**
  * Resend verification email
+ * ENTERPRISE FIX: Uses auth token, no body required.
+ * Backend gets user email from the auth token.
  */
-export const resendVerificationEmail = (email: string): Promise<{
+export const resendVerificationEmail = (token: string): Promise<{
   success: boolean;
   message: string;
-}> => fetchAPI('/resend-verification', {
+}> => fetchWithAuth('/resend-verification', token, {
   method: 'POST',
-  body: { email },
 });
 
 // Category Spec Template
