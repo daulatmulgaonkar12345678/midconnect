@@ -4137,15 +4137,22 @@ async def get_products(
             "$match": {"product_info.categoryId": ObjectId(category_id)}
         })
     
-    # Stage 8: Project final shape - CANONICAL: No legacy fallbacks
+    # Stage 8: Project final shape - USE LISTING DATA AS FALLBACK
     pipeline.append({
         "$project": {
             "_id": {"$toString": "$_id"},
-            "name": "$product_info.name",
+            # Name: prefer product catalog, fallback to listing's productName
+            "name": {"$ifNull": ["$product_info.name", "$firstProductName"]},
             "slug": "$product_info.slug",
             "description": {"$ifNull": ["$product_info.description", "$firstDescription"]},
-            "categoryId": {"$toString": "$product_info.categoryId"},
-            "categoryName": "$category_info.name",
+            # CategoryId: prefer product catalog, fallback to listing's categoryId
+            "categoryId": {
+                "$toString": {
+                    "$ifNull": ["$product_info.categoryId", "$firstCategoryId"]
+                }
+            },
+            # CategoryName: prefer product's category, fallback to listing's category
+            "categoryName": {"$ifNull": ["$category_info.name", "$listing_category_info.name", "$firstCategoryName"]},
             "images": {"$ifNull": ["$product_info.images", "$firstImages"]},
             "sellerCount": {"$size": "$seller_ids"},
             "minPrice": {
