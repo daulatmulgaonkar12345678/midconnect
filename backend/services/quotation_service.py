@@ -265,15 +265,36 @@ class QuotationService:
         if existing_quote:
             raise ValueError(f"Active quote already exists for this inquiry: {existing_quote.get('quoteId')}")
         
-        # Get product info
-        product_id = inquiry.get("productId")
-        product = None
-        product_name = "Unknown Product"
+        # Get product info via listing -> product chain
+        # Inquiry stores listingId, not productId directly
+        product_name = "Product"
+        product_id = inquiry.get("productId")  # Try direct productId first
         
+        # If no direct productId, get it from listing
+        if not product_id:
+            listing_id = inquiry.get("listingId")
+            if listing_id:
+                try:
+                    lid = listing_id if isinstance(listing_id, ObjectId) else ObjectId(str(listing_id))
+                    listing = await self.db.sellerListings.find_one({"_id": lid})
+                    if listing:
+                        product_id = listing.get("productId")
+                except Exception as e:
+                    logger.warning(f"Error fetching listing for product name: {e}")
+        
+        # Now fetch product name
         if product_id:
-            product = await self.db.products.find_one({"_id": product_id})
-            if product:
-                product_name = product.get("name", "Unknown Product")
+            try:
+                pid = product_id if isinstance(product_id, ObjectId) else ObjectId(str(product_id))
+                product = await self.db.products.find_one({"_id": pid})
+                if product:
+                    product_name = product.get("name") or "Product"
+            except Exception as e:
+                logger.warning(f"Error fetching product: {e}")
+        
+        # Fallback: Check if inquiry has productName embedded
+        if product_name == "Product":
+            product_name = inquiry.get("productName") or "Product"
         
         # Get seller info
         seller = await self.db.users.find_one({"_id": seller_id})
