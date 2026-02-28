@@ -5,20 +5,11 @@ import { ArrowRight, Shield, Truck, BadgeCheck, MapPin, TrendingUp, Package } fr
 import { SearchListing } from '@/types';
 import HeroSearchSection from '@/components/HeroSearchSection';
 
-// Category type from public API
-interface PublicCategory {
-  _id: string;
-  name: string;
-  image?: string;
-  icon?: string;
-  productCount: number;
-  listingCount: number;
-}
-
 export const revalidate = 3600; // Revalidate every hour
 
 export default async function HomePage() {
-  let categories: PublicCategory[] = [];
+  // Using any[] for categories since PublicCategory type matches at runtime
+  let categories: { _id: string; name: string; image?: string; productCount?: number; listingCount?: number }[] = [];
   let featuredProducts: SearchListing[] = [];
 
   try {
