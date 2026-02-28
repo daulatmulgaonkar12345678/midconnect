@@ -1280,14 +1280,14 @@ export const exportAdminInquiries = async (
 
 /**
  * Send verification email via backend (Zoho SMTP)
- * Called after signup or when user requests resend
+ * ENTERPRISE FIX: Uses auth token, not email in body.
+ * Backend gets user email from the Firebase auth token.
  */
-export const sendVerificationEmail = (email: string): Promise<{
+export const sendVerificationEmail = (token: string): Promise<{
   success: boolean;
   message: string;
-}> => fetchAPI('/send-verification', {
+}> => fetchWithAuth('/send-verification', token, {
   method: 'POST',
-  body: { email },
 });
 
 /**
