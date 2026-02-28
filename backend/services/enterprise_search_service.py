@@ -865,17 +865,30 @@ class EnterpriseSearchService:
                 {"$sort": sort_spec or {"rankScore": -1, "createdAt": -1}},
                 {"$skip": skip},
                 {"$limit": limit},
-                # Minimal projection
+                # Lookup product - ONLY ACTIVE PRODUCTS
                 {
                     "$lookup": {
                         "from": "products",
                         "localField": "productId",
                         "foreignField": "_id",
                         "as": "product",
-                        "pipeline": [{"$project": {"name": 1}}]
+                        "pipeline": [
+                            {"$match": {
+                                "$or": [
+                                    {"isActive": True},
+                                    {"isActive": {"$exists": False}}
+                                ],
+                                "$or": [
+                                    {"isDeleted": {"$ne": True}},
+                                    {"isDeleted": {"$exists": False}}
+                                ]
+                            }},
+                            {"$project": {"name": 1, "slug": 1}}
+                        ]
                     }
                 },
-                {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
+                # FILTER OUT listings where product is missing, deleted, or inactive
+                {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": False}},
                 {
                     "$project": {
                         "_id": 1,
