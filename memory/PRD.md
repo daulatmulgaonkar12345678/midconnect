@@ -108,10 +108,11 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 - [x] Email Verification Blocking I/O Fix - Completed 2026-02-27
 - [x] Email Verification Enterprise Fix (Auth Token) - Completed 2026-02-28
 - [x] Production API URL Fallback Fix - Completed 2026-02-28
+- [x] **RESEND MIGRATION** - Completed 2026-02-28 (Replaced Zoho SMTP)
 - [ ] Backend Deployment to Render - Required for all fixes to go live
 
 ### P1 (High Priority)
-- [x] Custom Email Verification (Zoho SMTP) - Architecture complete
+- [x] Custom Email Verification (Resend) - Architecture complete
 - [ ] Enterprise Search - Atlas Indexing (Phase 2)
 - [ ] Admin & Seller Dashboard audit
 
@@ -123,33 +124,53 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 - [ ] Online Payments for Quotes
 - [ ] Counter-Offer System
 
-## Session: 2026-02-28 (Email Verification - Final Fix)
+## Session: 2026-02-28 (RESEND EMAIL MIGRATION)
 
-### Issue Fixed: Send Email Not Working on Signup
+### Major Migration: Zoho SMTP → Resend
 
-**Root Cause**: After `createUserWithEmailAndPassword()`, Firebase auto-logs in the user which triggers `onAuthStateChanged`. This causes state changes and component re-renders, and the `sendVerificationEmail(email)` call sometimes gets swallowed before executing.
+**What Changed**:
+- Completely replaced Zoho SMTP with Resend email service
+- Created centralized email service at `/app/backend/services/email_service.py`
+- Removed old `/app/backend/services/email_verification_service.py`
 
-**Enterprise Fix Applied**:
-Both `/send-verification` and `/resend-verification` endpoints now:
-- Use auth token (not email in body)
-- Backend gets user email from the Firebase auth token
-- Eliminates race condition by getting token immediately after signup
+**New Email Service Architecture**:
+```
+/app/backend/services/email_service.py
+├── EmailVerificationService (signup, resend, token verification)
+├── SubscriptionEmailService (activated, expiring, expired, upgraded, renewed)
+├── InquiryEmailService (buyer confirmation, seller notification, quote received)
+└── OrderEmailService (placed, payment, tracking, completed)
+```
 
-**Changes Made (2026-02-28)**:
+**Environment Variables Required**:
+```
+RESEND_API_KEY=re_xxx        # From https://resend.com/api-keys
+SENDER_EMAIL=noreply@yourdomain.com
+FRONTEND_URL=https://udyogconnect.in
+```
 
-**Backend (`/app/backend/server.py`)**:
-- `/api/send-verification`: Removed `SendVerificationRequest` body model, now uses auth token
+**Security Improvements**:
+- Verification tokens are now SHA256 hashed before storage
+- Token expiry reduced to 1 hour (from 24 hours)
+- Tokens invalidated after successful verification
 
-**Frontend (`/app/frontend/src/lib/api.ts`)**:
-- `sendVerificationEmail(token)`: Now takes auth token, not email
+**Email Notifications Now Implemented**:
+1. **On Signup**: Buyer receives verification email
+2. **On Inquiry Create**: 
+   - Buyer receives confirmation email
+   - Seller receives new inquiry notification
+3. **On Quote Created**: Buyer receives quote notification with pricing details
 
-**Frontend (`/app/frontend/src/context/AuthContext.tsx`)**:
-- `signUp()`: Gets token IMMEDIATELY after Firebase signup, then calls `sendVerificationEmail(token)`
+**MOCK Mode**:
+- If `RESEND_API_KEY` is not set, emails are logged but not sent
+- Verification links are logged for testing purposes
 
-**Test Results**:
-- `/api/send-verification` with auth: ✅ 200 OK
-- `/api/resend-verification` with auth: ✅ 200 OK
-- Full verification flow working
+**Files Changed**:
+- `/app/backend/services/email_service.py` (NEW - centralized email service)
+- `/app/backend/server.py` (updated email endpoints, removed OTP SMTP code)
+- `/app/backend/routers/quotation_router.py` (added email on quote creation)
+- `/app/frontend/src/lib/api.ts` (updated comments)
+- `/app/frontend/src/context/AuthContext.tsx` (updated comments)
 
 ## Session: 2026-02-27 (Email Verification - Enterprise Fix)
 
