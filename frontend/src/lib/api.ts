@@ -88,31 +88,44 @@ export type {
 
 // API Configuration - uses environment variable with fallback for Vercel
 const getApiUrl = (): string => {
-  // Check for explicit API URL first
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  // ENTERPRISE FIX: Support multiple environment variable names for backwards compatibility
+  // Priority: NEXT_PUBLIC_API_URL > NEXT_PUBLIC_API_BASE_URL > NEXT_PUBLIC_BACKEND_URL
+  const apiUrl = 
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||  // Legacy fallback
+    process.env.NEXT_PUBLIC_BACKEND_URL;
+  
   if (apiUrl && apiUrl.startsWith('http')) {
     return apiUrl;
   }
   
-  // Check for backend URL
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-  if (backendUrl && backendUrl.startsWith('http')) {
-    return backendUrl;
+  // Production domain fallback for udyogconnect.in
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    
+    // Production domains - use Render backend
+    if (hostname === 'udyogconnect.in' || hostname === 'www.udyogconnect.in') {
+      return 'https://midconnect.onrender.com';
+    }
+    
+    // Vercel preview deployments
+    if (hostname.includes('vercel.app') || hostname.includes('midconnect')) {
+      return 'https://midconnect.onrender.com';
+    }
   }
   
-  // Fallback for Vercel deployment
-  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-    return 'https://midconnect-verify.preview.emergentagent.com';
-  }
-  
-  // Local development - use relative URLs
+  // Local development - use relative URLs (will be proxied by Next.js)
   return '';
 };
 
 const API_URL = getApiUrl();
 
-if (!API_URL && typeof window !== 'undefined' && !window.location.hostname.includes('localhost')) {
-  console.warn('API URL not configured. Using fallback.');
+// Log API URL configuration for debugging (only in browser)
+if (typeof window !== 'undefined') {
+  console.log('[API Config] API_URL:', API_URL || '(relative/proxy)');
+  if (!API_URL && !window.location.hostname.includes('localhost')) {
+    console.warn('[API Config] No API URL configured - using domain fallback or proxy');
+  }
 }
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
