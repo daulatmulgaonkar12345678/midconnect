@@ -88,6 +88,34 @@ def create_quotation_router(db, get_current_user):
                 request=quote_request
             )
             
+            # ==== SEND EMAIL NOTIFICATION TO BUYER ====
+            try:
+                from services.email_service import get_inquiry_email_service
+                email_service = get_inquiry_email_service(db)
+                
+                # Get inquiry details
+                inquiry = await db.inquiries.find_one({"_id": ObjectId(request.inquiryId)})
+                if inquiry:
+                    buyer = await db.users.find_one({"_id": inquiry.get("buyerId")})
+                    if buyer and buyer.get("email"):
+                        buyer_name = buyer.get("businessName") or buyer.get("name") or buyer.get("email", "").split("@")[0]
+                        seller_name = current_user.get("businessName") or current_user.get("name") or "Seller"
+                        product_name = inquiry.get("productName") or "Product"
+                        
+                        await email_service.send_buyer_quote_received(
+                            to_email=buyer.get("email"),
+                            buyer_name=buyer_name,
+                            seller_name=seller_name,
+                            product_name=product_name,
+                            quoted_price=request.unitPrice,
+                            moq=request.moq,
+                            lead_time_days=request.leadTimeDays,
+                            validity_days=request.validityDays,
+                            quote_id=result.get("quote", {}).get("quoteId", "")
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to send quote notification email: {e}")
+            
             return result
             
         except ValueError as e:
