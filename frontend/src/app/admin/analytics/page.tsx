@@ -99,7 +99,10 @@ export default function AdminAnalyticsDashboard() {
         return;
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+      // Ensure API_URL always ends with /api
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
+      const cleanUrl = baseUrl.replace(/\/+$/, '');
+      const API_URL = cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
       
       const [overviewRes, revenueRes] = await Promise.all([
         fetch(`${API_URL}/admin/analytics/overview`, {
