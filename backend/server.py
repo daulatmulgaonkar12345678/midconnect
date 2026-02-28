@@ -6237,6 +6237,42 @@ async def create_inquiry(
         except Exception as e:
             logger.warning(f"Failed to track inquiry interaction: {e}")
     
+    # ==== SEND EMAIL NOTIFICATIONS ====
+    try:
+        from services.email_service import get_inquiry_email_service
+        email_service = get_inquiry_email_service(db)
+        
+        # Send buyer confirmation email
+        buyer_email = user.get("email")
+        buyer_name = user.get("businessName") or user.get("name") or buyer_email.split("@")[0] if buyer_email else "Buyer"
+        seller_name = seller.get("businessName") or seller.get("name") or "Seller"
+        
+        if buyer_email:
+            await email_service.send_buyer_inquiry_confirmation(
+                to_email=buyer_email,
+                buyer_name=buyer_name,
+                product_name=product_name or "Product",
+                seller_name=seller_name,
+                quantity=inquiry.quantity,
+                inquiry_id=str(inquiry_doc["_id"])
+            )
+        
+        # Send seller notification email
+        seller_email = seller.get("email")
+        if seller_email:
+            await email_service.send_seller_new_inquiry_notification(
+                to_email=seller_email,
+                seller_name=seller_name,
+                buyer_name=buyer_name,
+                buyer_company=user.get("businessName"),
+                product_name=product_name or "Product",
+                quantity=inquiry.quantity,
+                inquiry_id=str(inquiry_doc["_id"]),
+                message=inquiry.message
+            )
+    except Exception as e:
+        logger.warning(f"Failed to send inquiry email notifications: {e}")
+    
     logger.info(f"Inquiry created: buyer={user.get('email')}, seller={str(seller_oid)}, product={product_name}")
     
     return {
