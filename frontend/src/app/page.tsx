@@ -1,18 +1,29 @@
 import Link from 'next/link';
-import { getCategories, searchProducts } from '@/lib/api';
+import { getPublicCategories, searchProducts } from '@/lib/api';
 import CategoryCard from '@/components/CategoryCard';
-import { ArrowRight, Shield, Truck, BadgeCheck, MapPin, TrendingUp } from 'lucide-react';
-import { Category, SearchListing } from '@/types';
+import { ArrowRight, Shield, Truck, BadgeCheck, MapPin, TrendingUp, Package } from 'lucide-react';
+import { SearchListing } from '@/types';
 import HeroSearchSection from '@/components/HeroSearchSection';
+
+// Category type from public API
+interface PublicCategory {
+  _id: string;
+  name: string;
+  image?: string;
+  icon?: string;
+  productCount: number;
+  listingCount: number;
+}
 
 export const revalidate = 3600; // Revalidate every hour
 
 export default async function HomePage() {
-  let categories: Category[] = [];
+  let categories: PublicCategory[] = [];
   let featuredProducts: SearchListing[] = [];
 
   try {
-    categories = await getCategories();
+    // Use getPublicCategories to only show categories with active seller listings
+    categories = await getPublicCategories();
     const searchResult = await searchProducts('');
     featuredProducts = searchResult.products?.slice(0, 8) || [];
   } catch (error) {
