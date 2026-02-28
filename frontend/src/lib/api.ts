@@ -436,6 +436,9 @@ interface AutocompleteSuggestion {
 
 interface AutocompleteResponse {
   suggestions: AutocompleteSuggestion[];
+  query?: string;
+  correctedQuery?: string;
+  didYouMean?: string;
 }
 
 interface LocationSuggestion {
