@@ -966,17 +966,30 @@ class EnterpriseSearchService:
                 {"$sort": {"distance": 1}},  # Sort by distance (closest first)
                 {"$skip": skip},
                 {"$limit": limit},
-                # Lookup product name
+                # Lookup product - ONLY ACTIVE PRODUCTS
                 {
                     "$lookup": {
                         "from": "products",
                         "localField": "productId",
                         "foreignField": "_id",
                         "as": "product",
-                        "pipeline": [{"$project": {"name": 1}}]
+                        "pipeline": [
+                            {"$match": {
+                                "$or": [
+                                    {"isActive": True},
+                                    {"isActive": {"$exists": False}}
+                                ],
+                                "$or": [
+                                    {"isDeleted": {"$ne": True}},
+                                    {"isDeleted": {"$exists": False}}
+                                ]
+                            }},
+                            {"$project": {"name": 1, "slug": 1}}
+                        ]
                     }
                 },
-                {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
+                # FILTER OUT listings where product is missing, deleted, or inactive
+                {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": False}},
                 # Projection
                 {
                     "$project": {
