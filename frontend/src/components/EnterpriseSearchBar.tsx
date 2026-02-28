@@ -75,6 +75,7 @@ export default function EnterpriseSearchBar({
   const fetchProductSuggestions = useCallback(async (searchQuery: string) => {
     if (searchQuery.length < 2) {
       setProductSuggestions([]);
+      setDidYouMean(null);
       return;
     }
     
@@ -82,9 +83,12 @@ export default function EnterpriseSearchBar({
     try {
       const data = await getAutocompleteSuggestions(searchQuery);
       setProductSuggestions(data.suggestions || []);
+      // Capture "did you mean" suggestion for typos
+      setDidYouMean(data.didYouMean || null);
     } catch (err) {
       console.error('Autocomplete fetch error:', err);
       setProductSuggestions([]);
+      setDidYouMean(null);
     } finally {
       setLoading(false);
     }
