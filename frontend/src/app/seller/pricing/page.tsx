@@ -375,7 +375,7 @@ export default function QuickPricingPage() {
                               <input
                                 type="number"
                                 value={slab.pricePerUnit}
-                                onChange={(e) => updateTier(index, 'pricePerUnit', parseFloat(e.target.value) || 0)}
+                                onChange={(e) => updateTier(index, 'pricePerUnit', Math.round(parseFloat(e.target.value) * 100) / 100 || 0)}
                                 className="w-24 px-2 py-1 border rounded text-sm font-medium"
                                 step={0.01}
                               />
