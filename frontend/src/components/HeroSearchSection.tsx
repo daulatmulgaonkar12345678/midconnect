@@ -26,14 +26,17 @@ export default function HeroSearchSection() {
       {/* Content - Positioned on top of image */}
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 md:pt-16 text-center">
         
-        {/* Logo in hero */}
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg">
-            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        {/* Logo in hero - Checkmark icon + Brand name */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+            <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
-          <span className="text-2xl font-bold text-blue-600 drop-shadow-sm">Udyog Connect</span>
+          <span className="text-3xl font-bold">
+            <span style={{ color: '#1e4785' }}>Udyog</span>
+            <span style={{ color: '#f58220' }}>Connect</span>
+          </span>
         </div>
         
         {/* Main Headline */}
