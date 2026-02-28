@@ -14,7 +14,13 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+// Ensure API_URL always ends with /api
+const getApiUrl = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
+  const cleanUrl = baseUrl.replace(/\/+$/, '');
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+};
+const API_URL = getApiUrl();
 
 interface BaseRequest {
   _id: string;
