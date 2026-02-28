@@ -220,10 +220,9 @@ class TestEmailServiceMockMode:
         print(f"✅ Send verification endpoint exists (status: {response.status_code})")
     
     def test_verify_email_endpoint_exists(self):
-        """Verify email endpoint should exist"""
-        response = requests.post(
-            f"{BASE_URL}/api/verify-email",
-            json={"token": "test-token"},
+        """Verify email endpoint should exist (GET with token query param)"""
+        response = requests.get(
+            f"{BASE_URL}/api/verify-email?token=test-token",
             timeout=10
         )
         # Should not 404 - will return error for invalid token
