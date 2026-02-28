@@ -4,7 +4,14 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { CheckCircle, XCircle, Eye, Clock, MapPin, Phone, Mail, FileText, AlertCircle, Loader2 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://midconnect.onrender.com/api';
+// Ensure API_URL always ends with /api
+const getApiUrl = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
+  // Remove trailing slash and ensure /api suffix
+  const cleanUrl = baseUrl.replace(/\/+$/, '');
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+};
+const API_URL = getApiUrl();
 
 interface GSTRequest {
   _id: string;
