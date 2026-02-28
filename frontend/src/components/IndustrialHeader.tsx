@@ -255,31 +255,13 @@ export default function IndustrialHeader() {
             {/* Left: Logo + B2B Tag */}
             <div className="flex items-center gap-3">
               <Link href="/" className="flex items-center gap-2">
-                {/* Industrial Logo Mark */}
-                <div 
-                  className="w-9 h-9 rounded-md flex items-center justify-center"
-                  style={{ backgroundColor: COLORS.deepBlue }}
-                >
-                  <span className="text-white font-bold text-lg">M</span>
-                </div>
-                <span 
-                  className="text-xl font-semibold hidden sm:inline"
-                  style={{ color: COLORS.textPrimary }}
-                >
-                  {APP_NAME}
-                </span>
+                {/* UdyogConnect Logo */}
+                <img 
+                  src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/igi21x06_image.png"
+                  alt="UdyogConnect - Connecting Bharat Industries"
+                  className="h-10 w-auto object-contain"
+                />
               </Link>
-              
-              {/* B2B Tag */}
-              <span 
-                className="hidden md:inline-flex text-xs font-medium px-2.5 py-1 rounded-full"
-                style={{ 
-                  backgroundColor: COLORS.lightGrey, 
-                  color: COLORS.textSecondary 
-                }}
-              >
-                B2B Marketplace
-              </span>
             </div>
 
             {/* Right: Utility Links */}
