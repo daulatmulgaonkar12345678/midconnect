@@ -68,18 +68,22 @@ export default function HeroSearchSection() {
           </div>
         </div>
         
-        {/* Bottom Section - Industrial Equipment Image */}
-        <div className="relative w-full h-[200px] sm:h-[280px] md:h-[350px] lg:h-[400px]">
-          <Image
-            src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/p7nlljni_image.png"
-            alt="Industrial Equipment - Motors, Bearings, Pumps, Valves, Safety Equipment"
-            fill
-            className="object-contain object-bottom"
-            priority
-            sizes="100vw"
-          />
+        {/* Bottom Section - Industrial Equipment Image (Full Width) */}
+        <div className="relative w-full h-[180px] sm:h-[250px] md:h-[320px] lg:h-[380px] mt-2">
+          {/* The image container spans full viewport width */}
+          <div className="absolute inset-0 overflow-hidden">
+            <Image
+              src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/p7nlljni_image.png"
+              alt="Industrial Equipment - Motors, Bearings, Pumps, Valves, Safety Equipment"
+              fill
+              className="object-cover object-top scale-110"
+              priority
+              sizes="100vw"
+              style={{ objectPosition: 'center top' }}
+            />
+          </div>
           {/* Gradient fade at top to blend with content */}
-          <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-blue-100/80 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-blue-100 via-blue-100/60 to-transparent pointer-events-none z-10" />
         </div>
       </div>
     </section>
