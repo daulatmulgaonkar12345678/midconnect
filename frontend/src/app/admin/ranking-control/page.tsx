@@ -66,7 +66,9 @@ export default function RankingControlPage() {
           return;
         }
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+        // Get base URL (without /api since endpoints already include /api)
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
+        const API_URL = baseUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
         const res = await fetch(`${API_URL}/api/products/ranking/config`, {
           headers: { Authorization: `Bearer ${token}` }
         });
