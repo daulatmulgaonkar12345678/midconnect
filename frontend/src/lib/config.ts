@@ -1,7 +1,7 @@
 // Central configuration - Single source of truth for app-wide constants
 // Change here = change everywhere
 
-export const APP_NAME = "MidConnect";
+export const APP_NAME = "UdyogConnect";
 export const APP_TAGLINE = "India's Industrial Marketplace";
 export const APP_DESCRIPTION = "Connect with verified manufacturers, dealers, and distributors. Buy industrial products - Steel, Electrical, Chemicals, Building Materials and more.";
 export const APP_KEYWORDS = "B2B marketplace, industrial products, manufacturers, dealers, steel, electrical equipment, chemicals, India";
