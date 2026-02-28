@@ -1292,9 +1292,10 @@ export const exportAdminInquiries = async (
 // ==================== Email Verification API ====================
 
 /**
- * Send verification email via backend (Zoho SMTP)
- * ENTERPRISE FIX: Uses auth token, not email in body.
- * Backend gets user email from the Firebase auth token.
+ * Send verification email via backend (Resend)
+ * Uses auth token - backend gets user email from the token.
+ * 
+ * MIGRATION: Now uses Resend instead of Zoho SMTP.
  */
 export const sendVerificationEmail = (token: string): Promise<{
   success: boolean;
@@ -1305,6 +1306,8 @@ export const sendVerificationEmail = (token: string): Promise<{
 
 /**
  * Verify email token from verification link
+ * 
+ * MIGRATION: Token is now SHA256 hashed before verification.
  */
 export const verifyEmailToken = (token: string): Promise<{
   success: boolean;
@@ -1313,9 +1316,11 @@ export const verifyEmailToken = (token: string): Promise<{
 }> => fetchAPI(`/verify-email?token=${encodeURIComponent(token)}`);
 
 /**
- * Resend verification email
- * ENTERPRISE FIX: Uses auth token, no body required.
- * Backend gets user email from the auth token.
+ * Resend verification email via backend (Resend)
+ * Uses auth token - backend gets user email from the token.
+ * Rate limited to prevent abuse.
+ * 
+ * MIGRATION: Now uses Resend instead of Zoho SMTP.
  */
 export const resendVerificationEmail = (token: string): Promise<{
   success: boolean;
