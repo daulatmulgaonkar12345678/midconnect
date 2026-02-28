@@ -69,21 +69,21 @@ export default function HeroSearchSection() {
         </div>
         
         {/* Bottom Section - Industrial Equipment Image (Full Width) */}
-        <div className="relative w-full h-[180px] sm:h-[250px] md:h-[320px] lg:h-[380px] mt-2">
+        <div className="relative w-full h-[220px] sm:h-[300px] md:h-[380px] lg:h-[420px]">
           {/* The image container spans full viewport width */}
           <div className="absolute inset-0 overflow-hidden">
             <Image
               src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/p7nlljni_image.png"
               alt="Industrial Equipment - Motors, Bearings, Pumps, Valves, Safety Equipment"
               fill
-              className="object-cover object-top scale-110"
+              className="object-cover"
               priority
               sizes="100vw"
-              style={{ objectPosition: 'center top' }}
+              style={{ objectPosition: 'center bottom' }}
             />
           </div>
           {/* Gradient fade at top to blend with content */}
-          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-blue-100 via-blue-100/60 to-transparent pointer-events-none z-10" />
+          <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-blue-100 via-blue-100/70 to-transparent pointer-events-none z-10" />
         </div>
       </div>
     </section>
