@@ -2199,13 +2199,15 @@ async def send_verification_email(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
-    Send verification email via Zoho SMTP.
+    Send verification email via Resend.
     
-    ENTERPRISE FIX: Uses auth token to get user email.
+    Uses auth token to get user email.
     No request body required - backend knows user from token.
     This is called immediately after Firebase signup.
+    
+    MIGRATION: Now uses Resend instead of Zoho SMTP.
     """
-    from services.email_verification_service import get_email_verification_service
+    from services.email_service import get_email_verification_service
     
     # Get current user from auth token (auto-creates if not exists)
     current_user = await get_current_user(credentials)
@@ -2218,7 +2220,7 @@ async def send_verification_email(
     if not email:
         raise HTTPException(status_code=400, detail="No email associated with this account")
     
-    email_service = await get_email_verification_service(db)
+    email_service = get_email_verification_service(db)
     result = await email_service.send_verification_email(email)
     
     if not result["success"]:
