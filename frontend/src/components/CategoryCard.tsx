@@ -21,7 +21,14 @@ const iconMap: { [key: string]: React.ReactNode } = {
 };
 
 interface CategoryCardProps {
-  category: Category;
+  category: Category | {
+    _id: string;
+    name: string;
+    image?: string;
+    icon?: string;
+    productCount?: number;
+    listingCount?: number;
+  };
   showProductCount?: boolean;
 }
 
