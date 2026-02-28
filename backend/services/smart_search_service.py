@@ -307,14 +307,18 @@ class SmartSearchService:
                 limit=limit - len(suggestions)
             )
             
-            for match, score, _ in fuzzy_matches:
-                if score >= self.FUZZY_THRESHOLD and match not in [s["text"] for s in suggestions]:
-                    suggestions.append({
-                        "type": "product",
-                        "text": match,
-                        "matchType": "fuzzy",
-                        "score": score
-                    })
+            for match_result in fuzzy_matches:
+                # Handle both 2-tuple and 3-tuple formats from different fuzzywuzzy versions
+                if len(match_result) >= 2:
+                    match = match_result[0]
+                    score = match_result[1]
+                    if score >= self.FUZZY_THRESHOLD and match not in [s["text"] for s in suggestions]:
+                        suggestions.append({
+                            "type": "product",
+                            "text": match,
+                            "matchType": "fuzzy",
+                            "score": score
+                        })
         
         return {
             "query": query,
