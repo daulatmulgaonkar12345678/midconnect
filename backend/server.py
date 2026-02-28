@@ -3041,24 +3041,13 @@ async def update_profile(
 
 # ============== EMAIL OTP SYSTEM ==============
 
-import smtplib
 import secrets
 import hashlib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 # OTP Configuration from environment
 OTP_LENGTH = int(os.environ.get("OTP_LENGTH", "6"))
 OTP_VALIDITY_MINUTES = int(os.environ.get("OTP_VALIDITY_MINUTES", "10"))
 OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "3"))
-
-# Email Configuration
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.zoho.in")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "465"))
-EMAIL_USERNAME = os.environ.get("EMAIL_USERNAME", "")
-EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
-EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "B2B Market")
-EMAIL_FROM_ADDRESS = os.environ.get("EMAIL_FROM_ADDRESS", "")
 
 def generate_otp() -> str:
     """Generate a random OTP"""
@@ -3068,109 +3057,96 @@ def hash_otp(otp: str) -> str:
     """Hash OTP for secure storage"""
     return hashlib.sha256(otp.encode()).hexdigest()
 
-def _send_otp_smtp_blocking(to_email: str, otp: str, purpose: str) -> bool:
-    """
-    Synchronous blocking SMTP send operation for OTP emails.
-    This runs in a thread pool to avoid blocking the async event loop.
-    
-    Returns:
-        True if sent successfully, False otherwise
-    """
-    try:
-        subject_map = {
-            "verify_current_email": "Verify Your Current Email - B2B Market",
-            "verify_new_email": "Verify Your New Email - B2B Market",
-            "verify_mobile_change": "Verify Mobile Number Change - B2B Market"
-        }
-        
-        body_map = {
-            "verify_current_email": f"""
-Hello,
-
-You have requested to change your email address on B2B Market.
-
-To verify your current email, please use this OTP:
-
-{otp}
-
-This OTP is valid for {OTP_VALIDITY_MINUTES} minutes.
-
-If you did not request this change, please ignore this email or contact support.
-
-Best regards,
-B2B Market Team
-""",
-            "verify_new_email": f"""
-Hello,
-
-You are updating your email address on B2B Market.
-
-To verify your new email address, please use this OTP:
-
-{otp}
-
-This OTP is valid for {OTP_VALIDITY_MINUTES} minutes.
-
-If you did not request this change, please ignore this email.
-
-Best regards,
-B2B Market Team
-""",
-            "verify_mobile_change": f"""
-Hello,
-
-You have requested to change your mobile number on B2B Market.
-
-To verify this change, please use this OTP:
-
-{otp}
-
-This OTP is valid for {OTP_VALIDITY_MINUTES} minutes.
-
-If you did not request this change, please secure your account immediately.
-
-Best regards,
-B2B Market Team
-"""
-        }
-        
-        msg = MIMEMultipart()
-        msg['From'] = f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDRESS}>"
-        msg['To'] = to_email
-        msg['Subject'] = subject_map.get(purpose, "Your OTP - B2B Market")
-        
-        body = body_map.get(purpose, f"Your OTP is: {otp}\n\nValid for {OTP_VALIDITY_MINUTES} minutes.")
-        msg.attach(MIMEText(body, 'plain'))
-        
-        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=30) as server:
-            server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
-            server.send_message(msg)
-        
-        logger.info(f"OTP email sent to {to_email} for {purpose}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to send OTP email to {to_email}: {e}")
-        return False
-
 async def send_email_otp(to_email: str, otp: str, purpose: str) -> bool:
     """
-    Send OTP via email using Zoho SMTP.
+    Send OTP via email using Resend.
     
-    IMPORTANT: Uses asyncio.to_thread() to run blocking SMTP in thread pool.
-    This prevents the async event loop from blocking and causing timeouts
-    that manifest as CORS errors on the frontend.
+    MIGRATION: Now uses Resend instead of Zoho SMTP.
+    Uses asyncio.to_thread() to run blocking SDK in thread pool.
     
     Returns True if sent successfully, False otherwise.
     In MOCK mode (no credentials), returns True and logs OTP.
     """
-    # MOCK MODE - if no email credentials configured
-    if not EMAIL_USERNAME or not EMAIL_PASSWORD:
-        logger.info(f"[MOCK EMAIL] OTP {otp} sent to {to_email} for {purpose}")
-        return True
+    from services.email_service import send_email, _get_email_wrapper, _get_button_html
     
-    # Run blocking SMTP in thread pool
-    return await asyncio.to_thread(_send_otp_smtp_blocking, to_email, otp, purpose)
+    # Define subject and body based on purpose
+    subject_map = {
+        "verify_current_email": "Verify Your Current Email - Udyog Connect",
+        "verify_new_email": "Verify Your New Email - Udyog Connect",
+        "verify_mobile_change": "Verify Mobile Number Change - Udyog Connect"
+    }
+    
+    body_html_map = {
+        "verify_current_email": f"""
+        <h2 style="color: #0B3C5D; margin-top: 0;">Verify Your Current Email</h2>
+        
+        <p>You have requested to change your email address on Udyog Connect.</p>
+        
+        <p>To verify your current email, please use this OTP:</p>
+        
+        <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <div style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #0B3C5D; font-family: monospace;">{otp}</div>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">This OTP is valid for {OTP_VALIDITY_MINUTES} minutes.</p>
+        
+        <p style="color: #999; font-size: 12px;">If you did not request this change, please ignore this email or contact support.</p>
+        """,
+        "verify_new_email": f"""
+        <h2 style="color: #0B3C5D; margin-top: 0;">Verify Your New Email</h2>
+        
+        <p>You are updating your email address on Udyog Connect.</p>
+        
+        <p>To verify your new email address, please use this OTP:</p>
+        
+        <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <div style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #28a745; font-family: monospace;">{otp}</div>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">This OTP is valid for {OTP_VALIDITY_MINUTES} minutes.</p>
+        
+        <p style="color: #999; font-size: 12px;">If you did not request this change, please ignore this email.</p>
+        """,
+        "verify_mobile_change": f"""
+        <h2 style="color: #0B3C5D; margin-top: 0;">Verify Mobile Number Change</h2>
+        
+        <p>You have requested to change your mobile number on Udyog Connect.</p>
+        
+        <p>To verify this change, please use this OTP:</p>
+        
+        <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <div style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #f59e0b; font-family: monospace;">{otp}</div>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">This OTP is valid for {OTP_VALIDITY_MINUTES} minutes.</p>
+        
+        <p style="color: #ef4444; font-size: 12px;">If you did not request this change, please secure your account immediately.</p>
+        """
+    }
+    
+    subject = subject_map.get(purpose, f"Your OTP - Udyog Connect")
+    body_html = body_html_map.get(purpose, f"""
+        <h2 style="color: #0B3C5D; margin-top: 0;">Your OTP Code</h2>
+        <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <div style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #0B3C5D; font-family: monospace;">{otp}</div>
+        </div>
+        <p style="color: #666; font-size: 14px;">Valid for {OTP_VALIDITY_MINUTES} minutes.</p>
+    """)
+    
+    html_content = _get_email_wrapper(body_html, subject)
+    
+    result = await send_email(
+        to_email=to_email,
+        subject=subject,
+        html_content=html_content
+    )
+    
+    if result.get("success"):
+        logger.info(f"OTP email sent to {to_email} for {purpose}")
+        return True
+    else:
+        logger.error(f"Failed to send OTP email to {to_email}: {result.get('error')}")
+        return False
 
 # OTP Request Models
 class RequestEmailChangeStep1(BaseModel):
