@@ -128,7 +128,7 @@ export default function QuickPricingPage() {
       slabs: [...editState.slabs, {
         minQty: newMin,
         maxQty: null,
-        pricePerUnit: editState.basePrice * 0.95
+        pricePerUnit: Math.round(editState.basePrice * 0.95 * 100) / 100
       }]
     });
   };
