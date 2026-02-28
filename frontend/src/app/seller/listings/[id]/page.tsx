@@ -1129,9 +1129,9 @@ export default function EditSellerListingPage() {
                             <input
                               type="number"
                               value={tier.pricePerUnit || ''}
-                              onChange={(e) => updatePricingTier(idx, 'pricePerUnit', parseFloat(e.target.value) || 0)}
+                              onChange={(e) => updatePricingTier(idx, 'pricePerUnit', Math.round(parseFloat(e.target.value) * 100) / 100 || 0)}
                               min={0}
-                              step={0.01}
+                              step={1}
                               className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
                               data-testid={`price-tier-${idx}`}
                             />
