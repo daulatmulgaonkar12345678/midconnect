@@ -26,13 +26,13 @@ export default function HeroSearchSection() {
       {/* Content - Positioned on top of image */}
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 md:pt-16 text-center">
         
-        {/* Logo in hero - Checkmark icon + Brand name */}
+        {/* Logo in hero - UdyogConnect logo + Brand name */}
         <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-            <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
+          <img 
+            src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png"
+            alt="UdyogConnect"
+            className="h-14 w-14 object-contain drop-shadow-lg"
+          />
           <span className="text-3xl font-bold">
             <span style={{ color: '#1e4785' }}>Udyog</span>
             <span style={{ color: '#f58220' }}>Connect</span>
