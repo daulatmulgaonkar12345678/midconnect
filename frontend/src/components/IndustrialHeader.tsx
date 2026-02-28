@@ -254,15 +254,16 @@ export default function IndustrialHeader() {
             
             {/* Left: Logo + Brand Name */}
             <div className="flex items-center gap-3">
-              <Link href="/" className="flex items-center gap-2">
-                {/* UdyogConnect Logo Icon */}
+              <Link href="/" className="flex items-center gap-2.5">
+                {/* UdyogConnect Logo Icon - High Quality */}
                 <img 
-                  src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png"
+                  src="https://static.prod-images.emergentagent.com/jobs/59d69e96-5add-42b9-88de-4fe2b67c84c6/images/7abccb6424c22d25114294889f8635b0ccaec8dd04d3d029b59c8e556a06ef89.png"
                   alt="UdyogConnect"
-                  className="h-10 w-10 object-contain"
+                  className="h-9 w-9 object-contain"
+                  style={{ imageRendering: 'crisp-edges' }}
                 />
                 {/* Brand Name - Udyog (Blue) Connect (Orange) */}
-                <span className="text-xl font-bold hidden sm:flex">
+                <span className="text-xl font-bold hidden sm:flex tracking-tight">
                   <span style={{ color: '#1e4785' }}>Udyog</span>
                   <span style={{ color: '#f58220' }}>Connect</span>
                 </span>
