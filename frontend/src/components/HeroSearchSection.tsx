@@ -47,8 +47,8 @@ export default function HeroSearchSection() {
           from verified manufacturers, dealers & distributors across India
         </p>
         
-        {/* Search Bar - Glass effect card */}
-        <div className="max-w-3xl mx-auto mb-6 bg-white/80 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-white/50">
+        {/* Search Bar - Glass effect card with high z-index for dropdowns */}
+        <div className="relative z-50 max-w-3xl mx-auto mb-6 bg-white/80 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-white/50">
           <EnterpriseSearchBar 
             variant="hero" 
             showLocationFilter={true}
