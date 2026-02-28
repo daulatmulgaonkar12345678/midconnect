@@ -27,14 +27,13 @@ export default function HeroSearchSection() {
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 md:pt-16 text-center">
         
         {/* Logo in hero - UdyogConnect logo + Brand name */}
-        <div className="flex items-center justify-center gap-4 mb-6">
+        <div className="flex items-center justify-center gap-3 mb-6">
           <img 
-            src="https://static.prod-images.emergentagent.com/jobs/59d69e96-5add-42b9-88de-4fe2b67c84c6/images/7abccb6424c22d25114294889f8635b0ccaec8dd04d3d029b59c8e556a06ef89.png"
+            src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png"
             alt="UdyogConnect"
-            className="h-16 w-16 object-contain"
-            style={{ imageRendering: 'crisp-edges' }}
+            className="h-12 w-12 sm:h-14 sm:w-14 object-contain flex-shrink-0"
           />
-          <span className="text-3xl sm:text-4xl font-bold tracking-tight">
+          <span className="text-2xl sm:text-3xl font-bold tracking-tight">
             <span style={{ color: '#1e4785' }}>Udyog</span>
             <span style={{ color: '#f58220' }}>Connect</span>
           </span>
