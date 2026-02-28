@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy - MidConnect',
-  description: 'Learn how MidConnect collects, uses, and protects your personal and business information.',
+  title: 'Privacy Policy - UdyogConnect',
+  description: 'Learn how UdyogConnect collects, uses, and protects your personal and business information.',
 };
 
 export default function PrivacyPage() {

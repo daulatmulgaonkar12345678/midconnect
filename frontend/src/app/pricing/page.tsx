@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { Check, X, Star, Zap, Shield, Crown } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Pricing - MidConnect',
-  description: 'Simple, transparent pricing for sellers on MidConnect. Start free and grow your business.',
+  title: 'Pricing - UdyogConnect',
+  description: 'Simple, transparent pricing for sellers on UdyogConnect. Start free and grow your business.',
 };
 
 export default function PricingPage() {
@@ -64,12 +64,12 @@ export default function PricingPage() {
             <p className="text-gray-500 mt-2">For growing businesses</p>
           </div>
           <div className="text-center mb-6">
-            <span className="text-4xl font-bold text-gray-900">₹1,999</span>
+            <span className="text-4xl font-bold text-gray-900">₹999</span>
             <span className="text-gray-500">/month</span>
           </div>
           <ul className="space-y-3 mb-8">
             <Feature included>Unlimited product listings</Feature>
-            <Feature included>100 enquiries per month</Feature>
+            <Feature included>Unlimited enquiries per month</Feature>
             <Feature included>Verified seller badge</Feature>
             <Feature included>Priority support</Feature>
             <Feature included>Priority search ranking</Feature>

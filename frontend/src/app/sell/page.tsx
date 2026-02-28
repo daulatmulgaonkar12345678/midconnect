@@ -31,7 +31,7 @@ export default function SellPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
-              Start Selling on India's Fastest Growing MidConnect Marketplace
+              Start Selling on India's Fastest Growing UdyogConnect Marketplace
             </h1>
             <p className="text-xl text-green-100 mb-8">
               Reach thousands of verified buyers. List your products, get enquiries, and grow your business.
@@ -68,7 +68,7 @@ export default function SellPage() {
       {/* Benefits */}
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Why Sell on MidConnect?</h2>
+          <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">Why Sell on UdyogConnect?</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center">
               <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -129,7 +129,7 @@ export default function SellPage() {
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Ready to Start Selling?</h2>
           <p className="text-blue-100 mb-8">
-            Join thousands of sellers who are growing their business on MidConnect
+            Join thousands of sellers who are growing their business on UdyogConnect
           </p>
           {!loading && (
             isAuthenticated ? (

@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { Store, Camera, Tag, MessageCircle, BarChart, CheckCircle, ArrowRight } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Seller Guide - MidConnect',
-  description: 'Complete guide for sellers on MidConnect. Learn how to list products, manage orders, and grow your business.',
+  title: 'Seller Guide - UdyogConnect',
+  description: 'Complete guide for sellers on UdyogConnect. Learn how to list products, manage orders, and grow your business.',
 };
 
 export default function SellerGuidePage() {
@@ -13,7 +13,7 @@ export default function SellerGuidePage() {
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Seller Guide</h1>
         <p className="text-xl text-gray-600">
-          Everything you need to know to succeed as a seller on MidConnect
+          Everything you need to know to succeed as a seller on UdyogConnect
         </p>
       </div>
 
@@ -97,7 +97,7 @@ export default function SellerGuidePage() {
         </h2>
         <div className="bg-white rounded-xl shadow-sm p-6">
           <p className="text-gray-600 mb-4">
-            MidConnect allows you to set quantity-based pricing slabs to offer better deals for bulk orders.
+            UdyogConnect allows you to set quantity-based pricing slabs to offer better deals for bulk orders.
           </p>
           <div className="bg-gray-50 rounded-lg p-4">
             <h4 className="font-semibold text-gray-900 mb-3">Example Pricing Slabs:</h4>
@@ -186,7 +186,7 @@ export default function SellerGuidePage() {
       <div className="bg-blue-600 rounded-xl p-8 text-center text-white">
         <h2 className="text-2xl font-bold mb-4">Ready to Start Selling?</h2>
         <p className="mb-6 text-blue-100">
-          Join thousands of sellers already growing their business on MidConnect.
+          Join thousands of sellers already growing their business on UdyogConnect.
         </p>
         <Link 
           href="/sell" 

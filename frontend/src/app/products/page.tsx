@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Package, Users, ArrowRight } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'All Products - MidConnect',
+  title: 'All Products - UdyogConnect',
   description: 'Browse industrial products from verified sellers. Steel, electrical equipment, chemicals, building materials and more.',
 };
 

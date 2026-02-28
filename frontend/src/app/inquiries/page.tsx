@@ -147,7 +147,7 @@ export default function InquiriesPage() {
   const openWhatsApp = (phone: string, productName: string, quantity: number) => {
     const cleanPhone = phone.replace(/\D/g, '');
     const finalPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
-    const message = `Hi, I sent an inquiry for ${productName} (Qty: ${quantity}) on MidConnect. I'd like to discuss further.`;
+    const message = `Hi, I sent an inquiry for ${productName} (Qty: ${quantity}) on UdyogConnect. I'd like to discuss further.`;
     window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 

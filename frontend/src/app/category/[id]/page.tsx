@@ -45,12 +45,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const category = categories.find((c) => c._id === id);
     if (category) {
       return {
-        title: `${category.name} - Industrial Products | MidConnect`,
+        title: `${category.name} - Industrial Products | UdyogConnect`,
         description: `Browse ${category.name} products from verified sellers.`,
       };
     }
   } catch {}
-  return { title: 'Category - MidConnect' };
+  return { title: 'Category - UdyogConnect' };
 }
 
 export const revalidate = 60;

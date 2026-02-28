@@ -3,7 +3,7 @@ import { Mail, Phone, MapPin, Clock, MessageCircle } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Contact Us - .udyogconnect',
-  description: 'Get in touch with MidConnect support team. We are here to help with your queries about buying, selling, or using our platform.',
+  description: 'Get in touch with UdyogConnect support team. We are here to help with your queries about buying, selling, or using our platform.',
 };
 
 export default function ContactPage() {
