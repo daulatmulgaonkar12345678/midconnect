@@ -40,8 +40,9 @@ export default function HeroSearchSection() {
         </div>
         
         {/* Main Headline */}
-        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 leading-tight drop-shadow-sm">
-          India&apos;s Trusted B2B Marketplace
+        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-4 leading-tight drop-shadow-sm">
+          <span style={{ color: '#1e4785' }}>India&apos;s Trusted</span>{' '}
+          <span style={{ color: '#f58220' }}>B2B Marketplace</span>
         </h1>
         
         {/* Description */}
