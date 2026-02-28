@@ -106,7 +106,7 @@ export default function BuyerInquiriesPage() {
 
   const openWhatsApp = (phone: string, productName?: string, quantity?: number) => {
     const message = encodeURIComponent(
-      `Hi, I sent an inquiry for ${productName || 'your product'} (Qty: ${quantity || 'N/A'}) on MidConnect. I'd like to discuss further.`
+      `Hi, I sent an inquiry for ${productName || 'your product'} (Qty: ${quantity || 'N/A'}) on Udyog Connect. I'd like to discuss further.`
     );
     window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${message}`, '_blank');
   };
