@@ -14,6 +14,11 @@ export const metadata: Metadata = {
   title: SEO.title,
   description: SEO.description,
   keywords: APP_KEYWORDS,
+  icons: {
+    icon: 'https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png',
+    shortcut: 'https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png',
+    apple: 'https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png',
+  },
   openGraph: {
     title: SEO.ogTitle,
     description: SEO.ogDescription,
