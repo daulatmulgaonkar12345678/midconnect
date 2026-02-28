@@ -51,6 +51,7 @@ export default function EnterpriseSearchBar({
   const [locationSearch, setLocationSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
   
   const searchRef = useRef<HTMLDivElement>(null);
   const locationRef = useRef<HTMLDivElement>(null);
