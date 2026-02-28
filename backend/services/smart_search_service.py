@@ -64,6 +64,12 @@ class SmartSearchService:
         'battery': ['batry', 'battry', 'batery'],
         'contactor': ['contacter', 'contactar', 'contctor'],
         'breaker': ['braker', 'breakar', 'breker'],
+        'gloves': ['glows', 'glovs', 'glove', 'gluves', 'gluvs'],
+        'bearing': ['bering', 'bearng', 'baering', 'berring'],
+        'valve': ['valv', 'valev', 'vlave'],
+        'wheel': ['weel', 'whel', 'wheeel'],
+        'cutting': ['cuting', 'cutng', 'cuttin'],
+        'safety': ['safty', 'saftey', 'safetty'],
     }
     
     # Build reverse lookup for common typos
