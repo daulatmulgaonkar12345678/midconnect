@@ -31,7 +31,7 @@ export default function HeroSearchSection() {
           <img 
             src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png"
             alt="UdyogConnect"
-            className="h-12 w-12 sm:h-14 sm:w-14 object-contain flex-shrink-0"
+            className="h-16 w-16 sm:h-[70px] sm:w-[70px] object-contain flex-shrink-0"
           />
           <span className="text-2xl sm:text-3xl font-bold tracking-tight">
             <span style={{ color: '#1e4785' }}>Udyog</span>
