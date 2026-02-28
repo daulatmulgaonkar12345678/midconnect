@@ -255,12 +255,12 @@ export default function IndustrialHeader() {
             {/* Left: Logo + Brand Name */}
             <div className="flex items-center gap-3">
               <Link href="/" className="flex items-center gap-2">
-                {/* Checkmark Logo Icon */}
-                <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                  <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
+                {/* UdyogConnect Logo Icon */}
+                <img 
+                  src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png"
+                  alt="UdyogConnect"
+                  className="h-10 w-10 object-contain"
+                />
                 {/* Brand Name - Udyog (Blue) Connect (Orange) */}
                 <span className="text-xl font-bold hidden sm:flex">
                   <span style={{ color: '#1e4785' }}>Udyog</span>
