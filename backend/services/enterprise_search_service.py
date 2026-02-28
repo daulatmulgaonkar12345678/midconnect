@@ -450,16 +450,30 @@ class EnterpriseSearchService:
         # ============================================================
         # STEP 11: Result Projection (Minimal Payload - Phase 3)
         # ============================================================
+        # Lookup product info - ONLY ACTIVE PRODUCTS
         pipeline.append({
             "$lookup": {
                 "from": "products",
                 "localField": "productId",
                 "foreignField": "_id",
                 "as": "product",
-                "pipeline": [{"$project": {"name": 1}}]  # Only fetch name
+                "pipeline": [
+                    {"$match": {
+                        "$or": [
+                            {"isActive": True},
+                            {"isActive": {"$exists": False}}  # Treat missing as active
+                        ],
+                        "$or": [
+                            {"isDeleted": {"$ne": True}},
+                            {"isDeleted": {"$exists": False}}
+                        ]
+                    }},
+                    {"$project": {"name": 1, "slug": 1, "isActive": 1}}
+                ]
             }
         })
-        pipeline.append({"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}})
+        # FILTER OUT listings where product is missing, deleted, or inactive
+        pipeline.append({"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": False}})
         
         # Minimal projection for performance
         pipeline.append({
