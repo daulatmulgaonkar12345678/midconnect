@@ -43,11 +43,11 @@ export default function HeroSearchSection() {
           {/* Left Content - Text & Search */}
           <div className="text-center md:text-left">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold mb-4 leading-tight">
-              India&apos;s Trusted
-              <span className="block text-yellow-300">B2B Marketplace</span>
+              Connecting Bharat
+              <span className="block text-yellow-300">Industries</span>
             </h1>
             <p className="text-base sm:text-lg lg:text-xl text-blue-100 mb-6 max-w-lg mx-auto md:mx-0">
-              Source industrial equipment directly from verified manufacturers, dealers & distributors across India
+              India&apos;s trusted B2B marketplace. Source industrial equipment directly from verified manufacturers, dealers & distributors
             </p>
             
             {/* Enterprise Search Bar */}
