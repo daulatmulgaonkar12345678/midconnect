@@ -244,10 +244,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Resend verification email via backend (Zoho SMTP)
+   * Resend verification email via backend (Resend)
    * 
-   * ENTERPRISE FIX: Uses auth token, no email in body.
-   * Backend gets user email from the Firebase auth token.
+   * Uses auth token - backend gets user email from the token.
+   * MIGRATION: Now uses Resend instead of Zoho SMTP.
    */
   const resendVerificationEmail = async () => {
     if (!state.user) throw new Error('No user logged in');
