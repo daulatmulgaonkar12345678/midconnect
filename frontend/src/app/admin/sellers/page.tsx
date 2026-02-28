@@ -3,7 +3,13 @@
 import { useState, useEffect } from 'react';
 import { Search, BadgeCheck, MapPin, Package } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://auth-ssot-rebuild.preview.emergentagent.com/api';
+// Ensure API_URL always ends with /api
+const getApiUrl = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
+  const cleanUrl = baseUrl.replace(/\/+$/, '');
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+};
+const API_URL = getApiUrl();
 
 interface Seller {
   _id: string;
