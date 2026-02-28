@@ -78,15 +78,28 @@ export default async function HomePage() {
               <h2 className="text-2xl font-bold text-gray-900">Browse by Category</h2>
               <p className="text-gray-500 mt-1">Explore industrial products across categories</p>
             </div>
-            <Link href="/categories" className="text-blue-600 hover:text-blue-700 flex items-center gap-1">
-              View All <ArrowRight className="h-4 w-4" />
-            </Link>
+            {categories.length > 0 && (
+              <Link href="/categories" className="text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                View All <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {categories.slice(0, 8).map((category) => (
-              <CategoryCard key={category._id} category={category} />
-            ))}
-          </div>
+          
+          {categories.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {categories.slice(0, 8).map((category) => (
+                <CategoryCard key={category._id} category={category} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 bg-gray-50 rounded-xl border border-gray-100">
+              <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Categories Coming Soon</h3>
+              <p className="text-gray-500 max-w-md mx-auto">
+                We&apos;re onboarding verified sellers. Product categories will appear here once sellers list their products.
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
