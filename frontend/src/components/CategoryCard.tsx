@@ -26,6 +26,7 @@ interface CategoryCardProps {
     name: string;
     image?: string;
     icon?: string;
+    description?: string;
     productCount?: number;
     listingCount?: number;
   };
