@@ -416,10 +416,11 @@ def create_enterprise_search_router(db, require_auth=None):
         
         Features:
         - Direct product/category matches
-        - Fuzzy matching for typos (moter → motor)
+        - Fuzzy matching for typos (moter → motor, glows → gloves)
         - Phonetic matching (India-friendly)
         - "Did you mean?" suggestions
         - Popular searches ranking
+        - Falls back to sellerListings for actual products
         """
         try:
             from services.smart_search_service import create_smart_search_service
@@ -432,16 +433,16 @@ def create_enterprise_search_router(db, require_auth=None):
             # Normalize the query for better matching
             parsed = search_normalizer.parse_search_query(q)
             
-            # Get spelling suggestion
+            # Get spelling suggestion (checks known typo patterns)
             spelling = await smart_search.get_spelling_suggestion(q)
             if spelling:
                 did_you_mean = spelling.get("corrected")
                 corrected_query = did_you_mean
             
-            # Use corrected query for matching
+            # Use corrected query for matching if available
             search_q = corrected_query or q
             
-            # 1. Product name matches (direct + fuzzy)
+            # 1. Product name matches (from products collection)
             product_regex = {"$regex": search_q, "$options": "i"}
             products = await db.products.find(
                 {"name": product_regex, "isActive": True},
@@ -456,7 +457,32 @@ def create_enterprise_search_router(db, require_auth=None):
                     "icon": "package"
                 })
             
-            # 2. If not enough direct matches, try fuzzy
+            # 2. Also search sellerListings for actual products being sold
+            if len(suggestions) < limit:
+                # Search by productName in sellerListings
+                listings = await db.sellerListings.aggregate([
+                    {"$match": {
+                        "isActive": True,
+                        "status": "active",
+                        "$or": [
+                            {"productName": {"$regex": search_q, "$options": "i"}},
+                            {"searchableText": {"$regex": search_q, "$options": "i"}}
+                        ]
+                    }},
+                    {"$group": {"_id": "$productName"}},
+                    {"$limit": 5}
+                ]).to_list(5)
+                
+                for l in listings:
+                    product_name = l.get("_id")
+                    if product_name and product_name not in [s.get("text") for s in suggestions]:
+                        suggestions.append({
+                            "type": "product",
+                            "text": product_name,
+                            "icon": "package"
+                        })
+            
+            # 3. If still not enough, try fuzzy matching
             if len(suggestions) < 3:
                 fuzzy_result = await smart_search.get_smart_autocomplete(q, limit=5)
                 for s in fuzzy_result.get("suggestions", []):
