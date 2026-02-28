@@ -876,13 +876,15 @@ class EnterpriseSearchService:
                         "as": "product",
                         "pipeline": [
                             {"$match": {
-                                "$or": [
-                                    {"isActive": True},
-                                    {"isActive": {"$exists": False}}
-                                ],
-                                "$or": [
-                                    {"isDeleted": {"$ne": True}},
-                                    {"isDeleted": {"$exists": False}}
+                                "$and": [
+                                    {"$or": [
+                                        {"isActive": True},
+                                        {"isActive": {"$exists": False}}
+                                    ]},
+                                    {"$or": [
+                                        {"isDeleted": {"$ne": True}},
+                                        {"isDeleted": {"$exists": False}}
+                                    ]}
                                 ]
                             }},
                             {"$project": {"name": 1, "slug": 1}}
