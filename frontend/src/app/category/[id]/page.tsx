@@ -75,18 +75,23 @@ export default async function CategoryPage({ params }: Props) {
   if (!category && products.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-16 bg-white rounded-xl">
-          <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Products in This Category</h3>
-          <p className="text-gray-500 mb-4">
-            This category doesn't have any products with active sellers yet.
+        <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-100">
+          <div className="bg-blue-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Package className="h-10 w-10 text-blue-500" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-3">No Products Available Yet</h3>
+          <p className="text-gray-500 mb-2 max-w-md mx-auto">
+            We&apos;re actively onboarding sellers in this category.
+          </p>
+          <p className="text-sm text-gray-400 mb-6 max-w-md mx-auto">
+            Check back soon or explore other categories with verified supplier listings.
           </p>
           <Link
             href="/products"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
-            View All Products
+            Browse All Products
           </Link>
         </div>
       </div>
