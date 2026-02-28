@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 load_dotenv('/app/backend/.env')
 
 # Get BASE_URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://midconnect-verify.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://auth-ssot-rebuild.preview.emergentagent.com')
 BASE_URL = BASE_URL.rstrip('/')
 
 # MongoDB connection for direct schema validation tests

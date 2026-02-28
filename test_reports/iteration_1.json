@@ -18,7 +18,7 @@
     "critical_bugs": [
       {
         "component": "External URL Access",
-        "issue": "Frontend URL https://midconnect-verify.preview.emergentagent.com shows 520 Cloudflare error",
+        "issue": "Frontend URL https://auth-ssot-rebuild.preview.emergentagent.com shows 520 Cloudflare error",
         "impact": "External users cannot access the application",
         "fix_priority": "CRITICAL",
         "affected_selectors": ["entire frontend"],
