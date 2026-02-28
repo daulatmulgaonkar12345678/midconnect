@@ -124,7 +124,30 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 - [ ] Online Payments for Quotes
 - [ ] Counter-Offer System
 
-## Session: 2026-02-28 (RESEND EMAIL MIGRATION)
+## Session: 2026-02-28 (Category Visibility Fix)
+
+### Issue Fixed: Category Visibility Inconsistency
+
+**Problem**: Home page showed ALL categories (including empty ones) while categories page only showed categories with active listings. This caused confusion and broken links.
+
+**Root Cause**: 
+- Home page (`page.tsx`) was using `getCategories()` → `/api/categories/all` (returns ALL categories)
+- Categories page (`categories/page.tsx`) was using `getPublicCategories()` → `/api/categories/public` (filtered by listings)
+
+**Fix Applied**:
+1. Updated home page to use `getPublicCategories()` instead of `getCategories()`
+2. Added proper empty state messages for when no categories have active listings
+
+**AI Empty State Text Added**:
+- **Home page**: "Categories Coming Soon - We're onboarding verified sellers. Product categories will appear here once sellers list their products."
+- **Categories page**: "Categories Coming Soon - We're onboarding verified industrial suppliers across India. Categories will appear here once sellers start listing their products. Check back soon!"
+- **Category detail page**: "No Products Available Yet - We're actively onboarding sellers in this category. Check back soon or explore other categories with verified supplier listings."
+
+**Files Changed**:
+- `/app/frontend/src/app/page.tsx` - Now uses `getPublicCategories()`
+- `/app/frontend/src/app/categories/page.tsx` - Updated empty state
+- `/app/frontend/src/app/category/[id]/page.tsx` - Updated empty state
+- `/app/frontend/src/components/CategoryCard.tsx` - Extended type support
 
 ### Major Migration: Zoho SMTP → Resend
 
