@@ -106,6 +106,8 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 ### P0 (Critical)
 - [x] Quotation SSOT Fix - Completed 2026-02-27
 - [x] Email Verification Blocking I/O Fix - Completed 2026-02-27
+- [x] Email Verification Enterprise Fix (Auth Token) - Completed 2026-02-28
+- [x] Production API URL Fallback Fix - Completed 2026-02-28
 - [ ] Backend Deployment to Render - Required for all fixes to go live
 
 ### P1 (High Priority)
