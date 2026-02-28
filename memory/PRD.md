@@ -214,12 +214,19 @@ MongoDB → Single Source of Truth for ALL business logic (verification status, 
 
 **Expected Flow**:
 1. User registers → stored with `isEmailVerified=false`
-2. Verification email sent (Zoho SMTP or MOCK)
-3. User clicks link → backend sets `isEmailVerified=true`
+2. Verification email sent via Resend (or MOCK if no API key)
+3. User clicks link → backend verifies hashed token, sets `isEmailVerified=true`
 4. `/users/me` returns verified status
 5. Access granted
 
 No Firebase verification used in business logic.
+
+## Email Templates (Branded)
+All emails use Udyog Connect branded templates with:
+- Blue gradient header (#0B3C5D)
+- Clean, professional design
+- Support email footer
+- Mobile-responsive tables
 
 ## Technical Decisions
 
