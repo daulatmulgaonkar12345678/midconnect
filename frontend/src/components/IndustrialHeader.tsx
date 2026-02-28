@@ -259,7 +259,7 @@ export default function IndustrialHeader() {
                 <img 
                   src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png"
                   alt="UdyogConnect"
-                  className="h-8 w-8 object-contain flex-shrink-0"
+                  className="h-10 w-10 object-contain flex-shrink-0"
                 />
                 {/* Brand Name - Udyog (Blue) Connect (Orange) */}
                 <span className="text-lg font-bold hidden sm:flex items-center tracking-tight">
