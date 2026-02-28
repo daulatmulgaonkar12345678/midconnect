@@ -215,11 +215,30 @@ export default function EnterpriseSearchBar({
           {/* Product Suggestions Dropdown */}
           {showProductDropdown && (query.length >= 2 || productSuggestions.length > 0) && (
             <div className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-80 overflow-hidden">
-              {productSuggestions.length === 0 && query.length >= 2 && !loading ? (
+              {/* Did You Mean suggestion for typos */}
+              {didYouMean && productSuggestions.length === 0 && (
+                <button
+                  onClick={() => {
+                    setQuery(didYouMean);
+                    fetchProductSuggestions(didYouMean);
+                  }}
+                  className="w-full px-4 py-3 text-left bg-blue-50 border-b border-blue-100 hover:bg-blue-100 transition"
+                >
+                  <span className="text-gray-600 text-sm">Did you mean: </span>
+                  <span className="text-blue-600 font-semibold">{didYouMean}</span>
+                  <span className="text-gray-400 text-xs ml-2">?</span>
+                </button>
+              )}
+              
+              {productSuggestions.length === 0 && query.length >= 2 && !loading && !didYouMean ? (
                 <div className="px-4 py-8 text-center">
                   <Search className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                  <p className="text-gray-500 text-sm">No suggestions for "{query}"</p>
+                  <p className="text-gray-500 text-sm">No suggestions for &quot;{query}&quot;</p>
                   <p className="text-gray-400 text-xs mt-1">Press Enter to search anyway</p>
+                </div>
+              ) : productSuggestions.length === 0 && didYouMean ? (
+                <div className="px-4 py-4 text-center">
+                  <p className="text-gray-400 text-xs">Press Enter to search for &quot;{query}&quot;</p>
                 </div>
               ) : (
                 <div className="py-2">
