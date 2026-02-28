@@ -211,11 +211,13 @@ export default async function CategoryPage({ params }: Props) {
               })}
             </div>
           ) : (
-            <div className="text-center py-16 bg-white rounded-xl">
-              <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Products Currently Available</h3>
-              <p className="text-gray-500">
-                Products appear here when verified sellers list them for sale.
+            <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-100">
+              <div className="bg-amber-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5">
+                <Package className="h-8 w-8 text-amber-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Sellers Coming Soon</h3>
+              <p className="text-gray-500 max-w-sm mx-auto">
+                We&apos;re connecting with verified suppliers in this category. Products will appear here once sellers list their offerings.
               </p>
             </div>
           )}
