@@ -173,10 +173,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /**
    * Sign up with email/password
    * 
-   * NEW ARCHITECTURE: 
+   * ENTERPRISE FIX: 
    * 1. Firebase creates auth user
-   * 2. Backend sends verification email via Zoho SMTP
-   * 3. No Firebase sendEmailVerification call
+   * 2. Get token from Firebase
+   * 3. Backend sends verification email via Zoho SMTP using token
+   * 
+   * IMPORTANT: We must get the token IMMEDIATELY after signup and call
+   * the verification endpoint before onAuthStateChanged causes re-renders.
    */
   const signUp = async (email: string, password: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
@@ -184,13 +187,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Step 1: Create Firebase auth user
       const result = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Step 2: Call backend to send verification email via Zoho SMTP
+      // Step 2: Get token IMMEDIATELY (before onAuthStateChanged triggers)
+      const token = await result.user.getIdToken();
+      
+      // Step 3: Call backend to send verification email using TOKEN (not email)
+      // This is the ENTERPRISE FIX - backend gets email from token
       try {
         const { sendVerificationEmail } = await import('@/lib/api');
-        await sendVerificationEmail(email);
+        await sendVerificationEmail(token);
+        console.log('[Auth] Verification email sent successfully');
       } catch (emailError) {
         // Log but don't fail signup if email sending fails
-        console.error('Error sending verification email:', emailError);
+        console.error('[Auth] Error sending verification email:', emailError);
       }
       
       setState(prev => ({
