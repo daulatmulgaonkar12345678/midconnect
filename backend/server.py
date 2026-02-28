@@ -2235,13 +2235,15 @@ async def verify_email_token(token: str):
     
     Called when user clicks the verification link in their email.
     Returns redirect URL for frontend.
+    
+    MIGRATION: Now uses Resend-based token verification.
     """
-    from services.email_verification_service import get_email_verification_service
+    from services.email_service import get_email_verification_service
     
     if not token:
         raise HTTPException(status_code=400, detail="Invalid verification token")
     
-    email_service = await get_email_verification_service(db)
+    email_service = get_email_verification_service(db)
     result = await email_service.verify_token(token)
     
     if not result["success"]:
