@@ -2190,35 +2190,36 @@ async def register_user(request: Request, user_data: UserCreate):
 
 # ============== EMAIL VERIFICATION (Custom Zoho SMTP) ==============
 
-class SendVerificationRequest(BaseModel):
-    """Request to send verification email"""
-    email: str
+# REMOVED: SendVerificationRequest - no longer needed, we use auth token
 
 @api_router.post("/send-verification")
 @limiter.limit("3/minute")
-async def send_verification_email(request: Request, data: SendVerificationRequest):
+async def send_verification_email(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     """
     Send verification email via Zoho SMTP.
     
-    This replaces Firebase email verification with our custom backend-controlled system.
-    Called by frontend after user signs up with Firebase.
+    ENTERPRISE FIX: Uses auth token to get user email.
+    No request body required - backend knows user from token.
+    This is called immediately after Firebase signup.
     """
     from services.email_verification_service import get_email_verification_service
     
-    # Check if user exists
-    user = await db.users.find_one({"email": data.email})
-    if not user:
-        # Create a minimal user record if it doesn't exist
-        # This can happen if called immediately after Firebase signup before /users/register
-        logger.info(f"User not found for verification, will be created on first login: {data.email}")
-        # Return success anyway to not reveal user existence
-        return {"success": True, "message": "If your email is registered, you will receive a verification link."}
+    # Get current user from auth token (auto-creates if not exists)
+    current_user = await get_current_user(credentials)
     
-    if user.get("isEmailVerified"):
+    # Check if already verified
+    if current_user.get("isEmailVerified"):
         return {"success": True, "message": "Email is already verified. Please login."}
     
+    email = current_user.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="No email associated with this account")
+    
     email_service = await get_email_verification_service(db)
-    result = await email_service.send_verification_email(data.email)
+    result = await email_service.send_verification_email(email)
     
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to send email"))
