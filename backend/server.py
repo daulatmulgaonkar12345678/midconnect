@@ -3990,14 +3990,29 @@ async def get_public_categories():
             "listingCategoryId": {"$first": "$categoryId"},      # Capture listing's direct categoryId
             "listingCategoryName": {"$first": "$categoryName"}   # Capture listing's categoryName
         }},
-        # Stage 3: Lookup product to get canonical categoryId
+        # Stage 3: Lookup product to get canonical categoryId - ONLY ACTIVE PRODUCTS
         {"$lookup": {
             "from": "products",
             "localField": "_id",
             "foreignField": "_id",
-            "as": "product"
+            "as": "product",
+            "pipeline": [
+                {"$match": {
+                    "$and": [
+                        {"$or": [
+                            {"isActive": True},
+                            {"isActive": {"$exists": False}}
+                        ]},
+                        {"$or": [
+                            {"isDeleted": {"$ne": True}},
+                            {"isDeleted": {"$exists": False}}
+                        ]}
+                    ]
+                }}
+            ]
         }},
-        {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},  # FLEXIBLE: Don't require product
+        # FILTER OUT products that are deleted/inactive
+        {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": False}},
         # Stage 4: Determine categoryId - prefer product.categoryId, fallback to listing's
         {"$addFields": {
             "resolvedCategoryId": {
