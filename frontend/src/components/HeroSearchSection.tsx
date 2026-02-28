@@ -13,7 +13,7 @@ export default function HeroSearchSection() {
         {/* Desktop: Image on right side */}
         <div className="hidden md:block absolute right-0 bottom-0 w-[55%] h-full">
           <Image
-            src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/ge1uhf1k_image.png"
+            src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/p7nlljni_image.png"
             alt="Industrial Equipment - B2B Marketplace"
             fill
             className="object-cover object-left-bottom opacity-90"
@@ -27,7 +27,7 @@ export default function HeroSearchSection() {
         {/* Mobile: Subtle background image */}
         <div className="md:hidden absolute inset-0">
           <Image
-            src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/ge1uhf1k_image.png"
+            src="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/p7nlljni_image.png"
             alt="Industrial Equipment"
             fill
             className="object-cover object-center opacity-20"
