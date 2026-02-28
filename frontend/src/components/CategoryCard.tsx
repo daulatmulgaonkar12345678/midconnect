@@ -92,7 +92,7 @@ export default function CategoryCard({ category, showProductCount = true }: Cate
             </h3>
             <ArrowRight className="h-4 w-4 text-blue-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
           </div>
-          {category.description && (
+          {'description' in category && category.description && (
             <p className="text-sm text-gray-500 mt-1 line-clamp-2">{category.description}</p>
           )}
         </div>
