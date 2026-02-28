@@ -248,7 +248,7 @@ class EmailVerificationService:
             token = await self.generate_verification_token(email)
             
             # Build verification link
-            verify_link = f"{FRONTEND_URL}/verify?token={token}"
+            verify_link = f"{FRONTEND_URL}/verify-email?token={token}"
             
             # Build email content
             content = f"""
