@@ -144,11 +144,16 @@ export default function CategoriesPage() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-100">
-          <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Categories Yet</h3>
-          <p className="text-gray-500">
-            Categories appear here when sellers list products for sale.
+        <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-100">
+          <div className="bg-blue-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Package className="h-10 w-10 text-blue-500" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-3">Categories Coming Soon</h3>
+          <p className="text-gray-500 max-w-md mx-auto mb-2">
+            We&apos;re onboarding verified industrial suppliers across India.
+          </p>
+          <p className="text-sm text-gray-400 max-w-md mx-auto">
+            Categories will appear here once sellers start listing their products. Check back soon!
           </p>
         </div>
       )}
