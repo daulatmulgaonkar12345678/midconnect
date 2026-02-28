@@ -19,7 +19,7 @@ Architecture:
 
 Environment Variables:
 - RESEND_API_KEY: Your Resend API key (required)
-- SENDER_EMAIL: Sender email (default: noreply@yourdomain.com)
+- SENDER_EMAIL: Sender email (default: noreply@udyogconnect.in)
 - FRONTEND_URL: Frontend URL for links (default: https://udyogconnect.in)
 """
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration from environment
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "noreply@yourdomain.com")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "noreply@udyogconnect.in")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://udyogconnect.in")
 SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@udyogconnect.in")
 

@@ -145,7 +145,7 @@ Build an enterprise-grade B2B marketplace platform ("midconnect") that connects 
 **Environment Variables Required**:
 ```
 RESEND_API_KEY=re_xxx        # From https://resend.com/api-keys
-SENDER_EMAIL=noreply@yourdomain.com
+SENDER_EMAIL=noreply@udyogconnect.in
 FRONTEND_URL=https://udyogconnect.in
 ```
 
