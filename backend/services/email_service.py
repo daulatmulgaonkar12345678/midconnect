@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "noreply@udyogconnect.in")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://udyogconnect.in")
-SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@udyogconnect.in")
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "admin@udyogconnect.in")
 
 # Token settings
 TOKEN_EXPIRY_HOURS = 1  # As per user requirements

@@ -107,7 +107,7 @@ export default function PrivacyPage() {
           <p>
             For privacy-related questions or to exercise your rights, contact us at:
             <br />
-            Email: privacy@b2bmarket.in
+            Email: admin@udyogconnect.in
           </p>
         </section>
       </div>

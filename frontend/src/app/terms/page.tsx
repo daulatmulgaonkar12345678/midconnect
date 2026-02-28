@@ -106,7 +106,7 @@ export default function TermsPage() {
           <p>
             For questions about these Terms of Service, please contact us at:
             <br />
-            Email: legal@b2bmarket.in
+            Email: legal@.udyogconnect.in
           </p>
         </section>
       </div>

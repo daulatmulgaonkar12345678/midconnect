@@ -755,7 +755,7 @@ export default function SellerSubscriptionPage() {
           <p className="text-sm text-gray-500">
             Questions about your subscription? Contact us at{' '}
             <a href="mailto:support@b2bmarket.com" className="text-blue-600 hover:underline">
-              support@b2bmarket.com
+              admin@.udyogconnect.in
             </a>
           </p>
         </div>

@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { Mail, Phone, MapPin, Clock, MessageCircle } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Contact Us - MidConnect',
+  title: 'Contact Us - .udyogconnect',
   description: 'Get in touch with MidConnect support team. We are here to help with your queries about buying, selling, or using our platform.',
 };
 
@@ -38,7 +38,7 @@ export default function ContactPage() {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Phone Support</h3>
-              <p className="text-gray-600">+91 98765 43210</p>
+              <p className="text-gray-600">+91 73878 21042</p>
               <p className="text-sm text-gray-500">Mon-Sat, 9 AM - 6 PM IST</p>
             </div>
           </div>
@@ -49,7 +49,7 @@ export default function ContactPage() {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">WhatsApp</h3>
-              <p className="text-gray-600">+91 98765 43210</p>
+              <p className="text-gray-600">+91 73878 21042</p>
               <p className="text-sm text-gray-500">Quick responses for urgent queries</p>
             </div>
           </div>
