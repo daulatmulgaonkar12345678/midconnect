@@ -38,6 +38,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png" type="image/png" />
+        <link rel="shortcut icon" href="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png" type="image/png" />
+        <link rel="apple-touch-icon" href="https://customer-assets.emergentagent.com/job_59d69e96-5add-42b9-88de-4fe2b67c84c6/artifacts/o4stdhdf_image.png" />
+      </head>
       <body className={`${inter.className} antialiased bg-gray-50`}>
         <AuthProvider>
           <ServerWarmUp />
