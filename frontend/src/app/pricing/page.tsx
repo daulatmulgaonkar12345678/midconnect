@@ -34,7 +34,7 @@ export default function PricingPage() {
           </div>
           <ul className="space-y-3 mb-8">
             <Feature included>Up to 5 product listings</Feature>
-            <Feature included>10 enquiries per month</Feature>
+            <Feature included>5 enquiries per month</Feature>
             <Feature included>Basic seller profile</Feature>
             <Feature included>Email support</Feature>
             <Feature>Priority search ranking</Feature>
