@@ -299,6 +299,13 @@ function SellerCard({
       </div>
 
       <div className="p-4">
+        {/* UdyogConnect Badge - Priority display above seller info */}
+        {seller.badgeType && seller.badgeType !== 'none' && (
+          <div className="mb-3">
+            <UdyogConnectBadge badgeType={seller.badgeType} />
+          </div>
+        )}
+        
         {/* Seller Info Row */}
         <div className="flex items-start justify-between mb-4">
           <div>
