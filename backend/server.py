@@ -8556,12 +8556,14 @@ async def admin_get_user_detail(
         "gst": gst,
         # Legacy flat fields for backward compatibility
         "businessName": profile.get("businessName"),
+        "business_name": profile.get("businessName"),  # For frontend compatibility
         "phone": profile.get("phone"),
         "city": profile.get("city"),
         "state": profile.get("state"),
         "pincode": profile.get("pincode"),
         "gstNumber": gst.get("number"),
         "gstStatus": gst.get("status"),
+        "gst_status": gst.get("status"),  # For frontend compatibility
         # Boolean flags
         "isSeller": user.get("isSeller", False) or gst.get("status") == "verified",
         "isAdmin": user.get("isAdmin", False),
@@ -8570,6 +8572,8 @@ async def admin_get_user_detail(
         "listingCount": listing_count,
         "roles": user.get("roles", []),
         "subscription": subscription_obj,
+        # Badge type for UdyogConnect Choice/Trusted
+        "badgeType": user.get("badgeType", "none"),
     }
 
 
