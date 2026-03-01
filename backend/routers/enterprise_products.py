@@ -234,6 +234,7 @@ def create_enterprise_product_router(db):
                 "city": seller_profile.get("city"),
                 "state": seller_profile.get("state"),
                 "sellerRole": listing.get("sellerRole", "dealer"),
+                "badgeType": seller_profile.get("badgeType", "none"),
                 "searchableAttributes": searchable_attrs,
                 "attributeLabels": attribute_labels,
                 "pricingTiers": serialize_doc(pricing),
