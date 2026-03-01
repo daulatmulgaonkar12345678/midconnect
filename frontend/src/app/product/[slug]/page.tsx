@@ -137,6 +137,31 @@ function SellerRoleBadge({ role }: { role: string }) {
   );
 }
 
+// UdyogConnect Seller Badge (Choice/Trusted)
+function UdyogConnectBadge({ badgeType }: { badgeType?: string }) {
+  if (!badgeType || badgeType === 'none') return null;
+  
+  if (badgeType === 'choice') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded border border-yellow-300">
+        <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+        UdyogConnect Choice
+      </span>
+    );
+  }
+  
+  if (badgeType === 'trusted') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded border border-green-300">
+        <Shield className="h-3 w-3 fill-green-500 text-green-500" />
+        UdyogConnect Trusted
+      </span>
+    );
+  }
+  
+  return null;
+}
+
 // ==================== FILTER PANEL ====================
 
 function FilterPanel({
