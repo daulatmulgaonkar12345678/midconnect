@@ -35,7 +35,9 @@ import {
   BarChart3,
   RefreshCw,
   SlidersHorizontal,
-  GitCompare
+  GitCompare,
+  Star,
+  Shield
 } from 'lucide-react';
 
 // ==================== TYPES ====================
