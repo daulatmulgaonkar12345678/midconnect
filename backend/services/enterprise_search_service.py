@@ -627,6 +627,8 @@ class EnterpriseSearchService:
             "sellerRating": listing.get("sellerRating", 0),
             "isPremiumSeller": listing.get("isPremiumSeller", False),
             "sellerTier": listing.get("sellerTier", "free"),
+            "sellerBadge": listing.get("sellerBadge", "none"),  # Badge: none, choice, trusted
+            "sellerName": listing.get("sellerName", ""),
             "rankScore": listing.get("rankScore", 0),
             "createdAt": listing.get("createdAt").isoformat() if listing.get("createdAt") else None,
         }
