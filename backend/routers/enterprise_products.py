@@ -639,6 +639,7 @@ def create_enterprise_product_router(db):
                 "city": listing.get("city"),  # Phase 2: City
                 "state": listing.get("state"),  # Phase 2: State
                 "location": f"{listing.get('city', '')}, {listing.get('state', '')}".strip(", ") or "India",
+                "badgeType": listing.get("badgeType", "none"),  # Seller badge (choice/trusted)
                 "searchableAttributes": searchable_attrs,
                 "attributeLabels": attribute_labels,
                 "pricingTiers": pricing,
