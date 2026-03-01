@@ -564,6 +564,17 @@ export default function EnterpriseProductPage() {
         setProduct(productData);
         setFacets(facetsData);
         setSellers(productData.sellers);
+        
+        // Load SEO data in background (non-blocking)
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+        fetch(`${API_URL}/api/products/${productId}/seo`)
+          .then(res => res.json())
+          .then(data => setSeoData({
+            seoContent: data.seoContent,
+            sellersByCity: data.sellersByCity
+          }))
+          .catch(err => console.log('SEO data not available:', err));
+          
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Product not found');
       } finally {
