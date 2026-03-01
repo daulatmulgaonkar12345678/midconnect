@@ -477,6 +477,18 @@ class EnterpriseSearchService:
         # FILTER OUT listings where product is missing, deleted, or inactive
         pipeline.append({"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": False}})
         
+        # Lookup seller info for badge
+        pipeline.append({
+            "$lookup": {
+                "from": "users",
+                "localField": "sellerId",
+                "foreignField": "_id",
+                "as": "seller",
+                "pipeline": [{"$project": {"badgeType": 1, "businessName": 1}}]
+            }
+        })
+        pipeline.append({"$unwind": {"path": "$seller", "preserveNullAndEmptyArrays": True}})
+        
         # Minimal projection for performance
         pipeline.append({
             "$project": {
@@ -500,6 +512,8 @@ class EnterpriseSearchService:
                 "sellerRating": 1,
                 "isPremiumSeller": 1,
                 "sellerTier": 1,
+                "sellerBadge": {"$ifNull": ["$seller.badgeType", "none"]},
+                "sellerName": {"$ifNull": ["$seller.businessName", ""]},
                 "rankScore": 1,
                 "sellerId": 1,
                 "createdAt": 1,
