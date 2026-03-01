@@ -106,21 +106,27 @@ def _get_email_wrapper(content: str, title: str = "Udyog Connect") -> str:
 
 
 def _get_button_html(text: str, url: str, color: str = "#0B3C5D") -> str:
-    """Generate a styled button for emails."""
     return f"""
-    <div style="text-align: center; margin: 30px 0;">
-        <a href="{url}" 
-           style="display: inline-block; 
-                  padding: 14px 40px; 
-                  background-color: {color}; 
-                  color: white; 
-                  text-decoration: none; 
-                  border-radius: 6px; 
-                  font-weight: bold;
-                  font-size: 16px;">
-            {text}
-        </a>
-    </div>
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 30px auto;">
+        <tr>
+            <td align="center" bgcolor="{color}" style="border-radius: 6px;">
+                <a href="{url}" 
+                   target="_blank"
+                   style="
+                        display: inline-block;
+                        padding: 14px 40px;
+                        font-size: 16px;
+                        font-weight: bold;
+                        color: #ffffff;
+                        text-decoration: none;
+                        border-radius: 6px;
+                        background-color: {color};
+                   ">
+                    {text}
+                </a>
+            </td>
+        </tr>
+    </table>
     """
 
 
