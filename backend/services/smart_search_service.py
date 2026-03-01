@@ -152,11 +152,14 @@ class SmartSearchService:
             )
             
             if result:
-                match, score, _ = result
+                # Handle both 2-tuple and 3-tuple formats from different fuzzywuzzy versions
+                # Some versions return (match, score), others return (match, score, index)
+                match = result[0]
+                score = result[1]
                 return (match, score)
                 
         except Exception as e:
-            logger.error(f"Fuzzy match error: {e}")
+            logger.error(f"Fuzzy match error: {str(e)}")
         
         return None
     
