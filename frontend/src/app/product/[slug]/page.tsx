@@ -1013,6 +1013,27 @@ export default function EnterpriseProductPage() {
           onClose={() => setShowCompareModal(false)}
         />
       )}
+      
+      {/* ==================== SECTION 5: SEO CONTENT ==================== */}
+      {/* JSON-LD Structured Data for Google Rich Snippets */}
+      {productId && <ProductJsonLd slug={productId} />}
+      
+      {/* City-wise Seller Grouping */}
+      {seoData?.sellersByCity && Object.keys(seoData.sellersByCity).length > 1 && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+          <CitySellerGroup sellersByCity={seoData.sellersByCity} />
+        </div>
+      )}
+      
+      {/* SEO Content (Collapsible) */}
+      {seoData?.seoContent && product && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <SEOContentSection 
+            seoContent={seoData.seoContent} 
+            productName={product.productName} 
+          />
+        </div>
+      )}
     </div>
   );
 }
