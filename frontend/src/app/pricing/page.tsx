@@ -30,7 +30,6 @@ export default function PricingPage() {
           </div>
           <div className="text-center mb-6">
             <span className="text-4xl font-bold text-gray-900">Free</span>
-            <span className="text-gray-500">/forever</span>
           </div>
           <ul className="space-y-3 mb-8">
             <Feature included>Up to 5 product listings</Feature>
@@ -64,7 +63,7 @@ export default function PricingPage() {
           </div>
           <div className="text-center mb-6">
             <span className="text-4xl font-bold text-gray-900">₹999</span>
-            <span className="text-gray-500">/month</span>
+            <span className="text-gray-500">/quarter</span>
           </div>
           <ul className="space-y-3 mb-8">
             <Feature included>Unlimited product listings</Feature>
@@ -93,7 +92,7 @@ export default function PricingPage() {
           </div>
           <div className="text-center mb-6">
             <span className="text-4xl font-bold text-gray-900">₹3,999</span>
-            <span className="text-gray-500">/month</span>
+            <span className="text-gray-500">/quarter</span>
           </div>
           <ul className="space-y-3 mb-8">
             <Feature included>Everything in Professional</Feature>
