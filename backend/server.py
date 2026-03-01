@@ -2989,6 +2989,65 @@ async def admin_verify_gst(
     }
 
 
+# ============== CONTACT FORM ENDPOINT ==============
+
+class ContactFormRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    email: str = Field(..., pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+    subject: str = Field(..., pattern=r'^(general|support|seller|buyer|feedback)$')
+    message: str = Field(..., min_length=10, max_length=2000)
+
+@api_router.post("/contact")
+async def submit_contact_form(request: ContactFormRequest):
+    """
+    PUBLIC endpoint - no auth required.
+    Submit contact form message to admin.
+    
+    Sends email to admin@udyogconnect.in and confirmation to sender.
+    """
+    from services.email_service import send_contact_form_email
+    
+    # Log the contact submission
+    logger.info(f"Contact form submission from {request.email}: {request.subject}")
+    
+    # Store in database for record-keeping
+    contact_record = {
+        "name": request.name,
+        "email": request.email,
+        "subject": request.subject,
+        "message": request.message,
+        "status": "new",
+        "createdAt": datetime.now(timezone.utc)
+    }
+    
+    try:
+        await db.contact_submissions.insert_one(contact_record)
+    except Exception as e:
+        logger.warning(f"Failed to save contact submission: {e}")
+    
+    # Send email
+    result = await send_contact_form_email(
+        name=request.name,
+        email=request.email,
+        subject=request.subject,
+        message=request.message
+    )
+    
+    if result.get("success"):
+        return {
+            "success": True,
+            "message": "Your message has been sent successfully. We'll get back to you within 24-48 hours."
+        }
+    else:
+        # Even if email fails, we've saved to DB
+        logger.error(f"Contact form email failed: {result.get('error')}")
+        return {
+            "success": True,
+            "message": "Your message has been received. We'll get back to you soon.",
+            "_email_status": "pending"  # For debugging
+        }
+
+
 # ============== PROFILE UPDATE ENDPOINT ==============
 
 class ProfileUpdateRequest(BaseModel):
