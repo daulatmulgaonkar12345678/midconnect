@@ -417,7 +417,7 @@ class QuotationService:
         Minimum Order Quantity (MOQ): {moq}
         Packaging Charges: Not Included
         Transportation Charges: Not Included
-
+        GST Charges: Not Included
         Quotation Valid Till: {validityDate}
 
         Best Regards,
@@ -462,6 +462,8 @@ Quoted Price: {format_inr(quote.get('unitPrice'))} per unit
 Minimum Order Quantity (MOQ): {quote.get('moq', 1)}
 Packaging Charges: Not Included
 Transportation Charges: Not Included
+GST Charges: Not Included
+
 Total (Excl. Transport and packaging charges): {format_inr(quote.get('totalPrice'))}
 
 Quotation Valid Till: {validity_str}
