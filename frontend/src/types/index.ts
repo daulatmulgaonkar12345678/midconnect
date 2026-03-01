@@ -88,6 +88,7 @@ export interface Seller {
   images: string[];
   updateStatus: string;
   locationClass?: 'LOCAL' | 'STATE' | 'NATIONAL';
+  badgeType?: 'none' | 'choice' | 'trusted';  // UdyogConnect seller badge
 }
 
 export interface ProductWithSellers {
