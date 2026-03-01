@@ -4768,6 +4768,169 @@ async def get_product_with_sellers(product_identifier: str):
     }
 
 
+# ============== SEO DATA ENDPOINT ==============
+
+@api_router.get("/products/{product_identifier}/seo")
+async def get_product_seo_data(product_identifier: str):
+    """
+    Get SEO data for a product page.
+    
+    Returns:
+    - seoTitle
+    - seoDescription
+    - seoContent
+    - jsonLd (Product + AggregateOffer schema)
+    - breadcrumbJsonLd
+    - sellersByCity (for city grouping UI)
+    
+    PUBLIC endpoint - no auth required.
+    """
+    from urllib.parse import unquote
+    from services.seo_service import seo_service
+    
+    decoded_identifier = unquote(product_identifier)
+    product_info = None
+    
+    # Identity resolution: ObjectId → slug
+    if len(decoded_identifier) == 24:
+        try:
+            product_oid = ObjectId(decoded_identifier)
+            product_info = await db.products.find_one({"_id": product_oid})
+        except:
+            pass
+    
+    if not product_info:
+        product_info = await db.products.find_one({"slug": decoded_identifier})
+    
+    if not product_info:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    product_oid = product_info["_id"]
+    product_name = product_info.get("name", "")
+    product_slug = product_info.get("slug", "")
+    
+    # Get category info
+    category_name = None
+    category_slug = None
+    category_id = product_info.get("categoryId")
+    if category_id:
+        try:
+            cat_oid = ObjectId(category_id) if isinstance(category_id, str) else category_id
+            category = await db.categories.find_one({"_id": cat_oid})
+            if category:
+                category_name = category.get("name")
+                category_slug = category.get("slug")
+        except:
+            pass
+    
+    # Get active seller listings with seller info
+    pipeline = [
+        {"$match": {"productId": product_oid, "status": "active"}},
+        {"$lookup": {
+            "from": "users",
+            "localField": "sellerId",
+            "foreignField": "_id",
+            "as": "sellerData"
+        }},
+        {"$unwind": {"path": "$sellerData", "preserveNullAndEmptyArrays": True}},
+        {"$project": {
+            "_id": 1,
+            "sellerId": 1,
+            "pricingTiers": 1,
+            "images": {"$slice": ["$images", 2]},
+            "searchableAttributes": 1,
+            "companyName": {"$ifNull": ["$sellerData.profile.businessName", "Verified Seller"]},
+            "city": "$sellerData.profile.city",
+            "state": "$sellerData.profile.state",
+            "badgeType": {"$ifNull": ["$sellerData.badgeType", "none"]}
+        }}
+    ]
+    
+    listings = await db.sellerListings.aggregate(pipeline).to_list(100)
+    
+    # Build sellers list for JSON-LD
+    sellers_for_jsonld = []
+    for listing in listings:
+        lowest_price = None
+        pricing_tiers = listing.get("pricingTiers", [])
+        if pricing_tiers:
+            prices = [t.get("pricePerUnit") or t.get("price", 0) for t in pricing_tiers if t]
+            lowest_price = min(prices) if prices else None
+        
+        sellers_for_jsonld.append({
+            "sellerId": str(listing.get("sellerId")),
+            "companyName": listing.get("companyName", "Verified Seller"),
+            "city": listing.get("city"),
+            "state": listing.get("state"),
+            "pricingTiers": listing.get("pricingTiers", []),
+            "lowestPrice": lowest_price,
+            "images": listing.get("images", []),
+            "badgeType": listing.get("badgeType", "none")
+        })
+    
+    # Group sellers by city for UI
+    sellers_by_city = {}
+    for seller in sellers_for_jsonld:
+        city = seller.get("city") or "Other"
+        if city not in sellers_by_city:
+            sellers_by_city[city] = []
+        sellers_by_city[city].append({
+            "companyName": seller.get("companyName"),
+            "state": seller.get("state"),
+            "lowestPrice": seller.get("lowestPrice"),
+            "badgeType": seller.get("badgeType")
+        })
+    
+    # Sort cities by seller count (descending)
+    sellers_by_city = dict(sorted(
+        sellers_by_city.items(),
+        key=lambda x: len(x[1]),
+        reverse=True
+    ))
+    
+    # Get specifications for SEO content
+    specifications = product_info.get("normalizedSpecs") or product_info.get("specifications") or {}
+    
+    # Generate SEO data
+    seo_title = product_info.get("seoTitle") or seo_service.generate_seo_title(product_name, category_name)
+    seo_description = product_info.get("seoDescription") or seo_service.generate_seo_description(
+        product_name, category_name, len(sellers_for_jsonld)
+    )
+    seo_content = product_info.get("seoContent") or seo_service.generate_seo_content(
+        product_name, category_name, specifications, product_info.get("description")
+    )
+    
+    # Generate JSON-LD
+    product_json_ld = seo_service.generate_json_ld(
+        product_info,
+        sellers_for_jsonld,
+        category_name
+    )
+    
+    breadcrumb_json_ld = seo_service.generate_breadcrumb_json_ld(
+        product_name,
+        product_slug,
+        category_name,
+        category_slug
+    )
+    
+    return {
+        "productId": str(product_oid),
+        "productName": product_name,
+        "slug": product_slug,
+        "categoryName": category_name,
+        "categorySlug": category_slug,
+        "seoTitle": seo_title,
+        "seoDescription": seo_description,
+        "seoContent": seo_content,
+        "jsonLd": product_json_ld,
+        "breadcrumbJsonLd": breadcrumb_json_ld,
+        "sellerCount": len(sellers_for_jsonld),
+        "sellersByCity": sellers_by_city,
+        "canonicalUrl": f"https://www.udyogconnect.in/product/{product_slug}"
+    }
+
+
 # ============== PRODUCT CATALOG - HIERARCHY & SEARCH ==============
 # NOTE: These routes MUST come BEFORE /products/{product_id} to avoid route conflicts
 
