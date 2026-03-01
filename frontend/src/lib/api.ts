@@ -1725,6 +1725,7 @@ export interface EnterpriseProductSeller {
   city?: string;
   state?: string;
   sellerRole: string;
+  badgeType?: 'none' | 'choice' | 'trusted';  // UdyogConnect seller badge
   searchableAttributes: Record<string, string | number>;
   attributeLabels: Record<string, string>;
   pricingTiers: PricingTier[];
