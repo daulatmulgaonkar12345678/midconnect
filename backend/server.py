@@ -5707,6 +5707,7 @@ async def search_products_deduplicated(request: Request, search: SearchQuery):
                     "businessName": "$seller.businessName",
                     "city": "$seller.city",
                     "state": "$seller.state",
+                    "badgeType": {"$ifNull": ["$seller.badgeType", "none"]},
                     "pricingTiers": "$pricingTiers",
                     "stock": "$stock",
                     "specifications": "$specifications"
