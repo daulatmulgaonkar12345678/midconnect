@@ -1,0 +1,32 @@
+# UdyogConnect Robots.txt
+# https://www.udyogconnect.in
+
+User-agent: *
+
+# Allow public pages
+Allow: /
+Allow: /products
+Allow: /product/
+Allow: /categories
+Allow: /category/
+Allow: /about
+Allow: /contact
+Allow: /pricing
+
+# Disallow private/dynamic pages
+Disallow: /api/
+Disallow: /admin/
+Disallow: /seller/
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /inquiries
+Disallow: /cart/
+Disallow: /*?*
+
+# Sitemap location
+Sitemap: https://www.udyogconnect.in/api/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
