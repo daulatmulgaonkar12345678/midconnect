@@ -11296,6 +11296,18 @@ async def startup_db_client():
     # Start integrity check in background
     asyncio.create_task(run_enterprise_integrity_check())
     
+    async def initialize_smart_search():
+        """Initialize smart search cache in background"""
+        await asyncio.sleep(2)
+        try:
+            from services.smart_search_service import initialize_smart_search_cache
+            await initialize_smart_search_cache(db)
+        except Exception as e:
+            logger.warning(f"⚠️ Could not initialize smart search cache: {e}")
+    
+    # Start smart search cache initialization in background
+    asyncio.create_task(initialize_smart_search())
+    
     async def create_indexes_in_background():
         """Create indexes in background to not block startup"""
         # Wait for server to be fully ready and detected by platform
