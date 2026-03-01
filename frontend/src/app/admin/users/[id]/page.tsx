@@ -140,6 +140,7 @@ export default function UserDetailPage() {
   const [extendNotes, setExtendNotes] = useState('');
   const [suspendReason, setSuspendReason] = useState('');
   const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [badgeUpdating, setBadgeUpdating] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
