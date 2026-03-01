@@ -37,8 +37,13 @@ export default function ContactPage() {
               <Phone className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Phone Support</h3>
-              <p className="text-gray-600">+91 73878 21042</p>
+			<h3>Phone Support</h3>
+              <a
+                href="tel:+917387821042"
+                className="text-gray-600 hover:text-green-600"
+                 >
+                +91 73878 21042 
+                </a>
               <p className="text-sm text-gray-500">Mon-Sat, 9 AM - 6 PM IST</p>
             </div>
           </div>
@@ -48,8 +53,14 @@ export default function ContactPage() {
               <MessageCircle className="h-6 w-6 text-purple-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">WhatsApp</h3>
-              <p className="text-gray-600">+91 73878 21042</p>
+			  <h3>WhatsApp Support</h3>
+              <a
+               href="https://wa.me/917387821042"
+               target="_blank"
+               className="text-gray-600 hover:text-green-600"
+               >
+               +91 73878 21042
+               </a>
               <p className="text-sm text-gray-500">Quick responses for urgent queries</p>
             </div>
           </div>
@@ -67,26 +78,28 @@ export default function ContactPage() {
 
           <div className="flex items-start gap-4">
             <div className="bg-red-100 p-3 rounded-lg">
-              <MapPin className="h-6 w-6 text-red-600" />
+             <MapPin className="h-6 w-6 text-red-600" />
             </div>
-           <div>
-              <h3 className="font-semibold text-gray-900">Head Office – Pune</h3>
-                <p className="text-gray-600">
-                  D2, Kedareshwar Park, Gujarwadi, Katraj, Pune – 411046
-                </p>
-                <p className="text-sm text-gray-500">Maharashtra, India</p>
-          </div>
 
+          <div className="space-y-5">
           <div>
-              <h3 className="font-semibold text-gray-900">Branch Office – Kolhapur</h3>
-                <p className="text-gray-600">
-                  Plot No. 12, Near Tulips Residency,<br/>
-                  Behind Circuit House, Kolhapur – 416003
-                </p>
-                <p className="text-sm text-gray-500">Maharashtra, India</p>
-                </div>
-          </div>
-        </div>
+          <h3 className="font-semibold text-gray-900">Head Office – Pune</h3>
+          <p className="text-gray-600">
+           D2, Kedareshwar Park, Gujarwadi, Katraj, Pune – 411046
+          </p>
+          <p className="text-sm text-gray-500">Maharashtra, India</p>
+         </div>
+
+      <div>
+      <h3 className="font-semibold text-gray-900">Branch Office – Kolhapur</h3>
+      <p className="text-gray-600">
+        Plot No. 12, Near Tulips Residency,<br/>
+        Behind Circuit House, Kolhapur – 416003
+      </p>
+      <p className="text-sm text-gray-500">Maharashtra, India</p>
+    </div>
+  </div>
+</div>
 
         {/* Contact Form Placeholder */}
         <div className="bg-white rounded-xl shadow-lg p-8">
