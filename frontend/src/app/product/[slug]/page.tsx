@@ -14,6 +14,7 @@ import {
   ProductFacetsResponse,
   FilterRequest
 } from '@/lib/api';
+import { ProductJsonLd, CitySellerGroup, SEOContentSection } from '@/components/ProductSEO';
 import {
   Package,
   MapPin,
