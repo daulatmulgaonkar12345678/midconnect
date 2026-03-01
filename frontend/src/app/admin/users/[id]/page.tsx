@@ -32,7 +32,10 @@ import {
   Phone,
   MapPin,
   Building,
-  AlertCircle
+  AlertCircle,
+  Star,
+  Shield,
+  Award
 } from 'lucide-react';
 
 // Brand Colors
