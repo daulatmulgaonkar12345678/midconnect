@@ -434,22 +434,31 @@ def create_enterprise_product_router(db):
         
         total = await db.sellerListings.count_documents(match)
         
-        # Phase 2: Batch lookup seller profiles for companyName
+        # Phase 2: Batch lookup seller profiles for companyName and badgeType
         seller_ids = list(set(r.get("sellerId") for r in results if r.get("sellerId")))
         seller_profiles = {}
         if seller_ids:
             sellers = await db.users.find(
                 {"_id": {"$in": seller_ids}},
-                {"profile.businessName": 1}
+                {"profile.businessName": 1, "profile.city": 1, "profile.state": 1, "badgeType": 1}
             ).to_list(None)
             for s in sellers:
                 profile = s.get("profile", {})
-                seller_profiles[str(s["_id"])] = profile.get("businessName") or "Verified Seller"
+                seller_profiles[str(s["_id"])] = {
+                    "businessName": profile.get("businessName") or "Verified Seller",
+                    "city": profile.get("city"),
+                    "state": profile.get("state"),
+                    "badgeType": s.get("badgeType", "none")
+                }
         
-        # Enrich results with seller companyName
+        # Enrich results with seller data
         for r in results:
             sid = str(r.get("sellerId", ""))
-            r["companyName"] = seller_profiles.get(sid, "Verified Seller")
+            seller_data = seller_profiles.get(sid, {"businessName": "Verified Seller", "badgeType": "none"})
+            r["companyName"] = seller_data.get("businessName", "Verified Seller")
+            r["badgeType"] = seller_data.get("badgeType", "none")
+            r["city"] = seller_data.get("city")
+            r["state"] = seller_data.get("state")
         
         fallback_level = 0
         fallback_message = None
