@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MapPin, Users, TrendingUp } from 'lucide-react';
+import { MapPin, Users, TrendingUp, Star, Shield } from 'lucide-react';
 import { ProductWithSellers } from '@/types';
 
 interface ProductCardProps {
@@ -26,6 +26,31 @@ const SELLER_TYPE_BADGES: { [key: string]: { emoji: string; label: string; color
   retailer: { emoji: '🛍️', label: 'Retailer', color: 'bg-pink-100 text-pink-700' },
 };
 
+// UdyogConnect Seller Badge Component
+function SellerBadgeDisplay({ badgeType }: { badgeType?: string }) {
+  if (!badgeType || badgeType === 'none') return null;
+  
+  if (badgeType === 'choice') {
+    return (
+      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
+        <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+        <span>UdyogConnect Choice</span>
+      </div>
+    );
+  }
+  
+  if (badgeType === 'trusted') {
+    return (
+      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-300">
+        <Shield className="h-3 w-3 fill-green-500 text-green-500" />
+        <span>UdyogConnect Trusted</span>
+      </div>
+    );
+  }
+  
+  return null;
+}
+
 export default function ProductCard({ product }: ProductCardProps) {
   const firstSeller = product.sellers?.[0];
   const thumbnail = firstSeller?.images?.[0] || '/placeholder-product.png';
@@ -33,6 +58,9 @@ export default function ProductCard({ product }: ProductCardProps) {
   // Get seller type from first seller's role - camelCase
   const sellerType = firstSeller?.sellerRole?.toLowerCase();
   const sellerBadge = sellerType ? SELLER_TYPE_BADGES[sellerType] : null;
+  
+  // Get seller badge type (UdyogConnect Choice/Trusted)
+  const sellerBadgeType = firstSeller?.badgeType;
 
   return (
     <Link href={`/product/${product.productId}`}>
@@ -67,8 +95,15 @@ export default function ProductCard({ product }: ProductCardProps) {
 
         {/* Content */}
         <div className="p-4">
-          {/* Seller Type Badge */}
-          {sellerBadge && (
+          {/* UdyogConnect Seller Badge (Choice/Trusted) - Priority display */}
+          {sellerBadgeType && sellerBadgeType !== 'none' && (
+            <div className="mb-2">
+              <SellerBadgeDisplay badgeType={sellerBadgeType} />
+            </div>
+          )}
+          
+          {/* Seller Type Badge - Only show if no UdyogConnect badge */}
+          {(!sellerBadgeType || sellerBadgeType === 'none') && sellerBadge && (
             <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium mb-2 ${sellerBadge.color}`}>
               <span>{sellerBadge.emoji}</span>
               <span>{sellerBadge.label}</span>
