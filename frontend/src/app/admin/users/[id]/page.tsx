@@ -263,6 +263,35 @@ export default function UserDetailPage() {
     }
   }
 
+  async function handleBadgeUpdate(newBadgeType: 'none' | 'choice' | 'trusted') {
+    try {
+      setBadgeUpdating(true);
+      setError(null);
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+      
+      const response = await fetchWithAuth<{ success: boolean; message: string }>(
+        `/admin/sellers/${userId}/badge`,
+        token,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ badgeType: newBadgeType })
+        }
+      );
+      
+      // Update local state
+      if (user) {
+        setUser({ ...user, badgeType: newBadgeType });
+      }
+      setSuccessMessage(response.message || `Badge updated to ${newBadgeType === 'none' ? 'No Badge' : newBadgeType === 'choice' ? 'UdyogConnect Choice' : 'UdyogConnect Trusted'}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update badge');
+    } finally {
+      setBadgeUpdating(false);
+    }
+  }
+
   // Clear messages after 5 seconds
   useEffect(() => {
     if (successMessage) {
