@@ -169,7 +169,8 @@ def create_enterprise_product_router(db):
                 "sellerProfile": {
                     "businessName": {"$ifNull": ["$sellerData.profile.businessName", "$sellerData.businessName"]},
                     "city": "$sellerData.profile.city",
-                    "state": "$sellerData.profile.state"
+                    "state": "$sellerData.profile.state",
+                    "badgeType": {"$ifNull": ["$sellerData.badgeType", "none"]}
                 }
             }}
         ]
