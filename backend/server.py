@@ -10654,8 +10654,8 @@ async def admin_update_seller_badge(
     except:
         raise HTTPException(status_code=400, detail="Invalid seller ID format")
     
-    # Verify seller exists
-    seller = await db.users.find_one({"_id": seller_oid, "isSeller": True})
+    # Verify seller exists - SSOT: Check for 'seller' in roles array
+    seller = await db.users.find_one({"_id": seller_oid, "roles": "seller"})
     if not seller:
         raise HTTPException(status_code=404, detail="Seller not found")
     
