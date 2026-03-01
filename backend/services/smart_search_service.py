@@ -84,30 +84,53 @@ class SmartSearchService:
         self._category_names_cache: List[str] = []
         self._last_cache_refresh: float = 0
         self._phonetic_cache: Dict[str, Tuple[str, str]] = {}
+        self._cache_initialized: bool = False
+        self._cache_loading: bool = False
     
     async def _refresh_cache_if_needed(self):
         """Refresh product names cache if stale."""
         current_time = time.time()
-        if current_time - self._last_cache_refresh > self.CACHE_REFRESH_INTERVAL:
+        
+        # Skip if already loading to prevent concurrent loads
+        if self._cache_loading:
+            return
+        
+        # Check if cache needs refresh (first load or expired)
+        needs_refresh = (
+            not self._cache_initialized or 
+            (current_time - self._last_cache_refresh > self.CACHE_REFRESH_INTERVAL)
+        )
+        
+        if needs_refresh:
             await self._load_names_cache()
             self._last_cache_refresh = current_time
     
     async def _load_names_cache(self):
         """Load product and category names into memory cache."""
+        # Prevent concurrent cache loads
+        if self._cache_loading:
+            return
+        
+        self._cache_loading = True
         try:
             # Get distinct product names
             self._product_names_cache = await self.db.products.distinct("name")
-            logger.info(f"Loaded {len(self._product_names_cache)} product names into cache")
             
             # Get distinct category names
             self._category_names_cache = await self.db.categories.distinct("name")
-            logger.info(f"Loaded {len(self._category_names_cache)} category names into cache")
             
             # Build phonetic cache
             self._build_phonetic_cache()
             
+            # Mark cache as initialized (only log on first load)
+            if not self._cache_initialized:
+                logger.info(f"SmartSearch cache initialized: {len(self._product_names_cache)} products, {len(self._category_names_cache)} categories")
+                self._cache_initialized = True
+            
         except Exception as e:
             logger.error(f"Error loading names cache: {e}")
+        finally:
+            self._cache_loading = False
     
     def _build_phonetic_cache(self):
         """Build phonetic representations of all product names."""
