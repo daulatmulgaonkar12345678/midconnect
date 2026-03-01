@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { Mail, Phone, MapPin, Clock, MessageCircle } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Contact Us - .udyogconnect',
+  title: 'Contact Us - udyogconnect',
   description: 'Get in touch with UdyogConnect support team. We are here to help with your queries about buying, selling, or using our platform.',
 };
 
@@ -69,11 +69,22 @@ export default function ContactPage() {
             <div className="bg-red-100 p-3 rounded-lg">
               <MapPin className="h-6 w-6 text-red-600" />
             </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Office Address</h3>
-              <p className="text-gray-600">Mumbai, Maharashtra</p>
-              <p className="text-sm text-gray-500">India</p>
-            </div>
+           <div>
+              <h3 className="font-semibold text-gray-900">Head Office – Pune</h3>
+                <p className="text-gray-600">
+                  D2, Kedareshwar Park, Gujarwadi, Katraj, Pune – 411046
+                </p>
+                <p className="text-sm text-gray-500">Maharashtra, India</p>
+          </div>
+
+          <div>
+              <h3 className="font-semibold text-gray-900">Branch Office – Kolhapur</h3>
+                <p className="text-gray-600">
+                  Plot No. 12, Near Tulips Residency,<br/>
+                  Behind Circuit House, Kolhapur – 416003
+                </p>
+                <p className="text-sm text-gray-500">Maharashtra, India</p>
+                </div>
           </div>
         </div>
 
