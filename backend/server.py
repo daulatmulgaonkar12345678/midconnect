@@ -8865,30 +8865,84 @@ async def get_or_create_subscription(user_id: str) -> dict:
     Get existing subscription or create default free subscription.
     ALWAYS returns calculated fields.
     
-    SSOT POLICY: user_id is stored as ObjectId.
+    SSOT POLICY: 
+    1. Check subscriptions collection first (new SSOT)
+    2. If not found, check users.subscription field (legacy)
+    3. If legacy exists, migrate it to subscriptions collection
+    4. If neither exists, create default free subscription
     """
     # SSOT: Convert user_id to ObjectId for query
     user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
     
+    # First check subscriptions collection (new SSOT)
     subscription = await db.subscriptions.find_one({"user_id": user_oid})
     
     if not subscription:
-        # Create default free subscription with ObjectId user_id
-        now = datetime.now(timezone.utc)
-        subscription = {
-            "user_id": user_oid,  # SSOT: Store as ObjectId
-            "planName": "free",
-            "durationDays": 0,
-            "startDate": now,
-            "endDate": None,
-            "status": "active",
-            "lastUpdatedBy": "system",
-            "updatedAt": now,
-            "notes": "Default free plan",
-            "createdAt": now
-        }
-        await db.subscriptions.insert_one(subscription)
-        subscription = await db.subscriptions.find_one({"user_id": user_oid})
+        # Check if user has legacy subscription in users collection
+        user = await db.users.find_one({"_id": user_oid})
+        legacy_sub = user.get("subscription") if user else None
+        
+        if legacy_sub and legacy_sub.get("plan") and legacy_sub.get("plan") != "free":
+            # Migrate legacy subscription to subscriptions collection
+            now = datetime.now(timezone.utc)
+            
+            # Parse dates from legacy format
+            start_date = legacy_sub.get("startDate")
+            end_date = legacy_sub.get("endDate")
+            
+            # Convert string dates to datetime if needed
+            if isinstance(start_date, str):
+                try:
+                    start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                except:
+                    start_date = now
+            
+            if isinstance(end_date, str):
+                try:
+                    end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                except:
+                    end_date = None
+            
+            # Calculate duration days from dates
+            duration_days = 0
+            if start_date and end_date:
+                duration_days = (end_date - start_date).days
+            
+            subscription = {
+                "user_id": user_oid,
+                "planName": legacy_sub.get("plan", "free"),
+                "durationDays": duration_days,
+                "startDate": start_date or now,
+                "endDate": end_date,
+                "status": "active" if legacy_sub.get("active", True) else "expired",
+                "lastUpdatedBy": "migration",
+                "updatedAt": now,
+                "notes": "Migrated from users.subscription",
+                "createdAt": now,
+                "enquiryLimit": legacy_sub.get("inquiryLimit", -1)
+            }
+            
+            # Insert migrated subscription
+            await db.subscriptions.insert_one(subscription)
+            subscription = await db.subscriptions.find_one({"user_id": user_oid})
+            logger.info(f"[SUBSCRIPTION] Migrated legacy subscription for user {user_id}: {legacy_sub.get('plan')}")
+        else:
+            # Create default free subscription with ObjectId user_id
+            now = datetime.now(timezone.utc)
+            subscription = {
+                "user_id": user_oid,  # SSOT: Store as ObjectId
+                "planName": "free",
+                "durationDays": 0,
+                "startDate": now,
+                "endDate": None,
+                "status": "active",
+                "lastUpdatedBy": "system",
+                "updatedAt": now,
+                "notes": "Default free plan",
+                "createdAt": now
+            }
+            await db.subscriptions.insert_one(subscription)
+            subscription = await db.subscriptions.find_one({"user_id": user_oid})
     
     # Calculate derived fields
     subscription = calculate_subscription_fields(subscription)
