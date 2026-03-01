@@ -4621,9 +4621,10 @@ async def get_product_with_sellers(product_identifier: str):
             if seller:
                 seller_info = {
                     "businessName": seller.get("businessName", "Verified Seller"),
-                        "city": seller.get("city"),
-                        "state": seller.get("state")
-                    }
+                    "city": seller.get("city"),
+                    "state": seller.get("state"),
+                    "badgeType": seller.get("badgeType", "none")
+                }
         except Exception:
             pass
         
