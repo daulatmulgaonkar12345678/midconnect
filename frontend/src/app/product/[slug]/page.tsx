@@ -516,6 +516,12 @@ export default function EnterpriseProductPage() {
   const [product, setProduct] = useState<EnterpriseProductResponse | null>(null);
   const [facets, setFacets] = useState<ProductFacetsResponse | null>(null);
   const [sellers, setSellers] = useState<EnterpriseProductSeller[]>([]);
+  
+  // SEO state
+  const [seoData, setSeoData] = useState<{
+    seoContent: string;
+    sellersByCity: Record<string, Array<{ companyName: string; state: string; lowestPrice: number | null; badgeType: string }>>;
+  } | null>(null);
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({});
