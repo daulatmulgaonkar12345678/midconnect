@@ -1030,7 +1030,7 @@ export default function EnterpriseProductPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SEOContentSection 
             seoContent={seoData.seoContent} 
-            productName={product.productName} 
+            productName={product.product?.name || 'Product'} 
           />
         </div>
       )}
