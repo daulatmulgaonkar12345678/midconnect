@@ -39,7 +39,6 @@ export default function PricingPage() {
             <Feature included>Email support</Feature>
             <Feature>Priority search ranking</Feature>
             <Feature>Featured listings</Feature>
-            <Feature>Analytics dashboard</Feature>
           </ul>
           <Link 
             href="/register" 
@@ -73,7 +72,6 @@ export default function PricingPage() {
             <Feature included>Verified seller badge</Feature>
             <Feature included>Priority support</Feature>
             <Feature included>Priority search ranking</Feature>
-            <Feature included>Basic analytics</Feature>
             <Feature>Featured listings</Feature>
           </ul>
           <Link 
@@ -94,7 +92,7 @@ export default function PricingPage() {
             <p className="text-gray-500 mt-2">For large businesses</p>
           </div>
           <div className="text-center mb-6">
-            <span className="text-4xl font-bold text-gray-900">₹4,999</span>
+            <span className="text-4xl font-bold text-gray-900">₹3,999</span>
             <span className="text-gray-500">/month</span>
           </div>
           <ul className="space-y-3 mb-8">
@@ -103,7 +101,6 @@ export default function PricingPage() {
             <Feature included>Featured listings (5/month)</Feature>
             <Feature included>Advanced analytics</Feature>
             <Feature included>Dedicated account manager</Feature>
-            <Feature included>API access</Feature>
             <Feature included>Custom integrations</Feature>
           </ul>
           <Link 
