@@ -10615,6 +10615,132 @@ async def admin_get_sellers_for_dropdown(
     }
 
 
+# ============== SELLER BADGE SYSTEM ==============
+# Badge Types: none, choice (UdyogConnect Choice), trusted (UdyogConnect Trusted)
+
+VALID_BADGE_TYPES = ["none", "choice", "trusted"]
+
+class UpdateBadgeRequest(BaseModel):
+    badgeType: str = Field(..., description="Badge type: none, choice, or trusted")
+    
+    @field_validator('badgeType')
+    @classmethod
+    def validate_badge_type(cls, v):
+        if v not in VALID_BADGE_TYPES:
+            raise ValueError(f"Invalid badge type. Must be one of: {VALID_BADGE_TYPES}")
+        return v
+
+
+@api_router.put("/admin/sellers/{seller_id}/badge")
+async def admin_update_seller_badge(
+    seller_id: str,
+    request: UpdateBadgeRequest,
+    admin: dict = Depends(require_admin)
+):
+    """
+    Admin endpoint to update seller badge.
+    
+    Badge Types:
+    - none: No badge
+    - choice: UdyogConnect Choice (yellow badge)
+    - trusted: UdyogConnect Trusted (green badge)
+    """
+    try:
+        seller_oid = ObjectId(seller_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid seller ID format")
+    
+    # Verify seller exists
+    seller = await db.users.find_one({"_id": seller_oid, "isSeller": True})
+    if not seller:
+        raise HTTPException(status_code=404, detail="Seller not found")
+    
+    # Update badge
+    result = await db.users.update_one(
+        {"_id": seller_oid},
+        {
+            "$set": {
+                "badgeType": request.badgeType,
+                "badgeUpdatedAt": datetime.now(timezone.utc),
+                "badgeUpdatedBy": str(admin["_id"])
+            }
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=500, detail="Failed to update badge")
+    
+    logger.info(f"Admin {admin.get('email')} updated seller {seller_id} badge to {request.badgeType}")
+    
+    return {
+        "success": True,
+        "message": f"Badge updated to {request.badgeType}",
+        "sellerId": seller_id,
+        "badgeType": request.badgeType
+    }
+
+
+@api_router.get("/admin/sellers")
+async def admin_get_sellers(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    badgeFilter: Optional[str] = Query(None, description="Filter by badge type"),
+    admin: dict = Depends(require_admin)
+):
+    """
+    Admin endpoint to get all sellers with badge info.
+    """
+    query = {"isSeller": True}
+    
+    if search:
+        query["$or"] = [
+            {"businessName": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"gstNumber": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if badgeFilter and badgeFilter in VALID_BADGE_TYPES:
+        query["badgeType"] = badgeFilter
+    
+    skip = (page - 1) * limit
+    
+    total = await db.users.count_documents(query)
+    
+    cursor = db.users.find(
+        query,
+        {
+            "_id": 1, "businessName": 1, "email": 1, "phone": 1,
+            "gstNumber": 1, "gstVerified": 1, "badgeType": 1,
+            "city": 1, "state": 1, "createdAt": 1, "status": 1
+        }
+    ).sort("createdAt", -1).skip(skip).limit(limit)
+    
+    sellers = await cursor.to_list(length=limit)
+    
+    return {
+        "sellers": [
+            {
+                "_id": str(s["_id"]),
+                "businessName": s.get("businessName", ""),
+                "email": s.get("email", ""),
+                "phone": s.get("phone", ""),
+                "gstNumber": s.get("gstNumber", ""),
+                "gstVerified": s.get("gstVerified", False),
+                "badgeType": s.get("badgeType", "none"),
+                "city": s.get("city", ""),
+                "state": s.get("state", ""),
+                "createdAt": s.get("createdAt").isoformat() if s.get("createdAt") else None,
+                "status": s.get("status", "active")
+            }
+            for s in sellers
+        ],
+        "total": total,
+        "page": page,
+        "totalPages": (total + limit - 1) // limit
+    }
+
+
 # ============== HEALTH CHECK ==============
 
 @api_router.get("/")
