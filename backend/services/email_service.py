@@ -1075,3 +1075,124 @@ def get_inquiry_email_service(db) -> InquiryEmailService:
 def get_order_email_service(db) -> OrderEmailService:
     """Get order email service instance."""
     return OrderEmailService(db)
+
+
+# ============================================================================
+# 5. CONTACT FORM EMAIL
+# ============================================================================
+
+async def send_contact_form_email(
+    name: str,
+    email: str,
+    subject: str,
+    message: str
+) -> Dict[str, Any]:
+    """
+    Send contact form submission to admin.
+    
+    Args:
+        name: Sender's name
+        email: Sender's email
+        subject: Subject category (general, support, seller, buyer, feedback)
+        message: Message content
+    
+    Returns:
+        dict with success status
+    """
+    # Map subject values to readable labels
+    subject_labels = {
+        "general": "General Inquiry",
+        "support": "Technical Support",
+        "seller": "Seller Support",
+        "buyer": "Buyer Support",
+        "feedback": "Feedback"
+    }
+    subject_label = subject_labels.get(subject, subject)
+    
+    # Build email content for admin
+    content = f"""
+    <h2 style="color: #0B3C5D; margin-top: 0;">New Contact Form Submission</h2>
+    
+    <p>You have received a new message from the contact form on UdyogConnect.</p>
+    
+    <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0B3C5D;">
+        <table style="width: 100%;">
+            <tr>
+                <td style="padding: 8px 0; color: #666; width: 120px;"><strong>From:</strong></td>
+                <td style="padding: 8px 0;">{name}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; color: #666;"><strong>Email:</strong></td>
+                <td style="padding: 8px 0;"><a href="mailto:{email}" style="color: #0B3C5D;">{email}</a></td>
+            </tr>
+            <tr>
+                <td style="padding: 8px 0; color: #666;"><strong>Subject:</strong></td>
+                <td style="padding: 8px 0;">{subject_label}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="color: #333; margin-top: 0;">Message:</h3>
+        <p style="color: #333; white-space: pre-wrap;">{message}</p>
+    </div>
+    
+    <p style="color: #666; font-size: 14px;">
+        Reply directly to this email to respond to {name}.
+    </p>
+    """
+    
+    html = _get_email_wrapper(content, f"Contact Form: {subject_label}")
+    
+    # Send to admin email
+    admin_email = SUPPORT_EMAIL  # admin@udyogconnect.in
+    
+    result = await send_email(
+        to_email=admin_email,
+        subject=f"[Contact Form] {subject_label} from {name}",
+        html_content=html
+    )
+    
+    # Also send confirmation to the sender
+    if result.get("success"):
+        await _send_contact_confirmation(name, email, subject_label)
+    
+    return result
+
+
+async def _send_contact_confirmation(name: str, email: str, subject: str) -> None:
+    """Send confirmation email to the person who submitted the contact form."""
+    content = f"""
+    <h2 style="color: #0B3C5D; margin-top: 0;">We've Received Your Message</h2>
+    
+    <p>Dear {name},</p>
+    
+    <p>Thank you for contacting UdyogConnect. We have received your message regarding <strong>{subject}</strong>.</p>
+    
+    <p>Our team will review your inquiry and respond within <strong>24-48 hours</strong>.</p>
+    
+    <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+        <div style="font-size: 36px;">✓</div>
+        <p style="color: #28a745; font-weight: bold; margin: 10px 0;">Message Received</p>
+    </div>
+    
+    <p style="color: #666;">In the meantime, you can:</p>
+    <ul style="color: #666;">
+        <li>Browse our <a href="{FRONTEND_URL}/products" style="color: #0B3C5D;">product catalog</a></li>
+        <li>Check our <a href="{FRONTEND_URL}/faq" style="color: #0B3C5D;">FAQ section</a></li>
+        <li>Call us at <strong>+91 73878 21042</strong> for urgent queries</li>
+    </ul>
+    
+    <p>Best Regards,<br>UdyogConnect Support Team</p>
+    """
+    
+    html = _get_email_wrapper(content, "Message Received - UdyogConnect")
+    
+    try:
+        await send_email(
+            to_email=email,
+            subject="We've Received Your Message - UdyogConnect",
+            html_content=html
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send contact confirmation to {email}: {e}")
