@@ -10695,7 +10695,8 @@ async def admin_get_sellers(
     """
     Admin endpoint to get all sellers with badge info.
     """
-    query = {"isSeller": True}
+    # SSOT: Sellers are identified by having 'seller' in their roles array
+    query = {"roles": "seller"}
     
     if search:
         query["$or"] = [
