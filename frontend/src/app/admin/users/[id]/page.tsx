@@ -105,6 +105,7 @@ interface UserDetail {
   accountStatus: string;
   createdAt?: string;
   listingCount?: number;
+  badgeType?: 'none' | 'choice' | 'trusted';
 }
 
 export default function UserDetailPage() {
