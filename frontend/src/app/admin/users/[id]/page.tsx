@@ -275,8 +275,7 @@ export default function UserDetailPage() {
         token,
         {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ badgeType: newBadgeType })
+          body: { badgeType: newBadgeType }  // Pass object, not JSON string
         }
       );
       
