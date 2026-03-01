@@ -484,7 +484,29 @@ class SmartSearchService:
         return sorted(results, key=calculate_score, reverse=True)
 
 
-# Factory function
+# Singleton instance storage
+_smart_search_instance: Optional[SmartSearchService] = None
+
+# Factory function with singleton pattern
 def create_smart_search_service(db):
-    """Create and return a SmartSearchService instance."""
-    return SmartSearchService(db)
+    """
+    Create and return a SmartSearchService instance (singleton).
+    This ensures the cache is shared across all requests and only loaded once.
+    """
+    global _smart_search_instance
+    
+    if _smart_search_instance is None:
+        _smart_search_instance = SmartSearchService(db)
+        logger.info("SmartSearchService singleton created")
+    
+    return _smart_search_instance
+
+
+async def initialize_smart_search_cache(db):
+    """
+    Initialize the smart search cache at startup.
+    Call this from the server startup event to pre-warm the cache.
+    """
+    service = create_smart_search_service(db)
+    await service._load_names_cache()
+    logger.info("SmartSearch cache pre-warmed at startup")
