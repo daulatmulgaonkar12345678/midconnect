@@ -4652,6 +4652,7 @@ async def get_product_with_sellers(product_identifier: str):
             "sellerId": seller_id_str,
             "companyName": seller_info.get("businessName", "Verified Seller") if seller_info else "Verified Seller",
             "location": f"{seller_info.get('city', '')}, {seller_info.get('state', '')}" if seller_info else "India",
+            "badgeType": seller_info.get("badgeType", "none") if seller_info else "none",
             "moq": listing.get("moq", 1),
             "pricingTiers": serialized_pricing,
             "leadTimeDays": listing.get("leadTime"),
