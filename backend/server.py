@@ -10700,7 +10700,8 @@ async def admin_update_seller_badge(
     admin: dict = Depends(require_admin)
 ):
     """
-    Admin endpoint to update seller badge.
+    Admin endpoint to update user badge.
+    Works for all users, not just sellers.
     
     Badge Types:
     - none: No badge
@@ -10708,18 +10709,18 @@ async def admin_update_seller_badge(
     - trusted: UdyogConnect Trusted (green badge)
     """
     try:
-        seller_oid = ObjectId(seller_id)
+        user_oid = ObjectId(seller_id)
     except:
-        raise HTTPException(status_code=400, detail="Invalid seller ID format")
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
     
-    # Verify seller exists - SSOT: Check for 'seller' in roles array
-    seller = await db.users.find_one({"_id": seller_oid, "roles": "seller"})
-    if not seller:
-        raise HTTPException(status_code=404, detail="Seller not found")
+    # Verify user exists - works for any user, not just sellers
+    user = await db.users.find_one({"_id": user_oid})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     
     # Update badge
     result = await db.users.update_one(
-        {"_id": seller_oid},
+        {"_id": user_oid},
         {
             "$set": {
                 "badgeType": request.badgeType,
@@ -10729,10 +10730,10 @@ async def admin_update_seller_badge(
         }
     )
     
-    if result.modified_count == 0:
+    if result.modified_count == 0 and user.get("badgeType") != request.badgeType:
         raise HTTPException(status_code=500, detail="Failed to update badge")
     
-    logger.info(f"Admin {admin.get('email')} updated seller {seller_id} badge to {request.badgeType}")
+    logger.info(f"Admin {admin.get('email')} updated user {seller_id} badge to {request.badgeType}")
     
     return {
         "success": True,
