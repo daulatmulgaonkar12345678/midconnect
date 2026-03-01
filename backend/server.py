@@ -3938,6 +3938,164 @@ async def admin_archive_deleted_account(user_id: str, admin: dict = Depends(requ
     
     return {"message": "Account archived permanently", "status": "archived"}
 
+
+# ============== SEO SITEMAP ENDPOINT ==============
+
+@api_router.get("/sitemap.xml", response_class=Response)
+async def get_sitemap_xml():
+    """
+    Generate dynamic XML sitemap for SEO.
+    
+    Includes:
+    - Homepage
+    - All product pages (master products)
+    - All category pages
+    - Static pages (about, contact, etc.)
+    
+    Excludes:
+    - Dashboard pages
+    - API endpoints
+    - Filter/pagination URLs
+    """
+    from datetime import datetime
+    
+    base_url = "https://www.udyogconnect.in"
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    urls = []
+    
+    # Static pages
+    static_pages = [
+        {"loc": "/", "priority": "1.0", "changefreq": "daily"},
+        {"loc": "/products", "priority": "0.9", "changefreq": "daily"},
+        {"loc": "/categories", "priority": "0.9", "changefreq": "weekly"},
+        {"loc": "/about", "priority": "0.5", "changefreq": "monthly"},
+        {"loc": "/contact", "priority": "0.5", "changefreq": "monthly"},
+        {"loc": "/pricing", "priority": "0.6", "changefreq": "monthly"},
+        {"loc": "/privacy", "priority": "0.3", "changefreq": "yearly"},
+        {"loc": "/terms", "priority": "0.3", "changefreq": "yearly"},
+    ]
+    
+    for page in static_pages:
+        urls.append(f"""  <url>
+    <loc>{base_url}{page['loc']}</loc>
+    <lastmod>{now}</lastmod>
+    <changefreq>{page['changefreq']}</changefreq>
+    <priority>{page['priority']}</priority>
+  </url>""")
+    
+    # Product pages - only master products with active listings
+    products_pipeline = [
+        {"$match": {"isActive": True}},
+        {"$lookup": {
+            "from": "sellerListings",
+            "localField": "_id",
+            "foreignField": "productId",
+            "pipeline": [{"$match": {"status": "active"}}],
+            "as": "listings"
+        }},
+        {"$match": {"$expr": {"$gt": [{"$size": "$listings"}, 0]}}},
+        {"$project": {"slug": 1, "updatedAt": 1}},
+        {"$sort": {"updatedAt": -1}}
+    ]
+    
+    products = await db.products.aggregate(products_pipeline).to_list(10000)
+    
+    for product in products:
+        slug = product.get("slug")
+        if slug:
+            updated = product.get("updatedAt")
+            lastmod = updated.strftime("%Y-%m-%d") if updated else now
+            urls.append(f"""  <url>
+    <loc>{base_url}/product/{slug}</loc>
+    <lastmod>{lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>""")
+    
+    # Category pages
+    categories = await db.categories.find(
+        {"isActive": True},
+        {"slug": 1, "updatedAt": 1}
+    ).to_list(100)
+    
+    for category in categories:
+        slug = category.get("slug")
+        if slug:
+            updated = category.get("updatedAt")
+            lastmod = updated.strftime("%Y-%m-%d") if updated else now
+            urls.append(f"""  <url>
+    <loc>{base_url}/category/{slug}</loc>
+    <lastmod>{lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>""")
+    
+    # Build XML
+    xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{chr(10).join(urls)}
+</urlset>"""
+    
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-Robots-Tag": "noindex"
+        }
+    )
+
+
+@api_router.get("/robots.txt", response_class=Response)
+async def get_robots_txt():
+    """
+    Generate robots.txt for crawler guidance.
+    
+    Allow: Product pages, category pages, static pages
+    Disallow: Dashboard, API, auth, admin
+    """
+    robots_content = """# UdyogConnect Robots.txt
+# https://www.udyogconnect.in
+
+User-agent: *
+
+# Allow public pages
+Allow: /
+Allow: /products
+Allow: /product/
+Allow: /categories
+Allow: /category/
+Allow: /about
+Allow: /contact
+Allow: /pricing
+
+# Disallow private/dynamic pages
+Disallow: /api/
+Disallow: /admin/
+Disallow: /seller/
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /inquiries
+Disallow: /cart/
+Disallow: /*?*
+
+# Sitemap location
+Sitemap: https://www.udyogconnect.in/api/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
+"""
+    
+    return Response(
+        content=robots_content,
+        media_type="text/plain",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
 # ============== CATEGORY ENDPOINTS ==============
 
 @api_router.get("/categories")
