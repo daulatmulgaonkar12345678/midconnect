@@ -5590,6 +5590,7 @@ async def search_listings(search: SearchQuery):
             "sellerRole": listing.get("sellerRole", listing.get("sellerRole", "")),
             "sellerArea": seller.get("city", ""),
             "sellerState": seller.get("state", ""),
+            "sellerBadgeType": seller.get("badgeType", "none"),
             "distanceKm": round(distance, 1) if distance else None,
             "specifications": listing.get("specifications", {}),
             "description": listing.get("description", ""),
