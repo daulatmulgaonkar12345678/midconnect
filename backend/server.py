@@ -5,7 +5,7 @@
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, Body, File, UploadFile, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, EmailStr, field_validator, model_validator, Field
 from typing import Optional, List, Dict, Any, Literal
 from enum import Enum
