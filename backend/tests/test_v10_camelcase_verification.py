@@ -12,7 +12,7 @@ import requests
 import os
 
 # Get API URL from environment - use frontend's .env for public testing
-BASE_URL = "https://auth-ssot-rebuild.preview.emergentagent.com"
+BASE_URL = "https://search-typos.preview.emergentagent.com"
 
 
 class TestHealthAndBasicEndpoints:
