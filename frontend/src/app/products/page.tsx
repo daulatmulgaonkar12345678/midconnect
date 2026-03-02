@@ -96,7 +96,7 @@ export default async function ProductsPage() {
               {products.map((product) => (
                 <Link
                   key={product._id}
-                  href={`/product/${product.slug || product._id}`}
+                  href={`/products/${product.slug || product._id}`}
                   className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition group"
                 >
                   <div className="aspect-video bg-gray-100 flex items-center justify-center">

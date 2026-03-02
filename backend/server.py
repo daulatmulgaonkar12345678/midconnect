@@ -4681,6 +4681,13 @@ async def create_product(
     # Generate keyword-rich, SEO-friendly slug
     slug = seo_service.generate_seo_slug(product.name, category_name_for_slug, existing_slugs)
     
+    # Pre-generate ALL SEO data for storage (SEO v2 enforcement)
+    seo_title = seo_service.generate_seo_title(product.name, category_name_for_slug)
+    seo_description = seo_service.generate_seo_description(product.name, category_name_for_slug, 0)
+    seo_content = seo_service.generate_seo_content(
+        product.name, category_name_for_slug, product.specifications or {}, product.description, 0, []
+    )
+    
     # === Build product document with CANONICAL schema ===
     now = datetime.now(timezone.utc)
     
@@ -4699,6 +4706,11 @@ async def create_product(
         "moq": product.moq,
         "images": product.images[:10],  # Max 10 images
         "specifications": product.specifications,
+        # SEO v2 fields - pre-generated for performance
+        "seoTitle": seo_title,
+        "seoDescription": seo_description,
+        "seoContent": seo_content,
+        "legacyIds": [],  # For 301 redirect mapping
         "status": "active",
         "isActive": True,  # SSOT: camelCase
         "createdAt": now,
@@ -8612,9 +8624,12 @@ async def admin_create_product(
     existing_slugs = await db.products.distinct("slug")
     seo_slug = seo_service.generate_seo_slug(product.name, category_name, existing_slugs)
     
-    # Pre-generate SEO data for storage
+    # Pre-generate ALL SEO data for storage (SEO v2 enforcement)
     seo_title = seo_service.generate_seo_title(product.name, category_name)
     seo_description = seo_service.generate_seo_description(product.name, category_name, 0)
+    seo_content = seo_service.generate_seo_content(
+        product.name, category_name, {}, product.description, 0, []
+    )
     
     product_doc = {
         "_id": ObjectId(),
@@ -8624,9 +8639,11 @@ async def admin_create_product(
         "categoryId": ObjectId(product.categoryId),
         "categoryName": category_name,  # SSOT: Include category name
         "description": product.description,
-        # SEO fields - pre-generated for performance
+        # SEO fields - pre-generated for performance (SEO v2)
         "seoTitle": seo_title,
         "seoDescription": seo_description,
+        "seoContent": seo_content,
+        "legacyIds": [],  # Will store old IDs for 301 redirects
         # Admin provides mandatory product cover image - Firebase URL
         "coverImageUrl": product.coverImageUrl,  # SSOT: camelCase
         # ARCHITECTURAL FIX: Use validated ObjectIds directly
