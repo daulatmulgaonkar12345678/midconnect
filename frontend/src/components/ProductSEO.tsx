@@ -1,8 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { ChevronRight, MapPin, Star, Shield } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+
+interface InternalLink {
+  name: string;
+  url: string;
+}
 
 interface ProductSEOData {
   productName: string;
@@ -11,6 +18,13 @@ interface ProductSEOData {
   seoContent: string;
   jsonLd: Record<string, unknown>;
   breadcrumbJsonLd: Record<string, unknown>;
+  faqJsonLd: Record<string, unknown>;
+  internalLinks: {
+    category: InternalLink | null;
+    similarProducts: InternalLink[];
+    cityPages: InternalLink[];
+    topRated: string;
+  };
   sellerCount: number;
   sellersByCity: Record<string, Array<{
     companyName: string;
@@ -18,6 +32,10 @@ interface ProductSEOData {
     lowestPrice: number | null;
     badgeType: string;
   }>>;
+  minPrice: number | null;
+  maxPrice: number | null;
+  minMoq: number | null;
+  availableCities: string[];
   canonicalUrl: string;
 }
 
@@ -83,6 +101,14 @@ export function ProductJsonLd({ slug }: ProductJsonLdProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(seoData.breadcrumbJsonLd) }}
       />
       
+      {/* FAQ Schema for Rich Snippets */}
+      {seoData.faqJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(seoData.faqJsonLd) }}
+        />
+      )}
+      
       {/* Organization Schema */}
       <script
         type="application/ld+json"
@@ -101,6 +127,29 @@ interface CitySellerGroupProps {
   }>>;
 }
 
+// Badge component for sellers
+function SellerBadge({ badgeType }: { badgeType: string }) {
+  if (!badgeType || badgeType === 'none') return null;
+  
+  if (badgeType === 'choice') {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-yellow-600">
+        <Star className="h-3 w-3 fill-yellow-500" />
+      </span>
+    );
+  }
+  
+  if (badgeType === 'trusted') {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-green-600">
+        <Shield className="h-3 w-3 fill-green-500" />
+      </span>
+    );
+  }
+  
+  return null;
+}
+
 export function CitySellerGroup({ sellersByCity }: CitySellerGroupProps) {
   if (!sellersByCity || Object.keys(sellersByCity).length === 0) {
     return null;
@@ -111,22 +160,110 @@ export function CitySellerGroup({ sellersByCity }: CitySellerGroupProps) {
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
         Suppliers by City
       </h3>
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {Object.entries(sellersByCity).map(([city, sellers]) => (
-          <div key={city} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+          <div 
+            key={city} 
+            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+          >
             <div className="flex items-center gap-2">
-              <span className="text-gray-900 font-medium">{city}</span>
-              <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
-                {sellers.length} {sellers.length === 1 ? 'Seller' : 'Sellers'}
-              </span>
+              <MapPin className="h-4 w-4 text-gray-400" />
+              <div>
+                <span className="text-gray-900 font-medium">{city}</span>
+                <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                  {sellers.length} {sellers.length === 1 ? 'Seller' : 'Sellers'}
+                </span>
+              </div>
             </div>
             {sellers.some(s => s.lowestPrice) && (
-              <span className="text-sm text-green-600">
+              <span className="text-sm text-green-600 font-medium">
                 From ₹{Math.min(...sellers.filter(s => s.lowestPrice).map(s => s.lowestPrice!)).toLocaleString()}
               </span>
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+interface InternalLinksProps {
+  internalLinks: {
+    category: InternalLink | null;
+    similarProducts: InternalLink[];
+    cityPages: InternalLink[];
+    topRated: string;
+  };
+  productName: string;
+}
+
+export function InternalLinksSection({ internalLinks, productName }: InternalLinksProps) {
+  if (!internalLinks) return null;
+  
+  const hasSimilarProducts = internalLinks.similarProducts && internalLinks.similarProducts.length > 0;
+  const hasCityPages = internalLinks.cityPages && internalLinks.cityPages.length > 0;
+  
+  if (!hasSimilarProducts && !hasCityPages && !internalLinks.category) {
+    return null;
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mt-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        Related Products & Categories
+      </h3>
+      
+      <div className="space-y-4">
+        {/* Category Link */}
+        {internalLinks.category && (
+          <div>
+            <h4 className="text-sm font-medium text-gray-600 mb-2">Browse Category</h4>
+            <Link 
+              href={internalLinks.category.url.replace('https://www.udyogconnect.in', '')}
+              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
+            >
+              <ChevronRight className="h-4 w-4" />
+              {internalLinks.category.name}
+            </Link>
+          </div>
+        )}
+        
+        {/* Similar Products */}
+        {hasSimilarProducts && (
+          <div>
+            <h4 className="text-sm font-medium text-gray-600 mb-2">Similar Products</h4>
+            <div className="flex flex-wrap gap-2">
+              {internalLinks.similarProducts.map((product, idx) => (
+                <Link
+                  key={idx}
+                  href={product.url.replace('https://www.udyogconnect.in', '')}
+                  className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  {product.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* City Pages */}
+        {hasCityPages && (
+          <div>
+            <h4 className="text-sm font-medium text-gray-600 mb-2">{productName} by Location</h4>
+            <div className="flex flex-wrap gap-2">
+              {internalLinks.cityPages.map((city, idx) => (
+                <Link
+                  key={idx}
+                  href={city.url.replace('https://www.udyogconnect.in', '')}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 text-sm rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <MapPin className="h-3 w-3" />
+                  {city.name.replace(productName + ' in ', '')}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -140,19 +277,30 @@ interface SEOContentSectionProps {
 export function SEOContentSection({ seoContent, productName }: SEOContentSectionProps) {
   if (!seoContent) return null;
 
-  // Convert markdown-like content to HTML
+  // Convert markdown-like content to HTML with proper structure
   const formatContent = (content: string) => {
     return content
-      .replace(/## (.*)/g, '<h2 class="text-xl font-semibold text-gray-900 mt-6 mb-3">$1</h2>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/- (.*)/g, '<li class="ml-4">$1</li>')
-      .replace(/\n\n/g, '</p><p class="text-gray-600 mb-3">')
-      .replace(/^\d+\. (.*)/gm, '<li class="ml-4 list-decimal">$1</li>');
+      // H1 heading
+      .replace(/^# (.*)/gm, '<h1 class="text-2xl font-bold text-gray-900 mb-4">$1</h1>')
+      // H2 headings
+      .replace(/^## (.*)/gm, '<h2 class="text-xl font-semibold text-gray-900 mt-8 mb-3">$1</h2>')
+      // H3 headings
+      .replace(/^### (.*)/gm, '<h3 class="text-lg font-medium text-gray-800 mt-6 mb-2">$1</h3>')
+      // Bold text
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+      // Numbered lists
+      .replace(/^(\d+)\. (.*)/gm, '<li class="ml-6 list-decimal text-gray-600 mb-1">$2</li>')
+      // Bullet lists
+      .replace(/^- (.*)/gm, '<li class="ml-6 list-disc text-gray-600 mb-1">$1</li>')
+      // Paragraphs - wrap non-heading, non-list content
+      .replace(/^(?!<h|<li)(.+)$/gm, '<p class="text-gray-600 mb-3 leading-relaxed">$1</p>')
+      // Clean up empty paragraphs
+      .replace(/<p class="text-gray-600 mb-3 leading-relaxed"><\/p>/g, '');
   };
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mt-8">
-      <details className="group">
+      <details className="group" open>
         <summary className="flex items-center justify-between cursor-pointer list-none">
           <h2 className="text-lg font-semibold text-gray-900">
             About {productName}
@@ -164,10 +312,60 @@ export function SEOContentSection({ seoContent, productName }: SEOContentSection
           </span>
         </summary>
         <div 
-          className="mt-4 prose prose-sm max-w-none text-gray-600"
+          className="mt-6 prose prose-slate max-w-none"
           dangerouslySetInnerHTML={{ __html: formatContent(seoContent) }}
         />
       </details>
+    </div>
+  );
+}
+
+interface ProductMetaSummaryProps {
+  sellerCount: number;
+  minPrice: number | null;
+  maxPrice: number | null;
+  minMoq: number | null;
+  availableCities: string[];
+}
+
+export function ProductMetaSummary({ 
+  sellerCount, 
+  minPrice, 
+  maxPrice, 
+  minMoq,
+  availableCities 
+}: ProductMetaSummaryProps) {
+  return (
+    <div className="flex flex-wrap gap-3 text-sm">
+      {sellerCount > 0 && (
+        <span className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
+          {sellerCount} {sellerCount === 1 ? 'Supplier' : 'Suppliers'}
+        </span>
+      )}
+      
+      {minPrice && maxPrice && minPrice !== maxPrice && (
+        <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 rounded-full">
+          ₹{minPrice.toLocaleString()} - ₹{maxPrice.toLocaleString()}
+        </span>
+      )}
+      
+      {minPrice && (!maxPrice || minPrice === maxPrice) && (
+        <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 rounded-full">
+          From ₹{minPrice.toLocaleString()}
+        </span>
+      )}
+      
+      {minMoq && minMoq > 1 && (
+        <span className="inline-flex items-center px-3 py-1 bg-amber-50 text-amber-700 rounded-full">
+          MOQ: {minMoq} units
+        </span>
+      )}
+      
+      {availableCities && availableCities.length > 0 && (
+        <span className="inline-flex items-center px-3 py-1 bg-purple-50 text-purple-700 rounded-full">
+          {availableCities.length} Cities
+        </span>
+      )}
     </div>
   );
 }

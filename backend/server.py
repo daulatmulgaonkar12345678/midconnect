@@ -4661,15 +4661,23 @@ async def create_product(
             }
         )
     
-    # === Generate slug ===
-    base_slug = re.sub(r'[^a-z0-9]+', '-', product.name.lower()).strip('-')
-    slug = base_slug
+    # === Generate SEO-optimized slug ===
+    from services.seo_service import seo_service
     
-    # Ensure slug uniqueness
-    slug_counter = 1
-    while await db.products.find_one({"slug": slug}):
-        slug = f"{base_slug}-{slug_counter}"
-        slug_counter += 1
+    # Get category name for slug
+    category_name_for_slug = None
+    try:
+        category_for_slug = await db.categories.find_one({"_id": category_oid})
+        if category_for_slug:
+            category_name_for_slug = category_for_slug.get("name")
+    except:
+        pass
+    
+    # Get existing slugs to ensure uniqueness
+    existing_slugs = await db.products.distinct("slug")
+    
+    # Generate keyword-rich, SEO-friendly slug
+    slug = seo_service.generate_seo_slug(product.name, category_name_for_slug, existing_slugs)
     
     # === Build product document with CANONICAL schema ===
     now = datetime.now(timezone.utc)
@@ -4931,14 +4939,16 @@ async def get_product_with_sellers(product_identifier: str):
 @api_router.get("/products/{product_identifier}/seo")
 async def get_product_seo_data(product_identifier: str):
     """
-    Get SEO data for a product page.
+    Get SEO data for a product page (MARKETPLACE STANDARD v2.0).
     
     Returns:
-    - seoTitle
-    - seoDescription
-    - seoContent
+    - seoTitle (55-65 chars, CTR-optimized)
+    - seoDescription (150-160 chars, with seller count, price, MOQ)
+    - seoContent (300-500 words, H1/H2 structured)
     - jsonLd (Product + AggregateOffer schema)
     - breadcrumbJsonLd
+    - faqJsonLd (FAQ schema for rich snippets)
+    - internalLinks (category, similar products, city pages)
     - sellersByCity (for city grouping UI)
     
     PUBLIC endpoint - no auth required.
@@ -4971,13 +4981,14 @@ async def get_product_seo_data(product_identifier: str):
     category_name = None
     category_slug = None
     category_id = product_info.get("categoryId")
+    category_doc = None
     if category_id:
         try:
             cat_oid = ObjectId(category_id) if isinstance(category_id, str) else category_id
-            category = await db.categories.find_one({"_id": cat_oid})
-            if category:
-                category_name = category.get("name")
-                category_slug = category.get("slug")
+            category_doc = await db.categories.find_one({"_id": cat_oid})
+            if category_doc:
+                category_name = category_doc.get("name")
+                category_slug = category_doc.get("slug")
         except:
             pass
     
@@ -4995,8 +5006,10 @@ async def get_product_seo_data(product_identifier: str):
             "_id": 1,
             "sellerId": 1,
             "pricingTiers": 1,
+            "moq": 1,
             "images": {"$slice": ["$images", 2]},
             "searchableAttributes": 1,
+            "specifications": 1,
             "companyName": {"$ifNull": ["$sellerData.profile.businessName", "Verified Seller"]},
             "city": "$sellerData.profile.city",
             "state": "$sellerData.profile.state",
@@ -5006,25 +5019,48 @@ async def get_product_seo_data(product_identifier: str):
     
     listings = await db.sellerListings.aggregate(pipeline).to_list(100)
     
-    # Build sellers list for JSON-LD
+    # Build sellers list and collect statistics
     sellers_for_jsonld = []
+    all_prices = []
+    all_moqs = []
+    all_cities = set()
+    
     for listing in listings:
         lowest_price = None
         pricing_tiers = listing.get("pricingTiers", [])
         if pricing_tiers:
             prices = [t.get("pricePerUnit") or t.get("price", 0) for t in pricing_tiers if t]
-            lowest_price = min(prices) if prices else None
+            if prices:
+                lowest_price = min(prices)
+                all_prices.extend(prices)
+        
+        moq = listing.get("moq")
+        if moq:
+            all_moqs.append(moq)
+        
+        city = listing.get("city")
+        if city:
+            all_cities.add(city)
         
         sellers_for_jsonld.append({
             "sellerId": str(listing.get("sellerId")),
             "companyName": listing.get("companyName", "Verified Seller"),
-            "city": listing.get("city"),
+            "city": city,
             "state": listing.get("state"),
             "pricingTiers": listing.get("pricingTiers", []),
             "lowestPrice": lowest_price,
+            "moq": moq,
             "images": listing.get("images", []),
-            "badgeType": listing.get("badgeType", "none")
+            "badgeType": listing.get("badgeType", "none"),
+            "specifications": listing.get("specifications") or listing.get("searchableAttributes", {})
         })
+    
+    # Calculate price/MOQ stats for SEO description
+    min_price = min(all_prices) if all_prices else None
+    max_price = max(all_prices) if all_prices else None
+    min_moq = min(all_moqs) if all_moqs else None
+    available_cities = list(all_cities)
+    seller_count = len(sellers_for_jsonld)
     
     # Group sellers by city for UI
     sellers_by_city = {}
@@ -5048,17 +5084,35 @@ async def get_product_seo_data(product_identifier: str):
     
     # Get specifications for SEO content
     specifications = product_info.get("normalizedSpecs") or product_info.get("specifications") or {}
+    if not specifications and sellers_for_jsonld:
+        specifications = sellers_for_jsonld[0].get("specifications", {})
     
-    # Generate SEO data
+    # Get similar products for internal linking
+    similar_products = []
+    if category_id:
+        try:
+            cat_oid = ObjectId(category_id) if isinstance(category_id, str) else category_id
+            similar = await db.products.find({
+                "categoryId": cat_oid,
+                "_id": {"$ne": product_oid},
+                "isActive": {"$ne": False}
+            }).limit(5).to_list(5)
+            similar_products = [{"_id": str(p["_id"]), "name": p.get("name"), "slug": p.get("slug")} for p in similar]
+        except:
+            pass
+    
+    # Generate SEO data using MARKETPLACE STANDARD v2.0
+    # Use stored SEO data if available, otherwise generate fresh
     seo_title = product_info.get("seoTitle") or seo_service.generate_seo_title(product_name, category_name)
     seo_description = product_info.get("seoDescription") or seo_service.generate_seo_description(
-        product_name, category_name, len(sellers_for_jsonld)
+        product_name, category_name, seller_count, min_price, max_price, min_moq
     )
     seo_content = product_info.get("seoContent") or seo_service.generate_seo_content(
-        product_name, category_name, specifications, product_info.get("description")
+        product_name, category_name, specifications, 
+        product_info.get("description"), seller_count, available_cities
     )
     
-    # Generate JSON-LD
+    # Generate JSON-LD structured data
     product_json_ld = seo_service.generate_json_ld(
         product_info,
         sellers_for_jsonld,
@@ -5072,6 +5126,22 @@ async def get_product_seo_data(product_identifier: str):
         category_slug
     )
     
+    # Generate FAQ JSON-LD for rich snippets
+    faq_json_ld = seo_service.generate_faq_json_ld(
+        product_name, category_name, seller_count, min_price
+    )
+    
+    # Generate internal links
+    internal_links = seo_service.generate_internal_links(
+        str(product_oid),
+        product_name,
+        str(category_id) if category_id else None,
+        category_name,
+        category_slug,
+        similar_products,
+        available_cities
+    )
+    
     return {
         "productId": str(product_oid),
         "productName": product_name,
@@ -5083,8 +5153,14 @@ async def get_product_seo_data(product_identifier: str):
         "seoContent": seo_content,
         "jsonLd": product_json_ld,
         "breadcrumbJsonLd": breadcrumb_json_ld,
-        "sellerCount": len(sellers_for_jsonld),
+        "faqJsonLd": faq_json_ld,
+        "internalLinks": internal_links,
+        "sellerCount": seller_count,
         "sellersByCity": sellers_by_city,
+        "minPrice": min_price,
+        "maxPrice": max_price,
+        "minMoq": min_moq,
+        "availableCities": available_cities,
         "canonicalUrl": f"https://www.udyogconnect.in/product/{product_slug}"
     }
 
@@ -8529,13 +8605,26 @@ async def admin_create_product(
     category = await db.categories.find_one({"_id": ObjectId(product.categoryId)})
     category_name = category.get("name", "Unknown") if category else "Unknown"
     
+    # Generate SEO-optimized slug
+    from services.seo_service import seo_service
+    existing_slugs = await db.products.distinct("slug")
+    seo_slug = seo_service.generate_seo_slug(product.name, category_name, existing_slugs)
+    
+    # Pre-generate SEO data for storage
+    seo_title = seo_service.generate_seo_title(product.name, category_name)
+    seo_description = seo_service.generate_seo_description(product.name, category_name, 0)
+    
     product_doc = {
         "_id": ObjectId(),
         "name": product.name,
+        "slug": seo_slug,  # SEO-optimized slug
         # SSOT: Use camelCase ONLY
         "categoryId": ObjectId(product.categoryId),
         "categoryName": category_name,  # SSOT: Include category name
         "description": product.description,
+        # SEO fields - pre-generated for performance
+        "seoTitle": seo_title,
+        "seoDescription": seo_description,
         # Admin provides mandatory product cover image - Firebase URL
         "coverImageUrl": product.coverImageUrl,  # SSOT: camelCase
         # ARCHITECTURAL FIX: Use validated ObjectIds directly

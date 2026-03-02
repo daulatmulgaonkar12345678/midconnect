@@ -14,7 +14,7 @@ import {
   ProductFacetsResponse,
   FilterRequest
 } from '@/lib/api';
-import { ProductJsonLd, CitySellerGroup, SEOContentSection } from '@/components/ProductSEO';
+import { ProductJsonLd, CitySellerGroup, SEOContentSection, InternalLinksSection } from '@/components/ProductSEO';
 import {
   Package,
   MapPin,
@@ -517,10 +517,20 @@ export default function EnterpriseProductPage() {
   const [facets, setFacets] = useState<ProductFacetsResponse | null>(null);
   const [sellers, setSellers] = useState<EnterpriseProductSeller[]>([]);
   
-  // SEO state
+  // SEO state - Enhanced for Marketplace v2.0
   const [seoData, setSeoData] = useState<{
     seoContent: string;
     sellersByCity: Record<string, Array<{ companyName: string; state: string; lowestPrice: number | null; badgeType: string }>>;
+    internalLinks?: {
+      category: { name: string; url: string } | null;
+      similarProducts: Array<{ name: string; url: string }>;
+      cityPages: Array<{ name: string; url: string }>;
+      topRated: string;
+    };
+    minPrice?: number | null;
+    maxPrice?: number | null;
+    minMoq?: number | null;
+    availableCities?: string[];
   } | null>(null);
 
   // Filter state
@@ -565,13 +575,18 @@ export default function EnterpriseProductPage() {
         setFacets(facetsData);
         setSellers(productData.sellers);
         
-        // Load SEO data in background (non-blocking)
+        // Load SEO data in background (non-blocking) - Enhanced for Marketplace v2.0
         const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
         fetch(`${API_URL}/api/products/${productId}/seo`)
           .then(res => res.json())
           .then(data => setSeoData({
             seoContent: data.seoContent,
-            sellersByCity: data.sellersByCity
+            sellersByCity: data.sellersByCity,
+            internalLinks: data.internalLinks,
+            minPrice: data.minPrice,
+            maxPrice: data.maxPrice,
+            minMoq: data.minMoq,
+            availableCities: data.availableCities
           }))
           .catch(err => console.log('SEO data not available:', err));
           
@@ -1014,7 +1029,7 @@ export default function EnterpriseProductPage() {
         />
       )}
       
-      {/* ==================== SECTION 5: SEO CONTENT ==================== */}
+      {/* ==================== SECTION 5: SEO CONTENT (MARKETPLACE v2.0) ==================== */}
       {/* JSON-LD Structured Data for Google Rich Snippets */}
       {productId && <ProductJsonLd slug={productId} />}
       
@@ -1025,7 +1040,17 @@ export default function EnterpriseProductPage() {
         </div>
       )}
       
-      {/* SEO Content (Collapsible) */}
+      {/* Internal Links for SEO (Category, Similar Products, City Pages) */}
+      {seoData?.internalLinks && product && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <InternalLinksSection 
+            internalLinks={seoData.internalLinks} 
+            productName={product.product?.name || 'Product'} 
+          />
+        </div>
+      )}
+      
+      {/* SEO Content (Collapsible) - 300-500 words structured content */}
       {seoData?.seoContent && product && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SEOContentSection 
