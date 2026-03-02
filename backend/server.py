@@ -11521,6 +11521,89 @@ async def admin_migrate_category_ids(admin: dict = Depends(require_admin)):
     }
 
 
+@api_router.post("/admin/migrate/generate-seo-slugs")
+async def admin_migrate_generate_seo_slugs(admin: dict = Depends(require_admin)):
+    """
+    One-time migration to generate SEO-optimized slugs for products without slugs.
+    
+    Format: {product-name}-{category}-supplier-india
+    
+    This ensures all existing products have keyword-rich slugs for SEO.
+    Only runs on products where slug is null/empty.
+    """
+    from services.seo_service import seo_service
+    
+    # Get all existing slugs for uniqueness check
+    existing_slugs = await db.products.distinct("slug")
+    existing_slugs = [s for s in existing_slugs if s]  # Filter out None/empty
+    
+    # Find all products without slugs
+    products = await db.products.find({
+        "$or": [
+            {"slug": None},
+            {"slug": ""},
+            {"slug": {"$exists": False}}
+        ]
+    }).to_list(5000)
+    
+    if not products:
+        return {
+            "success": True,
+            "message": "No products need slug migration",
+            "updated": 0,
+            "total": 0
+        }
+    
+    # Load categories for slug generation
+    categories = await db.categories.find({}).to_list(500)
+    category_map = {str(c["_id"]): c for c in categories}
+    
+    updated_count = 0
+    errors = []
+    
+    for prod in products:
+        try:
+            product_name = prod.get("name", "")
+            if not product_name:
+                continue
+            
+            # Get category name
+            cat_id = prod.get("categoryId")
+            category_name = None
+            if cat_id:
+                cat_str = str(cat_id)
+                if cat_str in category_map:
+                    category_name = category_map[cat_str].get("name")
+            
+            # Generate slug
+            new_slug = seo_service.generate_seo_slug(product_name, category_name, existing_slugs)
+            
+            # Update product
+            await db.products.update_one(
+                {"_id": prod["_id"]},
+                {"$set": {"slug": new_slug, "updatedAt": datetime.now(timezone.utc)}}
+            )
+            
+            # Add to existing slugs to ensure next iteration doesn't duplicate
+            existing_slugs.append(new_slug)
+            updated_count += 1
+            
+        except Exception as e:
+            errors.append({
+                "productId": str(prod.get("_id")),
+                "name": prod.get("name"),
+                "error": str(e)
+            })
+    
+    return {
+        "success": True,
+        "message": f"Slug migration complete",
+        "updated": updated_count,
+        "total": len(products),
+        "errors": errors[:10] if errors else []
+    }
+
+
 # ================================================================
 # MIGRATION ENDPOINT REMOVED - 2026-02-25
 # The temporary populate-listing-locations-2024-temp endpoint

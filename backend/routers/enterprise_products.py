@@ -80,6 +80,8 @@ def create_enterprise_product_router(db):
         
         SINGLE AGGREGATION - NO N+1 QUERIES.
         
+        Supports both ObjectId and slug for product lookup.
+        
         Returns:
         - Product details
         - Spec template structure
@@ -87,15 +89,27 @@ def create_enterprise_product_router(db):
         - Paginated seller listings with denormalized attributes
         - Available facets for filtering
         """
-        try:
-            product_oid = ObjectId(product_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid product ID")
+        from urllib.parse import unquote
         
-        # Get product
-        product = await db.products.find_one({"_id": product_oid})
+        decoded_id = unquote(product_id)
+        product = None
+        
+        # Try ObjectId first
+        if len(decoded_id) == 24:
+            try:
+                product_oid = ObjectId(decoded_id)
+                product = await db.products.find_one({"_id": product_oid})
+            except Exception:
+                pass
+        
+        # If not found, try slug
+        if not product:
+            product = await db.products.find_one({"slug": decoded_id})
+        
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+        
+        product_oid = product["_id"]
         
         # Get category
         category = None
@@ -297,18 +311,31 @@ def create_enterprise_product_router(db):
         Get available filter values for a product.
         
         USES denormalized searchableAttributes - NO JOINS.
+        Supports both ObjectId and slug for product lookup.
         
         Returns dynamic facets based on specTemplate fields.
         """
-        try:
-            product_oid = ObjectId(product_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid product ID")
+        from urllib.parse import unquote
         
-        # Get product and its spec template
-        product = await db.products.find_one({"_id": product_oid})
+        decoded_id = unquote(product_id)
+        product = None
+        
+        # Try ObjectId first
+        if len(decoded_id) == 24:
+            try:
+                product_oid = ObjectId(decoded_id)
+                product = await db.products.find_one({"_id": product_oid})
+            except Exception:
+                pass
+        
+        # If not found, try slug
+        if not product:
+            product = await db.products.find_one({"slug": decoded_id})
+        
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+        
+        product_oid = product["_id"]
         
         # Get spec template for field metadata
         spec_template = None
@@ -383,6 +410,7 @@ def create_enterprise_product_router(db):
         
         NO JOINS - uses denormalized searchableAttributes.
         SINGLE QUERY with index support.
+        Supports both ObjectId and slug for product lookup.
         
         Implements 4-level fallback:
         1. Remove lowest priority filter
@@ -390,10 +418,27 @@ def create_enterprise_product_router(db):
         3. Show other variants of same product
         4. Show related category products
         """
-        try:
-            product_oid = ObjectId(product_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid product ID")
+        from urllib.parse import unquote
+        
+        decoded_id = unquote(product_id)
+        product = None
+        
+        # Try ObjectId first
+        if len(decoded_id) == 24:
+            try:
+                product_oid = ObjectId(decoded_id)
+                product = await db.products.find_one({"_id": product_oid}, {"_id": 1})
+            except Exception:
+                pass
+        
+        # If not found, try slug
+        if not product:
+            product = await db.products.find_one({"slug": decoded_id}, {"_id": 1})
+        
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        product_oid = product["_id"]
         
         # Build match filter
         match = {
