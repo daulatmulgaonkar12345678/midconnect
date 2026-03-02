@@ -505,3 +505,36 @@ Implement emails for subscription lifecycle (activated, expiring, expired).
 - All categories have slugs ✅
 - No duplicate slugs ✅
 - Sitemap uses slug-only URLs ✅
+
+### Session: 2026-03-02 (continued)
+
+#### COMPLETE: SEO v2.1 Enforcement - Marketplace Standard
+
+**URL Structure (STEP 1):**
+- Products: `/products/{slug}` (plural)
+- Categories: `/categories/{slug}` (plural)
+- Old routes (`/product/`, `/category/`) → 301 redirect to new routes
+
+**Slug Formats (STEP 2):**
+- Products: `{product-name}-{category}-supplier-india` (max 90 chars)
+- Categories: `{category-name}-suppliers-india` (max 90 chars)
+- Lowercase, hyphen-separated, no special characters
+
+**Files Created/Modified:**
+1. `/app/frontend/src/app/products/[slug]/page.tsx` - New product page (plural route)
+2. `/app/frontend/src/app/products/[slug]/layout.tsx` - SEO metadata generation
+3. `/app/frontend/src/app/categories/[slug]/page.tsx` - New category page (plural route)
+4. `/app/frontend/src/app/product/[slug]/layout.tsx` - Redirect to /products/
+5. `/app/frontend/src/app/category/[id]/page.tsx` - Redirect to /categories/
+6. `/app/frontend/src/app/sitemap.ts` - Updated to use /products/ and /categories/
+7. `/app/backend/services/seo_migration_service.py` - V2.1 patterns with 90-char limit
+
+**Testing Results** (24/25 → 25/25 after fix):
+- All redirect endpoints working ✅
+- Product slugs end with -supplier-india ✅
+- Category slugs end with -suppliers-india ✅
+- All slugs within 90 chars ✅
+- SEO data quality (title 55-65, desc 150-160) ✅
+- JSON-LD schemas (Product, FAQ, Breadcrumb) ✅
+- Frontend plural routes working ✅
+- 301 redirects from singular routes ✅
