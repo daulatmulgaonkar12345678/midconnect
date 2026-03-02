@@ -11748,6 +11748,128 @@ async def get_category_redirect(identifier: str):
 
 
 # ================================================================
+# ENTERPRISE INFRASTRUCTURE ENDPOINTS
+# ================================================================
+
+@api_router.post("/admin/enterprise/create-indexes")
+async def admin_create_indexes(admin: dict = Depends(require_admin)):
+    """
+    Create all enterprise indexes for scalability.
+    
+    Indexes created:
+    - products: slug (unique), categoryId, isActive, text search
+    - categories: slug (unique), isActive
+    - sellerListings: productId, sellerId, price sorting
+    - users: email (unique), firebaseUid, role
+    - quotes: buyerId, sellerId, productId, status
+    
+    Safe to run multiple times (idempotent).
+    """
+    from services.index_migration import run_index_migration
+    
+    logger.info(f"[Enterprise] Admin {admin.get('email')} initiated index creation")
+    
+    results = await run_index_migration(db)
+    
+    return {
+        "success": len(results["errors"]) == 0,
+        "created": results["created"],
+        "existed": results["existed"],
+        "errors": results["errors"],
+        "message": f"Created {len(results['created'])} indexes, {len(results['existed'])} already existed"
+    }
+
+
+@api_router.get("/admin/enterprise/index-stats")
+async def admin_get_index_stats(admin: dict = Depends(require_admin)):
+    """
+    Get index statistics for all collections.
+    """
+    from services.index_migration import get_index_stats
+    
+    stats = await get_index_stats(db)
+    
+    return {
+        "collections": stats,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@api_router.get("/enterprise/resolve/product/{identifier}")
+async def resolve_product_endpoint(identifier: str):
+    """
+    Enterprise product resolver endpoint.
+    
+    Resolves product by:
+    - ObjectId (fastest)
+    - Slug (SEO)
+    - Legacy ID (redirects)
+    
+    Returns canonical URL for SEO.
+    """
+    from services.resolver_service import create_resolver
+    from urllib.parse import unquote
+    
+    decoded = unquote(identifier)
+    resolver = create_resolver(db)
+    
+    product, needs_redirect, canonical_slug = await resolver.get_product_with_redirect(decoded)
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    return {
+        "product": {
+            "_id": str(product["_id"]),
+            "name": product.get("name"),
+            "slug": product.get("slug"),
+            "seoTitle": product.get("seoTitle"),
+            "seoDescription": product.get("seoDescription")
+        },
+        "redirect": {
+            "needed": needs_redirect,
+            "canonicalSlug": canonical_slug,
+            "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}" if canonical_slug else None
+        }
+    }
+
+
+@api_router.get("/enterprise/resolve/category/{identifier}")
+async def resolve_category_endpoint(identifier: str):
+    """
+    Enterprise category resolver endpoint.
+    """
+    from services.resolver_service import create_resolver
+    from urllib.parse import unquote
+    
+    decoded = unquote(identifier)
+    resolver = create_resolver(db)
+    
+    category = await resolver.resolve_category(decoded)
+    
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    canonical_slug = category.get("slug")
+    needs_redirect = decoded != canonical_slug
+    
+    return {
+        "category": {
+            "_id": str(category["_id"]),
+            "name": category.get("name"),
+            "slug": canonical_slug,
+            "seoTitle": category.get("seoTitle"),
+            "seoDescription": category.get("seoDescription")
+        },
+        "redirect": {
+            "needed": needs_redirect,
+            "canonicalSlug": canonical_slug,
+            "canonicalUrl": f"https://www.udyogconnect.in/categories/{canonical_slug}" if canonical_slug else None
+        }
+    }
+
+
+# ================================================================
 # MIGRATION ENDPOINT REMOVED - 2026-02-25
 # The temporary populate-listing-locations-2024-temp endpoint
 # has been removed for security. Never leave admin/migration
