@@ -73,6 +73,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   // Dynamic pages - fetch from API with timeout
+  // SEO v2.0: ONLY use slug-based URLs, NEVER use ObjectIds
   let productPages: MetadataRoute.Sitemap = [];
   let categoryPages: MetadataRoute.Sitemap = [];
 
@@ -89,10 +90,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? productsData 
         : productsData.products || [];
 
+      // SEO v2.0: ONLY include products with slugs - never use ObjectIds in sitemap
       productPages = products
-        .filter((p) => p.slug || p._id) // Must have identifier
+        .filter((p) => p.slug && p.slug.length > 0) // Must have a valid slug
         .map((product) => ({
-          url: `${SITE_URL}/product/${product.slug || product._id}`,
+          url: `${SITE_URL}/product/${product.slug}`,
           lastModified: product.updatedAt || now,
           changeFrequency: 'weekly' as const,
           priority: 0.8,
@@ -116,10 +118,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? categoriesData
         : categoriesData.categories || [];
 
+      // SEO v2.0: ONLY include categories with slugs - never use ObjectIds in sitemap
       categoryPages = categories
-        .filter((c) => c.slug || c._id) // Must have identifier
+        .filter((c) => c.slug && c.slug.length > 0) // Must have a valid slug
         .map((category) => ({
-          url: `${SITE_URL}/category/${category.slug || category._id}`,
+          url: `${SITE_URL}/category/${category.slug}`,
           lastModified: category.updatedAt || now,
           changeFrequency: 'weekly' as const,
           priority: 0.7,

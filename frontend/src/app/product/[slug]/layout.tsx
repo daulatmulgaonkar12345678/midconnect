@@ -1,10 +1,22 @@
 import { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
+// Check if identifier is an ObjectId (24 hex chars)
+function isObjectId(str: string): boolean {
+  return /^[a-f0-9]{24}$/i.test(str);
+}
+
 // Generate dynamic metadata for SEO
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const { slug } = params;
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  
+  // If it's an ObjectId, we need to redirect - but metadata won't matter
+  // as the redirect happens in the page component
+  if (isObjectId(slug)) {
+    return getDefaultMetadata();
+  }
   
   try {
     const response = await fetch(`${API_URL}/api/products/${slug}/seo`, {

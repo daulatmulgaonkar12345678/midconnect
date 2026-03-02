@@ -11604,6 +11604,130 @@ async def admin_migrate_generate_seo_slugs(admin: dict = Depends(require_admin))
     }
 
 
+@api_router.post("/admin/migrate/seo-v2-full")
+async def admin_migrate_seo_v2_full(
+    force_regenerate: bool = False,
+    admin: dict = Depends(require_admin)
+):
+    """
+    Complete SEO v2.0 migration for all products and categories.
+    
+    Performs:
+    1. Regenerate slugs for all categories
+    2. Regenerate slugs for all products (format: {product-name}-{category}-supplier-india)
+    3. Store legacy IDs and slugs for 301 redirect mapping
+    4. Validate migration completeness
+    
+    Args:
+        force_regenerate: If true, regenerate ALL slugs even if they already exist
+    
+    Returns:
+        Complete migration report with stats
+    """
+    from services.seo_migration_service import SEOMigrationService
+    
+    logger.info(f"[SEO Migration] Admin {admin.get('email')} initiated SEO v2.0 migration, force={force_regenerate}")
+    
+    migration_service = SEOMigrationService(db)
+    report = await migration_service.run_full_migration(force_regenerate)
+    
+    return report
+
+
+@api_router.get("/admin/migrate/seo-v2-validate")
+async def admin_validate_seo_v2(admin: dict = Depends(require_admin)):
+    """
+    Validate SEO v2.0 migration completeness.
+    
+    Checks:
+    - No null slugs in products or categories
+    - No duplicate slugs
+    - All slugs match v2 pattern
+    
+    Returns:
+        Validation report with any issues found
+    """
+    from services.seo_migration_service import SEOMigrationService
+    
+    migration_service = SEOMigrationService(db)
+    validation = await migration_service.validate_migration()
+    
+    return validation
+
+
+@api_router.get("/redirect/product/{identifier}")
+async def get_product_redirect(identifier: str):
+    """
+    Get 301 redirect target for old product URL.
+    
+    Supports:
+    - Old ObjectId-based URLs: /product/{objectId}
+    - Old legacy slugs: /product/{old-slug}
+    
+    Returns:
+        Redirect target slug for 301 redirect
+    """
+    from services.seo_migration_service import SEOMigrationService
+    from urllib.parse import unquote
+    
+    decoded = unquote(identifier)
+    migration_service = SEOMigrationService(db)
+    
+    new_slug = await migration_service.get_redirect_mapping("product", decoded)
+    
+    if new_slug:
+        return {
+            "redirect": True,
+            "status": 301,
+            "from": f"/product/{identifier}",
+            "to": f"/product/{new_slug}",
+            "slug": new_slug
+        }
+    
+    # Not found - no redirect needed (might be current slug)
+    return {
+        "redirect": False,
+        "status": 200,
+        "message": "No redirect needed or identifier not found"
+    }
+
+
+@api_router.get("/redirect/category/{identifier}")
+async def get_category_redirect(identifier: str):
+    """
+    Get 301 redirect target for old category URL.
+    
+    Supports:
+    - Old ObjectId-based URLs: /category/{objectId}
+    - Old legacy slugs: /category/{old-slug}
+    
+    Returns:
+        Redirect target slug for 301 redirect
+    """
+    from services.seo_migration_service import SEOMigrationService
+    from urllib.parse import unquote
+    
+    decoded = unquote(identifier)
+    migration_service = SEOMigrationService(db)
+    
+    new_slug = await migration_service.get_redirect_mapping("category", decoded)
+    
+    if new_slug:
+        return {
+            "redirect": True,
+            "status": 301,
+            "from": f"/category/{identifier}",
+            "to": f"/category/{new_slug}",
+            "slug": new_slug
+        }
+    
+    return {
+        "redirect": False,
+        "status": 200,
+        "message": "No redirect needed or identifier not found"
+    }
+
+
 # ================================================================
 # MIGRATION ENDPOINT REMOVED - 2026-02-25
 # The temporary populate-listing-locations-2024-temp endpoint

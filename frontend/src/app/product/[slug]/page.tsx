@@ -503,12 +503,20 @@ function CompareModal({
 
 // ==================== MAIN PAGE ====================
 
+// Check if identifier is an ObjectId (24 hex chars)
+function isObjectId(str: string): boolean {
+  return /^[a-f0-9]{24}$/i.test(str);
+}
+
 export default function EnterpriseProductPage() {
   const params = useParams();
   const router = useRouter();
   const { user, getIdToken, isAuthenticated } = useAuth();
 
   const productId = params?.slug ? decodeURIComponent(params.slug as string) : null;
+  
+  // Redirect state for 301 redirects from old URLs
+  const [redirectChecked, setRedirectChecked] = useState(false);
 
   // Data state
   const [loading, setLoading] = useState(true);
@@ -556,11 +564,37 @@ export default function EnterpriseProductPage() {
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
   const [inquirySuccess, setInquirySuccess] = useState<string | null>(null);
 
+  // Check for 301 redirect (old ObjectId or legacy slug URLs)
+  useEffect(() => {
+    if (!productId || redirectChecked) return;
+    
+    // If it looks like an ObjectId, check for redirect
+    if (isObjectId(productId)) {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+      
+      fetch(`${API_URL}/api/redirect/product/${productId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.redirect && data.slug) {
+            // Perform 301 redirect to new slug URL
+            router.replace(`/product/${data.slug}`);
+          } else {
+            setRedirectChecked(true);
+          }
+        })
+        .catch(() => setRedirectChecked(true));
+    } else {
+      setRedirectChecked(true);
+    }
+  }, [productId, redirectChecked, router]);
+
   // Load initial data
   useEffect(() => {
-    if (!productId) {
-      setError('Invalid product');
-      setLoading(false);
+    if (!productId || !redirectChecked) {
+      if (!productId) {
+        setError('Invalid product');
+        setLoading(false);
+      }
       return;
     }
 
@@ -598,7 +632,7 @@ export default function EnterpriseProductPage() {
     }
 
     loadData();
-  }, [productId]);
+  }, [productId, redirectChecked]);
 
   // Apply filters
   const applyFilters = useCallback(async () => {
