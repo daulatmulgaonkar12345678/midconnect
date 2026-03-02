@@ -28,9 +28,12 @@ logger = logging.getLogger("seo_migration")
 class SEOMigrationService:
     """Handles SEO v2.0 migration for products and categories."""
     
-    # Pattern to check if slug matches v2 format
+    # SEO v2.1 - Max slug length
+    MAX_SLUG_LENGTH = 90
+    
+    # Pattern to check if slug matches v2.1 format
     V2_PRODUCT_SLUG_PATTERN = re.compile(r'^[a-z0-9-]+-supplier-india(-\d+)?$')
-    V2_CATEGORY_SLUG_PATTERN = re.compile(r'^[a-z0-9-]+(-\d+)?$')
+    V2_CATEGORY_SLUG_PATTERN = re.compile(r'^[a-z0-9-]+-suppliers-india(-\d+)?$')
     
     def __init__(self, db):
         self.db = db
@@ -76,6 +79,17 @@ class SEOMigrationService:
         
         base_slug = '-'.join(slug_parts)
         
+        # SEO v2.1: Enforce max 90 character limit
+        if len(base_slug) > SEOMigrationService.MAX_SLUG_LENGTH:
+            # Truncate product name part to fit
+            max_name_len = SEOMigrationService.MAX_SLUG_LENGTH - len("-supplier-india") - (len(category_slug) + 1 if category_name else 0)
+            clean_name = clean_name[:max_name_len].rstrip('-')
+            slug_parts = [clean_name]
+            if category_name and category_slug:
+                slug_parts.append(category_slug)
+            slug_parts.append("supplier-india")
+            base_slug = '-'.join(slug_parts)
+        
         # Ensure uniqueness
         if existing_slugs:
             final_slug = base_slug
@@ -93,14 +107,17 @@ class SEOMigrationService:
         existing_slugs: List[str] = None
     ) -> str:
         """
-        Generate SEO v2.0 category slug.
+        Generate SEO v2.1 category slug.
         
-        Format: {category-name}
+        Format: {category-name}-suppliers-india
         
         - Lowercase
-        - Replace spaces with "-"
+        - Hyphen-separated
         - Remove special characters
+        - Max 90 characters
         - Ensure uniqueness
+        
+        Example: cutting-tools-accessories-suppliers-india
         """
         if not category_name:
             category_name = "general-category"
@@ -113,7 +130,14 @@ class SEOMigrationService:
         if not clean_name:
             clean_name = "category"
         
-        base_slug = clean_name
+        # SEO v2.1: Append suppliers-india suffix
+        base_slug = f"{clean_name}-suppliers-india"
+        
+        # SEO v2.1: Enforce max 90 character limit
+        if len(base_slug) > SEOMigrationService.MAX_SLUG_LENGTH:
+            max_name_len = SEOMigrationService.MAX_SLUG_LENGTH - len("-suppliers-india")
+            clean_name = clean_name[:max_name_len].rstrip('-')
+            base_slug = f"{clean_name}-suppliers-india"
         
         # Ensure uniqueness
         if existing_slugs:

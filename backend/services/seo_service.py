@@ -29,6 +29,9 @@ class SEOService:
     SITE_NAME = "UdyogConnect"
     SITE_URL = "https://www.udyogconnect.in"
     
+    # SEO v2.1 - Max slug length
+    MAX_SLUG_LENGTH = 90
+    
     # Industry applications mapping for different product categories
     INDUSTRY_APPLICATIONS = {
         "motors": ["manufacturing plants", "industrial automation", "pumps and compressors", "conveyors", "HVAC systems"],
@@ -110,6 +113,19 @@ class SEOService:
         slug_parts.append("supplier-india")
         
         base_slug = '-'.join(slug_parts)
+        
+        # SEO v2.1: Enforce max 90 character limit
+        if len(base_slug) > cls.MAX_SLUG_LENGTH:
+            # Truncate product name part to fit
+            suffix_len = len("-supplier-india")
+            cat_len = len(category_slug) + 1 if category_name else 0
+            max_name_len = cls.MAX_SLUG_LENGTH - suffix_len - cat_len
+            clean_name = clean_name[:max_name_len].rstrip('-')
+            slug_parts = [clean_name]
+            if category_name and category_slug:
+                slug_parts.append(category_slug)
+            slug_parts.append("supplier-india")
+            base_slug = '-'.join(slug_parts)
         
         # Ensure uniqueness
         if existing_slugs:
