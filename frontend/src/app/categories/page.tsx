@@ -9,6 +9,7 @@ import { Package, ArrowRight, Zap, Layers, FlaskRound, Building2, Settings, Shie
 interface PublicCategory {
   _id: string;
   name: string;
+  slug?: string;  // SEO v2.1: slug for routing
   image?: string;
   icon?: string;
   productCount: number;
@@ -46,8 +47,13 @@ function CategoryCard({ category }: { category: PublicCategory }) {
   const [imageError, setImageError] = useState(false);
   const hasImage = category.image && category.image.length > 0 && !imageError;
   
+  // SEO v2.1: Use slug-based URL if available
+  const categoryUrl = category.slug 
+    ? `/categories/${category.slug}` 
+    : `/categories/${category._id}`;
+  
   return (
-    <Link href={`/category/${category._id}`} data-testid={`category-card-${category._id}`}>
+    <Link href={categoryUrl} data-testid={`category-card-${category._id}`}>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all group overflow-hidden h-full">
         {/* Category Image Container - Large & Professional */}
         <div className="relative w-full h-32 sm:h-36 md:h-40 lg:h-44 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
