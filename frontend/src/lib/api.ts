@@ -486,6 +486,7 @@ export const getCategories = (): Promise<Category[]> =>
 export const getPublicCategories = (): Promise<{
   _id: string;
   name: string;
+  slug?: string;  // SEO v2.1: Added for slug-based routing
   image?: string;
   icon?: string;
   productCount: number;
