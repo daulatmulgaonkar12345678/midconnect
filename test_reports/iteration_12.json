@@ -92,7 +92,7 @@
   "context_for_next_testing_agent": "WhatsApp button visibility and buyer contact masking feature fully tested. Key implementation: (1) GET /seller/inquiries returns buyerMasked for pending (no phone/email) and buyerInfo for accepted (with phone/email). (2) unreadCount matches pending inquiry count. (3) POST /seller/inquiries/{id}/accept returns buyerContact and whatsappLink with 91 prefix. (4) Buyer data fetched from users collection using buyerId, with fallback to embedded buyerInfo for legacy inquiries. Test data: 10 total inquiries (9 accepted, 1 pending).",
 
   "test_environment": {
-    "api_url": "https://search-typos.preview.emergentagent.com",
+    "api_url": "https://seo-foundation-1.preview.emergentagent.com",
     "firebase_status": "MOCKED with dev-test-token",
     "mongodb_status": "CONNECTED"
   },

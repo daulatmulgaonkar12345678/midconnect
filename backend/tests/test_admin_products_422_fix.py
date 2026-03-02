@@ -24,7 +24,7 @@ import sys
 # Add backend to path for model imports
 sys.path.insert(0, '/app/backend')
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://search-typos.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://seo-foundation-1.preview.emergentagent.com').rstrip('/')
 
 
 class TestPublicEndpoints:
