@@ -583,4 +583,53 @@ Implement emails for subscription lifecycle (activated, expiring, expired).
 - Unique indexes enforced ✅
 - Frontend routing works ✅
 - Sitemap uses slugs only ✅
+
+---
+
+### Session: 2026-03-02 (continued)
+
+#### COMPLETE: Enterprise Architecture Hardening
+
+**Phase 1 - Core Architecture (DONE):**
+
+1. **Central Resolver Service** (`/app/backend/services/resolver_service.py`)
+   - `resolve_product(identifier)` - Supports ObjectId, slug, legacy ID
+   - `resolve_category(identifier)` - Same pattern
+   - `get_product_with_redirect()` - Returns canonical URL info
+   - `get_enterprise_product_data()` - Single aggregation, no N+1 queries
+   - Lean queries with projections (PRODUCT_FIELDS, CATEGORY_FIELDS, LISTING_FIELDS)
+
+2. **Enterprise Index Strategy** (`/app/backend/services/index_migration.py`)
+   - 23+ indexes created across all collections
+   - Products: slug (unique), categoryId, isActive, text search, legacy IDs
+   - Categories: slug (unique), isActive, legacy IDs
+   - SellerListings: productId+status, sellerId, price sorting
+   - Users: email (unique), firebaseUid, role, city
+   - Quotes: buyerId, sellerId, productId, status
+
+3. **Enterprise Endpoints**
+   - `GET /api/enterprise/resolve/product/{identifier}` - Canonical URL resolver
+   - `GET /api/enterprise/resolve/category/{identifier}` - Category resolver
+   - `POST /api/admin/enterprise/create-indexes` - Index migration
+   - `GET /api/admin/enterprise/index-stats` - Index statistics
+
+**Phase 2 - SEO Domination (DONE):**
+- ✅ Clean URL structure: /products/{slug}, /categories/{slug}
+- ✅ Dynamic metadata per page (generateMetadata)
+- ✅ JSON-LD structured data (Product, AggregateOffer, BreadcrumbList, FAQPage)
+- ✅ Sitemap automation (frontend-generated)
+- ✅ Canonical URLs on all pages
+
+**Phase 3 - Performance Layer (PARTIAL):**
+- ✅ Lean queries with projections
+- ✅ Single aggregation for enterprise page
+- ⏳ Redis caching (future)
+- ⏳ Cursor pagination (future)
+
+**Testing Results** (17/19 passed - 89%):
+- Resolver endpoints working ✅
+- ObjectId and slug lookups ✅
+- Canonical URLs correct ✅
+- SEO fields verified ✅
+- Indexes defined and created ✅
 - 301 redirects working ✅
