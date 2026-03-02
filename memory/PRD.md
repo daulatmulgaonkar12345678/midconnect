@@ -458,3 +458,50 @@ Implement emails for subscription lifecycle (activated, expiring, expired).
 - JSON-LD Product/FAQ/Breadcrumb schemas ✅
 - Internal links structure ✅
 - Slug-based URL routing ✅
+
+### Session: 2026-03-02 (continued)
+
+#### COMPLETE: SEO v2.0 Migration - Products & Categories
+
+**Migration Implemented:**
+
+1. **SEO Migration Service** (`/app/backend/services/seo_migration_service.py`)
+   - `generate_product_slug()`: Format `{product-name}-{category}-supplier-india`
+   - `generate_category_slug()`: Format `{category-name}`
+   - `migrate_all_products()`: Batch migration with uniqueness checks
+   - `migrate_all_categories()`: Batch migration with uniqueness checks
+   - `get_redirect_mapping()`: Lookup old ID → new slug for 301 redirects
+   - `validate_migration()`: Check for null/duplicate slugs
+
+2. **301 Redirect Endpoints**
+   - `GET /api/redirect/product/{identifier}`: Returns redirect info for old ObjectId/legacy slug
+   - `GET /api/redirect/category/{identifier}`: Returns redirect info for old ObjectId/legacy slug
+   - Stores `legacyIds` and `legacySlugs` arrays on documents for redirect resolution
+
+3. **Admin Migration Endpoints**
+   - `POST /api/admin/migrate/seo-v2-full`: Run complete migration (categories then products)
+   - `GET /api/admin/migrate/seo-v2-validate`: Validate migration completeness
+
+4. **Frontend Updates**
+   - Product page: Added redirect check for ObjectId URLs → redirects to slug URL
+   - Sitemap: Updated to ONLY include slug-based URLs, filter out entities without slugs
+   - Layout: Fixed params Promise handling for Next.js 15
+
+5. **API Fixes**
+   - Added `slug` field to `/api/categories` projection
+   - Added `slug` field to `/api/categories/public` response
+
+**Migration Results:**
+- 12 categories migrated with new slugs
+- 10 products migrated with v2.0 format slugs (-supplier-india suffix)
+- 0 null slugs
+- 0 duplicate slugs
+- All redirect mappings stored for 301 redirect resolution
+
+**Testing Results** (14/14 passed after fix):
+- Product redirect endpoint ✅
+- Category redirect endpoint ✅
+- All products have v2 slugs ✅
+- All categories have slugs ✅
+- No duplicate slugs ✅
+- Sitemap uses slug-only URLs ✅

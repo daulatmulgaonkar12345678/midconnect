@@ -4126,6 +4126,7 @@ async def get_categories():
         {"$project": {
             "_id": 1,
             "name": 1,
+            "slug": 1,  # SEO v2.0: Include slug for sitemap and routing
             "description": 1,
             "icon": 1,
             "image": 1,  # Include category image
@@ -4272,6 +4273,7 @@ async def get_public_categories():
         categories.append({
             "_id": cat_id,
             "name": cat_name,
+            "slug": category.get("slug") if category else None,  # SEO v2.0: Include slug
             "image": category.get("image") if category else None,
             "icon": category.get("icon") if category else None,
             "productCount": c.get("productCount", 0),
