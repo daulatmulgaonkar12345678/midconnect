@@ -25,8 +25,8 @@ Disallow: /inquiries
 Disallow: /cart/
 Disallow: /*?*
 
-# Sitemap location
-Sitemap: https://www.udyogconnect.in/api/sitemap.xml
+# Sitemap location (served by Next.js, not backend)
+Sitemap: https://www.udyogconnect.in/sitemap.xml
 
 # Crawl-delay for polite crawling
 Crawl-delay: 1
