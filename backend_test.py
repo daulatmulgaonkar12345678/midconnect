@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 
 class B2BAPITester:
-    def __init__(self, base_url="https://seo-foundation-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://stupefied-hugle-2.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0

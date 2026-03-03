@@ -19,7 +19,7 @@ from datetime import datetime
 # Use the same API URL as frontend
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://seo-foundation-1.preview.emergentagent.com"
+    BASE_URL = "https://stupefied-hugle-2.preview.emergentagent.com"
 
 AUTH_TOKEN = "dev-test-token"
 TEST_USER_ID = "699adb3bacf78470ba9551fb"

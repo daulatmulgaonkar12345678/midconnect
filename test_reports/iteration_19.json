@@ -63,7 +63,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://seo-foundation-1.preview.emergentagent.com"
+    "api_url": "https://stupefied-hugle-2.preview.emergentagent.com"
   },
   
   "seed_data_creation": "activeSellerCities collection contains Delhi with 1 seller (rebuilt via POST /api/search/locations/rebuild)",
