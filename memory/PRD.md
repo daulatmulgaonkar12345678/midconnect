@@ -749,3 +749,69 @@ User reported "Product Not Found" errors when accessing URLs like `/products/abc
 - `/app/frontend/src/app/products/[slug]/page.tsx` (MODIFIED)
 - `/app/frontend/src/lib/api.ts` (MODIFIED - added redirect type)
 
+---
+
+### Session: 2026-03-03 (continued)
+
+#### COMPLETE: Video Upload Feature for Seller Listings
+
+**Problem Statement:**
+Implement video upload capability for sellers to showcase product demos. Requirements:
+- Max 2 videos per listing
+- Max 30 seconds duration per video
+- Max 5MB file size
+- Optional field (not required)
+- Stored same way as images (Cloudinary URL → DB)
+
+**Implementation:**
+
+1. **Backend Changes:**
+   - Added `videos` field to `ListingCreate` and `ListingUpdate` Pydantic models (max_length=2)
+   - Created `validate_videos()` in EnterpriseListingGuard:
+     - Validates max 2 videos
+     - Validates Cloudinary URL format
+     - Returns empty list for None/empty (optional)
+   - Updated listing creation to store `videos` in document
+   - Updated enterprise endpoint to return `videos` in seller data
+
+2. **Frontend Changes:**
+   - Added `uploadSellerProductVideo()` to cloudinary.ts (uses video endpoint)
+   - Added `uploadProductVideos()` to api.ts
+   - Added video upload UI to new listing page (`/seller/listings/new`)
+   - Added video upload UI to edit listing page (`/seller/listings/[id]`)
+   - Added video display in seller card on product page
+
+3. **Validation (Frontend):**
+   - File type: video/mp4, video/webm, video/quicktime
+   - File size: Max 5MB
+   - Duration: Max 30 seconds (client-side validation via video element)
+
+4. **Validation (Backend):**
+   - Max 2 videos per listing
+   - Cloudinary URL format: `https://res.cloudinary.com/*`
+
+**Testing Results** (20/20 pytest + 7/7 direct tests - 100%):
+- ✅ Max 2 videos validation works
+- ✅ Cloudinary URL format validation works
+- ✅ Videos field is optional (empty list returned for None)
+- ✅ Videos stored in sellerListings collection
+- ✅ Enterprise endpoint returns videos in seller data
+- ✅ Frontend upload functions exist and configured correctly
+
+**Files Created/Modified:**
+- `/app/backend/seller_products.py` (MODIFIED - ListingCreate/Update with videos)
+- `/app/backend/guards/enterprise_listing_guard.py` (MODIFIED - validate_videos)
+- `/app/backend/routers/enterprise_products.py` (MODIFIED - returns videos)
+- `/app/frontend/src/lib/cloudinary.ts` (MODIFIED - video upload support)
+- `/app/frontend/src/lib/api.ts` (MODIFIED - uploadProductVideos)
+- `/app/frontend/src/app/seller/listings/new/page.tsx` (MODIFIED - video upload UI)
+- `/app/frontend/src/app/seller/listings/[id]/page.tsx` (MODIFIED - video upload in edit)
+- `/app/frontend/src/app/products/[slug]/page.tsx` (MODIFIED - video display)
+- `/app/frontend/src/types/index.ts` (MODIFIED - SellerListing with videos)
+
+**Business Impact:**
+- Videos can significantly boost buyer interest and conversion
+- Helps machinery/industrial sellers demonstrate product in action
+- "Product Demo Video" badge visible when videos uploaded
+
+
