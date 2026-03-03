@@ -11884,20 +11884,36 @@ async def resolve_product_endpoint(identifier: str):
 async def resolve_category_endpoint(identifier: str):
     """
     Enterprise category resolver endpoint.
+    
+    Resolves category by:
+    - ObjectId (fastest)
+    - Slug (SEO)
+    
+    Returns canonical URL for SEO.
     """
-    from services.resolver_service import create_resolver
+    from services.slug_resolver_service import create_slug_resolver
     from urllib.parse import unquote
     
     decoded = unquote(identifier)
-    resolver = create_resolver(db)
+    resolver = create_slug_resolver(db)
     
-    category = await resolver.resolve_category(decoded)
+    # Use the token-based resolver for categories
+    category, needs_redirect, canonical_slug = await resolver.resolve_category_slug(decoded)
+    
+    if not category:
+        # Fallback: Try direct ObjectId lookup
+        if len(decoded) == 24:
+            try:
+                oid = ObjectId(decoded)
+                category = await db.categories.find_one({"_id": oid})
+                if category:
+                    canonical_slug = category.get("slug")
+                    needs_redirect = decoded != canonical_slug if canonical_slug else False
+            except Exception:
+                pass
     
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
-    
-    canonical_slug = category.get("slug")
-    needs_redirect = decoded != canonical_slug
     
     return {
         "category": {

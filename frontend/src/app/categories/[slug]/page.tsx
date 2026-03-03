@@ -103,74 +103,82 @@ export default async function CategoryPage({ params }: Props) {
   let products: ProductWithSellers[] = [];
   let canonicalSlug = slug;
 
-  // SEO v2.1: Use enterprise resolver for token-based slug matching
-  if (isObjectId(slug)) {
-    try {
-      const resolverResponse = await fetch(`${API_URL}/api/enterprise/resolve/category/${slug}`, {
-        cache: 'no-store'
-      });
-      
-      if (resolverResponse.ok) {
-        const resolverData = await resolverResponse.json();
-        
-        // Redirect BEFORE try-catch so redirect() throws properly
-        if (resolverData.redirect?.needed && resolverData.redirect?.canonicalSlug) {
-          redirect(`/categories/${resolverData.redirect.canonicalSlug}`);
-        }
-        
-        if (resolverData.category) {
-          // Use resolved category data
-          category = {
-            _id: resolverData.category._id,
-            name: resolverData.category.name,
-            slug: resolverData.category.slug,
-            productCount: 0,
-            listingCount: 0
-          };
-          canonicalSlug = resolverData.category.slug || slug;
-        }
-      }
-    } catch (resolverError) {
-      // Re-throw redirect errors (they're special in Next.js)
-      if (resolverError instanceof Error && resolverError.message.includes('NEXT_REDIRECT')) {
-        throw resolverError;
-      }
-      console.error('Resolver lookup failed:', resolverError);
-    }
+  // Fetch public categories first (this works on all environments)
+  try {
+    categories = await getPublicCategories();
+  } catch (error) {
+    console.error('Failed to fetch categories:', error);
+    categories = [];
   }
 
-  try {
-    // Fetch public categories for additional data
-    categories = await getPublicCategories();
+  // SEO v2.1: Handle ObjectId-based URLs
+  if (isObjectId(slug)) {
+    // Try to find category by _id in the fetched categories list
+    category = categories.find((c) => c._id === slug);
     
-    // If not found via resolver, try finding in categories list
+    // If found and has a slug, redirect to canonical URL
+    if (category?.slug && category.slug !== slug) {
+      redirect(`/categories/${category.slug}`);
+    }
+    
+    // If not found in categories list, try the enterprise resolver (if available)
     if (!category) {
-      category = categories.find((c) => c.slug === slug) || 
-                 categories.find((c) => c._id === slug);
-      canonicalSlug = category?.slug || slug;
-      
-      // If ObjectId access and category has slug, redirect to canonical
-      if (isObjectId(slug) && category?.slug && category.slug !== slug) {
-        redirect(`/categories/${category.slug}`);
-      }
-    } else {
-      // Update category with full data from public categories
-      const fullCategory = categories.find(c => c._id === category?._id);
-      if (fullCategory) {
-        category = fullCategory;
+      try {
+        const resolverResponse = await fetch(`${API_URL}/api/enterprise/resolve/category/${slug}`, {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+        
+        if (resolverResponse.ok) {
+          const resolverData = await resolverResponse.json();
+          
+          // Redirect if needed
+          if (resolverData.redirect?.needed && resolverData.redirect?.canonicalSlug) {
+            redirect(`/categories/${resolverData.redirect.canonicalSlug}`);
+          }
+          
+          if (resolverData.category) {
+            category = {
+              _id: resolverData.category._id,
+              name: resolverData.category.name,
+              slug: resolverData.category.slug,
+              productCount: 0,
+              listingCount: 0
+            };
+            canonicalSlug = resolverData.category.slug || slug;
+          }
+        }
+      } catch (resolverError) {
+        // Re-throw redirect errors (they're special in Next.js)
+        if (resolverError instanceof Error && resolverError.message.includes('NEXT_REDIRECT')) {
+          throw resolverError;
+        }
+        console.error('Resolver lookup failed (fallback to direct lookup):', resolverError);
       }
     }
     
-    if (category) {
-      // Get products for this category
+    canonicalSlug = category?.slug || slug;
+  } else {
+    // Find by slug (preferred method)
+    category = categories.find((c) => c.slug === slug);
+    canonicalSlug = slug;
+  }
+
+  // If category found, update with full data and get products
+  if (category) {
+    // Update category with full data from public categories
+    const fullCategory = categories.find(c => c._id === category?._id);
+    if (fullCategory) {
+      category = fullCategory;
+    }
+    
+    // Get products for this category
+    try {
       products = await getProducts(category._id);
+    } catch (error) {
+      console.error('Failed to fetch products:', error);
+      products = [];
     }
-  } catch (error) {
-    // Re-throw redirect errors
-    if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
-      throw error;
-    }
-    console.error('Failed to fetch category:', error);
   }
 
   // If category not found
