@@ -93,7 +93,7 @@ interface Props {
 
 export default function SellerDetailPage({ params }: Props) {
   const router = useRouter();
-  const { user, token } = useAuth();
+  const { user, getIdToken } = useAuth();
   
   const [data, setData] = useState<SellerDetailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -154,10 +154,13 @@ export default function SellerDetailPage({ params }: Props) {
   
   // Check review eligibility
   useEffect(() => {
-    if (!listingId || !token) return;
+    if (!listingId || !user) return;
     
     async function checkEligibility() {
       try {
+        const token = await getIdToken();
+        if (!token) return;
+        
         const response = await fetch(`${API_URL}/api/reviews/eligible?sellerListingId=${listingId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -172,11 +175,14 @@ export default function SellerDetailPage({ params }: Props) {
     }
     
     checkEligibility();
-  }, [listingId, token]);
+  }, [listingId, user, getIdToken]);
   
   // Submit review
   const handleSubmitReview = async () => {
-    if (!token || !listingId) return;
+    if (!user || !listingId) return;
+    
+    const token = await getIdToken();
+    if (!token) return;
     
     setSubmittingReview(true);
     try {
@@ -217,7 +223,10 @@ export default function SellerDetailPage({ params }: Props) {
   
   // Submit inquiry
   const handleSubmitInquiry = async () => {
-    if (!token || !data) return;
+    if (!user || !data) return;
+    
+    const token = await getIdToken();
+    if (!token) return;
     
     setSubmittingInquiry(true);
     try {
