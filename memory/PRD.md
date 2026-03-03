@@ -901,4 +901,103 @@ The category page was calling a redirect endpoint that failed, and the `redirect
 **Files Modified:**
 - `/app/frontend/src/app/categories/[slug]/page.tsx`
 
+---
 
+### Session: 2026-03-03 (continued)
+
+#### COMPLETE: Seller Detail Page with Reviews
+
+**Problem Statement:**
+Build a dedicated seller-specific product detail page that displays comprehensive seller information, media gallery (images/videos), pricing, and a complete review/rating system. Only buyers with accepted inquiries can leave reviews. Rating aggregation stored in sellerListings for performance.
+
+**Implementation:**
+
+1. **Backend - Reviews Router** (`/app/backend/routers/reviews.py`)
+   - `GET /api/reviews/seller-listing/{id}/details` - Returns aggregated data:
+     - Product info, seller profile, listing details
+     - All reviews with buyer info
+     - avgRating and totalReviews computed from reviews
+   - `GET /api/reviews/eligible` - Checks if buyer can review (requires accepted inquiry)
+   - `GET /api/reviews/listing/{id}` - Returns reviews for a listing
+   - `POST /api/reviews` - Submit new review (validates eligibility)
+   - `update_listing_rating_stats()` - Updates avgRating/totalReviews in sellerListings
+
+2. **Backend - Rating Aggregation**
+   - Stores `avgRating`, `totalReviews`, `lastReviewAt` directly in `sellerListings` document
+   - Updated on every new review submission
+   - Exposed in enterprise products API for seller cards
+
+3. **Frontend - Seller Detail Page** (`/app/frontend/src/app/products/[slug]/seller/[listingId]/page.tsx`)
+   - Media gallery with image thumbnails
+   - Product info: name, pricing tiers, MOQ, stock, lead time
+   - Seller info: company name, location, badge, verification status
+   - Technical specifications grid
+   - Reviews section with star ratings
+   - Review submission form (conditional on eligibility)
+   - Request Quote button (opens inquiry modal)
+
+4. **Frontend - Seller Card Updates**
+   - Added `avgRating` and `totalReviews` to `EnterpriseProductSeller` type
+   - Added star rating display when seller has reviews
+   - Added "View Details & Reviews" link button
+
+5. **API Types Updated** (`/app/frontend/src/lib/api.ts`)
+   - Added `avgRating?: number` and `totalReviews?: number` to EnterpriseProductSeller
+
+**Testing Results** (15/15 backend + 9/9 frontend - 100%):
+- ✅ Seller detail page loads at /products/{slug}/seller/{listingId}
+- ✅ API returns product, seller, listing, reviews data
+- ✅ avgRating and totalReviews computed correctly
+- ✅ Eligibility check requires auth and accepted inquiry
+- ✅ Rating displayed on seller cards
+- ✅ "View Details & Reviews" button navigates correctly
+- ✅ Request Quote redirects to login for unauthenticated users
+- ✅ "No reviews yet" message displays when 0 reviews
+- ✅ Technical specifications displayed correctly
+
+**Files Created:**
+- `/app/backend/routers/reviews.py` (Reviews API)
+- `/app/frontend/src/app/products/[slug]/seller/[listingId]/page.tsx` (Seller detail page)
+- `/app/frontend/src/lib/utils.ts` (cn utility function)
+- `/app/backend/tests/test_seller_detail_reviews.py` (Tests)
+
+**Files Modified:**
+- `/app/backend/routers/enterprise_products.py` - Added avgRating, totalReviews to seller response
+- `/app/frontend/src/app/products/[slug]/page.tsx` - Added rating display and View Details button
+- `/app/frontend/src/components/enterprise/SellerCard.tsx` - Added rating display and View Details button
+- `/app/frontend/src/lib/api.ts` - Updated EnterpriseProductSeller type
+
+**Business Impact:**
+- Builds buyer trust through social proof (reviews)
+- Helps differentiate sellers based on ratings
+- Provides detailed seller information for informed buying decisions
+- Future: Can influence search ranking by seller rating
+
+---
+
+## Pending Tasks (Priority Order)
+
+### P0: Deploy Backend to Render
+**CRITICAL**: User's production site is running outdated backend code. Recent fixes won't be live until redeployed.
+
+### P1: Implement Token-Based Search
+Refactor main site search to be order-independent like the slug resolver.
+
+### P1: Implement Weighted Ranking
+Sort search results by calculated score (rating, response time, badge status).
+
+### P1: Self-Learning Keyword System
+Auto-add popular search terms to product searchAliases from analytics.
+
+### P2: Admin Search Insights Dashboard
+Build admin interface to view search analytics data.
+
+### P2: Redis Caching
+Add caching layer for frequently accessed data.
+
+### Future/Backlog
+- Refactor `server.py` into more routers
+- AI Semantic Search Layer
+- Online Payments for Quotes
+- Counter-Offer System
+- Cost-effective media storage (store publicId for Cloudinary cleanup)
