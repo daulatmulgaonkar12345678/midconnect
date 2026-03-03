@@ -1053,6 +1053,7 @@ export interface ListingCreatePayload {
   sellerRole: string;
   description?: string;
   images: string[];
+  videos?: string[];  // Max 2 videos, 30 seconds each, 5MB each
   moq: number;
   stock: number;
   maxCapacity?: number;
@@ -1071,6 +1072,7 @@ export const createSellerListing = (
 export interface ListingUpdatePayload {
   description?: string;
   images?: string[];
+  videos?: string[];  // Max 2 videos
   status?: 'draft' | 'active' | 'paused' | 'archived';
   moq?: number;
   stock?: number;
@@ -1431,6 +1433,39 @@ export async function uploadProductImages(token: string, files: File[]): Promise
   return { images: results.map(r => r.url) };
 }
 
+// Video upload constants
+const MAX_PRODUCT_VIDEOS = 2;
+const MAX_VIDEO_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_VIDEO_DURATION = 30; // seconds
+
+export async function uploadProductVideos(token: string, files: File[]): Promise<{ videos: string[] }> {
+  if (files.length === 0) {
+    throw new ApiError('At least one video is required', 400);
+  }
+  if (files.length > MAX_PRODUCT_VIDEOS) {
+    throw new ApiError(`Maximum ${MAX_PRODUCT_VIDEOS} videos allowed`, 400);
+  }
+  
+  // Validate each video file
+  files.forEach((file, idx) => {
+    // Check MIME type
+    if (!file.type.startsWith('video/')) {
+      throw new ApiError(`File ${idx + 1} is not a valid video`, 400, 'INVALID_FILE_TYPE');
+    }
+    
+    // Check file size
+    if (file.size > MAX_VIDEO_SIZE) {
+      throw new ApiError(`Video ${idx + 1} exceeds maximum size of 5MB`, 400, 'FILE_TOO_LARGE');
+    }
+  });
+  
+  const { uploadSellerProductVideo } = await import('./cloudinary');
+  const uploadPromises = files.map(file => uploadSellerProductVideo(file));
+  const results = await Promise.all(uploadPromises);
+  
+  return { videos: results.map(r => r.url) };
+}
+
 export async function uploadProductDatasheet(token: string, file: File): Promise<{ url: string }> {
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     throw new ApiError('Only PDF files are allowed for datasheets', 400, 'INVALID_FILE_TYPE');
@@ -1735,6 +1770,7 @@ export interface EnterpriseProductSeller {
   stock: number;
   leadTimeDays?: number;
   images: string[];
+  videos?: string[];  // Product demo videos (max 2, 30s each)
   stockStatus: 'in_stock' | 'out_of_stock' | 'limited';
   // Ranking fields (populated when sortBy=ranking)
   rankingScore?: number;

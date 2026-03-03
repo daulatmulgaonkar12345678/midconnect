@@ -17,6 +17,7 @@
 // Cloudinary Configuration
 const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dco24qmoq';
 const CLOUDINARY_IMAGE_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+const CLOUDINARY_VIDEO_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
 const CLOUDINARY_RAW_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
 
 // Upload Presets (MUST MATCH EXACTLY)
@@ -24,6 +25,7 @@ export const UPLOAD_PRESETS = {
   adminProductImage: 'midconnect_admin_product_upload',
   adminCategoryImage: 'midconnect_admin_category_upload',
   sellerProductImage: 'midconnect_seller_product_upload',
+  sellerProductVideo: 'midconnect_seller_product_upload',  // Videos use same preset
   sellerDatasheet: 'midconnect_seller_datasheet_upload',
 } as const;
 
@@ -31,8 +33,10 @@ export type UploadType = keyof typeof UPLOAD_PRESETS;
 
 // Validation Configuration
 const IMAGE_MAX_SIZE = 2 * 1024 * 1024; // 2MB
+const VIDEO_MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const PDF_MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_PDF_TYPES = ['application/pdf'];
 
 // Compression Configuration
@@ -68,13 +72,31 @@ export class CloudinaryError extends Error {
  */
 export function validateFile(file: File, type: UploadType): void {
   const isPdf = type === 'sellerDatasheet';
-  const allowedTypes = isPdf ? ALLOWED_PDF_TYPES : ALLOWED_IMAGE_TYPES;
-  const maxSize = isPdf ? PDF_MAX_SIZE : IMAGE_MAX_SIZE;
+  const isVideo = type === 'sellerProductVideo';
+  
+  let allowedTypes: string[];
+  let maxSize: number;
+  
+  if (isPdf) {
+    allowedTypes = ALLOWED_PDF_TYPES;
+    maxSize = PDF_MAX_SIZE;
+  } else if (isVideo) {
+    allowedTypes = ALLOWED_VIDEO_TYPES;
+    maxSize = VIDEO_MAX_SIZE;
+  } else {
+    allowedTypes = ALLOWED_IMAGE_TYPES;
+    maxSize = IMAGE_MAX_SIZE;
+  }
+  
   const maxSizeMB = maxSize / (1024 * 1024);
 
   // Check file type
   if (!allowedTypes.includes(file.type)) {
-    const formats = isPdf ? 'PDF' : 'JPEG, PNG, WEBP';
+    let formats: string;
+    if (isPdf) formats = 'PDF';
+    else if (isVideo) formats = 'MP4, WebM, MOV';
+    else formats = 'JPEG, PNG, WEBP';
+    
     throw new CloudinaryError(
       `Invalid file type. Allowed formats: ${formats}`,
       'INVALID_TYPE'
@@ -192,6 +214,19 @@ export function optimizeImageUrl(url: string): string {
 }
 
 /**
+ * Optimize Cloudinary video URL with auto compression
+ */
+export function optimizeVideoUrl(url: string): string {
+  if (!url.includes('res.cloudinary.com')) return url;
+  
+  // Don't optimize raw URLs
+  if (url.includes('/raw/upload/')) return url;
+  
+  // Add video optimization parameters (quality auto, format auto, video codec auto)
+  return url.replace('/upload/', '/upload/q_auto,f_auto,vc_auto/');
+}
+
+/**
  * Upload file to Cloudinary
  * 
  * @param file - File to upload
@@ -208,12 +243,22 @@ export async function uploadToCloudinary(
   validateFile(file, type);
 
   const isPdf = type === 'sellerDatasheet';
+  const isVideo = type === 'sellerProductVideo';
   const preset = UPLOAD_PRESETS[type];
-  const uploadUrl = isPdf ? CLOUDINARY_RAW_URL : CLOUDINARY_IMAGE_URL;
+  
+  // Determine upload endpoint
+  let uploadUrl: string;
+  if (isPdf) {
+    uploadUrl = CLOUDINARY_RAW_URL;
+  } else if (isVideo) {
+    uploadUrl = CLOUDINARY_VIDEO_URL;
+  } else {
+    uploadUrl = CLOUDINARY_IMAGE_URL;
+  }
 
-  // Compress image if not PDF
+  // Compress image if not PDF or video
   let fileToUpload: File | Blob = file;
-  if (!isPdf) {
+  if (!isPdf && !isVideo) {
     try {
       fileToUpload = await compressImage(file);
     } catch (err) {
@@ -251,8 +296,10 @@ export async function uploadToCloudinary(
           // Get the secure URL
           let url = response.secure_url;
           
-          // Optimize image URLs
-          if (!isPdf) {
+          // Optimize URLs based on type
+          if (isVideo) {
+            url = optimizeVideoUrl(url);
+          } else if (!isPdf) {
             url = optimizeImageUrl(url);
           }
 
@@ -333,3 +380,8 @@ export const uploadSellerDatasheet = (
   file: File, 
   onProgress?: (progress: UploadProgress) => void
 ) => uploadToCloudinary(file, 'sellerDatasheet', onProgress);
+
+export const uploadSellerProductVideo = (
+  file: File, 
+  onProgress?: (progress: UploadProgress) => void
+) => uploadToCloudinary(file, 'sellerProductVideo', onProgress);

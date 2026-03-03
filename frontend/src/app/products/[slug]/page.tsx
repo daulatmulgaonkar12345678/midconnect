@@ -38,7 +38,9 @@ import {
   SlidersHorizontal,
   GitCompare,
   Star,
-  Shield
+  Shield,
+  Play,
+  Video
 } from 'lucide-react';
 
 // ==================== TYPES ====================
@@ -366,6 +368,38 @@ function SellerCard({
             </div>
           </div>
         </div>
+
+        {/* Product Demo Videos */}
+        {seller.videos && seller.videos.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Video className="h-4 w-4 text-purple-600" />
+              <span className="text-xs text-slate-500 uppercase font-medium">Product Demo</span>
+              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                {seller.videos.length} video{seller.videos.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className={`grid ${seller.videos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+              {seller.videos.map((videoUrl, idx) => (
+                <div key={idx} className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
+                  <video
+                    src={videoUrl}
+                    className="w-full h-full object-contain"
+                    controls
+                    preload="metadata"
+                    poster=""
+                    data-testid={`seller-video-${seller.listingId}-${idx}`}
+                  />
+                  {idx === 0 && seller.videos && seller.videos.length > 1 && (
+                    <span className="absolute top-2 left-2 px-2 py-0.5 bg-purple-600 text-white text-xs rounded flex items-center gap-1">
+                      <Play className="h-3 w-3" /> Main
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Pricing Tiers */}
         {seller.pricingTiers.length > 1 && (

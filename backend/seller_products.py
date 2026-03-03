@@ -67,6 +67,7 @@ class ListingCreate(BaseModel):
     sellerRole: str = Field(..., description="distributor, manufacturer, trader, dealer")
     description: Optional[str] = Field(None, max_length=2000)
     images: List[str] = Field(default_factory=list, max_length=5)
+    videos: List[str] = Field(default_factory=list, max_length=2, description="Product demo videos (max 2, 30s each)")
     moq: int = Field(default=1, ge=1, description="Minimum Order Quantity")
     stock: int = Field(default=0, ge=0)
     maxCapacity: Optional[int] = Field(None, ge=1)
@@ -80,6 +81,7 @@ class ListingUpdate(BaseModel):
     """Update an existing listing"""
     description: Optional[str] = Field(None, max_length=2000)
     images: Optional[List[str]] = Field(None, max_length=5)
+    videos: Optional[List[str]] = Field(None, max_length=2, description="Product demo videos (max 2)")
     datasheetUrl: Optional[str] = None
     status: Optional[Literal["draft", "active", "paused", "archived"]] = None
     moq: Optional[int] = Field(None, ge=1)
@@ -461,7 +463,8 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 searchable_attributes=searchable_attributes,
                 pricing_tiers=[{"minQty": t.minQty, "maxQty": t.maxQty, "pricePerUnit": t.pricePerUnit} for t in data.pricingTiers],
                 moq=data.moq,
-                stock=data.stock
+                stock=data.stock,
+                videos=data.videos  # Optional product demo videos
             )
         except HTTPException:
             raise
@@ -537,6 +540,7 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             "sellerRole": data.sellerRole,
             "description": data.description,
             "images": validated["images"],  # ENTERPRISE: Validated images
+            "videos": validated.get("videos", []),  # Product demo videos (max 2, 30s each)
             "moq": validated["moq"],  # ENTERPRISE: Validated MOQ
             "stock": validated["stock"],  # ENTERPRISE: Validated stock
             "maxCapacity": data.maxCapacity,
@@ -792,13 +796,14 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 searchable_attributes=new_searchable_attrs,
                 pricing_tiers=None,  # Pricing is handled separately
                 moq=data.moq,
-                stock=data.stock
+                stock=data.stock,
+                videos=data.videos  # Optional product demo videos
             )
             # Apply validated values
             for key, value in validated.items():
                 if key == "searchableAttributes" and value:
                     update_data["searchableAttributes"] = value
-                elif key in ["images", "moq", "stock"]:
+                elif key in ["images", "videos", "moq", "stock"]:
                     update_data[key] = value
         except HTTPException:
             raise

@@ -281,6 +281,7 @@ export interface SellerListing {
   attributeLabels?: Record<string, string>;  // ENTERPRISE: Human-readable labels
   description?: string;
   images: string[];
+  videos?: string[];  // Product demo videos (max 2, 30s each)
   datasheetUrl?: string;
   moq: number;
   stock: number;

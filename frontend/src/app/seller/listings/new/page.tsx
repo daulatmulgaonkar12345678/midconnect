@@ -10,6 +10,7 @@ import {
   getProductSpecTemplate,
   createSellerListing,
   uploadProductImages,
+  uploadProductVideos,
   uploadProductDatasheet,
   requestProduct,
   requestCategory,
@@ -39,7 +40,9 @@ import {
   FileText,
   Clock,
   HelpCircle,
-  Send
+  Send,
+  Video,
+  Play
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -72,8 +75,9 @@ interface FormState {
   // Pricing Tiers (NOT pricing.slabs)
   pricingTiers: PricingTierCreate[];
   
-  // Images
+  // Images & Videos
   images: string[];
+  videos: string[];  // Max 2 videos, 30 seconds, 5MB each
   datasheetUrl: string;
 }
 
@@ -91,6 +95,7 @@ const initialFormState: FormState = {
   currency: 'INR',
   pricingTiers: [{ minQty: 1, maxQty: null, pricePerUnit: 0 }],
   images: [],
+  videos: [],  // Max 2 videos
   datasheetUrl: ''
 };
 
@@ -553,6 +558,7 @@ export default function NewSellerListingPage() {
   const [loadingSpecs, setLoadingSpecs] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingVideos, setUploadingVideos] = useState(false);
   const [uploadingDatasheet, setUploadingDatasheet] = useState(false);
   
   // UI states
@@ -758,6 +764,82 @@ export default function NewSellerListingPage() {
     }));
   };
 
+  // Validate video duration (max 30 seconds)
+  const validateVideoDuration = (file: File): Promise<boolean> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src);
+        if (video.duration > 30) {
+          reject(new Error('Video must be under 30 seconds'));
+        } else {
+          resolve(true);
+        }
+      };
+      
+      video.onerror = () => {
+        URL.revokeObjectURL(video.src);
+        reject(new Error('Invalid video file'));
+      };
+      
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
+  // Handle video upload
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !token) return;
+    
+    // Max 2 videos total
+    if (form.videos.length + files.length > 2) {
+      setError('Maximum 2 videos allowed');
+      return;
+    }
+    
+    setUploadingVideos(true);
+    setError(null);
+    
+    try {
+      // Validate each video
+      for (const file of Array.from(files)) {
+        // Check file type
+        if (!file.type.startsWith('video/')) {
+          throw new Error('Only video files are allowed');
+        }
+        
+        // Check file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error('Each video must be under 5MB');
+        }
+        
+        // Check duration (max 30 seconds)
+        await validateVideoDuration(file);
+      }
+      
+      // Upload videos
+      const result = await uploadProductVideos(token, Array.from(files));
+      setForm(prev => ({
+        ...prev,
+        videos: [...prev.videos, ...result.videos]
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload videos');
+    } finally {
+      setUploadingVideos(false);
+    }
+  };
+
+  // Remove video
+  const removeVideo = (index: number) => {
+    setForm(prev => ({
+      ...prev,
+      videos: prev.videos.filter((_, i) => i !== index)
+    }));
+  };
+
   // Handle datasheet upload
   const handleDatasheetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -925,6 +1007,7 @@ const addPricingTier = () => {
         sellerRole: form.sellerRole,
         description: form.description || undefined,
         images: form.images,
+        videos: form.videos.length > 0 ? form.videos : undefined,  // Optional videos
         moq: form.moq,
         stock: form.stock,
         maxCapacity: form.maxCapacity || undefined,
@@ -1455,6 +1538,71 @@ const addPricingTier = () => {
               
               <p className={`text-sm ${form.images.length === 0 ? 'text-red-500' : 'text-gray-500'}`}>
                 {form.images.length}/5 images uploaded {form.images.length === 0 && '(minimum 1 required)'}
+              </p>
+            </div>
+
+            {/* Product Videos (Optional) */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <Video className="h-5 w-5 text-purple-600" />
+                Product Demo Videos <span className="text-xs font-normal text-gray-500">(Optional)</span>
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Upload up to 2 videos showcasing your product (max 30 seconds, 5MB each). 
+                <span className="text-purple-600 font-medium"> Videos can significantly boost buyer interest!</span>
+              </p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                {form.videos.map((videoUrl, idx) => (
+                  <div key={idx} className="relative aspect-video rounded-lg overflow-hidden bg-gray-900 group">
+                    <video 
+                      src={videoUrl} 
+                      className="w-full h-full object-contain"
+                      controls
+                      preload="metadata"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeVideo(idx)}
+                      className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition z-10"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    {idx === 0 && (
+                      <span className="absolute top-2 left-2 px-2 py-0.5 bg-purple-600 text-white text-xs rounded flex items-center gap-1">
+                        <Play className="h-3 w-3" /> Main Video
+                      </span>
+                    )}
+                  </div>
+                ))}
+                
+                {form.videos.length < 2 && (
+                  <label className="aspect-video rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-500 cursor-pointer flex flex-col items-center justify-center transition bg-gray-50 hover:bg-purple-50">
+                    {uploadingVideos ? (
+                      <>
+                        <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+                        <span className="text-sm mt-2 text-purple-600">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Video className="h-10 w-10 text-gray-400" />
+                        <span className="text-sm mt-2 text-gray-500">Add Video</span>
+                        <span className="text-xs text-gray-400 mt-1">Max 30s, 5MB</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime"
+                      onChange={handleVideoUpload}
+                      className="hidden"
+                      data-testid="video-upload"
+                    />
+                  </label>
+                )}
+              </div>
+              
+              <p className="text-sm text-gray-500">
+                {form.videos.length}/2 videos uploaded
               </p>
             </div>
 

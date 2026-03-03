@@ -259,6 +259,7 @@ def create_enterprise_product_router(db):
                 "stock": listing.get("stock", 0),
                 "leadTimeDays": listing.get("leadTime"),
                 "images": listing_images,
+                "videos": listing.get("videos") or [],  # Product demo videos
                 "stockStatus": "in_stock" if listing.get("stock", 0) > 0 else "out_of_stock"
             })
         

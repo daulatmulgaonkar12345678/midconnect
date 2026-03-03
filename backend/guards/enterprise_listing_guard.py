@@ -121,6 +121,57 @@ class EnterpriseListingGuard:
         return valid_images
     
     @staticmethod
+    def validate_videos(
+        videos: Optional[List[str]],
+        max_allowed: int = 2
+    ) -> List[str]:
+        """
+        Validate videos array for listing.
+        
+        Args:
+            videos: List of video URLs (Cloudinary)
+            max_allowed: Maximum number of videos allowed (default 2)
+            
+        Returns:
+            Validated videos list
+            
+        Raises:
+            HTTPException: If validation fails
+        """
+        if videos is None:
+            return []
+        
+        if not isinstance(videos, list):
+            raise HTTPException(
+                status_code=400,
+                detail="videos must be a list of URLs"
+            )
+        
+        # Filter out empty/invalid URLs
+        valid_videos = [vid for vid in videos if vid and isinstance(vid, str) and vid.strip()]
+        
+        if len(valid_videos) > max_allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum {max_allowed} videos allowed per listing"
+            )
+        
+        # Validate Cloudinary URL format
+        cloudinary_prefixes = [
+            "https://res.cloudinary.com/",
+            "http://res.cloudinary.com/"
+        ]
+        for i, url in enumerate(valid_videos):
+            is_cloudinary = any(url.startswith(prefix) for prefix in cloudinary_prefixes)
+            if not is_cloudinary:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Video {i+1}: Invalid video URL. Must be from Cloudinary"
+                )
+        
+        return valid_videos
+    
+    @staticmethod
     def validate_pricing_tiers(
         pricing_tiers: Optional[List[Dict[str, Any]]],
         min_required: int = 1
@@ -197,7 +248,8 @@ class EnterpriseListingGuard:
         searchable_attributes: Dict[str, Any],
         pricing_tiers: List[Dict[str, Any]],
         moq: Optional[int] = None,
-        stock: Optional[int] = None
+        stock: Optional[int] = None,
+        videos: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Full validation for listing creation.
@@ -211,6 +263,7 @@ class EnterpriseListingGuard:
         
         validated = {
             "images": guard.validate_images(images, min_required=1),
+            "videos": guard.validate_videos(videos, max_allowed=2),  # Optional videos
             "searchableAttributes": guard.validate_searchable_attributes(searchable_attributes),
             "pricingTiers": guard.validate_pricing_tiers(pricing_tiers, min_required=1),
         }
@@ -245,7 +298,8 @@ class EnterpriseListingGuard:
         searchable_attributes: Optional[Dict[str, Any]] = None,
         pricing_tiers: Optional[List[Dict[str, Any]]] = None,
         moq: Optional[int] = None,
-        stock: Optional[int] = None
+        stock: Optional[int] = None,
+        videos: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Partial validation for listing update.
@@ -262,6 +316,9 @@ class EnterpriseListingGuard:
         
         if images is not None:
             validated["images"] = guard.validate_images(images, min_required=1)
+        
+        if videos is not None:
+            validated["videos"] = guard.validate_videos(videos, max_allowed=2)
         
         if searchable_attributes is not None:
             validated["searchableAttributes"] = guard.validate_searchable_attributes(searchable_attributes)
