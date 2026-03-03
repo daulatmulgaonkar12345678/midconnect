@@ -605,6 +605,15 @@ export default function EnterpriseProductPage() {
           getProductFacets(productId as string)
         ]);
 
+        // Handle 301 redirect if backend returns redirect info
+        // This handles partial slugs, reordered words, city additions, etc.
+        if (productData.redirect?.needed && productData.redirect?.canonicalSlug) {
+          const canonicalSlug = productData.redirect.canonicalSlug;
+          // Replace current URL with canonical URL for SEO
+          router.replace(`/products/${canonicalSlug}`);
+          return;
+        }
+
         setProduct(productData);
         setFacets(facetsData);
         setSellers(productData.sellers);
@@ -613,15 +622,22 @@ export default function EnterpriseProductPage() {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
         fetch(`${API_URL}/api/products/${productId}/seo`)
           .then(res => res.json())
-          .then(data => setSeoData({
-            seoContent: data.seoContent,
-            sellersByCity: data.sellersByCity,
-            internalLinks: data.internalLinks,
-            minPrice: data.minPrice,
-            maxPrice: data.maxPrice,
-            minMoq: data.minMoq,
-            availableCities: data.availableCities
-          }))
+          .then(data => {
+            // Handle redirect from SEO endpoint as well
+            if (data.redirect?.needed && data.redirect?.canonicalSlug) {
+              router.replace(`/products/${data.redirect.canonicalSlug}`);
+              return;
+            }
+            setSeoData({
+              seoContent: data.seoContent,
+              sellersByCity: data.sellersByCity,
+              internalLinks: data.internalLinks,
+              minPrice: data.minPrice,
+              maxPrice: data.maxPrice,
+              minMoq: data.minMoq,
+              availableCities: data.availableCities
+            });
+          })
           .catch(err => console.log('SEO data not available:', err));
           
       } catch (err) {
@@ -632,7 +648,7 @@ export default function EnterpriseProductPage() {
     }
 
     loadData();
-  }, [productId, redirectChecked]);
+  }, [productId, redirectChecked, router]);
 
   // Apply filters
   const applyFilters = useCallback(async () => {

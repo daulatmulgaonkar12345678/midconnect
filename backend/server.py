@@ -4791,42 +4791,44 @@ async def get_product_with_sellers(product_identifier: str):
     Get product details with all active sellers.
     This is the main buyer product page endpoint.
     
-    PRODUCT IDENTITY GOVERNANCE (STRICT ORDER):
+    PRODUCT IDENTITY GOVERNANCE (TOKEN-BASED):
     1. Look up by product._id (ObjectId) - internal identity
-    2. Look up by product.slug - SEO-friendly URL identity
-    3. NEVER use product_name for lookup
+    2. Look up by product.slug (exact match) - SEO-friendly URL identity
+    3. Token-based fuzzy matching - handles partial slugs, word order variations
+    
+    Features:
+    - Order-independent: "abc-xyz" matches "xyz-abc-supplier-india"
+    - Partial slugs: "abc" matches "abc-tools-supplier-india"
+    - City tolerance: "abc-mumbai" still finds "abc-supplier-india"
     
     All seller lookups use productId (ObjectId) only.
     """
     from urllib.parse import unquote
     from bson import ObjectId
+    from services.slug_resolver_service import create_slug_resolver
     
     decoded_identifier = unquote(product_identifier)
     product_info = None
+    needs_redirect = False
+    canonical_slug = None
     
-    # ==================== IDENTITY RESOLUTION ====================
-    # STRICT ORDER: ObjectId → slug → (no product_name fallback)
+    # ==================== TOKEN-BASED IDENTITY RESOLUTION ====================
+    # Use the enterprise slug resolver for flexible matching
     
-    # Step 1: Try ObjectId lookup (24-char hex string)
-    if len(decoded_identifier) == 24:
-        try:
-            product_oid = ObjectId(decoded_identifier)
-            product_info = await db.products.find_one({"_id": product_oid})
-            if product_info:
-                logger.info(f"[ProductDetail] Found by ObjectId: {decoded_identifier}")
-        except Exception:
-            pass
+    slug_resolver = create_slug_resolver(db)
+    product_info, needs_redirect, canonical_slug, _ = await slug_resolver.resolve_slug(decoded_identifier)
     
-    # Step 2: Try slug lookup (SEO-friendly URL)
-    if not product_info:
-        product_info = await db.products.find_one({"slug": decoded_identifier})
-        if product_info:
-            logger.info(f"[ProductDetail] Found by slug: {decoded_identifier}")
-    
-    # Step 3: No fallback to product_name - return 404
     if not product_info:
         logger.warning(f"[ProductDetail] Product not found: {decoded_identifier}")
         raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Fetch full product document if we only have partial data
+    if "_id" in product_info and "categoryId" not in product_info:
+        full_product = await db.products.find_one({"_id": product_info["_id"]})
+        if full_product:
+            product_info = full_product
+    
+    logger.info(f"[ProductDetail] Found product: {product_info.get('name')} (slug: {canonical_slug})")
     
     # ==================== SELLER LISTINGS LOOKUP ====================
     # CANONICAL: Use productId (ObjectId) for joins - NO legacy fallbacks
@@ -4932,7 +4934,7 @@ async def get_product_with_sellers(product_identifier: str):
         else:
             safe_images.append(img)
     
-    return {
+    response_data = {
         "productId": str(product_info["_id"]),
         "productName": product_info.get("name"),
         "slug": product_info.get("slug"),
@@ -4946,6 +4948,16 @@ async def get_product_with_sellers(product_identifier: str):
         "sellerCount": len(sellers),
         "sellers": sellers
     }
+    
+    # Add redirect info for frontend to handle canonical URLs
+    if needs_redirect and canonical_slug:
+        response_data["redirect"] = {
+            "needed": True,
+            "canonicalSlug": canonical_slug,
+            "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}"
+        }
+    
+    return response_data
 
 
 # ============== SEO DATA ENDPOINT ==============
@@ -4969,23 +4981,22 @@ async def get_product_seo_data(product_identifier: str):
     """
     from urllib.parse import unquote
     from services.seo_service import seo_service
+    from services.slug_resolver_service import create_slug_resolver
     
     decoded_identifier = unquote(product_identifier)
-    product_info = None
     
-    # Identity resolution: ObjectId → slug
-    if len(decoded_identifier) == 24:
-        try:
-            product_oid = ObjectId(decoded_identifier)
-            product_info = await db.products.find_one({"_id": product_oid})
-        except:
-            pass
-    
-    if not product_info:
-        product_info = await db.products.find_one({"slug": decoded_identifier})
+    # Use token-based resolver for flexible slug matching
+    slug_resolver = create_slug_resolver(db)
+    product_info, needs_redirect, canonical_slug, _ = await slug_resolver.resolve_slug(decoded_identifier)
     
     if not product_info:
         raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Fetch full product document if needed
+    if "_id" in product_info and "categoryId" not in product_info:
+        full_product = await db.products.find_one({"_id": product_info["_id"]})
+        if full_product:
+            product_info = full_product
     
     product_oid = product_info["_id"]
     product_name = product_info.get("name", "")
@@ -5156,7 +5167,7 @@ async def get_product_seo_data(product_identifier: str):
         available_cities
     )
     
-    return {
+    seo_response = {
         "productId": str(product_oid),
         "productName": product_name,
         "slug": product_slug,
@@ -5175,8 +5186,18 @@ async def get_product_seo_data(product_identifier: str):
         "maxPrice": max_price,
         "minMoq": min_moq,
         "availableCities": available_cities,
-        "canonicalUrl": f"https://www.udyogconnect.in/product/{product_slug}"
+        "canonicalUrl": f"https://www.udyogconnect.in/products/{product_slug}"
     }
+    
+    # Add redirect info for frontend canonical URL handling
+    if needs_redirect and canonical_slug:
+        seo_response["redirect"] = {
+            "needed": True,
+            "canonicalSlug": canonical_slug,
+            "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}"
+        }
+    
+    return seo_response
 
 
 # ============== PRODUCT CATALOG - HIERARCHY & SEARCH ==============
@@ -11824,20 +11845,21 @@ async def resolve_product_endpoint(identifier: str):
     """
     Enterprise product resolver endpoint.
     
-    Resolves product by:
+    Uses TOKEN-BASED matching for flexible URL resolution:
     - ObjectId (fastest)
-    - Slug (SEO)
+    - Exact slug (SEO)
+    - Token-based fuzzy matching (handles partial/reordered slugs)
     - Legacy ID (redirects)
     
     Returns canonical URL for SEO.
     """
-    from services.resolver_service import create_resolver
+    from services.slug_resolver_service import create_slug_resolver
     from urllib.parse import unquote
     
     decoded = unquote(identifier)
-    resolver = create_resolver(db)
+    resolver = create_slug_resolver(db)
     
-    product, needs_redirect, canonical_slug = await resolver.get_product_with_redirect(decoded)
+    product, needs_redirect, canonical_slug, _ = await resolver.resolve_slug(decoded)
     
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")

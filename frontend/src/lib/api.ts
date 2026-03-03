@@ -1778,6 +1778,12 @@ export interface EnterpriseProductResponse {
     total: number;
     pages: number;
   };
+  // Token-based slug resolution redirect info
+  redirect?: {
+    needed: boolean;
+    canonicalSlug: string;
+    canonicalUrl: string;
+  };
 }
 
 export interface ProductFacetsResponse {

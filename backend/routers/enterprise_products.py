@@ -80,7 +80,10 @@ def create_enterprise_product_router(db):
         
         SINGLE AGGREGATION - NO N+1 QUERIES.
         
-        Supports both ObjectId and slug for product lookup.
+        Supports:
+        - ObjectId lookup
+        - Exact slug match
+        - TOKEN-BASED FUZZY SLUG MATCHING (order-independent, city-tolerant)
         
         Returns:
         - Product details
@@ -88,26 +91,25 @@ def create_enterprise_product_router(db):
         - Seller count, min price, variant count
         - Paginated seller listings with denormalized attributes
         - Available facets for filtering
+        - Redirect info for canonical URL (if slug doesn't match exactly)
         """
         from urllib.parse import unquote
+        from services.slug_resolver_service import create_slug_resolver
         
         decoded_id = unquote(product_id)
-        product = None
         
-        # Try ObjectId first
-        if len(decoded_id) == 24:
-            try:
-                product_oid = ObjectId(decoded_id)
-                product = await db.products.find_one({"_id": product_oid})
-            except Exception:
-                pass
-        
-        # If not found, try slug
-        if not product:
-            product = await db.products.find_one({"slug": decoded_id})
+        # Use token-based slug resolver for flexible URL matching
+        slug_resolver = create_slug_resolver(db)
+        product, needs_redirect, canonical_slug, _ = await slug_resolver.resolve_slug(decoded_id)
         
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+        
+        # Fetch full product document if we only have partial data
+        if "_id" in product and "categoryId" not in product:
+            full_product = await db.products.find_one({"_id": product["_id"]})
+            if full_product:
+                product = full_product
         
         product_oid = product["_id"]
         
@@ -272,7 +274,7 @@ def create_enterprise_product_router(db):
                 if image_url:
                     product_images = [image_url]
         
-        return serialize_doc({
+        response_data = {
             "product": {
                 "_id": product["_id"],
                 "name": product.get("name"),
@@ -303,7 +305,17 @@ def create_enterprise_product_router(db):
                 "total": total_count,
                 "pages": (total_count + limit - 1) // limit if total_count > 0 else 1
             }
-        })
+        }
+        
+        # Add redirect info for canonical URL handling
+        if needs_redirect and canonical_slug:
+            response_data["redirect"] = {
+                "needed": True,
+                "canonicalSlug": canonical_slug,
+                "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}"
+            }
+        
+        return serialize_doc(response_data)
     
     @router.get("/{product_id}/facets")
     async def get_product_facets(product_id: str):
@@ -311,29 +323,27 @@ def create_enterprise_product_router(db):
         Get available filter values for a product.
         
         USES denormalized searchableAttributes - NO JOINS.
-        Supports both ObjectId and slug for product lookup.
+        Supports TOKEN-BASED slug matching (order-independent, city-tolerant).
         
         Returns dynamic facets based on specTemplate fields.
         """
         from urllib.parse import unquote
+        from services.slug_resolver_service import create_slug_resolver
         
         decoded_id = unquote(product_id)
-        product = None
         
-        # Try ObjectId first
-        if len(decoded_id) == 24:
-            try:
-                product_oid = ObjectId(decoded_id)
-                product = await db.products.find_one({"_id": product_oid})
-            except Exception:
-                pass
-        
-        # If not found, try slug
-        if not product:
-            product = await db.products.find_one({"slug": decoded_id})
+        # Use token-based slug resolver for flexible URL matching
+        slug_resolver = create_slug_resolver(db)
+        product, _, _, _ = await slug_resolver.resolve_slug(decoded_id)
         
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+        
+        # Fetch full product document if we only have partial data
+        if "_id" in product and "specTemplateIds" not in product:
+            full_product = await db.products.find_one({"_id": product["_id"]})
+            if full_product:
+                product = full_product
         
         product_oid = product["_id"]
         
@@ -410,7 +420,7 @@ def create_enterprise_product_router(db):
         
         NO JOINS - uses denormalized searchableAttributes.
         SINGLE QUERY with index support.
-        Supports both ObjectId and slug for product lookup.
+        Supports TOKEN-BASED slug matching (order-independent, city-tolerant).
         
         Implements 4-level fallback:
         1. Remove lowest priority filter
@@ -419,21 +429,13 @@ def create_enterprise_product_router(db):
         4. Show related category products
         """
         from urllib.parse import unquote
+        from services.slug_resolver_service import create_slug_resolver
         
         decoded_id = unquote(product_id)
-        product = None
         
-        # Try ObjectId first
-        if len(decoded_id) == 24:
-            try:
-                product_oid = ObjectId(decoded_id)
-                product = await db.products.find_one({"_id": product_oid}, {"_id": 1})
-            except Exception:
-                pass
-        
-        # If not found, try slug
-        if not product:
-            product = await db.products.find_one({"slug": decoded_id}, {"_id": 1})
+        # Use token-based slug resolver for flexible URL matching
+        slug_resolver = create_slug_resolver(db)
+        product, _, _, _ = await slug_resolver.resolve_slug(decoded_id)
         
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
