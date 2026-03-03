@@ -357,15 +357,54 @@ def create_reviews_router(db, get_current_user):
             except Exception:
                 pass
         
-        # Get seller profile
+        # Get seller profile from users collection (where profile data is stored)
         seller_id = listing.get("sellerId")
         seller = None
+        seller_profile = {}
         if seller_id:
             try:
                 seller_oid = ObjectId(seller_id) if isinstance(seller_id, str) else seller_id
-                seller = await db.sellers.find_one({"_id": seller_oid})
-            except Exception:
-                pass
+                # First try users collection (main profile storage)
+                seller = await db.users.find_one({"_id": seller_oid})
+                if seller:
+                    # Profile data is nested under 'profile' in users collection
+                    profile = seller.get("profile", {})
+                    seller_profile = {
+                        "_id": str(seller["_id"]),
+                        "businessName": profile.get("businessName") or seller.get("businessName") or "Verified Seller",
+                        "city": profile.get("city") or seller.get("city"),
+                        "state": profile.get("state") or seller.get("state"),
+                        "badgeType": seller.get("badgeType", "none"),
+                        "gstNumber": profile.get("gstNumber") or seller.get("gst", {}).get("number"),
+                        "establishedYear": profile.get("establishedYear")
+                    }
+                else:
+                    # Fallback to sellers collection (legacy)
+                    seller = await db.sellers.find_one({"_id": seller_oid})
+                    if seller:
+                        seller_profile = {
+                            "_id": str(seller["_id"]),
+                            "businessName": seller.get("businessName") or "Verified Seller",
+                            "city": seller.get("city"),
+                            "state": seller.get("state"),
+                            "badgeType": seller.get("badgeType", "none"),
+                            "gstNumber": seller.get("gst", {}).get("number") if seller.get("gst") else None,
+                            "establishedYear": seller.get("establishedYear")
+                        }
+            except Exception as e:
+                logger.error(f"Error fetching seller profile: {e}")
+        
+        # Default seller profile if nothing found
+        if not seller_profile:
+            seller_profile = {
+                "_id": str(seller_id) if seller_id else None,
+                "businessName": "Verified Seller",
+                "city": None,
+                "state": None,
+                "badgeType": "none",
+                "gstNumber": None,
+                "establishedYear": None
+            }
         
         # Get category
         category = None
@@ -406,15 +445,7 @@ def create_reviews_router(db, get_current_user):
         return {
             "product": serialize_oid(product),
             "sellerListing": serialize_oid(listing),
-            "seller": {
-                "_id": str(seller["_id"]) if seller else str(seller_id) if seller_id else None,
-                "businessName": seller.get("businessName") or seller.get("companyName") or "Verified Seller" if seller else "Verified Seller",
-                "city": seller.get("city") if seller else None,
-                "state": seller.get("state") if seller else None,
-                "badgeType": seller.get("badgeType", "none") if seller else "none",
-                "gstNumber": seller.get("gstNumber") if seller else None,
-                "establishedYear": seller.get("establishedYear") if seller else None
-            },
+            "seller": seller_profile,
             "category": {
                 "_id": str(category["_id"]) if category else None,
                 "name": category.get("name") if category else None,
