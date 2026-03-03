@@ -237,7 +237,7 @@ export default function SellerDetailPage({ params }: Props) {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          sellerId: data.seller._id,
+          sellerId: data.seller?._id,
           productId: data.product._id,
           listingId: data.sellerListing._id,
           quantity: parseInt(inquiryQuantity) || data.sellerListing.moq,
@@ -278,6 +278,26 @@ export default function SellerDetailPage({ params }: Props) {
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Seller Not Found</h2>
           <p className="text-gray-600 mb-6">{error || 'Unable to load seller details'}</p>
+          <button 
+            onClick={() => router.back()} 
+            className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Ensure seller data exists
+  if (!data.seller || !data.sellerListing || !data.product) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center p-8">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Seller Information Unavailable</h2>
+          <p className="text-gray-600 mb-6">Unable to load seller information for this listing.</p>
           <button 
             onClick={() => router.back()} 
             className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
@@ -331,7 +351,7 @@ export default function SellerDetailPage({ params }: Props) {
                 {product.name}
               </Link>
               <ChevronRight className="h-4 w-4 mx-1 shrink-0" />
-              <span className="text-gray-900 font-medium truncate">{seller.businessName}</span>
+              <span className="text-gray-900 font-medium truncate">{seller?.businessName || 'Verified Seller'}</span>
             </nav>
           </div>
         </div>
@@ -431,13 +451,13 @@ export default function SellerDetailPage({ params }: Props) {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold text-gray-900">{seller.businessName}</h2>
-                    {seller.badgeType === 'trusted' && (
+                    <h2 className="text-lg font-semibold text-gray-900">{seller?.businessName || 'Verified Seller'}</h2>
+                    {seller?.badgeType === 'trusted' && (
                       <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                         <Shield className="h-3 w-3" /> Trusted
                       </span>
                     )}
-                    {seller.badgeType === 'choice' && (
+                    {seller?.badgeType === 'choice' && (
                       <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                         <BadgeCheck className="h-3 w-3" /> Choice
                       </span>
@@ -445,16 +465,16 @@ export default function SellerDetailPage({ params }: Props) {
                   </div>
                   
                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                    {(seller.city || seller.state) && (
+                    {(seller?.city || seller?.state) && (
                       <span className="flex items-center gap-1">
                         <MapPin className="h-3.5 w-3.5" />
-                        {[seller.city, seller.state].filter(Boolean).join(', ')}
+                        {[seller?.city, seller?.state].filter(Boolean).join(', ')}
                       </span>
                     )}
-                    {seller.establishedYear && (
+                    {seller?.establishedYear && (
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5" />
-                        Est. {seller.establishedYear}
+                        Est. {seller?.establishedYear}
                       </span>
                     )}
                   </div>
@@ -470,10 +490,10 @@ export default function SellerDetailPage({ params }: Props) {
                 <span className="text-xs text-gray-500 uppercase">Role</span>
                 <span className="text-sm font-medium text-gray-900 capitalize">{sellerListing.sellerRole}</span>
                 
-                {seller.gstNumber && (
+                {seller?.gstNumber && (
                   <>
                     <span className="text-xs text-gray-500 uppercase">GST</span>
-                    <span className="text-sm text-gray-700 font-mono">{seller.gstNumber}</span>
+                    <span className="text-sm text-gray-700 font-mono">{seller?.gstNumber}</span>
                   </>
                 )}
               </div>

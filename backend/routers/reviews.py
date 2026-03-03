@@ -407,14 +407,14 @@ def create_reviews_router(db, get_current_user):
             "product": serialize_oid(product),
             "sellerListing": serialize_oid(listing),
             "seller": {
-                "_id": str(seller["_id"]) if seller else None,
-                "businessName": seller.get("businessName") if seller else None,
+                "_id": str(seller["_id"]) if seller else str(seller_id) if seller_id else None,
+                "businessName": seller.get("businessName") or seller.get("companyName") or "Verified Seller" if seller else "Verified Seller",
                 "city": seller.get("city") if seller else None,
                 "state": seller.get("state") if seller else None,
                 "badgeType": seller.get("badgeType", "none") if seller else "none",
                 "gstNumber": seller.get("gstNumber") if seller else None,
                 "establishedYear": seller.get("establishedYear") if seller else None
-            } if seller else None,
+            },
             "category": {
                 "_id": str(category["_id"]) if category else None,
                 "name": category.get("name") if category else None,
