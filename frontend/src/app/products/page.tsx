@@ -13,6 +13,7 @@ export const revalidate = 60; // 1 minute
 interface PublicCategory {
   _id: string;
   name: string;
+  slug?: string;  // SEO-friendly URL identifier
   productCount: number;
   listingCount: number;
 }
@@ -63,7 +64,7 @@ export default async function ProductsPage() {
                 {categories.map((cat) => (
                   <li key={cat._id}>
                     <Link
-                      href={`/category/${cat._id}`}
+                      href={`/categories/${cat.slug || cat._id}`}
                       className="flex items-center justify-between px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50"
                     >
                       <span>{cat.name}</span>

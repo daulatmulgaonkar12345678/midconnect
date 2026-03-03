@@ -12,6 +12,7 @@ interface IdentityBlockProps {
     images: string[];
     categoryId?: string;
     categoryName?: string;
+    categorySlug?: string;  // SEO-friendly category URL
   };
   summary: {
     sellerCount: number;
@@ -42,7 +43,7 @@ export default function IdentityBlock({ product, summary, specSummary }: Identit
             <>
               <ChevronRight className="h-4 w-4 mx-2 flex-shrink-0" />
               <Link 
-                href={`/category/${product.categoryId}`} 
+                href={`/categories/${product.categorySlug || product.categoryId}`} 
                 className="hover:text-gray-700 transition-colors"
               >
                 {product.categoryName}

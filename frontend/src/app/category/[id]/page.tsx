@@ -17,10 +17,29 @@ interface Props {
 export default async function CategoryRedirectPage({ params }: Props) {
   const { id } = await params;
   
-  // Try to get the new slug from redirect API
+  // Try to get the category from enterprise resolver first
+  try {
+    const response = await fetch(`${API_URL}/api/enterprise/resolve/category/${id}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      
+      if (data.category?.slug) {
+        redirect(`/categories/${data.category.slug}`);
+      }
+    }
+  } catch (error) {
+    console.error('Resolver lookup failed:', error);
+  }
+  
+  // Fallback: Try the redirect API
   try {
     const response = await fetch(`${API_URL}/api/redirect/category/${id}`, {
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000)
     });
     const data = await response.json();
     
@@ -31,6 +50,6 @@ export default async function CategoryRedirectPage({ params }: Props) {
     console.error('Redirect lookup failed:', error);
   }
   
-  // Fallback: redirect to categories list
-  redirect('/categories');
+  // Final fallback: redirect to categories list with the ID (new page will handle it)
+  redirect(`/categories/${id}`);
 }

@@ -24,6 +24,7 @@ interface CategoryCardProps {
   category: Category | {
     _id: string;
     name: string;
+    slug?: string;  // SEO-friendly URL identifier
     image?: string;
     icon?: string;
     description?: string;
@@ -52,8 +53,11 @@ export default function CategoryCard({ category, showProductCount = true }: Cate
     return <Package className="h-12 w-12" />;
   };
   
+  // Determine the best URL for the category
+  const categoryUrl = `/categories/${(category as { slug?: string }).slug || category._id}`;
+  
   return (
-    <Link href={`/category/${category._id}`} data-testid={`category-card-${category._id}`}>
+    <Link href={categoryUrl} data-testid={`category-card-${category._id}`}>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all group overflow-hidden h-full">
         {/* Category Image Container - Large & Professional */}
         <div className="relative w-full h-32 sm:h-36 md:h-40 lg:h-44 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">

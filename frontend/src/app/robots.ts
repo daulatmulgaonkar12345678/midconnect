@@ -8,9 +8,9 @@ export default function robots(): MetadataRoute.Robots {
         allow: [
           '/',
           '/products',
-          '/product/',
+          '/products/',
           '/categories',
-          '/category/',
+          '/categories/',
           '/about',
           '/contact',
           '/pricing',
@@ -25,6 +25,8 @@ export default function robots(): MetadataRoute.Robots {
           '/verify-email',
           '/inquiries',
           '/cart/',
+          '/product/',   // Old format - redirect to /products/
+          '/category/',  // Old format - redirect to /categories/
         ],
       },
     ],

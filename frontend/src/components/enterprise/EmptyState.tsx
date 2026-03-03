@@ -9,6 +9,7 @@ interface EmptyStateProps {
   fallbackMessage?: string;
   onClearFilters?: () => void;
   categoryId?: string;
+  categorySlug?: string;  // SEO-friendly category URL
 }
 
 export default function EmptyState({ 
@@ -16,7 +17,8 @@ export default function EmptyState({
   fallbackLevel, 
   fallbackMessage, 
   onClearFilters,
-  categoryId 
+  categoryId,
+  categorySlug
 }: EmptyStateProps) {
   // Show fallback message banner
   if (fallbackLevel && fallbackLevel > 0 && fallbackMessage) {
@@ -101,7 +103,7 @@ export default function EmptyState({
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           {categoryId && (
             <Link
-              href={`/category/${categoryId}`}
+              href={`/categories/${categorySlug || categoryId}`}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
             >
               Browse Category
