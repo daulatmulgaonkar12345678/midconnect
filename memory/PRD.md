@@ -875,4 +875,30 @@ Implement video upload capability for sellers to showcase product demos. Require
 - `/app/frontend/src/app/seller/listings/new/page.tsx` (MODIFIED)
 - `/app/frontend/src/app/seller/listings/[id]/page.tsx` (MODIFIED)
 
+---
+
+### Session: 2026-03-03 (continued)
+
+#### FIXED: Category Page 500 Error (ObjectId URL)
+
+**Problem:**
+User received 500 Internal Server Error when accessing `/categories/69a07a9dd3f5c6b5c5ebdbce` (ObjectId-based URL).
+
+**Root Cause:**
+The category page was calling a redirect endpoint that failed, and the `redirect()` function from Next.js was being caught inside a try-catch block, preventing the redirect from working.
+
+**Fix:**
+1. Updated category page to use enterprise resolver endpoint for token-based slug matching
+2. Fixed try-catch to re-throw redirect errors (Next.js redirect throws special `NEXT_REDIRECT` error)
+3. Added fallback lookup in public categories list
+4. Added secondary redirect check for ObjectId URLs that find a category with a slug
+
+**Behavior:**
+- `/categories/{objectId}` → Redirects to `/categories/{slug}`
+- `/categories/{slug}` → Loads directly (no redirect)
+- Category not found → Shows "Category Not Found" page
+
+**Files Modified:**
+- `/app/frontend/src/app/categories/[slug]/page.tsx`
+
 

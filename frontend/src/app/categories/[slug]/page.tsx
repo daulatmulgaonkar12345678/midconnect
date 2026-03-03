@@ -98,38 +98,78 @@ export const revalidate = 60;
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
   
-  // SEO v2.1: Check for ObjectId and redirect to slug-based URL
-  if (isObjectId(slug)) {
-    try {
-      const response = await fetch(`${API_URL}/api/redirect/category/${slug}`, {
-        cache: 'no-store'
-      });
-      const data = await response.json();
-      
-      if (data.redirect && data.slug) {
-        redirect(`/categories/${data.slug}`);
-      }
-    } catch (error) {
-      console.error('Redirect lookup failed:', error);
-    }
-  }
-  
   let categories: PublicCategory[] = [];
   let category: PublicCategory | undefined;
   let products: ProductWithSellers[] = [];
+  let canonicalSlug = slug;
+
+  // SEO v2.1: Use enterprise resolver for token-based slug matching
+  if (isObjectId(slug)) {
+    try {
+      const resolverResponse = await fetch(`${API_URL}/api/enterprise/resolve/category/${slug}`, {
+        cache: 'no-store'
+      });
+      
+      if (resolverResponse.ok) {
+        const resolverData = await resolverResponse.json();
+        
+        // Redirect BEFORE try-catch so redirect() throws properly
+        if (resolverData.redirect?.needed && resolverData.redirect?.canonicalSlug) {
+          redirect(`/categories/${resolverData.redirect.canonicalSlug}`);
+        }
+        
+        if (resolverData.category) {
+          // Use resolved category data
+          category = {
+            _id: resolverData.category._id,
+            name: resolverData.category.name,
+            slug: resolverData.category.slug,
+            productCount: 0,
+            listingCount: 0
+          };
+          canonicalSlug = resolverData.category.slug || slug;
+        }
+      }
+    } catch (resolverError) {
+      // Re-throw redirect errors (they're special in Next.js)
+      if (resolverError instanceof Error && resolverError.message.includes('NEXT_REDIRECT')) {
+        throw resolverError;
+      }
+      console.error('Resolver lookup failed:', resolverError);
+    }
+  }
 
   try {
+    // Fetch public categories for additional data
     categories = await getPublicCategories();
     
-    // Find category by slug first, then by ID
-    category = categories.find((c) => c.slug === slug) || 
-               categories.find((c) => c._id === slug);
+    // If not found via resolver, try finding in categories list
+    if (!category) {
+      category = categories.find((c) => c.slug === slug) || 
+                 categories.find((c) => c._id === slug);
+      canonicalSlug = category?.slug || slug;
+      
+      // If ObjectId access and category has slug, redirect to canonical
+      if (isObjectId(slug) && category?.slug && category.slug !== slug) {
+        redirect(`/categories/${category.slug}`);
+      }
+    } else {
+      // Update category with full data from public categories
+      const fullCategory = categories.find(c => c._id === category?._id);
+      if (fullCategory) {
+        category = fullCategory;
+      }
+    }
     
     if (category) {
       // Get products for this category
       products = await getProducts(category._id);
     }
   } catch (error) {
+    // Re-throw redirect errors
+    if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
+      throw error;
+    }
     console.error('Failed to fetch category:', error);
   }
 
