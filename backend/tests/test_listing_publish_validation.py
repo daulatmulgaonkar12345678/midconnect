@@ -26,7 +26,7 @@ import os
 from datetime import datetime
 
 # Use environment variable for BASE_URL
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://stupefied-hugle-2.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://seller-product-page.preview.emergentagent.com').rstrip('/')
 
 # Dev test token for testing when Firebase is not configured
 DEV_TOKEN = "dev-test-token"

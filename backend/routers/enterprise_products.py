@@ -260,7 +260,10 @@ def create_enterprise_product_router(db):
                 "leadTimeDays": listing.get("leadTime"),
                 "images": listing_images,
                 "videos": listing.get("videos") or [],  # Product demo videos
-                "stockStatus": "in_stock" if listing.get("stock", 0) > 0 else "out_of_stock"
+                "stockStatus": "in_stock" if listing.get("stock", 0) > 0 else "out_of_stock",
+                # Rating aggregation from sellerListing document
+                "avgRating": listing.get("avgRating", 0),
+                "totalReviews": listing.get("totalReviews", 0)
             })
         
         # Build response with safe image fallbacks
@@ -698,7 +701,10 @@ def create_enterprise_product_router(db):
                 "leadTimeDays": listing.get("leadTime"),
                 "images": listing_images[:2],
                 "sellerRole": listing.get("sellerRole"),
-                "rankingScore": listing.get("rankingScore")  # Include if ranked
+                "rankingScore": listing.get("rankingScore"),  # Include if ranked
+                # Rating aggregation from sellerListing document
+                "avgRating": listing.get("avgRating", 0),
+                "totalReviews": listing.get("totalReviews", 0)
             })
             
             # Include ranking breakdown in debug mode

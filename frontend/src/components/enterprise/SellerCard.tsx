@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { 
   MapPin, 
   Package, 
@@ -11,12 +12,15 @@ import {
   Square,
   Building2,
   TrendingDown,
-  Sparkles
+  Sparkles,
+  Star,
+  Eye
 } from 'lucide-react';
 import type { EnterpriseProductSeller, PricingTier } from '@/lib/api';
 
 interface SellerCardProps {
   seller: EnterpriseProductSeller;
+  productSlug?: string;  // Product slug for detail page link
   isCompareSelected: boolean;
   onCompareToggle: (sellerId: string) => void;
   onInquiry: (seller: EnterpriseProductSeller) => void;
@@ -43,6 +47,7 @@ const getRankingBadge = (score: number) => {
 
 export default function SellerCard({ 
   seller, 
+  productSlug,
   isCompareSelected, 
   onCompareToggle, 
   onInquiry,
@@ -152,6 +157,17 @@ export default function SellerCard({
             Compare
           </button>
         </div>
+
+        {/* Rating Display */}
+        {(seller.totalReviews !== undefined && seller.totalReviews > 0) && (
+          <div className="flex items-center gap-2 mb-3" data-testid={`seller-rating-${seller.listingId}`}>
+            <div className="flex items-center gap-1">
+              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+              <span className="font-semibold text-gray-900">{seller.avgRating?.toFixed(1) || '0.0'}</span>
+            </div>
+            <span className="text-sm text-gray-500">({seller.totalReviews} reviews)</span>
+          </div>
+        )}
 
         {/* Price Section */}
         <div className="bg-gray-50 rounded-lg p-3 mb-3">
@@ -268,6 +284,18 @@ export default function SellerCard({
           <Send className="h-4 w-4" />
           Request Quote
         </button>
+
+        {/* View Details Link */}
+        {productSlug && (
+          <Link
+            href={`/products/${productSlug}/seller/${seller.listingId}`}
+            className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            data-testid={`view-details-btn-${seller.listingId}`}
+          >
+            <Eye className="h-4 w-4" />
+            View Details & Reviews
+          </Link>
+        )}
       </div>
     </div>
   );

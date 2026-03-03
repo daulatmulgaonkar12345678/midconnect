@@ -1159,7 +1159,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://stupefied-hugle-2.preview.emergentagent.com",
+        "https://seller-product-page.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
@@ -9614,7 +9614,7 @@ async def admin_activate_subscription(
     except Exception as e:
         logger.error(f"[SUBSCRIPTION ERROR] {str(e)}")
         raise HTTPException(status_code=500, detail="Subscription activation failed")
-		
+                
 
 @api_router.post("/admin/subscriptions/extend/{user_id}")
 async def admin_extend_subscription(
@@ -12368,6 +12368,12 @@ app.include_router(admin_governance_router, prefix="/api")
 from routers.enterprise_search_router import create_enterprise_search_router
 enterprise_search_router = create_enterprise_search_router(db)
 app.include_router(enterprise_search_router, prefix="/api")
+
+# ================== REVIEWS ROUTER ==================
+from routers.reviews import create_reviews_router
+reviews_router = create_reviews_router(db, get_current_user)
+app.include_router(reviews_router, prefix="/api")
+
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health

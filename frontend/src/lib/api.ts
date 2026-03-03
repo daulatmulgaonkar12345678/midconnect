@@ -1775,6 +1775,9 @@ export interface EnterpriseProductSeller {
   // Ranking fields (populated when sortBy=ranking)
   rankingScore?: number;
   rankingBreakdown?: RankingBreakdown;
+  // Rating aggregation (stored in sellerListing for performance)
+  avgRating?: number;
+  totalReviews?: number;
 }
 
 export interface EnterpriseProductResponse {

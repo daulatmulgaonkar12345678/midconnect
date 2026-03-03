@@ -40,7 +40,8 @@ import {
   Star,
   Shield,
   Play,
-  Video
+  Video,
+  Eye
 } from 'lucide-react';
 
 // ==================== TYPES ====================
@@ -273,12 +274,14 @@ function FilterPanel({
 
 function SellerCard({
   seller,
+  productSlug,
   onInquiry,
   onCompare,
   isComparing,
   compareSelected
 }: {
   seller: EnterpriseProductSeller;
+  productSlug?: string;
   onInquiry: () => void;
   onCompare: () => void;
   isComparing: boolean;
@@ -337,6 +340,17 @@ function SellerCard({
             </label>
           )}
         </div>
+
+        {/* Rating Display */}
+        {seller.totalReviews !== undefined && seller.totalReviews > 0 && (
+          <div className="flex items-center gap-2 mb-3" data-testid={`seller-rating-${seller.listingId}`}>
+            <div className="flex items-center gap-1">
+              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+              <span className="font-semibold text-slate-900">{seller.avgRating?.toFixed(1) || '0.0'}</span>
+            </div>
+            <span className="text-sm text-slate-500">({seller.totalReviews} reviews)</span>
+          </div>
+        )}
 
         {/* Price & Stock Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -426,6 +440,18 @@ function SellerCard({
             Request Quote
           </button>
         </div>
+        
+        {/* View Details Link */}
+        {productSlug && (
+          <Link
+            href={`/products/${productSlug}/seller/${seller.listingId}`}
+            className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition-colors"
+            data-testid={`view-details-btn-${seller.listingId}`}
+          >
+            <Eye className="h-4 w-4" />
+            View Details & Reviews
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -1007,6 +1033,7 @@ export default function EnterpriseProductPage() {
                   <SellerCard
                     key={seller.listingId}
                     seller={seller}
+                    productSlug={productId || undefined}
                     onInquiry={() => setInquiryModal({ open: true, seller })}
                     onCompare={() => handleCompareToggle(seller.listingId)}
                     isComparing={isComparing}

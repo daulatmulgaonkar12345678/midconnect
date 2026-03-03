@@ -11,7 +11,7 @@
     {
       "test": "Health Check",
       "status": "PASS",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/health",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/health",
       "expected_status": 200,
       "actual_status": 200,
       "timestamp": "2026-02-22T08:59:52.394947"
@@ -27,7 +27,7 @@
     {
       "test": "Auth Security - /api/auth/complete-profile",
       "status": "FAIL",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/auth/complete-profile | Response: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"role\"],\"msg\":\"Field required\",\"input\":{\"test\":\"data\"},\"u",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/auth/complete-profile | Response: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"role\"],\"msg\":\"Field required\",\"input\":{\"test\":\"data\"},\"u",
       "expected_status": 401,
       "actual_status": 422,
       "timestamp": "2026-02-22T08:59:52.669947"
@@ -35,7 +35,7 @@
     {
       "test": "Auth Security - /api/auth/check-registration",
       "status": "PASS",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/auth/check-registration",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/auth/check-registration",
       "expected_status": 401,
       "actual_status": 401,
       "timestamp": "2026-02-22T08:59:52.825845"
@@ -43,7 +43,7 @@
     {
       "test": "Complete Profile - No Auth",
       "status": "FAIL",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/auth/complete-profile | Response: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://error",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/auth/complete-profile | Response: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://error",
       "expected_status": 401,
       "actual_status": 422,
       "timestamp": "2026-02-22T08:59:52.987292"
@@ -51,7 +51,7 @@
     {
       "test": "Complete Profile - Invalid Data",
       "status": "FAIL",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/auth/complete-profile | Response: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"role\"],\"msg\":\"Field required\",\"input\":{\"invalid\":\"data\"}",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/auth/complete-profile | Response: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"role\"],\"msg\":\"Field required\",\"input\":{\"invalid\":\"data\"}",
       "expected_status": 401,
       "actual_status": 422,
       "timestamp": "2026-02-22T08:59:53.214811"
@@ -59,7 +59,7 @@
     {
       "test": "Check Registration - No Auth",
       "status": "PASS",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/auth/check-registration",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/auth/check-registration",
       "expected_status": 401,
       "actual_status": 401,
       "timestamp": "2026-02-22T08:59:53.326198"
@@ -67,7 +67,7 @@
     {
       "test": "API Routing - Health with /api prefix",
       "status": "PASS",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/health",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/health",
       "expected_status": 200,
       "actual_status": 200,
       "timestamp": "2026-02-22T08:59:53.427489"
@@ -75,7 +75,7 @@
     {
       "test": "API Routing - Health without /api prefix",
       "status": "FAIL",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/health | Response: <!DOCTYPE html>\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if I",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/health | Response: <!DOCTYPE html>\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\n<!--[if I",
       "expected_status": 404,
       "actual_status": 520,
       "timestamp": "2026-02-22T08:59:59.518066"
@@ -83,7 +83,7 @@
     {
       "test": "Seller Dashboard - No Auth",
       "status": "PASS",
-      "details": "URL: https://stupefied-hugle-2.preview.emergentagent.com/api/seller/dashboard",
+      "details": "URL: https://seller-product-page.preview.emergentagent.com/api/seller/dashboard",
       "expected_status": 401,
       "actual_status": 401,
       "timestamp": "2026-02-22T08:59:59.683480"
