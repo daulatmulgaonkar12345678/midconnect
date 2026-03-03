@@ -20,21 +20,24 @@ const CLOUDINARY_IMAGE_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD
 const CLOUDINARY_VIDEO_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
 const CLOUDINARY_RAW_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
 
-// Upload Presets (MUST MATCH EXACTLY)
+// Upload Presets (MUST MATCH EXACTLY with Cloudinary)
 export const UPLOAD_PRESETS = {
   adminProductImage: 'midconnect_admin_product_upload',
   adminCategoryImage: 'midconnect_admin_category_upload',
-  sellerProductImage: 'midconnect_seller_product_upload',
-  sellerProductVideo: 'midconnect_seller_product_upload',  // Videos use same preset
+  sellerProductImage: 'midconnect_seller_product_upload',  // Images: q_auto,f_auto
+  sellerProductVideo: 'midconnect_seller_video_upload',    // Videos: q_auto,f_auto,vc_auto (dedicated preset)
   sellerDatasheet: 'midconnect_seller_datasheet_upload',
 } as const;
 
 export type UploadType = keyof typeof UPLOAD_PRESETS;
 
 // Validation Configuration
-const IMAGE_MAX_SIZE = 2 * 1024 * 1024; // 2MB
-const VIDEO_MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const IMAGE_MAX_SIZE = 5 * 1024 * 1024; // 5MB per image (per spec)
+const VIDEO_MAX_SIZE = 5 * 1024 * 1024; // 5MB per video
 const PDF_MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_IMAGES = 5;  // Max 5 images per listing
+const MAX_VIDEOS = 2;  // Max 2 videos per listing
+const MAX_VIDEO_DURATION = 30; // Max 30 seconds
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 const ALLOWED_PDF_TYPES = ['application/pdf'];

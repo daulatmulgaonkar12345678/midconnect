@@ -735,9 +735,23 @@ export default function NewSellerListingPage() {
     const files = e.target.files;
     if (!files || files.length === 0 || !token) return;
     
+    // Validate max count (5 images)
     if (form.images.length + files.length > 5) {
       setError('Maximum 5 images allowed');
       return;
+    }
+    
+    // Validate individual file sizes (5MB each)
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_IMAGE_SIZE) {
+        setError(`Image "${file.name}" exceeds 5MB limit`);
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        setError(`File "${file.name}" is not a valid image`);
+        return;
+      }
     }
     
     setUploadingImages(true);

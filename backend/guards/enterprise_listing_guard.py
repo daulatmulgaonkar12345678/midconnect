@@ -80,10 +80,15 @@ class EnterpriseListingGuard:
     def validate_images(
         images: Optional[List[str]],
         min_required: int = 1,
-        max_allowed: int = 10
+        max_allowed: int = 5  # Max 5 images per listing (per spec)
     ) -> List[str]:
         """
         Validate images array for listing.
+        
+        Enforces:
+        - Max 5 images per listing
+        - Min 1 image required
+        - Cloudinary URL format validation
         
         Args:
             images: List of image URLs
@@ -115,8 +120,23 @@ class EnterpriseListingGuard:
             )
         
         if len(valid_images) > max_allowed:
-            valid_images = valid_images[:max_allowed]
-            logger.warning(f"Images truncated to {max_allowed}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum {max_allowed} images allowed per listing"
+            )
+        
+        # Validate Cloudinary URL format for each image
+        cloudinary_prefixes = [
+            "https://res.cloudinary.com/",
+            "http://res.cloudinary.com/"
+        ]
+        for i, url in enumerate(valid_images):
+            is_cloudinary = any(url.startswith(prefix) for prefix in cloudinary_prefixes)
+            if not is_cloudinary:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Image {i+1}: Invalid image URL. Must be from Cloudinary"
+                )
         
         return valid_images
     

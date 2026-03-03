@@ -1375,8 +1375,8 @@ const ALLOWED_IMAGE_TYPES = [
   'image/heif',
 ];
 const MAX_CATEGORY_IMAGE_SIZE = 1 * 1024 * 1024;
-const MAX_PRODUCT_IMAGE_SIZE = 3 * 1024 * 1024;
-const MAX_PRODUCT_IMAGES = 5;
+const MAX_PRODUCT_IMAGE_SIZE = 5 * 1024 * 1024;  // 5MB per image (per spec)
+const MAX_PRODUCT_IMAGES = 5;  // Max 5 images per listing
 
 function validateImageFile(file: File, maxSize: number, context: string): void {
   const fileType = file.type.toLowerCase();
