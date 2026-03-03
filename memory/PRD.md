@@ -681,3 +681,71 @@ Implement emails for subscription lifecycle (activated, expiring, expired).
 - ✔ Dynamic resolver
 - ✔ Admin analytics
 - 301 redirects working ✅
+
+---
+
+### Session: 2026-03-03
+
+#### COMPLETE: Token-Based URL Slug Resolution
+
+**Problem Statement:**
+User reported "Product Not Found" errors when accessing URLs like `/products/abc-power-tools-hand-tools`. The issue was that the exact slug didn't exist in the database, but a related product did. Required implementing flexible, order-independent URL resolution.
+
+**Implementation:**
+
+1. **Token-Based Slug Resolver** (`/app/backend/services/slug_resolver_service.py`)
+   - Tokenizes URL slugs into meaningful words
+   - Removes stop words (buy, online, supplier, india, manufacturer, etc.)
+   - Removes Indian city/state names (mumbai, delhi, bangalore, etc.)
+   - Uses `$and`-based regex matching against product name/slug
+   - Scores candidates by token overlap
+   - Returns best match with redirect info
+
+2. **Features:**
+   - **Order Independence**: "motor-electric" matches "electric-motor-xxx"
+   - **Partial Slugs**: "motor" matches "industrial-electric-motor-5hp-xxx"
+   - **City Tolerance**: "motor-mumbai" ignores "mumbai", finds product
+   - **Stop Word Filtering**: "buy-motor-online-india" filters noise
+
+3. **Endpoints Updated:**
+   - `GET /api/products/detail/{identifier}` - Product detail
+   - `GET /api/products/{id}/enterprise` - Enterprise product page
+   - `GET /api/products/{id}/facets` - Filter facets
+   - `POST /api/products/{id}/filter` - Filter listings
+   - `GET /api/products/{id}/seo` - SEO data
+   - `GET /api/enterprise/resolve/product/{identifier}` - Direct resolver
+
+4. **Frontend Handling:**
+   - `/app/frontend/src/app/products/[slug]/page.tsx` updated
+   - Checks `redirect.needed` in API response
+   - Uses `router.replace()` for canonical URL redirect
+   - No visible flicker - smooth redirect experience
+
+**API Response Format:**
+```json
+{
+  "product": { "name": "...", "slug": "canonical-slug-here", ... },
+  "redirect": {
+    "needed": true,
+    "canonicalSlug": "canonical-slug-here",
+    "canonicalUrl": "https://www.udyogconnect.in/products/canonical-slug-here"
+  }
+}
+```
+
+**Testing Results** (21/21 backend, 5/5 frontend - 100%):
+- ✅ Partial slug 'motor' matches product
+- ✅ Word order 'motor-electric' matches
+- ✅ City name 'mumbai' ignored
+- ✅ Stop words 'buy', 'online' filtered
+- ✅ Exact slug returns redirect.needed = false
+- ✅ Frontend redirects to canonical URL
+- ✅ Combined partial + city + stopwords works
+
+**Files Created/Modified:**
+- `/app/backend/services/slug_resolver_service.py` (NEW)
+- `/app/backend/routers/enterprise_products.py` (MODIFIED)
+- `/app/backend/server.py` (MODIFIED)
+- `/app/frontend/src/app/products/[slug]/page.tsx` (MODIFIED)
+- `/app/frontend/src/lib/api.ts` (MODIFIED - added redirect type)
+
