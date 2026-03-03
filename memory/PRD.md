@@ -814,4 +814,65 @@ Implement video upload capability for sellers to showcase product demos. Require
 - Helps machinery/industrial sellers demonstrate product in action
 - "Product Demo Video" badge visible when videos uploaded
 
+---
+
+### Session: 2026-03-03 (continued)
+
+#### COMPLETE: Full Media Integration Verification
+
+**Implementation Summary - Image + Video System:**
+
+| Layer | Images | Videos |
+|-------|--------|--------|
+| **Count** | Max 5 | Max 2 |
+| **Size** | 5MB each | 5MB each |
+| **Duration** | N/A | 30 seconds |
+| **Required** | Min 1 | Optional |
+
+**Validation Layers:**
+
+1. **Frontend Validation (Pre-upload):**
+   - File type check (image/* or video/mp4,webm,mov)
+   - File size check (5MB per file)
+   - Video duration check (30 seconds max)
+   - Count check (5 images, 2 videos)
+
+2. **Cloudinary Upload:**
+   - Images: `/image/upload` with q_auto,f_auto compression
+   - Videos: `/video/upload` with q_auto,f_auto,vc_auto compression
+   - Separate presets for images vs videos
+
+3. **Backend Validation (Post-upload):**
+   - EnterpriseListingGuard validates:
+     - max_allowed=5 for images
+     - max_allowed=2 for videos
+     - Cloudinary URL format (https://res.cloudinary.com/*)
+     - Min 1 image required
+
+4. **MongoDB Schema Validation:**
+   - Collection: sellerListings
+   - images: array with maxItems=5
+   - videos: array with maxItems=2
+   - validationAction: error (rejects invalid docs)
+
+**Testing Results** (28/28 tests - 100%):
+- ✅ Backend guard max_allowed=5 for images
+- ✅ Backend guard Cloudinary URL validation for images
+- ✅ Backend guard max_allowed=2 for videos
+- ✅ Backend guard Cloudinary URL validation for videos
+- ✅ Pydantic models with max_length constraints
+- ✅ MongoDB schema with maxItems constraints
+- ✅ Frontend 5MB per image/video
+- ✅ Frontend 30 second video duration
+- ✅ Separate Cloudinary endpoints (image vs video)
+- ✅ Image compression configured
+
+**Files Created/Modified:**
+- `/app/backend/migrations/add_media_validation.py` (NEW)
+- `/app/backend/guards/enterprise_listing_guard.py` (MODIFIED)
+- `/app/frontend/src/lib/cloudinary.ts` (MODIFIED)
+- `/app/frontend/src/lib/api.ts` (MODIFIED)
+- `/app/frontend/src/app/seller/listings/new/page.tsx` (MODIFIED)
+- `/app/frontend/src/app/seller/listings/[id]/page.tsx` (MODIFIED)
+
 
