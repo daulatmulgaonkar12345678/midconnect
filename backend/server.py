@@ -6218,6 +6218,30 @@ async def search_products_deduplicated(request: Request, search: SearchQuery):
         "query": search.query
     }
 
+
+# Track search in background (non-blocking)
+async def _track_search_background(keyword: str, city: str, products: list):
+    """Track search asynchronously to not block response."""
+    try:
+        from services.search_analytics_service import create_search_analytics_service
+        service = create_search_analytics_service(db)
+        
+        first_product_id = None
+        if products and len(products) > 0:
+            try:
+                first_product_id = ObjectId(products[0].get("_id"))
+            except:
+                pass
+        
+        await service.track_search(
+            keyword=keyword,
+            city=city,
+            product_matched=first_product_id,
+            results_count=len(products)
+        )
+    except Exception as e:
+        logger.debug(f"Search tracking failed: {e}")
+
 @api_router.get("/listings/{listing_id}")
 async def get_listing_detail(
     listing_id: str,
@@ -11866,6 +11890,180 @@ async def resolve_category_endpoint(identifier: str):
             "canonicalSlug": canonical_slug,
             "canonicalUrl": f"https://www.udyogconnect.in/categories/{canonical_slug}" if canonical_slug else None
         }
+    }
+
+
+# ================================================================
+# SEARCH ANALYTICS & CITY SEO ENDPOINTS
+# ================================================================
+
+@api_router.post("/search/track")
+async def track_search(
+    keyword: str,
+    city: str = None,
+    product_matched: str = None,
+    results_count: int = 0
+):
+    """
+    Track a search event for analytics.
+    
+    Called after search completes to track:
+    - Keywords users search for
+    - Cities they filter by
+    - Whether products were matched
+    
+    Public endpoint (no auth required for tracking).
+    """
+    from services.search_analytics_service import create_search_analytics_service
+    
+    service = create_search_analytics_service(db)
+    
+    product_oid = None
+    if product_matched and len(product_matched) == 24:
+        try:
+            product_oid = ObjectId(product_matched)
+        except:
+            pass
+    
+    result = await service.track_search(
+        keyword=keyword,
+        city=city,
+        product_matched=product_oid,
+        results_count=results_count
+    )
+    
+    return {"success": True, "tracked": result is not None}
+
+
+@api_router.get("/admin/search/insights")
+async def get_search_insights(
+    limit: int = Query(50, ge=1, le=200),
+    days: int = Query(30, ge=1, le=365),
+    city: str = None,
+    has_match: bool = None,
+    admin: dict = Depends(require_admin)
+):
+    """
+    Get search analytics insights for admin dashboard.
+    
+    Returns:
+    - Top searched keywords
+    - Match rates
+    - City demand
+    """
+    from services.search_analytics_service import create_search_analytics_service
+    
+    service = create_search_analytics_service(db)
+    
+    # Get overall stats
+    stats = await service.get_search_stats()
+    
+    # Get top searches
+    top_searches = await service.get_top_searches(
+        limit=limit,
+        days=days,
+        city=city,
+        has_match=has_match
+    )
+    
+    # Get unmatched searches (content gaps)
+    unmatched = await service.get_unmatched_searches(limit=20, min_count=3)
+    
+    # Get city demand
+    city_demand = await service.get_city_search_demand(min_count=5)
+    
+    return {
+        "stats": stats,
+        "topSearches": top_searches,
+        "unmatchedSearches": unmatched,
+        "cityDemand": city_demand
+    }
+
+
+@api_router.get("/admin/search/setup-indexes")
+async def setup_search_analytics_indexes_endpoint(admin: dict = Depends(require_admin)):
+    """Create indexes for searchAnalytics collection."""
+    from services.search_analytics_service import setup_search_analytics_indexes
+    
+    created = await setup_search_analytics_indexes(db)
+    
+    return {
+        "success": True,
+        "indexesCreated": created
+    }
+
+
+@api_router.get("/products/{product_slug}/city/{city}")
+async def get_city_product_page(
+    product_slug: str,
+    city: str
+):
+    """
+    Get city-specific product page data.
+    
+    URL Pattern: /products/{product-slug}/{city}
+    Example: /products/industrial-motor-supplier-india/mumbai
+    
+    Returns 404 if:
+    - Product doesn't exist
+    - No sellers in that city
+    
+    This is the enterprise city SEO endpoint.
+    """
+    from services.city_seo_service import create_city_seo_service
+    from urllib.parse import unquote
+    
+    decoded_slug = unquote(product_slug)
+    decoded_city = unquote(city)
+    
+    service = create_city_seo_service(db)
+    
+    data = await service.get_city_page_data(decoded_slug, decoded_city)
+    
+    if not data:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No sellers for this product in {decoded_city}"
+        )
+    
+    return data
+
+
+@api_router.get("/products/{product_slug}/cities")
+async def get_product_available_cities(product_slug: str):
+    """
+    Get all cities with sellers for a product.
+    
+    Used for:
+    - Internal linking on product page
+    - City navigation
+    - Sitemap city pages
+    """
+    from services.city_seo_service import create_city_seo_service
+    from services.resolver_service import create_resolver
+    from urllib.parse import unquote
+    
+    decoded_slug = unquote(product_slug)
+    
+    # Resolve product
+    resolver = create_resolver(db)
+    product = await resolver.resolve_product(decoded_slug, {"_id": 1, "name": 1, "slug": 1})
+    
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get available cities
+    service = create_city_seo_service(db)
+    cities = await service.get_available_cities_for_product(product["_id"])
+    
+    return {
+        "product": {
+            "_id": str(product["_id"]),
+            "name": product.get("name"),
+            "slug": product.get("slug")
+        },
+        "cities": cities,
+        "totalCities": len(cities)
     }
 
 
