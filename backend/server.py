@@ -5952,9 +5952,23 @@ async def delete_listing(listing_id: str, user: dict = Depends(require_verified_
         {"$set": {
             "status": "archived",
             "isActive": False,
+            "isDeleted": True,  # Additional flag for extra safety
+            "deletedAt": now,
             "updatedAt": now
         }}
     )
+    
+    # Clear any search caches to ensure deleted listing doesn't appear
+    # (Enterprise search service has its own cache)
+    try:
+        from services.enterprise_search_service import EnterpriseSearchService
+        search_service = EnterpriseSearchService(db)
+        if hasattr(search_service, 'clear_cache'):
+            search_service.clear_cache()
+        logger.info(f"Listing {listing_id} archived and search cache cleared")
+    except Exception as e:
+        logger.warning(f"Could not clear search cache after listing delete: {e}")
+    
     return {"message": "Listing archived successfully", "status": "archived"}
 
 # ============== SEARCH ENDPOINTS ==============

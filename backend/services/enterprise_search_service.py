@@ -121,6 +121,12 @@ class SearchCache:
         key = self._make_key(query, filters)
         self.cache[key] = (result, time.time())
         logger.debug(f"Cache SET: {query[:20]}")
+    
+    def clear(self):
+        """Clear all cached results. Called when listings are modified/deleted."""
+        count = len(self.cache)
+        self.cache.clear()
+        logger.info(f"Search cache cleared ({count} entries)")
 
 
 # Global cache instance
@@ -238,6 +244,10 @@ class EnterpriseSearchService:
         self.db = db
         self.normalizer = QueryNormalizer()
     
+    def clear_cache(self):
+        """Clear search cache. Called when listings are created/updated/deleted."""
+        _search_cache.clear()
+    
     async def search(
         self,
         query: str,
@@ -331,7 +341,11 @@ class EnterpriseSearchService:
         # ============================================================
         base_filter = {
             "isActive": True,
-            "status": "active"
+            "status": "active",
+            "$or": [
+                {"isDeleted": {"$ne": True}},
+                {"isDeleted": {"$exists": False}}
+            ]
         }
         
         filters_applied = {}
