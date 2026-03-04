@@ -1228,7 +1228,12 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         product_id: str,
         seller: dict = Depends(require_verified_seller)
     ):
-        """Get the spec template directly from product's specTemplateIds (more reliable)"""
+        """
+        Get ALL spec templates for a product.
+        
+        Products can have multiple spec templates (e.g., different valve types).
+        Returns all templates so sellers can choose the appropriate one.
+        """
         try:
             product_oid = ObjectId(product_id)
         except Exception:
@@ -1238,9 +1243,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
         
-        # Get spec template from product's specTemplateIds
+        # Get ALL spec templates from product's specTemplateIds
         spec_template_ids = product.get("specTemplateIds", [])
-        template = None
+        templates = []
         
         for tid in spec_template_ids:
             template_oid = ObjectId(str(tid)) if not isinstance(tid, ObjectId) else tid
@@ -1249,10 +1254,10 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 "isActive": {"$ne": False}
             })
             if template:
-                break
+                templates.append(serialize_objectids(template))
         
-        # Fallback to category-based lookup if no template found from specTemplateIds
-        if not template:
+        # Fallback to category-based lookup if no templates found from specTemplateIds
+        if not templates:
             category_id = product.get("categoryId")
             if category_id:
                 category_oid = ObjectId(str(category_id)) if not isinstance(category_id, ObjectId) else category_id
@@ -1267,6 +1272,8 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                         "categoryId": str(category_id),
                         "isActive": {"$ne": False}
                     })
+                if template:
+                    templates.append(serialize_objectids(template))
         
         result = {
             "product": {
@@ -1274,13 +1281,14 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 "name": product.get("name"),
                 "categoryId": str(product.get("categoryId")) if product.get("categoryId") else None,
                 "specTemplateIds": [str(t) for t in spec_template_ids]
-            }
+            },
+            # Return ALL templates for multi-template products
+            "specTemplates": templates,
+            # Keep backward compatibility - first template for legacy clients
+            "specTemplate": templates[0] if templates else None
         }
         
-        if template:
-            result["specTemplate"] = serialize_objectids(template)
-        else:
-            result["specTemplate"] = None
+        if not templates:
             result["note"] = "No spec template found for this product."
         
         return result

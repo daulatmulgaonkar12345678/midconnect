@@ -1360,7 +1360,8 @@ export const getProductSpecTemplate = (
     categoryId: string | null;
     specTemplateIds: string[];
   };
-  specTemplate: B2BSpecTemplate | null;
+  specTemplates: B2BSpecTemplate[];  // All available templates
+  specTemplate: B2BSpecTemplate | null;  // First/default template (backward compatible)
   note?: string;
 }> => fetchWithAuth(`/seller/products/${encodeURIComponent(productId)}/spec-template`, token);
 

@@ -548,7 +548,9 @@ export default function NewSellerListingPage() {
   // Data states
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
-  const [specTemplate, setSpecTemplate] = useState<B2BSpecTemplate | null>(null);
+  const [specTemplates, setSpecTemplates] = useState<B2BSpecTemplate[]>([]);  // All available templates
+  const [specTemplate, setSpecTemplate] = useState<B2BSpecTemplate | null>(null);  // Currently selected template
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');  // Selected template ID
   const [categorySettings, setCategorySettings] = useState<{ allowedSellerTypes?: string[] } | null>(null);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   
@@ -638,15 +640,17 @@ export default function NewSellerListingPage() {
     if (!productId || !token) return;
 
     setLoadingSpecs(true);
+    setSpecTemplates([]);  // Reset templates
+    setSelectedTemplateId('');  // Reset selection
 
     try {
-      // PRIMARY: Try to get spec template directly from product's specTemplateIds
-      // This is more reliable as it checks product.specTemplateIds array directly
+      // PRIMARY: Try to get ALL spec templates directly from product's specTemplateIds
       const templateData = await getProductSpecTemplate(token, productId);
+      const allTemplates = templateData.specTemplates || [];
       let template = templateData.specTemplate;
 
-      // FALLBACK: If no template from product's specTemplateIds, try category-based lookup
-      if (!template) {
+      // FALLBACK: If no templates from product's specTemplateIds, try category-based lookup
+      if (allTemplates.length === 0 && !template) {
         const product = await getProductById(productId);
         const categoryId = product.categoryId;
         
@@ -654,13 +658,30 @@ export default function NewSellerListingPage() {
           console.log('No template from specTemplateIds, trying category lookup...');
           const categoryTemplateData = await getCategorySpecTemplate(token, categoryId);
           template = categoryTemplateData.specTemplate;
+          if (template) {
+            allTemplates.push(template);
+          }
         }
       }
 
-      setSpecTemplate(template);
+      // Store all available templates
+      setSpecTemplates(allTemplates);
 
-      // Initialize attributes from template.fields (SSOT)
-      if (template?.fields) {
+      // If multiple templates, let user choose. If single template, auto-select.
+      if (allTemplates.length === 1) {
+        template = allTemplates[0];
+        setSelectedTemplateId(template._id);
+        setSpecTemplate(template);
+      } else if (allTemplates.length > 1) {
+        // Don't auto-select - wait for user to choose
+        setSpecTemplate(null);
+        console.log(`Product has ${allTemplates.length} spec templates - awaiting user selection`);
+      } else {
+        setSpecTemplate(template);
+      }
+
+      // Initialize attributes from template.fields (SSOT) - only if single template auto-selected
+      if (allTemplates.length === 1 && template?.fields) {
         const attrs: Record<string, { value: any; touched: boolean }> = {};
 
         template.fields.forEach((field: any) => {
@@ -681,6 +702,7 @@ export default function NewSellerListingPage() {
     } catch (err) {
       console.error('Failed to load spec template:', err);
       setSpecTemplate(null);
+      setSpecTemplates([]);
     } finally {
       setLoadingSpecs(false);
     }
@@ -698,6 +720,8 @@ export default function NewSellerListingPage() {
       attributes: {} 
     }));
     setSpecTemplate(null);
+    setSpecTemplates([]);
+    setSelectedTemplateId('');
     if (categoryId) {
       loadProducts(categoryId);
     }
@@ -712,11 +736,37 @@ export default function NewSellerListingPage() {
   }));
 
   setSpecTemplate(null);
+  setSpecTemplates([]);
+  setSelectedTemplateId('');
 
   if (productId) {
     loadSpecTemplateByProduct(productId);
   }
 };
+
+  // Handle spec template selection (for products with multiple templates)
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    const template = specTemplates.find(t => t._id === templateId);
+    
+    if (template) {
+      setSpecTemplate(template);
+      
+      // Initialize attributes from selected template's fields
+      const attrs: Record<string, { value: any; touched: boolean }> = {};
+      template.fields?.forEach((field: any) => {
+        attrs[field.key] = {
+          value: field.fieldType === 'boolean' ? false : '',
+          touched: false
+        };
+      });
+      
+      setForm(prev => ({
+        ...prev,
+        attributes: attrs
+      }));
+    }
+  };
 
 
   // Handle attribute change (NOT specification)
@@ -1317,10 +1367,41 @@ const addPricingTier = () => {
                 </button>
               </div>
               
+              {/* Template Selector - shown when product has multiple spec templates */}
+              {specTemplates.length > 1 && (
+                <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Product Type <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-sm text-gray-500 mb-3">
+                    This product has {specTemplates.length} different specification templates. 
+                    Choose the one that matches your product.
+                  </p>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => handleTemplateSelect(e.target.value)}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white border-blue-300"
+                    data-testid="spec-template-selector"
+                  >
+                    <option value="">-- Select Product Type --</option>
+                    {specTemplates.map((t) => (
+                      <option key={t._id} value={t._id}>
+                        {t.name} {t.description ? `- ${t.description}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
               {loadingSpecs ? (
                 <div className="py-12 text-center">
                   <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
                   <p className="text-gray-500 mt-2">Loading attributes...</p>
+                </div>
+              ) : specTemplates.length > 1 && !selectedTemplateId ? (
+                <div className="py-12 text-center text-gray-500">
+                  <Layers className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Please select a product type above to see the attributes.</p>
                 </div>
               ) : specTemplate?.fields && specTemplate.fields.length > 0 ? (
                 <div className="space-y-4">
@@ -1455,6 +1536,12 @@ const addPricingTier = () => {
               </button>
               <button
                 onClick={() => {
+                  // Check if template is selected (for multi-template products)
+                  if (specTemplates.length > 1 && !selectedTemplateId) {
+                    setError('Please select a product type first.');
+                    return;
+                  }
+                  
                   // ENTERPRISE: Validate attributes before proceeding
                   if (!specTemplate?.fields || specTemplate.fields.length === 0) {
                     setError('This product does not have technical specifications defined. Please contact admin or choose a different product.');
@@ -1485,7 +1572,7 @@ const addPricingTier = () => {
                   setError(null);
                   setCurrentStep(3);
                 }}
-                disabled={!specTemplate?.fields || specTemplate.fields.length === 0}
+                disabled={!specTemplate?.fields || specTemplate.fields.length === 0 || (specTemplates.length > 1 && !selectedTemplateId)}
                 className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 data-testid="next-step-2"
               >
