@@ -17,7 +17,10 @@ import {
   Loader2,
   AlertTriangle,
   ListChecks,
-  Store
+  Store,
+  Calculator,
+  Ruler,
+  Beaker
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -91,6 +94,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: '/admin/dropdowns', label: 'Global Dropdowns', icon: ListChecks },
     { href: '/admin/categories', label: 'Categories', icon: FolderTree },
     { href: '/admin/spec-templates', label: 'Spec Templates', icon: ClipboardList },
+    // Calculator System
+    { href: '/admin/calculators', label: 'Calculators', icon: Calculator },
+    { href: '/admin/unit-groups', label: 'Unit Groups', icon: Ruler },
+    { href: '/admin/materials', label: 'Materials', icon: Beaker },
     // Product Management
     { href: '/admin/products', label: 'Products', icon: Package },
     // Commercial SSOT - Seller Listings
