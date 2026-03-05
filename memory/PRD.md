@@ -1055,6 +1055,77 @@ Build a Raw Material Smart Calculator system for calculating weight and price of
 
 ---
 
+### Session: 2026-03-05 (Raw Material Smart Calculator - Phase 5 Complete)
+
+#### COMPLETE: SEO Calculator Pages
+
+**Problem Statement:**
+Create public SEO calculator pages that help users calculate raw material weight, rank on Google for industrial queries, and direct users to UdyogConnect suppliers.
+
+**Implementation:**
+
+1. **Reusable SEO Layout Component** (`/components/seo/SEOCalculatorLayout.tsx`)
+   - Hero section with gradient background, H1 title, subtitle
+   - Embedded MaterialCalculatorCard with configurable defaults
+   - Calculation results panel with CTA to find suppliers
+   - Educational content section with formulas and tables
+   - Collapsible FAQ section with accordion behavior
+   - Related tools links
+   - Full footer with navigation
+
+2. **Steel Weight Calculator** (`/tools/steel-weight-calculator`)
+   - Default: MS Steel + Round Bar
+   - SEO Title: "Steel Weight Calculator | Calculate MS Steel, SS304, SS316 Weight - UdyogConnect"
+   - Content: Density table, all shape formulas, example calculations
+   - 6 FAQs about steel weight calculation
+
+3. **Pipe Weight Calculator** (`/tools/pipe-weight-calculator`)
+   - Default: MS Steel + Pipe
+   - SEO Title: "Pipe Weight Calculator | Calculate Steel Pipe, MS Pipe Weight - UdyogConnect"
+   - Content: Pipe formula, seamless vs ERW, pipe schedules
+   - 6 FAQs about pipe weight calculation
+
+4. **Plate Weight Calculator** (`/tools/plate-weight-calculator`)
+   - Default: MS Steel + Plate
+   - SEO Title: "Plate Weight Calculator | Steel Plate, MS Plate Weight - UdyogConnect"
+   - Content: Plate vs sheet, HR vs CR, standard sizes
+   - 6 FAQs about plate weight calculation
+
+5. **Round Bar Weight Calculator** (`/tools/round-bar-weight-calculator`)
+   - Default: MS Steel + Round Bar
+   - SEO Title: "Round Bar Weight Calculator | MS Round Bar, SS Round Bar Weight - UdyogConnect"
+   - Content: Weight per meter table, quick formula, bar types
+   - 6 FAQs about round bar weight
+
+**SEO Features:**
+- Next.js Metadata exports with title, description, keywords, openGraph
+- Canonical URLs for each page
+- JSON-LD WebApplication schema
+- JSON-LD FAQPage schema for each FAQ section
+- Semantic HTML structure (H1, H2, H3)
+- Internal linking between calculator pages
+
+**Testing Results** (100% - 9/9):
+- ✅ All 4 calculator pages load with correct defaults
+- ✅ Calculator functionality works on all pages
+- ✅ FAQ sections expand/collapse correctly
+- ✅ JSON-LD structured data present
+- ✅ Internal navigation works
+- ✅ Calculation results display correctly
+
+**Files Created:**
+- `/app/frontend/src/components/seo/SEOCalculatorLayout.tsx`
+- `/app/frontend/src/app/tools/steel-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/steel-weight-calculator/client.tsx`
+- `/app/frontend/src/app/tools/pipe-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/pipe-weight-calculator/client.tsx`
+- `/app/frontend/src/app/tools/plate-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/plate-weight-calculator/client.tsx`
+- `/app/frontend/src/app/tools/round-bar-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/round-bar-weight-calculator/client.tsx`
+
+---
+
 ### Session: 2026-03-05 (Raw Material Smart Calculator - Phase 4 Complete)
 
 #### COMPLETE: Seller Dashboard Integration for Raw Material Inquiries
@@ -1217,11 +1288,12 @@ Build an Admin Spec Template System that supports raw material templates with fo
 
 ## Pending Tasks (Priority Order)
 
-### P0: Raw Material Calculator - Remaining Phases
-1. ~~**Phase 2**: Admin UI for Spec Templates specific to raw materials~~ ✅ COMPLETE
-2. ~~**Phase 3**: Integrate calculator into raw material product pages~~ ✅ COMPLETE
-3. ~~**Phase 4**: Display calculation data in seller dashboard~~ ✅ COMPLETE
-4. **Phase 5**: SEO Calculator pages (/tools/steel-weight-calculator, etc.)
+### P0: Raw Material Calculator - ALL PHASES COMPLETE ✅
+1. ~~**Phase 1**: Calculation Engine~~ ✅ COMPLETE
+2. ~~**Phase 2**: Admin UI for Spec Templates~~ ✅ COMPLETE
+3. ~~**Phase 3**: Product Page Calculator Integration~~ ✅ COMPLETE
+4. ~~**Phase 4**: Seller Dashboard Display~~ ✅ COMPLETE
+5. ~~**Phase 5**: SEO Calculator Pages~~ ✅ COMPLETE
 
 ### P1: Deploy Backend to Render
 **CRITICAL**: User's production site is running outdated backend code. Recent fixes won't be live until redeployed.
