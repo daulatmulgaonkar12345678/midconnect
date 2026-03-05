@@ -1055,6 +1055,78 @@ Build a Raw Material Smart Calculator system for calculating weight and price of
 
 ---
 
+### Session: 2026-03-05 (Raw Material Pricing Flow - Complete Integration)
+
+#### COMPLETE: End-to-End Raw Material Pricing System
+
+**Problem Statement:**
+Ensure complete raw material flow: Sellers set rate/kg → Buyers see calculator → Weight calculated → Price shown per seller → Inquiry sent with calculation data → Sellers see details.
+
+**Implementation:**
+
+1. **Seller Listing with Rate/kg** (`seller_products.py`)
+   - Added `rate_per_kg` and `material_supported` to ListingCreate/ListingUpdate models
+   - Created `RatePerKgUpdate` model for daily rate updates
+   - Added `PATCH /api/seller/listings/{id}/rate-per-kg` endpoint
+   - Tracks rate history for auditing
+
+2. **Seller Listing Form** (`/seller/listings/new/page.tsx`)
+   - Detects raw material category via `/api/spec-templates/by-category/{id}`
+   - Shows "Raw Material Pricing" section with:
+     - Rate per kg input (₹/kg)
+     - Material selector (from admin materials list)
+     - Preview of calculated price (e.g., "100kg = ₹8,500")
+
+3. **Product Page Calculator** (`/products/[slug]/page.tsx`)
+   - Shows calculator below product description when `isRawMaterial=true`
+   - Buyer enters: Material, Shape, Dimensions, Quantity
+   - Weight calculated in real-time (client-side)
+
+4. **Seller Price Comparison** (`SellerPriceComparison.tsx`)
+   - Fetches sellers via `GET /api/raw-materials/sellers/raw-material/{productId}`
+   - Calculates price per seller: `totalWeight × rate_per_kg`
+   - Shows: Seller name, Rate/kg, Calculated Total, Send Inquiry button
+
+5. **Inquiry with Calculation Data**
+   - Inquiry includes: material, shape, dimensions, quantity, weight, rate, price
+   - Seller dashboard displays all calculation details
+   - Complete transparency for both parties
+
+**Complete Workflow:**
+```
+Admin → Creates materials list (MS Steel, SS304, etc.)
+     → Marks category as raw_material type
+     
+Seller → Creates listing with rate_per_kg
+      → Can update rate daily via quick update
+      
+Buyer → Opens product page
+     → Sees calculator (if raw material)
+     → Enters dimensions
+     → Weight calculated instantly
+     → Sees all seller prices (weight × rate)
+     → Sends inquiry with full calculation data
+     
+Seller → Receives inquiry
+      → Sees: Material, Shape, Dimensions, Weight, Price
+      → Can accept/quote/respond
+```
+
+**Testing Results** (100% - 12/12 backend + frontend verified):
+- ✅ POST /api/seller/listings accepts rate_per_kg
+- ✅ PATCH /api/seller/listings/{id}/rate-per-kg works
+- ✅ GET /api/raw-materials/sellers/raw-material/{productId} returns rates
+- ✅ Calculator pages functional
+- ✅ SellerPriceComparison calculates correctly
+- ✅ Inquiry with calculationData saves properly
+
+**Files Modified:**
+- `/app/backend/seller_products.py` - ListingCreate, ListingUpdate, RatePerKgUpdate
+- `/app/frontend/src/app/seller/listings/new/page.tsx` - Rate/kg input section
+- `/app/frontend/src/lib/api.ts` - ListingCreatePayload, ListingUpdatePayload
+
+---
+
 ### Session: 2026-03-05 (Raw Material Smart Calculator - Phase 5 Complete)
 
 #### COMPLETE: SEO Calculator Pages
