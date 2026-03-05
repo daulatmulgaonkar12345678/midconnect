@@ -602,9 +602,15 @@ def create_configurable_calculator_router(db):
     @router.get("/materials")
     async def get_materials(material_type: Optional[str] = None):
         """Get all materials, optionally filtered by type"""
-        query = {"is_active": {"$ne": False}}
+        query = {"is_active": {"$ne": False}, "isActive": {"$ne": False}}
+        
+        # If material_type is provided, try to filter
+        # But also include materials without material_type for backwards compatibility
         if material_type:
-            query["material_type"] = material_type
+            query["$or"] = [
+                {"material_type": material_type},
+                {"material_type": {"$exists": False}}  # Include old materials
+            ]
         
         materials = []
         cursor = db.materials.find(query).sort("name", 1)
@@ -754,5 +760,103 @@ def create_configurable_calculator_router(db):
             "calculation": result.model_dump(),
             "seller_prices": seller_prices
         }
+    
+    @router.get("/sellers-by-product/{product_id}")
+    async def get_sellers_with_rates(product_id: str):
+        """
+        Get all sellers for a product with their rate_per_unit.
+        Used by the frontend calculator to show seller price comparisons.
+        """
+        try:
+            prod_id = ObjectId(product_id)
+        except:
+            raise HTTPException(status_code=400, detail="Invalid product ID")
+        
+        sellers = []
+        
+        # Get seller listings with rates
+        pipeline = [
+            {
+                "$match": {
+                    "productId": prod_id,
+                    "status": "active"
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "sellerId",
+                    "foreignField": "_id",
+                    "as": "sellerData"
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$sellerData",
+                    "preserveNullAndEmptyArrays": True
+                }
+            },
+            {
+                "$project": {
+                    "_id": 1,
+                    "sellerId": 1,
+                    "rate_per_unit": 1,
+                    "rate_unit": 1,
+                    "moq": 1,
+                    "stock": 1,
+                    "leadTime": 1,
+                    "pricingTiers": 1,
+                    "searchableAttributes": 1,
+                    "seller": {
+                        "companyName": {"$ifNull": ["$sellerData.profile.businessName", "$sellerData.companyName"]},
+                        "city": "$sellerData.profile.city",
+                        "state": "$sellerData.profile.state",
+                        "badgeType": "$sellerData.badgeType",
+                        "rating": "$sellerData.rating",
+                        "reviewCount": "$sellerData.reviewCount"
+                    }
+                }
+            }
+        ]
+        
+        async for listing in db.sellerListings.aggregate(pipeline):
+            seller_info = listing.get("seller", {})
+            
+            # Get rate from rate_per_unit or from pricingTiers
+            rate = listing.get("rate_per_unit", 0)
+            rate_unit = listing.get("rate_unit", "kg")
+            
+            if not rate and listing.get("pricingTiers"):
+                tiers = listing["pricingTiers"]
+                if tiers and len(tiers) > 0:
+                    rate = tiers[0].get("pricePerUnit", 0)
+                    rate_unit = tiers[0].get("unit", "pc")
+            
+            # Get material type from searchableAttributes
+            attrs = listing.get("searchableAttributes", {})
+            material_type = attrs.get("material") or attrs.get("materialType") or attrs.get("Material")
+            
+            sellers.append({
+                "_id": str(listing["_id"]),
+                "sellerId": str(listing["sellerId"]),
+                "sellerName": seller_info.get("companyName") or "Verified Seller",
+                "companyName": seller_info.get("companyName"),
+                "city": seller_info.get("city"),
+                "state": seller_info.get("state"),
+                "badgeType": seller_info.get("badgeType"),
+                "rating": seller_info.get("rating"),
+                "reviewCount": seller_info.get("reviewCount"),
+                "rate_per_unit": rate,
+                "rate_unit": rate_unit,
+                "minOrderQty": listing.get("moq", 1),
+                "leadTime": listing.get("leadTime"),
+                "stock": listing.get("stock"),
+                "materialType": material_type
+            })
+        
+        # Sort by rate (lowest first), putting sellers without rates at the end
+        sellers.sort(key=lambda x: (x["rate_per_unit"] == 0, x["rate_per_unit"]))
+        
+        return sellers
     
     return router

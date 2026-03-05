@@ -18,6 +18,7 @@ import { ProductJsonLd, CitySellerGroup, SEOContentSection, InternalLinksSection
 import MaterialCalculatorCard, { CalculationResult } from '@/components/calculator/MaterialCalculatorCard';
 import SellerPriceComparison, { RawMaterialSeller } from '@/components/calculator/SellerPriceComparison';
 import DynamicCalculator from '@/components/calculator/DynamicCalculator';
+import CalculatorSellerCards from '@/components/calculator/CalculatorSellerCards';
 import {
   Package,
   MapPin,
@@ -641,6 +642,10 @@ export default function EnterpriseProductPage() {
   // Configurable calculator state
   const [linkedCalculatorId, setLinkedCalculatorId] = useState<string | null>(null);
   const [dynamicCalcResult, setDynamicCalcResult] = useState<any>(null);
+  const [sellersWithRates, setSellersWithRates] = useState<any[]>([]);
+  const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
+  const [selectedSellerForInquiry, setSelectedSellerForInquiry] = useState<any>(null);
+  const [calculatedPriceForInquiry, setCalculatedPriceForInquiry] = useState<number>(0);
 
   // Check for 301 redirect (old ObjectId or legacy slug URLs)
   useEffect(() => {
@@ -712,10 +717,18 @@ export default function EnterpriseProductPage() {
               if (calcData && calcData._id) {
                 console.log('Found linked calculator:', calcData.name);
                 setLinkedCalculatorId(calcData._id);
+                
+                // Fetch sellers with rate_per_unit for this product
+                fetch(`${API_URL}/api/calculator/sellers-by-product/${actualProductId}`)
+                  .then(res => res.ok ? res.json() : [])
+                  .then(sellers => {
+                    console.log('Sellers with rates:', sellers);
+                    setSellersWithRates(sellers);
+                  })
+                  .catch(err => console.log('Failed to fetch seller rates:', err));
               }
             })
             .catch(() => {
-              // No configurable calculator, check for legacy raw material config
               console.log('No configurable calculator, checking legacy raw material config...');
             });
         }
@@ -1065,14 +1078,14 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               </div>
               <h2 className="text-2xl font-bold text-slate-900">Calculate Your Requirements</h2>
               <p className="text-slate-600 mt-1">
-                Enter dimensions to calculate quantity and compare prices
+                Enter dimensions to calculate quantity and compare seller prices
               </p>
             </div>
 
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-2xl mx-auto mb-8">
               <DynamicCalculator
                 calculatorId={linkedCalculatorId}
-                showPriceField={true}
+                showPriceField={false}
                 onCalculate={(result) => {
                   setDynamicCalcResult(result);
                   console.log('Dynamic calculation result:', result);
@@ -1081,33 +1094,22 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               />
             </div>
             
-            {/* Show calculation result summary */}
+            {/* Seller Cards with Calculated Prices */}
             {dynamicCalcResult && dynamicCalcResult.total_value > 0 && (
-              <div className="mt-6 max-w-2xl mx-auto">
-                <div className="bg-white rounded-xl shadow-lg border border-green-200 p-6">
-                  <h3 className="font-semibold text-green-800 mb-4 text-lg flex items-center gap-2">
-                    <Scale className="h-5 w-5" />
-                    Calculation Summary
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div className="bg-green-50 rounded-lg p-4 text-center">
-                      <p className="text-sm text-green-600 mb-1">Calculator</p>
-                      <p className="font-bold text-green-800">{dynamicCalcResult.calculator_name}</p>
-                    </div>
-                    {dynamicCalcResult.material_name && (
-                      <div className="bg-green-50 rounded-lg p-4 text-center">
-                        <p className="text-sm text-green-600 mb-1">Material</p>
-                        <p className="font-bold text-green-800">{dynamicCalcResult.material_name}</p>
-                      </div>
-                    )}
-                    <div className="bg-green-100 rounded-lg p-4 text-center border-2 border-green-300">
-                      <p className="text-sm text-green-600 mb-1">Total {dynamicCalcResult.output_label}</p>
-                      <p className="font-bold text-green-800 text-xl">
-                        {dynamicCalcResult.total_value.toFixed(2)} {dynamicCalcResult.output_unit}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+              <div className="max-w-6xl mx-auto">
+                <CalculatorSellerCards
+                  calculationResult={dynamicCalcResult}
+                  sellers={sellersWithRates}
+                  onRequestQuote={(seller, calculatedPrice) => {
+                    setSelectedSellerForInquiry(seller);
+                    setCalculatedPriceForInquiry(calculatedPrice);
+                    setInquiryModalOpen(true);
+                  }}
+                  onViewDetails={(seller) => {
+                    // Navigate to seller details
+                    window.location.href = `/seller/${seller.sellerId}`;
+                  }}
+                />
               </div>
             )}
           </div>
