@@ -17,6 +17,7 @@ import {
 import { ProductJsonLd, CitySellerGroup, SEOContentSection, InternalLinksSection } from '@/components/ProductSEO';
 import MaterialCalculatorCard, { CalculationResult } from '@/components/calculator/MaterialCalculatorCard';
 import SellerPriceComparison, { RawMaterialSeller } from '@/components/calculator/SellerPriceComparison';
+import DynamicCalculator from '@/components/calculator/DynamicCalculator';
 import {
   Package,
   MapPin,
@@ -636,6 +637,10 @@ export default function EnterpriseProductPage() {
     seller: RawMaterialSeller | null;
     calculatedPrice: number;
   }>({ open: false, seller: null, calculatedPrice: 0 });
+  
+  // Configurable calculator state
+  const [linkedCalculatorId, setLinkedCalculatorId] = useState<string | null>(null);
+  const [dynamicCalcResult, setDynamicCalcResult] = useState<any>(null);
 
   // Check for 301 redirect (old ObjectId or legacy slug URLs)
   useEffect(() => {
@@ -694,8 +699,28 @@ export default function EnterpriseProductPage() {
         // Check if this is a raw material product (check category type OR template type)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
         const actualProductId = productData.product._id;
+        const categoryId = productData.product.categoryId;
         
-        // First try product-specific config (uses actual _id, not slug)
+        // First check for configurable calculator linked to this category
+        if (categoryId) {
+          fetch(`${API_URL}/api/calculator/calculators/by-category/${categoryId}`)
+            .then(res => {
+              if (res.ok) return res.json();
+              throw new Error('No calculator found');
+            })
+            .then(calcData => {
+              if (calcData && calcData._id) {
+                console.log('Found linked calculator:', calcData.name);
+                setLinkedCalculatorId(calcData._id);
+              }
+            })
+            .catch(() => {
+              // No configurable calculator, check for legacy raw material config
+              console.log('No configurable calculator, checking legacy raw material config...');
+            });
+        }
+        
+        // Also check legacy raw material config (for backwards compatibility)
         fetch(`${API_URL}/api/products/${actualProductId}/raw-material-config`)
           .then(res => res.json())
           .then(data => {
@@ -707,8 +732,8 @@ export default function EnterpriseProductPage() {
           .catch(err => {
             console.log('Product raw material check failed, trying category:', err);
             // Fallback to category-based check
-            if (productData.product.categoryId) {
-              fetch(`${API_URL}/api/spec-templates/by-category/${productData.product.categoryId}`)
+            if (categoryId) {
+              fetch(`${API_URL}/api/spec-templates/by-category/${categoryId}`)
                 .then(res => res.json())
                 .then(data => {
                   if (data.isRawMaterial) {
@@ -1028,6 +1053,66 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
           </div>
         </div>
       </div>
+
+      {/* ==================== CONFIGURABLE CALCULATOR SECTION ==================== */}
+      {linkedCalculatorId && (
+        <div className="bg-gradient-to-b from-blue-50 to-white border-b border-blue-100">
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-3">
+                <Calculator className="h-4 w-4" />
+                Calculator Available
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900">Calculate Your Requirements</h2>
+              <p className="text-slate-600 mt-1">
+                Enter dimensions to calculate quantity and compare prices
+              </p>
+            </div>
+
+            <div className="max-w-2xl mx-auto">
+              <DynamicCalculator
+                calculatorId={linkedCalculatorId}
+                showPriceField={true}
+                onCalculate={(result) => {
+                  setDynamicCalcResult(result);
+                  console.log('Dynamic calculation result:', result);
+                }}
+                className="shadow-lg"
+              />
+            </div>
+            
+            {/* Show calculation result summary */}
+            {dynamicCalcResult && dynamicCalcResult.total_value > 0 && (
+              <div className="mt-6 max-w-2xl mx-auto">
+                <div className="bg-white rounded-xl shadow-lg border border-green-200 p-6">
+                  <h3 className="font-semibold text-green-800 mb-4 text-lg flex items-center gap-2">
+                    <Scale className="h-5 w-5" />
+                    Calculation Summary
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="bg-green-50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-green-600 mb-1">Calculator</p>
+                      <p className="font-bold text-green-800">{dynamicCalcResult.calculator_name}</p>
+                    </div>
+                    {dynamicCalcResult.material_name && (
+                      <div className="bg-green-50 rounded-lg p-4 text-center">
+                        <p className="text-sm text-green-600 mb-1">Material</p>
+                        <p className="font-bold text-green-800">{dynamicCalcResult.material_name}</p>
+                      </div>
+                    )}
+                    <div className="bg-green-100 rounded-lg p-4 text-center border-2 border-green-300">
+                      <p className="text-sm text-green-600 mb-1">Total {dynamicCalcResult.output_label}</p>
+                      <p className="font-bold text-green-800 text-xl">
+                        {dynamicCalcResult.total_value.toFixed(2)} {dynamicCalcResult.output_unit}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ==================== RAW MATERIAL CALCULATOR SECTION ==================== */}
       {isRawMaterial && (
