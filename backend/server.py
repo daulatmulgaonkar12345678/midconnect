@@ -6816,6 +6816,8 @@ class InquiryCreate(BaseModel):
     buyerType: Literal["trader", "contractor", "oem", "manufacturer", "other"] = "other"
     locationCity: Optional[str] = Field(None, max_length=100)
     locationState: Optional[str] = Field(None, max_length=100)
+    # Raw material calculation data
+    calculationData: Optional[dict] = Field(None, description="Calculation data for raw material inquiries (material, shape, dimensions, weight, price)")
 
 # NEW: Standardized inquiry creation endpoint
 @api_router.post("/inquiries")
@@ -6917,7 +6919,9 @@ async def create_inquiry(
         "buyerInfo": buyer_info,
         "status": "pending",  # pending, accepted, rejected, reported
         "createdAt": now,
-        "updatedAt": now
+        "updatedAt": now,
+        # Raw material calculation data (if provided)
+        "calculationData": inquiry.calculationData
     }
     
     await db.inquiries.insert_one(inquiry_doc)

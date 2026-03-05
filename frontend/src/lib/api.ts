@@ -1620,6 +1620,16 @@ export const createInquiry = (
     quantity: number;
     message?: string;
     buyerType?: 'trader' | 'contractor' | 'oem' | 'manufacturer' | 'other';
+    calculationData?: {
+      material: string;
+      shape: string;
+      dimensions: Record<string, string>;
+      quantity: number;
+      weight_per_piece: number;
+      total_weight: number;
+      rate_per_kg: number;
+      calculated_price: number;
+    };
   }
 ): Promise<{
   success: boolean;
@@ -1635,6 +1645,7 @@ export const createInquiry = (
     quantity: data.quantity,
     message: data.message,
     buyerType: data.buyerType,
+    calculationData: data.calculationData,
   }
 });
 

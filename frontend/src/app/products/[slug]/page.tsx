@@ -15,6 +15,8 @@ import {
   FilterRequest
 } from '@/lib/api';
 import { ProductJsonLd, CitySellerGroup, SEOContentSection, InternalLinksSection } from '@/components/ProductSEO';
+import MaterialCalculatorCard, { CalculationResult } from '@/components/calculator/MaterialCalculatorCard';
+import SellerPriceComparison, { RawMaterialSeller } from '@/components/calculator/SellerPriceComparison';
 import {
   Package,
   MapPin,
@@ -41,7 +43,8 @@ import {
   Shield,
   Play,
   Video,
-  Eye
+  Eye,
+  Calculator
 } from 'lucide-react';
 
 // ==================== TYPES ====================
@@ -624,6 +627,15 @@ export default function EnterpriseProductPage() {
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
   const [inquirySuccess, setInquirySuccess] = useState<string | null>(null);
 
+  // Raw material calculator state
+  const [isRawMaterial, setIsRawMaterial] = useState(false);
+  const [calculationResult, setCalculationResult] = useState<CalculationResult | null>(null);
+  const [rawMaterialInquiry, setRawMaterialInquiry] = useState<{
+    open: boolean;
+    seller: RawMaterialSeller | null;
+    calculatedPrice: number;
+  }>({ open: false, seller: null, calculatedPrice: 0 });
+
   // Check for 301 redirect (old ObjectId or legacy slug URLs)
   useEffect(() => {
     if (!productId || redirectChecked) return;
@@ -677,6 +689,19 @@ export default function EnterpriseProductPage() {
         setProduct(productData);
         setFacets(facetsData);
         setSellers(productData.sellers);
+        
+        // Check if category is raw_material type (load spec templates)
+        if (productData.product.categoryId) {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+          fetch(`${API_URL}/api/spec-templates/by-category/${productData.product.categoryId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.isRawMaterial) {
+                setIsRawMaterial(true);
+              }
+            })
+            .catch(err => console.log('Category check failed:', err));
+        }
         
         // Load SEO data in background (non-blocking) - Enhanced for Marketplace v2.0
         const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
@@ -807,6 +832,74 @@ export default function EnterpriseProductPage() {
     }
   };
 
+  // Raw material inquiry handler with calculation data
+  const handleRawMaterialInquiry = async () => {
+    if (!rawMaterialInquiry.seller || !calculationResult) return;
+
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
+    setSubmittingInquiry(true);
+
+    try {
+      const token = await getIdToken();
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      // Create inquiry with calculation data embedded in message
+      const calculationDetails = `
+Material: ${calculationResult.material}
+Shape: ${calculationResult.shape.replace('_', ' ')}
+Dimensions: ${Object.entries(calculationResult.dimensions).map(([k, v]) => `${k}: ${v}`).join(', ')}
+Quantity: ${calculationResult.quantity} pieces
+Calculated Weight: ${calculationResult.total_weight_display}
+Rate/kg: ₹${rawMaterialInquiry.seller.rate_per_kg}
+Estimated Total: ₹${rawMaterialInquiry.calculatedPrice.toLocaleString('en-IN')}
+${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
+
+      await createInquiry(token, {
+        sellerId: rawMaterialInquiry.seller.sellerId,
+        listingId: rawMaterialInquiry.seller.listingId,
+        quantity: calculationResult.quantity,
+        message: calculationDetails.trim(),
+        buyerType,
+        // Include structured calculation data
+        calculationData: {
+          material: calculationResult.material,
+          shape: calculationResult.shape,
+          dimensions: calculationResult.dimensions,
+          quantity: calculationResult.quantity,
+          weight_per_piece: calculationResult.weight_per_piece,
+          total_weight: calculationResult.total_weight,
+          rate_per_kg: rawMaterialInquiry.seller.rate_per_kg,
+          calculated_price: rawMaterialInquiry.calculatedPrice
+        }
+      });
+
+      setInquirySuccess('Inquiry sent successfully! The seller will contact you soon.');
+      setRawMaterialInquiry({ open: false, seller: null, calculatedPrice: 0 });
+      setInquiryNote('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send inquiry');
+    } finally {
+      setSubmittingInquiry(false);
+    }
+  };
+
+  // Handle calculation result from calculator
+  const handleCalculationResult = (result: CalculationResult) => {
+    setCalculationResult(result);
+  };
+
+  // Handle raw material seller inquiry callback
+  const handleRawMaterialSellerInquiry = (seller: RawMaterialSeller, calculatedPrice: number) => {
+    setRawMaterialInquiry({ open: true, seller, calculatedPrice });
+  };
+
   const compareSellers = useMemo(() => {
     return sellers.filter(s => compareItems.includes(s.listingId));
   }, [sellers, compareItems]);
@@ -920,6 +1013,83 @@ export default function EnterpriseProductPage() {
           </div>
         </div>
       </div>
+
+      {/* ==================== RAW MATERIAL CALCULATOR SECTION ==================== */}
+      {isRawMaterial && (
+        <div className="bg-gradient-to-b from-orange-50 to-white border-b border-orange-100">
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-medium mb-3">
+                <Calculator className="h-4 w-4" />
+                Weight Calculator Available
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900">Calculate Your Requirements</h2>
+              <p className="text-slate-600 mt-1">
+                Enter dimensions to calculate weight and compare prices from sellers
+              </p>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Calculator Card */}
+              <div>
+                <MaterialCalculatorCard
+                  onCalculate={handleCalculationResult}
+                  defaultMaterial="MS Steel"
+                  defaultShape="round_bar"
+                  showPriceField={false}
+                  className="shadow-lg"
+                />
+              </div>
+
+              {/* Price Comparison */}
+              <div>
+                {calculationResult && calculationResult.total_weight > 0 ? (
+                  <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+                    {/* Calculation Summary */}
+                    <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                      <h3 className="font-semibold text-green-800 mb-2">Your Calculation</h3>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-green-600">Material:</span>
+                          <span className="font-medium text-green-800 ml-1">{calculationResult.material}</span>
+                        </div>
+                        <div>
+                          <span className="text-green-600">Shape:</span>
+                          <span className="font-medium text-green-800 ml-1 capitalize">{calculationResult.shape.replace('_', ' ')}</span>
+                        </div>
+                        <div>
+                          <span className="text-green-600">Quantity:</span>
+                          <span className="font-medium text-green-800 ml-1">{calculationResult.quantity} pcs</span>
+                        </div>
+                        <div>
+                          <span className="text-green-600">Total Weight:</span>
+                          <span className="font-bold text-green-800 ml-1">{calculationResult.total_weight_display}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Seller Price Comparison */}
+                    <SellerPriceComparison
+                      productId={product.product._id}
+                      material={calculationResult.material}
+                      totalWeight={calculationResult.total_weight}
+                      onInquiry={handleRawMaterialSellerInquiry}
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 flex flex-col items-center justify-center h-full text-center">
+                    <Calculator className="h-16 w-16 text-gray-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">Enter Dimensions</h3>
+                    <p className="text-gray-500 max-w-sm">
+                      Use the calculator to enter your dimensions. Seller prices will appear here based on your calculated weight.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ==================== MAIN CONTENT ==================== */}
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -1138,6 +1308,124 @@ export default function EnterpriseProductPage() {
           sellers={compareSellers}
           onClose={() => setShowCompareModal(false)}
         />
+      )}
+
+      {/* ==================== RAW MATERIAL INQUIRY MODAL ==================== */}
+      {rawMaterialInquiry.open && rawMaterialInquiry.seller && calculationResult && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" data-testid="raw-material-inquiry-modal">
+            <div className="p-4 border-b border-slate-200 sticky top-0 bg-white">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900">Request Quote</h2>
+                <button 
+                  onClick={() => setRawMaterialInquiry({ open: false, seller: null, calculatedPrice: 0 })}
+                  className="p-2 hover:bg-slate-100 rounded-lg"
+                >
+                  <X className="h-5 w-5 text-slate-500" />
+                </button>
+              </div>
+              <p className="text-sm text-slate-500 mt-1">
+                {rawMaterialInquiry.seller.sellerName}
+                {rawMaterialInquiry.seller.location && ` • ${rawMaterialInquiry.seller.location}`}
+              </p>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Calculation Summary */}
+              <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                <h3 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
+                  <Calculator className="h-4 w-4" />
+                  Your Calculation
+                </h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-orange-600">Material:</span>
+                    <p className="font-medium text-orange-800">{calculationResult.material}</p>
+                  </div>
+                  <div>
+                    <span className="text-orange-600">Shape:</span>
+                    <p className="font-medium text-orange-800 capitalize">{calculationResult.shape.replace('_', ' ')}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-orange-600">Dimensions:</span>
+                    <p className="font-medium text-orange-800">
+                      {Object.entries(calculationResult.dimensions).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-orange-600">Quantity:</span>
+                    <p className="font-medium text-orange-800">{calculationResult.quantity} pieces</p>
+                  </div>
+                  <div>
+                    <span className="text-orange-600">Total Weight:</span>
+                    <p className="font-bold text-orange-800">{calculationResult.total_weight_display}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price Summary */}
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-green-600">Rate/kg</p>
+                    <p className="font-semibold text-green-800">₹{rawMaterialInquiry.seller.rate_per_kg.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-green-600">Estimated Total</p>
+                    <p className="text-2xl font-bold text-green-800">₹{rawMaterialInquiry.calculatedPrice.toLocaleString('en-IN')}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Business Type</label>
+                <select
+                  value={buyerType}
+                  onChange={(e) => setBuyerType(e.target.value as typeof buyerType)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="manufacturer">Manufacturer</option>
+                  <option value="contractor">Contractor</option>
+                  <option value="oem">OEM</option>
+                  <option value="trader">Trader</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Additional Notes (Optional)</label>
+                <textarea
+                  value={inquiryNote}
+                  onChange={(e) => setInquiryNote(e.target.value)}
+                  placeholder="Any specific requirements, delivery details, or questions..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 sticky bottom-0 bg-white">
+              <button
+                onClick={handleRawMaterialInquiry}
+                disabled={submittingInquiry}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                data-testid="submit-raw-material-inquiry-btn"
+              >
+                {submittingInquiry ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending Inquiry...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Send Inquiry with Calculation
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       
       {/* ==================== SECTION 5: SEO CONTENT (MARKETPLACE v2.0) ==================== */}
