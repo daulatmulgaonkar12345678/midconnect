@@ -1196,3 +1196,230 @@ async def _send_contact_confirmation(name: str, email: str, subject: str) -> Non
         )
     except Exception as e:
         logger.warning(f"Failed to send contact confirmation to {email}: {e}")
+
+
+
+# ============================================================================
+# 7. PASSWORD RESET OTP SERVICE
+# ============================================================================
+
+class PasswordResetOTPService:
+    """
+    OTP-based password reset service.
+    
+    Flow:
+    1. User requests OTP via email
+    2. 6-digit OTP sent to email (valid for 10 minutes)
+    3. User enters OTP + new password
+    4. Password changed in Firebase
+    
+    Security:
+    - OTPs expire in 10 minutes
+    - Max 5 attempts per OTP
+    - Rate limiting: 3 OTPs per email per hour
+    """
+    
+    OTP_EXPIRY_MINUTES = 10
+    MAX_ATTEMPTS = 5
+    RATE_LIMIT_PER_HOUR = 3
+    
+    def __init__(self, db):
+        self.db = db
+        self.collection = db.password_reset_otps
+    
+    async def generate_otp(self, email: str) -> Dict[str, Any]:
+        """
+        Generate and send 6-digit OTP for password reset.
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            {success: bool, message: str, expires_at: datetime}
+        """
+        email = email.lower().strip()
+        
+        # Check rate limiting
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+        recent_otps = await self.collection.count_documents({
+            "email": email,
+            "createdAt": {"$gte": one_hour_ago}
+        })
+        
+        if recent_otps >= self.RATE_LIMIT_PER_HOUR:
+            return {
+                "success": False,
+                "message": "Too many OTP requests. Please try again after an hour."
+            }
+        
+        # Check if user exists
+        user = await self.db.users.find_one({"email": email})
+        if not user:
+            # Don't reveal if email exists or not (security)
+            return {
+                "success": True,
+                "message": "If this email is registered, you will receive an OTP shortly."
+            }
+        
+        # Generate 6-digit OTP
+        otp = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+        otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+        
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=self.OTP_EXPIRY_MINUTES)
+        
+        # Invalidate any existing OTPs for this email
+        await self.collection.update_many(
+            {"email": email, "isUsed": False},
+            {"$set": {"isUsed": True}}
+        )
+        
+        # Store OTP
+        await self.collection.insert_one({
+            "email": email,
+            "userId": str(user["_id"]),
+            "otpHash": otp_hash,
+            "attempts": 0,
+            "isUsed": False,
+            "expiresAt": expires_at,
+            "createdAt": datetime.now(timezone.utc)
+        })
+        
+        # Send OTP email
+        email_result = await self._send_otp_email(email, otp, user.get("profile", {}).get("name", "User"))
+        
+        if email_result.get("success"):
+            return {
+                "success": True,
+                "message": "OTP sent to your email. Valid for 10 minutes.",
+                "expires_at": expires_at.isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to send OTP. Please try again."
+            }
+    
+    async def verify_otp(self, email: str, otp: str) -> Dict[str, Any]:
+        """
+        Verify OTP for password reset.
+        
+        Args:
+            email: User's email address
+            otp: 6-digit OTP entered by user
+            
+        Returns:
+            {success: bool, message: str, reset_token: str (if success)}
+        """
+        email = email.lower().strip()
+        otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+        
+        # Find valid OTP
+        otp_record = await self.collection.find_one({
+            "email": email,
+            "isUsed": False,
+            "expiresAt": {"$gt": datetime.now(timezone.utc)}
+        })
+        
+        if not otp_record:
+            return {
+                "success": False,
+                "message": "Invalid or expired OTP. Please request a new one."
+            }
+        
+        # Check attempts
+        if otp_record["attempts"] >= self.MAX_ATTEMPTS:
+            await self.collection.update_one(
+                {"_id": otp_record["_id"]},
+                {"$set": {"isUsed": True}}
+            )
+            return {
+                "success": False,
+                "message": "Too many failed attempts. Please request a new OTP."
+            }
+        
+        # Verify OTP hash
+        if otp_record["otpHash"] != otp_hash:
+            await self.collection.update_one(
+                {"_id": otp_record["_id"]},
+                {"$inc": {"attempts": 1}}
+            )
+            remaining = self.MAX_ATTEMPTS - otp_record["attempts"] - 1
+            return {
+                "success": False,
+                "message": f"Invalid OTP. {remaining} attempts remaining."
+            }
+        
+        # OTP is valid - generate reset token
+        reset_token = secrets.token_urlsafe(32)
+        reset_token_hash = hashlib.sha256(reset_token.encode()).hexdigest()
+        
+        # Mark OTP as used and store reset token
+        await self.collection.update_one(
+            {"_id": otp_record["_id"]},
+            {"$set": {
+                "isUsed": True,
+                "verifiedAt": datetime.now(timezone.utc),
+                "resetTokenHash": reset_token_hash,
+                "resetTokenExpiresAt": datetime.now(timezone.utc) + timedelta(minutes=15)
+            }}
+        )
+        
+        return {
+            "success": True,
+            "message": "OTP verified successfully.",
+            "reset_token": reset_token
+        }
+    
+    async def _send_otp_email(self, email: str, otp: str, name: str) -> Dict[str, Any]:
+        """Send OTP email with branded template."""
+        content = f"""
+        <h2 style="color: #0B3C5D; margin-top: 0;">Password Reset Request</h2>
+        
+        <p>Dear {name},</p>
+        
+        <p>We received a request to reset your password for your UdyogConnect account.</p>
+        
+        <p>Your One-Time Password (OTP) is:</p>
+        
+        <div style="background: linear-gradient(135deg, #0B3C5D 0%, #1a5f8a 100%); padding: 25px; border-radius: 10px; margin: 25px 0; text-align: center;">
+            <span style="font-size: 36px; font-weight: bold; color: #ffffff; letter-spacing: 8px; font-family: 'Courier New', monospace;">{otp}</span>
+        </div>
+        
+        <div style="background: #fff8e1; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <p style="margin: 0; color: #856404;">
+                <strong>⏱️ This OTP is valid for 10 minutes.</strong><br>
+                Do not share this code with anyone.
+            </p>
+        </div>
+        
+        <p style="color: #666;">If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
+        
+        <p>Best Regards,<br>UdyogConnect Security Team</p>
+        """
+        
+        html = _get_email_wrapper(content, "Password Reset OTP - UdyogConnect")
+        
+        return await send_email(
+            to_email=email,
+            subject="Your Password Reset OTP - UdyogConnect",
+            html_content=html
+        )
+
+
+# ============================================================================
+# CLEANUP FUNCTION FOR EXPIRED OTPS
+# ============================================================================
+
+async def cleanup_expired_otps(db) -> int:
+    """
+    Delete expired OTPs from database.
+    Should be run periodically (e.g., daily via cron).
+    
+    Returns:
+        Number of deleted records
+    """
+    result = await db.password_reset_otps.delete_many({
+        "expiresAt": {"$lt": datetime.now(timezone.utc) - timedelta(days=1)}
+    })
+    logger.info(f"Cleaned up {result.deleted_count} expired OTPs")
+    return result.deleted_count

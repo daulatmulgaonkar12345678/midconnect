@@ -192,16 +192,17 @@ export default function SellerProfilePage() {
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Account</h3>
           <div className="space-y-3">
-            <button
+            <Link
+              href="/forgot-password"
               className="flex items-center gap-3 p-4 w-full border rounded-lg hover:bg-gray-50 transition text-left"
-              onClick={() => {/* TODO: Implement change password */}}
+              data-testid="change-password-btn"
             >
               <Key className="h-5 w-5 text-gray-600" />
               <div>
                 <p className="font-medium text-gray-900">Change Password</p>
-                <p className="text-sm text-gray-500">Update your security credentials</p>
+                <p className="text-sm text-gray-500">Update your security credentials via OTP</p>
               </div>
-            </button>
+            </Link>
 
             <button
               onClick={handleSignOut}

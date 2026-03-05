@@ -35,9 +35,6 @@ from starlette.requests import Request as StarletteRequest
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from PIL import Image
-from bson import ObjectId
-from fastapi import HTTPException, Query, Depends
-from datetime import datetime, timezone
 import io
 
 # Load environment variables from .env file
@@ -2574,6 +2571,155 @@ async def cleanup_for_reregister(request: Request, email: str = Body(..., embed=
         raise HTTPException(status_code=500, detail="Failed to cleanup for re-registration")
 
 
+# ============================================================================
+# OTP-BASED PASSWORD RESET ENDPOINTS
+# ============================================================================
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., description="User's registered email")
+
+class PasswordResetVerifyOTP(BaseModel):
+    email: str = Field(..., description="User's registered email")
+    otp: str = Field(..., min_length=6, max_length=6, description="6-digit OTP")
+
+class PasswordResetComplete(BaseModel):
+    email: str = Field(..., description="User's registered email")
+    reset_token: str = Field(..., description="Reset token from OTP verification")
+    new_password: str = Field(..., min_length=6, description="New password")
+
+
+@api_router.post("/auth/password-reset/request-otp")
+@limiter.limit("5/minute")
+async def request_password_reset_otp(request: Request, data: PasswordResetRequest):
+    """
+    Step 1: Request OTP for password reset.
+    
+    Sends a 6-digit OTP to the user's email if registered.
+    OTP is valid for 10 minutes.
+    
+    Rate limit: 3 OTPs per email per hour.
+    """
+    from services.email_service import PasswordResetOTPService
+    
+    otp_service = PasswordResetOTPService(db)
+    result = await otp_service.generate_otp(data.email)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=429, detail=result.get("message"))
+    
+    return result
+
+
+@api_router.post("/auth/password-reset/verify-otp")
+@limiter.limit("10/minute")
+async def verify_password_reset_otp(request: Request, data: PasswordResetVerifyOTP):
+    """
+    Step 2: Verify OTP and get reset token.
+    
+    Returns a reset_token if OTP is valid.
+    Reset token is valid for 15 minutes.
+    
+    Max 5 attempts per OTP.
+    """
+    from services.email_service import PasswordResetOTPService
+    
+    otp_service = PasswordResetOTPService(db)
+    result = await otp_service.verify_otp(data.email, data.otp)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message"))
+    
+    return result
+
+
+@api_router.post("/auth/password-reset/complete")
+@limiter.limit("5/minute")
+async def complete_password_reset(request: Request, data: PasswordResetComplete):
+    """
+    Step 3: Complete password reset with new password.
+    
+    Requires valid reset_token from OTP verification.
+    Updates password in Firebase.
+    """
+    import hashlib
+    
+    email = data.email.lower().strip()
+    reset_token_hash = hashlib.sha256(data.reset_token.encode()).hexdigest()
+    
+    # Find OTP record with valid reset token
+    otp_record = await db.password_reset_otps.find_one({
+        "email": email,
+        "resetTokenHash": reset_token_hash,
+        "isUsed": True,
+        "resetTokenExpiresAt": {"$gt": datetime.now(timezone.utc)}
+    })
+    
+    if not otp_record:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired reset token. Please request a new OTP."
+        )
+    
+    # Get user from database
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    firebase_uid = user.get("firebaseUid")
+    if not firebase_uid:
+        raise HTTPException(status_code=400, detail="User account not properly configured")
+    
+    # Update password in Firebase
+    if not firebase_initialized:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+    
+    try:
+        firebase_auth.update_user(firebase_uid, password=data.new_password)
+        logger.info(f"Password reset successful for {email}")
+        
+        # Invalidate the reset token
+        await db.password_reset_otps.update_one(
+            {"_id": otp_record["_id"]},
+            {"$set": {"resetTokenHash": None, "passwordChangedAt": datetime.now(timezone.utc)}}
+        )
+        
+        # Send confirmation email
+        from services.email_service import send_email, _get_email_wrapper
+        
+        content = """
+        <h2 style="color: #0B3C5D; margin-top: 0;">Password Changed Successfully</h2>
+        
+        <p>Your password has been successfully changed.</p>
+        
+        <div style="background: #d4edda; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+            <p style="margin: 0; color: #155724;">
+                <strong>✓ Your password has been updated.</strong><br>
+                You can now login with your new password.
+            </p>
+        </div>
+        
+        <p style="color: #666;">If you didn't make this change, please contact our support team immediately.</p>
+        
+        <p>Best Regards,<br>UdyogConnect Security Team</p>
+        """
+        
+        html = _get_email_wrapper(content, "Password Changed - UdyogConnect")
+        await send_email(
+            to_email=email,
+            subject="Your Password Has Been Changed - UdyogConnect",
+            html_content=html
+        )
+        
+        return {
+            "success": True,
+            "message": "Password changed successfully. You can now login with your new password."
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to reset password for {email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset password. Please try again.")
+
+
 @api_router.get("/users/me")
 async def get_current_user_profile(user: dict = Depends(require_auth)):
     """Get current user profile"""
@@ -3183,7 +3329,7 @@ async def send_email_otp(to_email: str, otp: str, purpose: str) -> bool:
         """
     }
     
-    subject = subject_map.get(purpose, f"Your OTP - Udyog Connect")
+    subject = subject_map.get(purpose, "Your OTP - Udyog Connect")
     body_html = body_html_map.get(purpose, f"""
         <h2 style="color: #0B3C5D; margin-top: 0;">Your OTP Code</h2>
         <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
@@ -9784,7 +9930,7 @@ async def admin_run_expiry_check(admin: dict = Depends(require_admin)):
     logger.info(f"[SUBSCRIPTION CRON] Expired {result.modified_count} subscriptions")
     
     return {
-        "message": f"Expiry check complete",
+        "message": "Expiry check complete",
         "expiredCount": result.modified_count,
         "checkedAt": now.isoformat()
     }
@@ -11675,7 +11821,7 @@ async def admin_migrate_generate_seo_slugs(admin: dict = Depends(require_admin))
     
     return {
         "success": True,
-        "message": f"Slug migration complete",
+        "message": "Slug migration complete",
         "updated": updated_count,
         "total": len(products),
         "errors": errors[:10] if errors else []
@@ -12417,7 +12563,6 @@ async def startup_db_client():
     # IMPORTANT: Don't block startup waiting for MongoDB operations
     # These can run in the background after the server is accepting connections
     # This allows Render to detect the HTTP port quickly
-    import asyncio
     
     async def run_enterprise_integrity_check():
         """Run enterprise data integrity check in background"""
@@ -12467,7 +12612,7 @@ async def startup_db_client():
                 await collection.drop_index(index_name)
                 logger.info(f"Dropped old index: {index_name}")
                 return True
-            except Exception as e:
+            except Exception:
                 # Index doesn't exist or other error - that's fine
                 return False
         
