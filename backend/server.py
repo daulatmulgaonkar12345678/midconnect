@@ -12534,6 +12534,11 @@ from routers.reviews import create_reviews_router
 reviews_router = create_reviews_router(db, get_current_user)
 app.include_router(reviews_router, prefix="/api")
 
+# ================== RAW MATERIAL CALCULATOR ROUTER ==================
+from routers.raw_material_router import create_raw_material_router
+raw_material_router = create_raw_material_router(db, require_admin)
+app.include_router(raw_material_router, prefix="/api/raw-materials")
+
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health
