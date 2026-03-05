@@ -52,6 +52,37 @@ class ProductTypeUpdate(BaseModel):
     product_type: str = Field(..., pattern="^(standard_product|raw_material|machine|service)$")
 
 
+class ShapeFieldConfig(BaseModel):
+    """Configuration for a dimension field in a shape"""
+    key: str = Field(..., min_length=1, max_length=50, description="Field key e.g., 'diameter'")
+    label: str = Field(..., min_length=1, max_length=100, description="Display label e.g., 'Diameter'")
+    unit_options: List[str] = Field(..., min_length=1, description="Available units e.g., ['mm', 'cm', 'inch']")
+    default_unit: str = Field(..., description="Default unit")
+    required: bool = Field(default=True)
+
+
+class ShapeCreate(BaseModel):
+    """Create a new shape configuration"""
+    key: str = Field(..., min_length=1, max_length=50, pattern="^[a-z_]+$", description="Unique key e.g., 'round_bar'")
+    name: str = Field(..., min_length=1, max_length=100, description="Display name e.g., 'Round Bar'")
+    description: Optional[str] = Field(default=None, max_length=500)
+    icon: Optional[str] = Field(default=None, max_length=50, description="Icon name e.g., 'circle'")
+    fields: List[ShapeFieldConfig] = Field(..., min_length=1, description="Dimension fields for this shape")
+    formula: str = Field(..., min_length=1, max_length=500, description="Formula e.g., 'V = π × (d/2)² × L'")
+    formula_type: str = Field(..., description="Calculation type: volume_cylinder, volume_hollow_cylinder, volume_box, etc.")
+
+
+class ShapeUpdate(BaseModel):
+    """Update an existing shape"""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
+    icon: Optional[str] = Field(default=None, max_length=50)
+    fields: Optional[List[ShapeFieldConfig]] = None
+    formula: Optional[str] = Field(default=None, max_length=500)
+    formula_type: Optional[str] = None
+    isActive: Optional[bool] = None
+
+
 # ============================================================================
 # ROUTER FACTORY
 # ============================================================================
@@ -117,7 +148,28 @@ def create_raw_material_router(db, require_admin, require_verified_seller=None):
     
     @router.get("/shapes")
     async def get_shapes():
-        """Get all supported shapes with their field configurations"""
+        """Get all supported shapes with their field configurations.
+        Loads from database if available, falls back to hardcoded defaults."""
+        
+        # Try to load from database first
+        db_shapes = await db.shapes.find({"isActive": {"$ne": False}}).to_list(100)
+        
+        if db_shapes and len(db_shapes) > 0:
+            return [
+                {
+                    "_id": str(s["_id"]),
+                    "key": s["key"],
+                    "name": s["name"],
+                    "description": s.get("description"),
+                    "icon": s.get("icon"),
+                    "fields": s.get("fields", []),
+                    "formula": s.get("formula"),
+                    "formula_type": s.get("formula_type")
+                }
+                for s in db_shapes
+            ]
+        
+        # Fallback to hardcoded shapes
         return get_all_shapes()
     
     @router.get("/shapes/{shape}")
@@ -426,5 +478,131 @@ def create_raw_material_router(db, require_admin, require_verified_seller=None):
             }
             for m in materials
         ]
+    
+    # ========================================================================
+    # SHAPES ADMIN CRUD
+    # ========================================================================
+    
+    @router.get("/admin/shapes", dependencies=[Depends(require_admin)])
+    async def admin_get_all_shapes():
+        """Get all shapes including inactive (admin only)"""
+        shapes = await db.shapes.find({}).to_list(100)
+        
+        # If no shapes in DB, seed with defaults
+        if not shapes:
+            default_shapes = get_all_shapes()
+            for shape in default_shapes:
+                shape_doc = {
+                    "_id": ObjectId(),
+                    "key": shape["key"],
+                    "name": shape["name"],
+                    "description": shape.get("description"),
+                    "icon": shape.get("icon"),
+                    "fields": shape.get("fields", []),
+                    "formula": shape.get("formula"),
+                    "formula_type": shape["key"],  # Use key as formula type
+                    "isActive": True,
+                    "createdAt": datetime.now(timezone.utc),
+                    "updatedAt": datetime.now(timezone.utc)
+                }
+                await db.shapes.insert_one(shape_doc)
+            shapes = await db.shapes.find({}).to_list(100)
+        
+        return [
+            {
+                "_id": str(s["_id"]),
+                "key": s["key"],
+                "name": s["name"],
+                "description": s.get("description"),
+                "icon": s.get("icon"),
+                "fields": s.get("fields", []),
+                "formula": s.get("formula"),
+                "formula_type": s.get("formula_type"),
+                "isActive": s.get("isActive", True),
+                "createdAt": s.get("createdAt"),
+                "updatedAt": s.get("updatedAt")
+            }
+            for s in shapes
+        ]
+    
+    @router.post("/admin/shapes", dependencies=[Depends(require_admin)])
+    async def create_shape(data: ShapeCreate):
+        """Create a new shape configuration (admin only)"""
+        # Check for duplicate key
+        existing = await db.shapes.find_one({"key": data.key})
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Shape with key '{data.key}' already exists")
+        
+        now = datetime.now(timezone.utc)
+        shape_doc = {
+            "_id": ObjectId(),
+            "key": data.key,
+            "name": data.name,
+            "description": data.description,
+            "icon": data.icon,
+            "fields": [f.model_dump() for f in data.fields],
+            "formula": data.formula,
+            "formula_type": data.formula_type,
+            "isActive": True,
+            "createdAt": now,
+            "updatedAt": now
+        }
+        
+        await db.shapes.insert_one(shape_doc)
+        logger.info(f"Shape created: {data.key} - {data.name}")
+        
+        return {"message": "Shape created successfully", "_id": str(shape_doc["_id"]), "key": data.key}
+    
+    @router.put("/admin/shapes/{shape_id}", dependencies=[Depends(require_admin)])
+    async def update_shape(shape_id: str, data: ShapeUpdate):
+        """Update an existing shape (admin only)"""
+        try:
+            shape_oid = ObjectId(shape_id)
+        except:
+            raise HTTPException(status_code=400, detail="Invalid shape ID")
+        
+        existing = await db.shapes.find_one({"_id": shape_oid})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Shape not found")
+        
+        update_data = {"updatedAt": datetime.now(timezone.utc)}
+        if data.name is not None:
+            update_data["name"] = data.name
+        if data.description is not None:
+            update_data["description"] = data.description
+        if data.icon is not None:
+            update_data["icon"] = data.icon
+        if data.fields is not None:
+            update_data["fields"] = [f.model_dump() for f in data.fields]
+        if data.formula is not None:
+            update_data["formula"] = data.formula
+        if data.formula_type is not None:
+            update_data["formula_type"] = data.formula_type
+        if data.isActive is not None:
+            update_data["isActive"] = data.isActive
+        
+        await db.shapes.update_one({"_id": shape_oid}, {"$set": update_data})
+        logger.info(f"Shape updated: {shape_id}")
+        
+        return {"message": "Shape updated successfully", "_id": shape_id}
+    
+    @router.delete("/admin/shapes/{shape_id}", dependencies=[Depends(require_admin)])
+    async def delete_shape(shape_id: str):
+        """Soft delete a shape (admin only)"""
+        try:
+            shape_oid = ObjectId(shape_id)
+        except:
+            raise HTTPException(status_code=400, detail="Invalid shape ID")
+        
+        result = await db.shapes.update_one(
+            {"_id": shape_oid},
+            {"$set": {"isActive": False, "updatedAt": datetime.now(timezone.utc)}}
+        )
+        
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Shape not found")
+        
+        logger.info(f"Shape deleted: {shape_id}")
+        return {"message": "Shape deleted successfully"}
     
     return router
