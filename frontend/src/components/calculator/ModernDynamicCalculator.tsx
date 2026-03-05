@@ -344,7 +344,7 @@ export default function ModernDynamicCalculator({
                   {field.label}
                   {field.required && <span className="text-red-500">*</span>}
                 </label>
-                <div className="flex gap-2">
+                <div className="flex">
                   <input
                     type="number"
                     step="any"
@@ -354,7 +354,7 @@ export default function ModernDynamicCalculator({
                       ...fieldValues,
                       [field.key]: parseFloat(e.target.value) || 0
                     })}
-                    className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                    className="flex-1 min-w-0 px-4 py-3 bg-gray-50 border border-gray-300 rounded-l-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 transition-all"
                     placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
                     data-testid={`field-${field.key}`}
                   />
@@ -364,7 +364,7 @@ export default function ModernDynamicCalculator({
                       ...fieldUnits,
                       [field.key]: e.target.value
                     })}
-                    className="w-20 px-2 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                    className="w-20 px-2 py-3 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-700 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all cursor-pointer"
                     data-testid={`unit-${field.key}`}
                   >
                     {units.map(u => (
@@ -384,16 +384,16 @@ export default function ModernDynamicCalculator({
             <label className="block text-sm font-semibold text-gray-700">
               Quantity
             </label>
-            <div className="flex gap-2">
+            <div className="flex">
               <input
                 type="number"
                 min="1"
                 value={quantity}
                 onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                className="flex-1 min-w-0 px-4 py-3 bg-gray-50 border border-gray-300 rounded-l-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 transition-all"
                 data-testid="quantity-field"
               />
-              <span className="flex items-center px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 text-sm font-medium">
+              <span className="flex items-center justify-center w-20 px-4 py-3 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm font-medium">
                 pcs
               </span>
             </div>
@@ -405,8 +405,8 @@ export default function ModernDynamicCalculator({
               <label className="block text-sm font-semibold text-gray-700">
                 Rate per {calculator.output_unit}
               </label>
-              <div className="flex gap-2">
-                <span className="flex items-center px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 font-medium">
+              <div className="flex">
+                <span className="flex items-center justify-center w-12 px-3 py-3 bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg text-gray-600 font-medium">
                   ₹
                 </span>
                 <input
@@ -415,8 +415,8 @@ export default function ModernDynamicCalculator({
                   min="0"
                   value={priceRate || ''}
                   onChange={(e) => setPriceRate(parseFloat(e.target.value) || undefined)}
-                  className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                  placeholder="Rate"
+                  className="flex-1 min-w-0 px-4 py-3 bg-gray-50 border border-gray-300 rounded-r-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 transition-all"
+                  placeholder="Enter rate"
                   data-testid="price-rate-field"
                 />
               </div>
