@@ -246,10 +246,12 @@ export default function ModernDynamicCalculator({
   // Render loading state
   if (loading) {
     return (
-      <div className={`rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-8 ${className}`}>
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
-          <span className="ml-3 text-slate-300">Loading calculator...</span>
+      <div className={`w-full rounded-xl border border-gray-200 shadow-lg overflow-hidden ${className}`}>
+        <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-white" />
+            <span className="text-white font-medium">Loading calculator...</span>
+          </div>
         </div>
       </div>
     );
@@ -258,10 +260,16 @@ export default function ModernDynamicCalculator({
   // Render error state
   if (error || !calculator) {
     return (
-      <div className={`rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-8 ${className}`}>
-        <div className="text-center py-8 text-slate-400">
-          <Calculator className="h-12 w-12 mx-auto mb-3 text-slate-600" />
-          <p>{error || 'No calculator available'}</p>
+      <div className={`w-full rounded-xl border border-gray-200 shadow-lg overflow-hidden ${className}`}>
+        <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <Calculator className="h-5 w-5 text-white" />
+            <span className="text-white font-medium">Calculator</span>
+          </div>
+        </div>
+        <div className="bg-white p-8 text-center">
+          <Calculator className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+          <p className="text-gray-500">{error || 'No calculator available'}</p>
         </div>
       </div>
     );
@@ -271,8 +279,8 @@ export default function ModernDynamicCalculator({
   const sortedFields = [...calculator.fields].sort((a, b) => a.order - b.order);
 
   return (
-    <div className={`rounded-2xl overflow-hidden shadow-2xl ${className}`}>
-      {/* Gradient Header */}
+    <div className={`w-full rounded-xl border border-gray-200 shadow-lg overflow-hidden ${className}`} data-testid="modern-dynamic-calculator">
+      {/* Gradient Header - Keep same colors */}
       <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 px-6 py-5 relative overflow-hidden">
         {/* Background decoration */}
         <div className="absolute inset-0 opacity-20">
@@ -293,19 +301,20 @@ export default function ModernDynamicCalculator({
         </div>
       </div>
 
-      {/* Calculator Body */}
-      <div className="bg-gradient-to-b from-slate-900 to-slate-950 p-6">
+      {/* Calculator Body - White background with dark text */}
+      <div className="bg-white p-6 lg:p-8">
         {/* Material Selector */}
         {calculator.use_material_density && materials.length > 0 && (
           <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-400 mb-2">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
               Select Material
             </label>
             <div className="relative">
               <select
                 value={selectedMaterial}
                 onChange={(e) => setSelectedMaterial(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-white appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                data-testid="material-selector"
               >
                 {materials.map(mat => (
                   <option key={mat._id} value={mat._id}>
@@ -313,27 +322,27 @@ export default function ModernDynamicCalculator({
                   </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
             </div>
             {selectedMaterialData?.material_family && (
-              <p className="text-xs text-slate-500 mt-1">
-                Family: {selectedMaterialData.material_family}
+              <p className="text-xs text-gray-500 mt-1.5">
+                Material Family: <span className="font-medium text-gray-700">{selectedMaterialData.material_family}</span>
               </p>
             )}
           </div>
         )}
 
-        {/* Dynamic Fields */}
-        <div className="grid gap-4 sm:grid-cols-2 mb-6">
+        {/* Dynamic Fields - Grid layout */}
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
           {sortedFields.map(field => {
             const unitGroup = unitGroups[field.unit_group];
             const units = unitGroup?.units || [];
 
             return (
               <div key={field.key} className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                <label className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
                   {field.label}
-                  {field.required && <span className="text-pink-500">*</span>}
+                  {field.required && <span className="text-red-500">*</span>}
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -345,8 +354,9 @@ export default function ModernDynamicCalculator({
                       ...fieldValues,
                       [field.key]: parseFloat(e.target.value) || 0
                     })}
-                    className="flex-1 px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                     placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
+                    data-testid={`field-${field.key}`}
                   />
                   <select
                     value={fieldUnits[field.key] || field.default_unit}
@@ -354,7 +364,8 @@ export default function ModernDynamicCalculator({
                       ...fieldUnits,
                       [field.key]: e.target.value
                     })}
-                    className="w-24 px-3 py-3 bg-slate-800/60 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    className="w-20 px-2 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                    data-testid={`unit-${field.key}`}
                   >
                     {units.map(u => (
                       <option key={u.key} value={u.key}>{u.key}</option>
@@ -362,7 +373,7 @@ export default function ModernDynamicCalculator({
                   </select>
                 </div>
                 {field.help_text && (
-                  <p className="text-xs text-slate-500">{field.help_text}</p>
+                  <p className="text-xs text-gray-500">{field.help_text}</p>
                 )}
               </div>
             );
@@ -370,7 +381,7 @@ export default function ModernDynamicCalculator({
 
           {/* Quantity */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-300">
+            <label className="block text-sm font-semibold text-gray-700">
               Quantity
             </label>
             <div className="flex gap-2">
@@ -379,9 +390,10 @@ export default function ModernDynamicCalculator({
                 min="1"
                 value={quantity}
                 onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                className="flex-1 px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                data-testid="quantity-field"
               />
-              <span className="flex items-center px-4 py-3 bg-slate-700/50 border border-slate-700 rounded-xl text-slate-400">
+              <span className="flex items-center px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 text-sm font-medium">
                 pcs
               </span>
             </div>
@@ -390,11 +402,11 @@ export default function ModernDynamicCalculator({
           {/* Price Rate (optional) */}
           {showPriceField && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300">
+              <label className="block text-sm font-semibold text-gray-700">
                 Rate per {calculator.output_unit}
               </label>
               <div className="flex gap-2">
-                <span className="flex items-center px-4 py-3 bg-slate-700/50 border border-slate-700 rounded-xl text-slate-400">
+                <span className="flex items-center px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 font-medium">
                   ₹
                 </span>
                 <input
@@ -403,71 +415,69 @@ export default function ModernDynamicCalculator({
                   min="0"
                   value={priceRate || ''}
                   onChange={(e) => setPriceRate(parseFloat(e.target.value) || undefined)}
-                  className="flex-1 px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                   placeholder="Rate"
+                  data-testid="price-rate-field"
                 />
               </div>
             </div>
           )}
         </div>
 
-        {/* Formula Info */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-800/30 px-4 py-2 rounded-lg mb-6">
-          <Info className="h-3 w-3" />
-          <span className="font-mono">{calculator.formula_expression}</span>
+        {/* Formula Info - Subtle display */}
+        <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 px-4 py-2.5 rounded-lg mb-6 border border-gray-100">
+          <Info className="h-3.5 w-3.5" />
+          <span className="font-mono text-gray-500">{calculator.formula_expression}</span>
         </div>
 
-        {/* Results */}
+        {/* Results - Professional green result card */}
         {result && result.total_value > 0 && (
-          <div className="relative">
-            {/* Glow effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 via-green-500/20 to-teal-500/20 blur-xl rounded-2xl"></div>
+          <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-xl p-6" data-testid="calculation-result">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="p-2 bg-emerald-100 rounded-lg">
+                <Sparkles className="h-5 w-5 text-emerald-600" />
+              </div>
+              <h4 className="font-bold text-lg text-emerald-800">Calculation Result</h4>
+            </div>
             
-            <div className="relative bg-gradient-to-br from-emerald-900/40 to-green-900/40 border border-emerald-500/30 rounded-2xl p-6 backdrop-blur-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="h-5 w-5 text-emerald-400" />
-                <h4 className="font-semibold text-emerald-300">Calculation Result</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl p-5 text-center border border-emerald-100 shadow-sm">
+                <p className="text-sm text-emerald-600 font-medium mb-2">{result.output_label} per piece</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {result.value_per_piece.toFixed(2)}
+                  <span className="text-lg font-medium text-emerald-600 ml-1">{result.output_unit}</span>
+                </p>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-black/20 rounded-xl p-4 text-center">
-                  <p className="text-sm text-emerald-400/80 mb-1">{result.output_label} per piece</p>
-                  <p className="text-2xl font-bold text-white">
-                    {result.value_per_piece.toFixed(2)}
-                    <span className="text-lg font-normal text-emerald-300 ml-1">{result.output_unit}</span>
-                  </p>
-                </div>
-                
-                <div className="bg-emerald-500/20 rounded-xl p-4 text-center border border-emerald-500/30">
-                  <p className="text-sm text-emerald-400/80 mb-1">Total ({quantity} pcs)</p>
-                  <p className="text-2xl font-bold text-emerald-300">
-                    {formatValue(result.total_value, result.output_unit)}
-                  </p>
+              <div className="bg-emerald-600 rounded-xl p-5 text-center shadow-sm">
+                <p className="text-sm text-emerald-100 font-medium mb-2">Total ({quantity} pcs)</p>
+                <p className="text-3xl font-bold text-white">
+                  {formatValue(result.total_value, result.output_unit)}
+                </p>
+              </div>
+            </div>
+
+            {/* Price Estimate */}
+            {priceRate && priceRate > 0 && (
+              <div className="mt-5 pt-5 border-t-2 border-emerald-200">
+                <div className="flex items-center justify-between bg-white rounded-lg p-4 border border-emerald-100">
+                  <span className="text-sm text-gray-600">
+                    Estimated Price @ <span className="font-semibold text-gray-800">{formatPrice(priceRate)}/{result.output_unit}</span>
+                  </span>
+                  <span className="text-2xl font-bold text-emerald-700">
+                    {formatPrice(result.total_value * priceRate)}
+                  </span>
                 </div>
               </div>
-
-              {/* Price Estimate */}
-              {priceRate && priceRate > 0 && (
-                <div className="mt-4 pt-4 border-t border-emerald-500/20">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-emerald-400/80">
-                      Estimated Price @ {formatPrice(priceRate)}/{result.output_unit}
-                    </span>
-                    <span className="text-xl font-bold text-emerald-300">
-                      {formatPrice(result.total_value * priceRate)}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         )}
 
         {/* Calculating indicator */}
         {calculating && (
-          <div className="flex items-center gap-2 text-sm text-indigo-400 mt-4">
+          <div className="flex items-center gap-2 text-sm text-indigo-600 mt-4 bg-indigo-50 px-4 py-2 rounded-lg">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Calculating...
+            <span className="font-medium">Calculating...</span>
           </div>
         )}
       </div>
