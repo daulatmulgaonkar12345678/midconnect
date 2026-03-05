@@ -466,70 +466,82 @@ export default function MaterialCalculatorCard({
         </div>
 
         {/* Dimension Inputs */}
-        <div className={compact ? 'grid grid-cols-2 gap-4' : 'grid md:grid-cols-3 gap-4'}>
-          {currentShape?.fields.map((field) => (
-            <div key={field.key}>
+        <div>
+          <div className={compact ? 'grid grid-cols-2 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'}>
+            {currentShape?.fields.map((field) => (
+              <div key={field.key} className="min-w-0">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                </label>
+                <div className="flex gap-0">
+                  <input
+                    type="number"
+                    value={dimensions[field.key] || ''}
+                    onChange={(e) => handleDimensionChange(field.key, e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="any"
+                    className="flex-1 min-w-0 px-3 py-2.5 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:z-10"
+                    data-testid={`dimension-${field.key}`}
+                  />
+                  <select
+                    value={units[field.key] || field.default_unit}
+                    onChange={(e) => handleUnitChange(field.key, e.target.value)}
+                    className="w-20 flex-shrink-0 px-2 py-2.5 border border-l-0 border-gray-300 rounded-r-lg bg-gray-50 text-sm focus:ring-2 focus:ring-blue-500"
+                    data-testid={`unit-${field.key}`}
+                  >
+                    {field.unit_options.map((unit) => (
+                      <option key={unit} value={unit}>{unit}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ))}
+
+            {/* Quantity */}
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                {field.label} {field.required && <span className="text-red-500">*</span>}
+                Quantity
               </label>
-              <div className="flex">
+              <div className="flex gap-0">
                 <input
                   type="number"
-                  value={dimensions[field.key] || ''}
-                  onChange={(e) => handleDimensionChange(field.key, e.target.value)}
-                  placeholder="0"
-                  min="0"
-                  step="any"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  data-testid={`dimension-${field.key}`}
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  min="1"
+                  className="flex-1 min-w-0 px-3 py-2.5 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  data-testid="quantity-input"
                 />
-                <select
-                  value={units[field.key] || field.default_unit}
-                  onChange={(e) => handleUnitChange(field.key, e.target.value)}
-                  className="px-2 py-2 border border-l-0 border-gray-300 rounded-r-lg bg-gray-50 text-sm"
-                  data-testid={`unit-${field.key}`}
-                >
-                  {field.unit_options.map((unit) => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
-                </select>
+                <span className="w-20 flex-shrink-0 px-2 py-2.5 border border-l-0 border-gray-300 rounded-r-lg bg-gray-50 text-sm text-gray-500 flex items-center justify-center">
+                  pcs
+                </span>
               </div>
             </div>
-          ))}
 
-          {/* Quantity */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Quantity
-            </label>
-            <input
-              type="number"
-              value={quantity}
-              onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-              min="1"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              data-testid="quantity-input"
-            />
+            {/* Rate per kg (optional) */}
+            {showPriceField && (
+              <div className="min-w-0">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Rate (₹/kg)
+                </label>
+                <div className="flex gap-0">
+                  <span className="w-10 flex-shrink-0 px-2 py-2.5 border border-r-0 border-gray-300 rounded-l-lg bg-gray-50 text-sm text-gray-500 flex items-center justify-center">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    value={ratePerKg || ''}
+                    onChange={(e) => setRatePerKg(parseFloat(e.target.value) || undefined)}
+                    placeholder="e.g., 70"
+                    min="0"
+                    step="0.01"
+                    className="flex-1 min-w-0 px-3 py-2.5 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    data-testid="rate-input"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Rate per kg (optional) */}
-          {showPriceField && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Rate (₹/kg)
-              </label>
-              <input
-                type="number"
-                value={ratePerKg || ''}
-                onChange={(e) => setRatePerKg(parseFloat(e.target.value) || undefined)}
-                placeholder="e.g., 70"
-                min="0"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                data-testid="rate-input"
-              />
-            </div>
-          )}
         </div>
 
         {/* Formula Info */}
