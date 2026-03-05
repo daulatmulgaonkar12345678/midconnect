@@ -130,7 +130,8 @@ export default function SEOCalculatorLayout({
               <nav className="hidden md:flex items-center gap-6 text-sm">
                 <Link href="/tools/steel-weight-calculator" className="text-gray-600 hover:text-blue-600">Steel Calculator</Link>
                 <Link href="/tools/pipe-weight-calculator" className="text-gray-600 hover:text-blue-600">Pipe Calculator</Link>
-                <Link href="/tools/plate-weight-calculator" className="text-gray-600 hover:text-blue-600">Plate Calculator</Link>
+                <Link href="/tools/beam-weight-calculator" className="text-gray-600 hover:text-blue-600">Beam Calculator</Link>
+                <Link href="/tools/angle-weight-calculator" className="text-gray-600 hover:text-blue-600">Angle Calculator</Link>
                 <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                   Browse Suppliers
                 </Link>
@@ -345,6 +346,10 @@ export default function SEOCalculatorLayout({
                   <li><Link href="/tools/pipe-weight-calculator" className="hover:text-white">Pipe Weight Calculator</Link></li>
                   <li><Link href="/tools/plate-weight-calculator" className="hover:text-white">Plate Weight Calculator</Link></li>
                   <li><Link href="/tools/round-bar-weight-calculator" className="hover:text-white">Round Bar Calculator</Link></li>
+                  <li><Link href="/tools/hex-bar-weight-calculator" className="hover:text-white">Hex Bar Calculator</Link></li>
+                  <li><Link href="/tools/angle-weight-calculator" className="hover:text-white">Angle Calculator</Link></li>
+                  <li><Link href="/tools/channel-weight-calculator" className="hover:text-white">Channel Calculator</Link></li>
+                  <li><Link href="/tools/beam-weight-calculator" className="hover:text-white">Beam Calculator</Link></li>
                 </ul>
               </div>
               <div>

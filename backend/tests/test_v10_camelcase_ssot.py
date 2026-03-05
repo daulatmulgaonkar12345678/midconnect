@@ -16,7 +16,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 
 # API base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://material-estimator-19.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://material-config.preview.emergentagent.com').rstrip('/')
 
 # MongoDB connection for direct DB verification
 MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')

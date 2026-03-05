@@ -118,17 +118,44 @@ function calculateVolume(
 ): number {
   const getMeters = (key: string) => convertToMeters(dimensions[key] || 0, units[key] || 'mm');
 
-  switch (shape.toLowerCase()) {
-    case 'round_bar': {
+  const shapeLower = shape.toLowerCase();
+
+  switch (shapeLower) {
+    case 'round_bar':
+    case 'wire_rod': {
       const diameter = getMeters('diameter');
       const length = getMeters('length');
       return Math.PI * Math.pow(diameter / 2, 2) * length;
     }
+    
     case 'square_bar': {
       const side = getMeters('side');
       const length = getMeters('length');
       return Math.pow(side, 2) * length;
     }
+    
+    case 'hex_bar': {
+      const af = getMeters('across_flats');
+      const length = getMeters('length');
+      // Area of hexagon with across-flats AF = (√3/2) × AF²
+      return (Math.sqrt(3) / 2) * Math.pow(af, 2) * length;
+    }
+    
+    case 'flat_bar':
+    case 'strip': {
+      const width = getMeters('width');
+      const thickness = getMeters('thickness');
+      const length = getMeters('length');
+      return width * thickness * length;
+    }
+    
+    case 'rectangular_bar': {
+      const width = getMeters('width');
+      const height = getMeters('height');
+      const length = getMeters('length');
+      return width * height * length;
+    }
+    
     case 'pipe': {
       const od = getMeters('outer_diameter');
       const thickness = getMeters('thickness');
@@ -137,13 +164,107 @@ function calculateVolume(
       if (id <= 0) return 0;
       return Math.PI * (Math.pow(od / 2, 2) - Math.pow(id / 2, 2)) * length;
     }
+    
+    case 'square_hollow': {
+      const side = getMeters('side');
+      const thickness = getMeters('thickness');
+      const length = getMeters('length');
+      const innerSide = side - 2 * thickness;
+      if (innerSide <= 0) return 0;
+      return (Math.pow(side, 2) - Math.pow(innerSide, 2)) * length;
+    }
+    
+    case 'rectangular_hollow': {
+      const width = getMeters('width');
+      const height = getMeters('height');
+      const thickness = getMeters('thickness');
+      const length = getMeters('length');
+      const innerWidth = width - 2 * thickness;
+      const innerHeight = height - 2 * thickness;
+      if (innerWidth <= 0 || innerHeight <= 0) return 0;
+      return ((width * height) - (innerWidth * innerHeight)) * length;
+    }
+    
+    case 'angle': {
+      const legA = getMeters('leg_a');
+      const legB = getMeters('leg_b');
+      const thickness = getMeters('thickness');
+      const length = getMeters('length');
+      // Area = t × (A + B - t)
+      return thickness * (legA + legB - thickness) * length;
+    }
+    
+    case 'channel': {
+      const webHeight = getMeters('web_height');
+      const flangeWidth = getMeters('flange_width');
+      const webThickness = getMeters('web_thickness');
+      const flangeThickness = getMeters('flange_thickness');
+      const length = getMeters('length');
+      // Web area + 2 flanges
+      const webArea = (webHeight - 2 * flangeThickness) * webThickness;
+      const flangeArea = 2 * flangeWidth * flangeThickness;
+      return (webArea + flangeArea) * length;
+    }
+    
+    case 'i_beam':
+    case 'h_beam': {
+      const height = getMeters('height');
+      const flangeWidth = getMeters('flange_width');
+      const webThickness = getMeters('web_thickness');
+      const flangeThickness = getMeters('flange_thickness');
+      const length = getMeters('length');
+      // Two flanges + web
+      const flangeArea = 2 * flangeWidth * flangeThickness;
+      const webArea = (height - 2 * flangeThickness) * webThickness;
+      return (flangeArea + webArea) * length;
+    }
+    
+    case 't_section': {
+      const flangeWidth = getMeters('flange_width');
+      const stemHeight = getMeters('stem_height');
+      const flangeThickness = getMeters('flange_thickness');
+      const stemThickness = getMeters('stem_thickness');
+      const length = getMeters('length');
+      // Flange + stem (accounting for overlap)
+      const flangeArea = flangeWidth * flangeThickness;
+      const stemArea = (stemHeight - flangeThickness) * stemThickness;
+      return (flangeArea + stemArea) * length;
+    }
+    
+    case 'z_section': {
+      const height = getMeters('height');
+      const flangeWidth = getMeters('flange_width');
+      const thickness = getMeters('thickness');
+      const length = getMeters('length');
+      // Area = t × (H + 2W - 2t)
+      return thickness * (height + 2 * flangeWidth - 2 * thickness) * length;
+    }
+    
     case 'plate':
-    case 'sheet': {
+    case 'sheet':
+    case 'coil': {
       const thickness = getMeters('thickness');
       const width = getMeters('width');
       const length = getMeters('length');
       return thickness * width * length;
     }
+    
+    case 'chequered_plate': {
+      const thickness = getMeters('thickness');
+      const width = getMeters('width');
+      const length = getMeters('length');
+      // 5% extra for pattern
+      return (thickness * 1.05) * width * length;
+    }
+    
+    case 'perforated_sheet': {
+      const thickness = getMeters('thickness');
+      const width = getMeters('width');
+      const length = getMeters('length');
+      const openArea = (dimensions['open_area'] || 0) / 100;
+      return thickness * width * length * (1 - openArea);
+    }
+    
     default:
       return 0;
   }
@@ -192,7 +313,7 @@ function calculateWeight(
 }
 
 // ============================================================================
-// DEFAULT DATA
+// DEFAULT DATA (Fallback if API fails)
 // ============================================================================
 
 const DEFAULT_MATERIALS: Material[] = [
@@ -215,17 +336,6 @@ const DEFAULT_SHAPES: ShapeConfig[] = [
     ],
     formula: 'V = π × (d/2)² × L',
     icon: 'circle',
-  },
-  {
-    key: 'square_bar',
-    name: 'Square Bar',
-    description: 'Solid square cross-section bar',
-    fields: [
-      { key: 'side', label: 'Side', unit_options: ['mm', 'cm', 'inch'], default_unit: 'mm', required: true },
-      { key: 'length', label: 'Length', unit_options: ['meter', 'feet', 'cm'], default_unit: 'meter', required: true },
-    ],
-    formula: 'V = side² × L',
-    icon: 'square',
   },
   {
     key: 'pipe',
@@ -251,18 +361,6 @@ const DEFAULT_SHAPES: ShapeConfig[] = [
     formula: 'V = thickness × width × length',
     icon: 'rectangle-horizontal',
   },
-  {
-    key: 'sheet',
-    name: 'Sheet',
-    description: 'Thin flat stock',
-    fields: [
-      { key: 'thickness', label: 'Thickness', unit_options: ['mm', 'cm'], default_unit: 'mm', required: true },
-      { key: 'width', label: 'Width', unit_options: ['mm', 'cm', 'meter', 'feet'], default_unit: 'mm', required: true },
-      { key: 'length', label: 'Length', unit_options: ['meter', 'feet', 'cm'], default_unit: 'meter', required: true },
-    ],
-    formula: 'V = thickness × width × length',
-    icon: 'layers',
-  },
 ];
 
 // ============================================================================
@@ -286,8 +384,9 @@ export default function MaterialCalculatorCard({
 
   // Data states
   const [materials, setMaterials] = useState<Material[]>(DEFAULT_MATERIALS);
-  const [shapes] = useState<ShapeConfig[]>(DEFAULT_SHAPES);
+  const [shapes, setShapes] = useState<ShapeConfig[]>(DEFAULT_SHAPES);
   const [loadingMaterials, setLoadingMaterials] = useState(true);
+  const [loadingShapes, setLoadingShapes] = useState(true);
 
   // Form states
   const [selectedMaterial, setSelectedMaterial] = useState<string>(defaultMaterial);
@@ -319,6 +418,30 @@ export default function MaterialCalculatorCard({
     };
     loadMaterials();
   }, []);
+
+  // Load shapes from API
+  useEffect(() => {
+    const loadShapes = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/raw-materials/shapes`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.length > 0) {
+            setShapes(data);
+            // If default shape not in loaded shapes, select first one
+            if (!data.find((s: ShapeConfig) => s.key === defaultShape)) {
+              setSelectedShape(data[0].key);
+            }
+          }
+        }
+      } catch (err) {
+        console.log('Using default shapes');
+      } finally {
+        setLoadingShapes(false);
+      }
+    };
+    loadShapes();
+  }, [defaultShape]);
 
   // Get current shape config
   const currentShape = useMemo(() => {

@@ -31,9 +31,25 @@ logger = logging.getLogger(__name__)
 class ShapeType(str, Enum):
     ROUND_BAR = "round_bar"
     SQUARE_BAR = "square_bar"
+    HEX_BAR = "hex_bar"
+    FLAT_BAR = "flat_bar"
+    RECTANGULAR_BAR = "rectangular_bar"
     PIPE = "pipe"
+    SQUARE_HOLLOW = "square_hollow"
+    RECTANGULAR_HOLLOW = "rectangular_hollow"
+    ANGLE = "angle"
+    CHANNEL = "channel"
+    I_BEAM = "i_beam"
+    H_BEAM = "h_beam"
+    T_SECTION = "t_section"
+    Z_SECTION = "z_section"
     PLATE = "plate"
     SHEET = "sheet"
+    CHEQUERED_PLATE = "chequered_plate"
+    PERFORATED_SHEET = "perforated_sheet"
+    WIRE_ROD = "wire_rod"
+    STRIP = "strip"
+    COIL = "coil"
 
 
 class UnitType(str, Enum):
@@ -250,6 +266,177 @@ def calculate_plate_volume(thickness_m: float, width_m: float, length_m: float) 
     return thickness_m * width_m * length_m
 
 
+def calculate_hex_bar_volume(across_flats_m: float, length_m: float) -> float:
+    """
+    Calculate volume of a hexagonal bar.
+    
+    Formula: V = (3√3/2) × (AF/2)² × L ≈ 0.866 × AF² × L
+    
+    Args:
+        across_flats_m: Across flats dimension in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    # Area of regular hexagon with across flats = AF is (√3/2) × AF²
+    area = (math.sqrt(3) / 2) * (across_flats_m ** 2)
+    return area * length_m
+
+
+def calculate_square_hollow_volume(side_m: float, thickness_m: float, length_m: float) -> float:
+    """
+    Calculate volume of a square hollow section.
+    
+    Formula: V = (side² - (side - 2t)²) × L
+    
+    Args:
+        side_m: Outer side in meters
+        thickness_m: Wall thickness in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    inner_side = side_m - (2 * thickness_m)
+    if inner_side <= 0:
+        raise ValueError("Thickness cannot be greater than half the side")
+    return ((side_m ** 2) - (inner_side ** 2)) * length_m
+
+
+def calculate_rectangular_hollow_volume(width_m: float, height_m: float, thickness_m: float, length_m: float) -> float:
+    """
+    Calculate volume of a rectangular hollow section.
+    
+    Formula: V = (W×H - (W-2t)×(H-2t)) × L
+    
+    Args:
+        width_m: Outer width in meters
+        height_m: Outer height in meters
+        thickness_m: Wall thickness in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    inner_width = width_m - (2 * thickness_m)
+    inner_height = height_m - (2 * thickness_m)
+    if inner_width <= 0 or inner_height <= 0:
+        raise ValueError("Thickness is too large for the section")
+    outer_area = width_m * height_m
+    inner_area = inner_width * inner_height
+    return (outer_area - inner_area) * length_m
+
+
+def calculate_angle_volume(leg_a_m: float, leg_b_m: float, thickness_m: float, length_m: float) -> float:
+    """
+    Calculate volume of an angle section.
+    
+    Formula: V = t × (A + B - t) × L
+    
+    Args:
+        leg_a_m: First leg dimension in meters
+        leg_b_m: Second leg dimension in meters
+        thickness_m: Thickness in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    area = thickness_m * (leg_a_m + leg_b_m - thickness_m)
+    return area * length_m
+
+
+def calculate_channel_volume(web_height_m: float, flange_width_m: float, web_thickness_m: float, flange_thickness_m: float, length_m: float) -> float:
+    """
+    Calculate volume of a C-channel section.
+    
+    Formula: V = (H×tw + 2×(W-tw)×tf) × L
+    
+    Args:
+        web_height_m: Web height in meters
+        flange_width_m: Flange width in meters
+        web_thickness_m: Web thickness in meters
+        flange_thickness_m: Flange thickness in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    # Web area
+    web_area = (web_height_m - 2 * flange_thickness_m) * web_thickness_m
+    # Flange areas (2 flanges)
+    flange_area = 2 * flange_width_m * flange_thickness_m
+    total_area = web_area + flange_area
+    return total_area * length_m
+
+
+def calculate_i_beam_volume(height_m: float, flange_width_m: float, web_thickness_m: float, flange_thickness_m: float, length_m: float) -> float:
+    """
+    Calculate volume of an I-beam or H-beam section.
+    
+    Formula: V = (2×W×tf + (H-2tf)×tw) × L
+    
+    Args:
+        height_m: Total height in meters
+        flange_width_m: Flange width in meters
+        web_thickness_m: Web thickness in meters
+        flange_thickness_m: Flange thickness in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    # Two flanges
+    flange_area = 2 * flange_width_m * flange_thickness_m
+    # Web (excluding flange overlap)
+    web_height = height_m - (2 * flange_thickness_m)
+    web_area = web_height * web_thickness_m
+    total_area = flange_area + web_area
+    return total_area * length_m
+
+
+def calculate_t_section_volume(flange_width_m: float, stem_height_m: float, flange_thickness_m: float, stem_thickness_m: float, length_m: float) -> float:
+    """
+    Calculate volume of a T-section.
+    
+    Formula: V = (W×tf + (H-tf)×ts) × L
+    
+    Args:
+        flange_width_m: Flange width in meters
+        stem_height_m: Total stem height in meters
+        flange_thickness_m: Flange thickness in meters
+        stem_thickness_m: Stem thickness in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    flange_area = flange_width_m * flange_thickness_m
+    stem_area = (stem_height_m - flange_thickness_m) * stem_thickness_m
+    total_area = flange_area + stem_area
+    return total_area * length_m
+
+
+def calculate_z_section_volume(height_m: float, flange_width_m: float, thickness_m: float, length_m: float) -> float:
+    """
+    Calculate volume of a Z-section.
+    
+    Formula: V = t × (H + 2W - 2t) × L
+    
+    Args:
+        height_m: Total height in meters
+        flange_width_m: Flange width in meters
+        thickness_m: Thickness in meters
+        length_m: Length in meters
+        
+    Returns:
+        Volume in cubic meters
+    """
+    area = thickness_m * (height_m + 2 * flange_width_m - 2 * thickness_m)
+    return area * length_m
+
+
 # ============================================================================
 # MAIN CALCULATOR SERVICE
 # ============================================================================
@@ -410,7 +597,7 @@ class WeightCalculatorService:
                     "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
                 }
                 
-        elif shape_lower in ("plate", "sheet"):
+        elif shape_lower in ("plate", "sheet", "coil", "strip"):
             thickness_m = convert_to_meters(
                 dimensions.get("thickness", 0),
                 dimensions.get("thickness_unit", "mm")
@@ -427,6 +614,285 @@ class WeightCalculatorService:
             dim_summary = {
                 "thickness": f"{dimensions.get('thickness')} {dimensions.get('thickness_unit', 'mm')}",
                 "width": f"{dimensions.get('width')} {dimensions.get('width_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "hex_bar":
+            across_flats_m = convert_to_meters(
+                dimensions.get("across_flats", 0),
+                dimensions.get("across_flats_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_hex_bar_volume(across_flats_m, length_m)
+            dim_summary = {
+                "across_flats": f"{dimensions.get('across_flats')} {dimensions.get('across_flats_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower in ("flat_bar", "rectangular_bar"):
+            width_m = convert_to_meters(
+                dimensions.get("width", 0),
+                dimensions.get("width_unit", "mm")
+            )
+            height_key = "height" if shape_lower == "rectangular_bar" else "thickness"
+            height_m = convert_to_meters(
+                dimensions.get(height_key, 0),
+                dimensions.get(f"{height_key}_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_plate_volume(height_m, width_m, length_m)
+            dim_summary = {
+                "width": f"{dimensions.get('width')} {dimensions.get('width_unit', 'mm')}",
+                height_key: f"{dimensions.get(height_key)} {dimensions.get(f'{height_key}_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "square_hollow":
+            side_m = convert_to_meters(
+                dimensions.get("side", 0),
+                dimensions.get("side_unit", "mm")
+            )
+            thickness_m = convert_to_meters(
+                dimensions.get("thickness", 0),
+                dimensions.get("thickness_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_square_hollow_volume(side_m, thickness_m, length_m)
+            dim_summary = {
+                "side": f"{dimensions.get('side')} {dimensions.get('side_unit', 'mm')}",
+                "thickness": f"{dimensions.get('thickness')} {dimensions.get('thickness_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "rectangular_hollow":
+            width_m = convert_to_meters(
+                dimensions.get("width", 0),
+                dimensions.get("width_unit", "mm")
+            )
+            height_m = convert_to_meters(
+                dimensions.get("height", 0),
+                dimensions.get("height_unit", "mm")
+            )
+            thickness_m = convert_to_meters(
+                dimensions.get("thickness", 0),
+                dimensions.get("thickness_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_rectangular_hollow_volume(width_m, height_m, thickness_m, length_m)
+            dim_summary = {
+                "width": f"{dimensions.get('width')} {dimensions.get('width_unit', 'mm')}",
+                "height": f"{dimensions.get('height')} {dimensions.get('height_unit', 'mm')}",
+                "thickness": f"{dimensions.get('thickness')} {dimensions.get('thickness_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "angle":
+            leg_a_m = convert_to_meters(
+                dimensions.get("leg_a", 0),
+                dimensions.get("leg_a_unit", "mm")
+            )
+            leg_b_m = convert_to_meters(
+                dimensions.get("leg_b", 0),
+                dimensions.get("leg_b_unit", "mm")
+            )
+            thickness_m = convert_to_meters(
+                dimensions.get("thickness", 0),
+                dimensions.get("thickness_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_angle_volume(leg_a_m, leg_b_m, thickness_m, length_m)
+            dim_summary = {
+                "leg_a": f"{dimensions.get('leg_a')} {dimensions.get('leg_a_unit', 'mm')}",
+                "leg_b": f"{dimensions.get('leg_b')} {dimensions.get('leg_b_unit', 'mm')}",
+                "thickness": f"{dimensions.get('thickness')} {dimensions.get('thickness_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "channel":
+            web_height_m = convert_to_meters(
+                dimensions.get("web_height", 0),
+                dimensions.get("web_height_unit", "mm")
+            )
+            flange_width_m = convert_to_meters(
+                dimensions.get("flange_width", 0),
+                dimensions.get("flange_width_unit", "mm")
+            )
+            web_thickness_m = convert_to_meters(
+                dimensions.get("web_thickness", 0),
+                dimensions.get("web_thickness_unit", "mm")
+            )
+            flange_thickness_m = convert_to_meters(
+                dimensions.get("flange_thickness", 0),
+                dimensions.get("flange_thickness_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_channel_volume(web_height_m, flange_width_m, web_thickness_m, flange_thickness_m, length_m)
+            dim_summary = {
+                "web_height": f"{dimensions.get('web_height')} {dimensions.get('web_height_unit', 'mm')}",
+                "flange_width": f"{dimensions.get('flange_width')} {dimensions.get('flange_width_unit', 'mm')}",
+                "web_thickness": f"{dimensions.get('web_thickness')} {dimensions.get('web_thickness_unit', 'mm')}",
+                "flange_thickness": f"{dimensions.get('flange_thickness')} {dimensions.get('flange_thickness_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower in ("i_beam", "h_beam"):
+            height_m = convert_to_meters(
+                dimensions.get("height", 0),
+                dimensions.get("height_unit", "mm")
+            )
+            flange_width_m = convert_to_meters(
+                dimensions.get("flange_width", 0),
+                dimensions.get("flange_width_unit", "mm")
+            )
+            web_thickness_m = convert_to_meters(
+                dimensions.get("web_thickness", 0),
+                dimensions.get("web_thickness_unit", "mm")
+            )
+            flange_thickness_m = convert_to_meters(
+                dimensions.get("flange_thickness", 0),
+                dimensions.get("flange_thickness_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_i_beam_volume(height_m, flange_width_m, web_thickness_m, flange_thickness_m, length_m)
+            dim_summary = {
+                "height": f"{dimensions.get('height')} {dimensions.get('height_unit', 'mm')}",
+                "flange_width": f"{dimensions.get('flange_width')} {dimensions.get('flange_width_unit', 'mm')}",
+                "web_thickness": f"{dimensions.get('web_thickness')} {dimensions.get('web_thickness_unit', 'mm')}",
+                "flange_thickness": f"{dimensions.get('flange_thickness')} {dimensions.get('flange_thickness_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "t_section":
+            flange_width_m = convert_to_meters(
+                dimensions.get("flange_width", 0),
+                dimensions.get("flange_width_unit", "mm")
+            )
+            stem_height_m = convert_to_meters(
+                dimensions.get("stem_height", 0),
+                dimensions.get("stem_height_unit", "mm")
+            )
+            flange_thickness_m = convert_to_meters(
+                dimensions.get("flange_thickness", 0),
+                dimensions.get("flange_thickness_unit", "mm")
+            )
+            stem_thickness_m = convert_to_meters(
+                dimensions.get("stem_thickness", 0),
+                dimensions.get("stem_thickness_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_t_section_volume(flange_width_m, stem_height_m, flange_thickness_m, stem_thickness_m, length_m)
+            dim_summary = {
+                "flange_width": f"{dimensions.get('flange_width')} {dimensions.get('flange_width_unit', 'mm')}",
+                "stem_height": f"{dimensions.get('stem_height')} {dimensions.get('stem_height_unit', 'mm')}",
+                "flange_thickness": f"{dimensions.get('flange_thickness')} {dimensions.get('flange_thickness_unit', 'mm')}",
+                "stem_thickness": f"{dimensions.get('stem_thickness')} {dimensions.get('stem_thickness_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "z_section":
+            height_m = convert_to_meters(
+                dimensions.get("height", 0),
+                dimensions.get("height_unit", "mm")
+            )
+            flange_width_m = convert_to_meters(
+                dimensions.get("flange_width", 0),
+                dimensions.get("flange_width_unit", "mm")
+            )
+            thickness_m = convert_to_meters(
+                dimensions.get("thickness", 0),
+                dimensions.get("thickness_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_z_section_volume(height_m, flange_width_m, thickness_m, length_m)
+            dim_summary = {
+                "height": f"{dimensions.get('height')} {dimensions.get('height_unit', 'mm')}",
+                "flange_width": f"{dimensions.get('flange_width')} {dimensions.get('flange_width_unit', 'mm')}",
+                "thickness": f"{dimensions.get('thickness')} {dimensions.get('thickness_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "chequered_plate":
+            thickness_m = convert_to_meters(
+                dimensions.get("thickness", 0),
+                dimensions.get("thickness_unit", "mm")
+            )
+            width_m = convert_to_meters(
+                dimensions.get("width", 0),
+                dimensions.get("width_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            # Chequered plates have ~5% more material due to pattern
+            volume = calculate_plate_volume(thickness_m * 1.05, width_m, length_m)
+            dim_summary = {
+                "thickness": f"{dimensions.get('thickness')} {dimensions.get('thickness_unit', 'mm')}",
+                "width": f"{dimensions.get('width')} {dimensions.get('width_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
+            }
+        
+        elif shape_lower == "perforated_sheet":
+            thickness_m = convert_to_meters(
+                dimensions.get("thickness", 0),
+                dimensions.get("thickness_unit", "mm")
+            )
+            width_m = convert_to_meters(
+                dimensions.get("width", 0),
+                dimensions.get("width_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            open_area = dimensions.get("open_area", 0) / 100  # Convert percentage to decimal
+            volume = calculate_plate_volume(thickness_m, width_m, length_m) * (1 - open_area)
+            dim_summary = {
+                "thickness": f"{dimensions.get('thickness')} {dimensions.get('thickness_unit', 'mm')}",
+                "width": f"{dimensions.get('width')} {dimensions.get('width_unit', 'mm')}",
+                "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}",
+                "open_area": f"{dimensions.get('open_area')}%"
+            }
+        
+        elif shape_lower == "wire_rod":
+            diameter_m = convert_to_meters(
+                dimensions.get("diameter", 0),
+                dimensions.get("diameter_unit", "mm")
+            )
+            length_m = convert_to_meters(
+                dimensions.get("length", 0),
+                dimensions.get("length_unit", "meter")
+            )
+            volume = calculate_round_bar_volume(diameter_m, length_m)
+            dim_summary = {
+                "diameter": f"{dimensions.get('diameter')} {dimensions.get('diameter_unit', 'mm')}",
                 "length": f"{dimensions.get('length')} {dimensions.get('length_unit', 'meter')}"
             }
             

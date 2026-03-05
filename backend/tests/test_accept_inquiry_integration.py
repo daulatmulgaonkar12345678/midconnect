@@ -20,7 +20,7 @@ import time
 import uuid
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://material-estimator-19.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://material-config.preview.emergentagent.com').rstrip('/')
 DEV_TOKEN = "dev-test-token"
 
 # Test user ID from the review request
