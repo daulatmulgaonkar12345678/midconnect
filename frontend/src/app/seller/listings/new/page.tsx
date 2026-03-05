@@ -42,7 +42,8 @@ import {
   HelpCircle,
   Send,
   Video,
-  Play
+  Play,
+  Scale
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -75,6 +76,10 @@ interface FormState {
   // Pricing Tiers (NOT pricing.slabs)
   pricingTiers: PricingTierCreate[];
   
+  // Raw material fields
+  rate_per_kg: number | null;
+  material_supported: string;
+  
   // Images & Videos
   images: string[];
   videos: string[];  // Max 2 videos, 30 seconds, 5MB each
@@ -94,6 +99,8 @@ const initialFormState: FormState = {
   leadTime: null,
   currency: 'INR',
   pricingTiers: [{ minQty: 1, maxQty: null, pricePerUnit: 0 }],
+  rate_per_kg: null,
+  material_supported: '',
   images: [],
   videos: [],  // Max 2 videos
   datasheetUrl: ''
@@ -553,6 +560,8 @@ export default function NewSellerListingPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');  // Selected template ID
   const [categorySettings, setCategorySettings] = useState<{ allowedSellerTypes?: string[] } | null>(null);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [isRawMaterialCategory, setIsRawMaterialCategory] = useState(false);
+  const [materials, setMaterials] = useState<Array<{ name: string; density: number }>>([]);
   
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -627,6 +636,19 @@ export default function NewSellerListingPage() {
       // Load category settings
       const templateData = await getCategorySpecTemplate(token, categoryId);
       setCategorySettings(templateData.category?.settings || null);
+      
+      // Check if this is a raw material category
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+      const specResponse = await fetch(`${API_URL}/api/spec-templates/by-category/${categoryId}`);
+      const specData = await specResponse.json();
+      setIsRawMaterialCategory(specData.isRawMaterial || false);
+      
+      // If raw material, load materials list
+      if (specData.isRawMaterial) {
+        const materialsResponse = await fetch(`${API_URL}/api/raw-materials/materials`);
+        const materialsData = await materialsResponse.json();
+        setMaterials(materialsData || []);
+      }
     } catch (err) {
       console.error('Failed to load products:', err);
     } finally {
@@ -1078,7 +1100,10 @@ const addPricingTier = () => {
         leadTime: form.leadTime || undefined,
         currency: form.currency,
         pricingTiers: form.pricingTiers,
-        datasheetUrl: form.datasheetUrl || undefined
+        datasheetUrl: form.datasheetUrl || undefined,
+        // Raw material pricing
+        rate_per_kg: isRawMaterialCategory && form.rate_per_kg ? form.rate_per_kg : undefined,
+        material_supported: isRawMaterialCategory && form.material_supported ? form.material_supported : undefined
       };
       
       await createSellerListing(token, payload);
@@ -1854,6 +1879,74 @@ const addPricingTier = () => {
                 </div>
               </div>
             </div>
+
+            {/* Raw Material Pricing (only for raw material categories) */}
+            {isRawMaterialCategory && (
+              <div className="bg-orange-50 rounded-xl shadow-sm p-6 border-2 border-orange-200">
+                <h2 className="text-lg font-semibold text-orange-800 mb-2 flex items-center gap-2">
+                  <Scale className="h-5 w-5 text-orange-600" />
+                  Raw Material Pricing
+                </h2>
+                <p className="text-sm text-orange-600 mb-4">
+                  Set your rate per kilogram. Buyers will see calculated prices based on their dimension requirements.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-4 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Rate per Kilogram (₹/kg) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                      <input
+                        type="number"
+                        value={form.rate_per_kg || ''}
+                        onChange={(e) => setForm(prev => ({ ...prev, rate_per_kg: parseFloat(e.target.value) || null }))}
+                        min={0}
+                        step={0.01}
+                        placeholder="e.g., 85.50"
+                        className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                        data-testid="rate-per-kg-input"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">You can update this rate daily</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Material Type
+                    </label>
+                    <select
+                      value={form.material_supported}
+                      onChange={(e) => setForm(prev => ({ ...prev, material_supported: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                      data-testid="material-select"
+                    >
+                      <option value="">Select material...</option>
+                      {materials.map(m => (
+                        <option key={m.name} value={m.name}>{m.name} ({m.density.toLocaleString()} kg/m³)</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Material this listing applies to</p>
+                  </div>
+                </div>
+                
+                {form.rate_per_kg && (
+                  <div className="mt-4 p-4 bg-white rounded-lg border border-orange-200">
+                    <h4 className="text-sm font-medium text-orange-800 mb-2">Preview</h4>
+                    <p className="text-gray-600 text-sm">
+                      When a buyer calculates <strong>100 kg</strong> of material:
+                    </p>
+                    <p className="text-2xl font-bold text-orange-600 mt-1">
+                      ₹{(form.rate_per_kg * 100).toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      = {form.rate_per_kg} ₹/kg × 100 kg
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Datasheet */}
             <div className="bg-white rounded-xl shadow-sm p-6">

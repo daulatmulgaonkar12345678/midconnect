@@ -1061,6 +1061,9 @@ export interface ListingCreatePayload {
   currency: string;
   pricingTiers: PricingTier[];
   datasheetUrl?: string;
+  // Raw material pricing
+  rate_per_kg?: number;
+  material_supported?: string;
 }
 
 export const createSellerListing = (
@@ -1080,6 +1083,9 @@ export interface ListingUpdatePayload {
   leadTime?: number;
   datasheetUrl?: string;
   attributes?: Record<string, string | number | boolean>;  // Creates new variant if changed
+  // Raw material pricing
+  rate_per_kg?: number;
+  material_supported?: string;
 }
 
 export const updateSellerListing = (token: string, listingId: string, data: ListingUpdatePayload): Promise<{ 

@@ -75,6 +75,9 @@ class ListingCreate(BaseModel):
     currency: str = Field(default="INR", max_length=3)
     pricingTiers: List[PricingTier] = Field(..., min_length=1, max_length=10)
     datasheetUrl: Optional[str] = None
+    # Raw material pricing fields
+    rate_per_kg: Optional[float] = Field(None, gt=0, description="Price per kg for raw materials")
+    material_supported: Optional[str] = Field(None, description="Material this listing supports (e.g., 'MS Steel')")
 
 
 class ListingUpdate(BaseModel):
@@ -89,6 +92,9 @@ class ListingUpdate(BaseModel):
     maxCapacity: Optional[int] = Field(None, ge=1)
     leadTime: Optional[int] = Field(None, ge=0)
     attributes: Optional[Dict[str, Any]] = Field(None)
+    # Raw material pricing fields (sellers can update rate daily)
+    rate_per_kg: Optional[float] = Field(None, gt=0, description="Price per kg for raw materials")
+    material_supported: Optional[str] = Field(None, description="Material this listing supports")
 
 
 class PricingUpdate(BaseModel):
@@ -104,6 +110,12 @@ class QuickPriceUpdate(BaseModel):
     validTillDate: Optional[datetime] = None
     stockStatus: Optional[Literal["in_stock", "limited", "made_to_order", "out_of_stock"]] = None
     note: Optional[str] = Field(None, max_length=200)
+
+
+class RatePerKgUpdate(BaseModel):
+    """Quick rate/kg update for raw material sellers (daily updates)"""
+    rate_per_kg: float = Field(..., gt=0, description="New rate per kg in INR")
+    material_supported: Optional[str] = Field(None, description="Material this rate applies to")
 
 
 class InquiryAccept(BaseModel):
@@ -548,6 +560,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             "currency": data.currency.upper(),
             "pricingTiers": validated["pricingTiers"],  # ENTERPRISE: Validated pricing
             "datasheetUrl": data.datasheetUrl,
+            # Raw material pricing fields
+            "rate_per_kg": data.rate_per_kg,
+            "material_supported": data.material_supported,
             "createdAt": now,
             "updatedAt": now,
             "publishedAt": None,
@@ -787,6 +802,12 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         if data.leadTime is not None:
             update_data["leadTime"] = data.leadTime
         
+        # Raw material pricing fields
+        if data.rate_per_kg is not None:
+            update_data["rate_per_kg"] = data.rate_per_kg
+        if data.material_supported is not None:
+            update_data["material_supported"] = data.material_supported
+        
         # ============================================================
         # ENTERPRISE GUARD: Validate update data
         # ============================================================
@@ -882,6 +903,59 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
         )
         
         return {"message": "Pricing updated", "pricingTiers": new_tiers, "lastUpdated": now.isoformat()}
+    
+    @router.patch("/listings/{listing_id}/rate-per-kg")
+    async def update_rate_per_kg(
+        listing_id: str,
+        data: RatePerKgUpdate,
+        seller: dict = Depends(require_verified_seller)
+    ):
+        """
+        Quick update rate/kg for raw material listings.
+        Sellers can update this daily to reflect current market rates.
+        """
+        seller_oid = ObjectId(seller["_id"]) if isinstance(seller["_id"], str) else seller["_id"]
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        listing = await db.sellerListings.find_one({"_id": listing_oid, "sellerId": seller_oid})
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        now = datetime.now(timezone.utc)
+        old_rate = listing.get("rate_per_kg")
+        
+        update_fields = {
+            "rate_per_kg": data.rate_per_kg,
+            "updatedAt": now
+        }
+        
+        if data.material_supported:
+            update_fields["material_supported"] = data.material_supported
+        
+        # Track rate history
+        if old_rate and old_rate != data.rate_per_kg:
+            await db.sellerListings.update_one(
+                {"_id": listing_oid},
+                {"$push": {"rateHistory": {"timestamp": now, "oldRate": old_rate, "newRate": data.rate_per_kg}}}
+            )
+        
+        await db.sellerListings.update_one(
+            {"_id": listing_oid},
+            {"$set": update_fields}
+        )
+        
+        logger.info(f"Seller {seller['email']} updated rate/kg: {old_rate} -> {data.rate_per_kg} for listing {listing_id}")
+        
+        return {
+            "message": "Rate per kg updated",
+            "rate_per_kg": data.rate_per_kg,
+            "material_supported": data.material_supported or listing.get("material_supported"),
+            "lastUpdated": now.isoformat()
+        }
     
     @router.post("/listings/{listing_id}/publish")
     async def publish_listing(
