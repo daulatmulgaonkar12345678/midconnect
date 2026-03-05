@@ -975,9 +975,95 @@ Build a dedicated seller-specific product detail page that displays comprehensiv
 
 ---
 
+### Session: 2026-03-05 (Raw Material Smart Calculator - Phase 1 Complete)
+
+#### COMPLETE: Raw Material Calculator - Core Components
+
+**Problem Statement:**
+Build a Raw Material Smart Calculator system for calculating weight and price of industrial materials (steel, aluminum, copper, etc.) based on shape and dimensions. The system must support multiple shapes (round bar, square bar, pipe, plate, sheet), multiple units (mm, cm, meter, inch, feet), and provide real-time client-side calculations.
+
+**Implementation:**
+
+1. **Backend - Raw Material Router** (`/app/backend/routers/raw_material_router.py`)
+   - `GET /api/raw-materials/materials` - Returns all materials with densities
+   - `GET /api/raw-materials/shapes` - Returns all shape configurations
+   - `POST /api/raw-materials/calculate` - Server-side weight calculation
+   - `GET /api/raw-materials/sellers/raw-material/{productId}` - Get sellers with rate/kg pricing
+   - Admin CRUD endpoints for materials management
+
+2. **Backend - Weight Calculator Service** (`/app/backend/services/weight_calculator_service.py`)
+   - Client and server-side calculation engine
+   - Unit conversion (mm, cm, meter, inch, feet → meters)
+   - Shape formulas:
+     - Round bar: V = π × (d/2)² × L
+     - Square bar: V = side² × L
+     - Pipe: V = π × ((OD/2)² - ((OD-2t)/2)²) × L
+     - Plate/Sheet: V = thickness × width × length
+   - Weight = Volume × Density
+   - Price = Total Weight × Rate/kg
+
+3. **Frontend - MaterialCalculatorCard** (`/app/frontend/src/components/calculator/MaterialCalculatorCard.tsx`)
+   - Material selector (loads from API)
+   - Shape selector (5 shapes: round_bar, square_bar, pipe, plate, sheet)
+   - Dynamic dimension inputs based on shape
+   - Unit selector per dimension
+   - Quantity and rate inputs
+   - Real-time client-side calculation
+   - Display: weight per piece, total weight, estimated price
+
+4. **Frontend - SellerPriceComparison** (`/app/frontend/src/components/calculator/SellerPriceComparison.tsx`)
+   - Loads sellers with rate_per_kg pricing
+   - Calculates price for each seller based on total weight
+   - Displays seller cards sorted by rate
+   - Send Inquiry button per seller
+
+5. **Frontend - Test Calculator Page** (`/app/frontend/src/app/tools/test-calculator/page.tsx`)
+   - Testing page at /tools/test-calculator
+   - Full calculator with all features
+   - Calculation details display
+   - API endpoint documentation
+
+6. **Admin - Materials Manager** (`/app/frontend/src/app/admin/materials/page.tsx`)
+   - CRUD interface for materials
+   - Material name, density, description
+   - Active/inactive status toggle
+
+7. **Database - Materials Collection**
+   - Default materials seeded: MS Steel (7850), SS304 (7930), SS316 (8000), Aluminum (2700), Copper (8960), Brass (8500)
+   - All densities in kg/m³
+
+**Testing Results** (15/15 backend + All frontend - 100%):
+- ✅ Materials API returns 6 materials with densities
+- ✅ Shapes API returns 5 shape configurations
+- ✅ Calculation API works for all shapes
+- ✅ Unit conversion works correctly
+- ✅ Price calculation with rate_per_kg
+- ✅ Calculator page loads at /tools/test-calculator
+- ✅ Material selector shows API data
+- ✅ Shape changes update dimension fields
+- ✅ Real-time calculations work
+- ✅ Admin materials requires authentication
+
+**Files Created:**
+- `/app/backend/routers/raw_material_router.py` (Raw material API)
+- `/app/backend/services/weight_calculator_service.py` (Calculation engine)
+- `/app/frontend/src/components/calculator/MaterialCalculatorCard.tsx`
+- `/app/frontend/src/components/calculator/SellerPriceComparison.tsx`
+- `/app/frontend/src/app/tools/test-calculator/page.tsx`
+- `/app/frontend/src/app/admin/materials/page.tsx`
+- `/app/backend/tests/test_raw_material_calculator.py`
+
+---
+
 ## Pending Tasks (Priority Order)
 
-### P0: Deploy Backend to Render
+### P0: Raw Material Calculator - Remaining Phases
+1. **Phase 2**: Admin UI for Spec Templates specific to raw materials
+2. **Phase 3**: Integrate calculator into raw material product pages
+3. **Phase 4**: Inquiry system extension with dimension/weight data
+4. **Phase 5**: SEO Calculator pages (/tools/steel-weight-calculator, etc.)
+
+### P1: Deploy Backend to Render
 **CRITICAL**: User's production site is running outdated backend code. Recent fixes won't be live until redeployed.
 
 ### P1: Implement Token-Based Search
