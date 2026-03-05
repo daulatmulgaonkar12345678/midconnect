@@ -22,7 +22,7 @@ import sys
 # Get BASE_URL from environment
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://seller-product-page.preview.emergentagent.com"
+    BASE_URL = "https://material-estimator-19.preview.emergentagent.com"
 
 
 class TestBackendHealth:
