@@ -24,7 +24,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND
 interface Material {
   _id: string;
   name: string;
-  material_type: string;
+  material_family: string;
   density?: number;
   weight_per_unit?: Record<string, number>;
   description?: string;
@@ -36,12 +36,19 @@ interface WeightPerUnitEntry {
   value: number;
 }
 
+interface MaterialFamily {
+  name: string;
+  count: number;
+}
+
 export default function MaterialsManagerPage() {
   const router = useRouter();
   const { user, getIdToken } = useAuth();
   
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [materialTypes, setMaterialTypes] = useState<string[]>(['steel', 'stainless_steel', 'aluminum', 'copper', 'brass', 'other']);
+  const [materialFamilies, setMaterialFamilies] = useState<string[]>([]);
+  const [newFamily, setNewFamily] = useState('');
+  const [showNewFamilyInput, setShowNewFamilyInput] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -51,7 +58,7 @@ export default function MaterialsManagerPage() {
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    material_type: 'steel',
+    material_family: '',
     density: '',
     description: ''
   });
@@ -69,36 +76,34 @@ export default function MaterialsManagerPage() {
 
   const loadMaterials = async () => {
     try {
-      const [oldRes, newRes, typesRes] = await Promise.all([
-        fetch(`${API_URL}/api/raw-materials/materials`),
+      const [materialsRes, familiesRes] = await Promise.all([
         fetch(`${API_URL}/api/calculator/materials`),
-        fetch(`${API_URL}/api/calculator/materials/types`)
+        fetch(`${API_URL}/api/calculator/materials/families`)
       ]);
       
-      const oldMaterials = oldRes.ok ? await oldRes.json() : [];
-      const newMaterials = newRes.ok ? await newRes.json() : [];
-      const types = typesRes.ok ? await typesRes.json() : [];
+      const materialsData = materialsRes.ok ? await materialsRes.json() : [];
+      const familiesData = familiesRes.ok ? await familiesRes.json() : [];
       
-      // Combine and deduplicate by name
-      const allMaterials = [...oldMaterials, ...newMaterials];
-      const uniqueMaterials = allMaterials.reduce((acc: Material[], mat: any) => {
-        if (!acc.find(m => m.name === mat.name)) {
-          acc.push({
-            _id: mat._id,
-            name: mat.name,
-            material_type: mat.material_type || 'general',
-            density: mat.density,
-            weight_per_unit: mat.weight_per_unit || {},
-            description: mat.description,
-            is_active: mat.is_active !== false && mat.isActive !== false
-          });
-        }
-        return acc;
-      }, []);
+      // Map materials to use material_family
+      const mappedMaterials = materialsData.map((mat: any) => ({
+        _id: mat._id,
+        name: mat.name,
+        material_family: mat.material_family || mat.material_type || 'General',
+        density: mat.density,
+        weight_per_unit: mat.weight_per_unit || {},
+        description: mat.description,
+        is_active: mat.is_active !== false && mat.isActive !== false
+      }));
       
-      setMaterials(uniqueMaterials);
-      if (types.length > 0) {
-        setMaterialTypes([...new Set([...materialTypes, ...types])]);
+      setMaterials(mappedMaterials);
+      
+      // Set families from API or extract from materials
+      if (familiesData.length > 0) {
+        setMaterialFamilies(familiesData);
+      } else {
+        // Extract unique families from materials
+        const uniqueFamilies = [...new Set(mappedMaterials.map((m: Material) => m.material_family).filter(Boolean))] as string[];
+        setMaterialFamilies(uniqueFamilies.length > 0 ? uniqueFamilies : ['Steel', 'Stainless Steel', 'Aluminum']);
       }
     } catch (err) {
       setError('Failed to load materials');
@@ -117,8 +122,8 @@ export default function MaterialsManagerPage() {
       return;
     }
     
-    if (!formData.material_type) {
-      setError('Material type is required');
+    if (!formData.material_family) {
+      setError('Material family is required');
       return;
     }
     
@@ -137,7 +142,7 @@ export default function MaterialsManagerPage() {
       
       const payload = {
         name: formData.name.trim(),
-        material_type: formData.material_type,
+        material_family: formData.material_family,
         density: formData.density ? parseFloat(formData.density) : undefined,
         weight_per_unit: Object.keys(weightObj).length > 0 ? weightObj : undefined,
         description: formData.description || undefined
@@ -175,7 +180,7 @@ export default function MaterialsManagerPage() {
     setEditingMaterial(material);
     setFormData({
       name: material.name,
-      material_type: material.material_type || 'steel',
+      material_family: material.material_family || '',
       density: material.density?.toString() || '',
       description: material.description || ''
     });
@@ -188,6 +193,8 @@ export default function MaterialsManagerPage() {
     setWeightPerUnit(entries);
     setShowWeightSection(entries.length > 0);
     setShowForm(true);
+    setShowNewFamilyInput(false);
+    setNewFamily('');
     setError('');
     setSuccess('');
   };
@@ -218,10 +225,24 @@ export default function MaterialsManagerPage() {
   const resetForm = () => {
     setShowForm(false);
     setEditingMaterial(null);
-    setFormData({ name: '', material_type: 'steel', density: '', description: '' });
+    setFormData({ name: '', material_family: materialFamilies[0] || '', density: '', description: '' });
     setWeightPerUnit([]);
     setShowWeightSection(false);
+    setShowNewFamilyInput(false);
+    setNewFamily('');
     setError('');
+  };
+
+  const handleAddNewFamily = () => {
+    if (newFamily.trim()) {
+      const familyName = newFamily.trim();
+      if (!materialFamilies.includes(familyName)) {
+        setMaterialFamilies([...materialFamilies, familyName]);
+      }
+      setFormData(prev => ({ ...prev, material_family: familyName }));
+      setNewFamily('');
+      setShowNewFamilyInput(false);
+    }
   };
 
   const addWeightEntry = () => {
@@ -332,19 +353,61 @@ export default function MaterialsManagerPage() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Material Type <span className="text-red-500">*</span>
+                    Material Family <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={formData.material_type}
-                    onChange={(e) => setFormData(prev => ({ ...prev, material_type: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    {materialTypes.map(type => (
-                      <option key={type} value={type}>
-                        {type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </option>
-                    ))}
-                  </select>
+                  {showNewFamilyInput ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newFamily}
+                        onChange={(e) => setNewFamily(e.target.value)}
+                        placeholder="Enter new family name"
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddNewFamily}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewFamilyInput(false); setNewFamily(''); }}
+                        className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <select
+                        value={formData.material_family}
+                        onChange={(e) => setFormData(prev => ({ ...prev, material_family: e.target.value }))}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">-- Select Family --</option>
+                        {materialFamilies.map(family => (
+                          <option key={family} value={family}>
+                            {family}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewFamilyInput(true)}
+                        className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-1"
+                        title="Add new family"
+                      >
+                        <Plus className="h-4 w-4" />
+                        New
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Group materials by family (e.g., Steel, Stainless Steel, Aluminum)
+                  </p>
                 </div>
                 
                 <div>
@@ -484,8 +547,8 @@ export default function MaterialsManagerPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="font-medium">{material.name}</h3>
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                          {material.material_type}
+                        <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded font-medium">
+                          {material.material_family}
                         </span>
                         {material.is_active === false && (
                           <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded">

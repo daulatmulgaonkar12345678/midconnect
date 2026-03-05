@@ -59,7 +59,7 @@ interface CalculatorTemplate {
   formula_expression: string;
   output_unit: string;
   output_label: string;
-  material_type?: string;
+  material_family?: string;
   use_material_density: boolean;
   icon?: string;
   is_active?: boolean;
@@ -279,7 +279,7 @@ export default function AdminCalculatorsPage() {
   const [calculators, setCalculators] = useState<CalculatorTemplate[]>([]);
   const [unitGroups, setUnitGroups] = useState<UnitGroup[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [materialTypes, setMaterialTypes] = useState<string[]>([]);
+  const [materialFamilies, setMaterialFamilies] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -297,17 +297,17 @@ export default function AdminCalculatorsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [calcsRes, unitsRes, catsRes, typesRes] = await Promise.all([
+      const [calcsRes, unitsRes, catsRes, familiesRes] = await Promise.all([
         fetch(`${API_URL}/api/calculator/calculators`),
         fetch(`${API_URL}/api/calculator/unit-groups`),
         fetch(`${API_URL}/api/categories/all`),
-        fetch(`${API_URL}/api/calculator/materials/types`)
+        fetch(`${API_URL}/api/calculator/materials/families`)
       ]);
       
       if (calcsRes.ok) setCalculators(await calcsRes.json());
       if (unitsRes.ok) setUnitGroups(await unitsRes.json());
       if (catsRes.ok) setCategories(await catsRes.json());
-      if (typesRes.ok) setMaterialTypes(await typesRes.json());
+      if (familiesRes.ok) setMaterialFamilies(await familiesRes.json());
     } catch (err) {
       setError('Failed to load data');
     } finally {
@@ -548,17 +548,18 @@ export default function AdminCalculatorsPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Material Type</label>
+                  <label className="block text-sm font-medium mb-1">Material Family</label>
                   <select
-                    value={editingCalc.material_type || ''}
-                    onChange={(e) => setEditingCalc({ ...editingCalc, material_type: e.target.value || undefined })}
+                    value={editingCalc.material_family || ''}
+                    onChange={(e) => setEditingCalc({ ...editingCalc, material_family: e.target.value || undefined })}
                     className="w-full px-3 py-2 border rounded-lg"
                   >
-                    <option value="">None</option>
-                    {materialTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
+                    <option value="">All Materials</option>
+                    {materialFamilies.map(family => (
+                      <option key={family} value={family}>{family}</option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">Filter materials shown in calculator dropdown</p>
                 </div>
                 
                 <div>
@@ -722,9 +723,9 @@ export default function AdminCalculatorsPage() {
                                 Category: {linkedCategory.name}
                               </span>
                             )}
-                            {calc.material_type && (
+                            {calc.material_family && (
                               <span className="px-2 py-1 bg-green-100 text-green-700 rounded">
-                                Material: {calc.material_type}
+                                Family: {calc.material_family}
                               </span>
                             )}
                           </div>
