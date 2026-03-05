@@ -61,7 +61,7 @@ class CalculatorTemplateCreate(BaseModel):
     formula_expression: str = Field(..., description="Math formula, e.g., 'pi * pow(diameter/2, 2) * length * material_density'")
     output_unit: str = Field(default="kg", description="Output unit, e.g., 'kg', 'liter'")
     output_label: str = Field(default="Weight", description="Output label, e.g., 'Weight', 'Volume'")
-    material_type: Optional[str] = Field(None, description="Material type for density lookup, e.g., 'steel'")
+    material_family: Optional[str] = Field(None, description="Material family for filtering, e.g., 'Steel', 'Stainless Steel'")
     use_material_density: bool = Field(default=True, description="Whether formula uses material_density variable")
     icon: Optional[str] = None
 
@@ -74,15 +74,15 @@ class CalculatorTemplateUpdate(BaseModel):
     formula_expression: Optional[str] = None
     output_unit: Optional[str] = None
     output_label: Optional[str] = None
-    material_type: Optional[str] = None
+    material_family: Optional[str] = None
     use_material_density: Optional[bool] = None
     icon: Optional[str] = None
     is_active: Optional[bool] = None
 
 class MaterialCreate(BaseModel):
     """Create a material with density and per-unit weights"""
-    name: str = Field(..., description="Material name, e.g., 'MS Steel'")
-    material_type: str = Field(..., description="Type category, e.g., 'steel', 'cement'")
+    name: str = Field(..., description="Material name, e.g., 'SS304'")
+    material_family: str = Field(..., description="Family/group, e.g., 'Stainless Steel', 'Steel', 'Aluminum'")
     density: Optional[float] = Field(None, description="Density in kg/m³")
     weight_per_unit: Optional[Dict[str, float]] = Field(
         default_factory=dict,
@@ -93,7 +93,7 @@ class MaterialCreate(BaseModel):
 class MaterialUpdate(BaseModel):
     """Update a material"""
     name: Optional[str] = None
-    material_type: Optional[str] = None
+    material_family: Optional[str] = None
     density: Optional[float] = None
     weight_per_unit: Optional[Dict[str, float]] = None
     description: Optional[str] = None
@@ -600,16 +600,26 @@ def create_configurable_calculator_router(db):
     # ========================
     
     @router.get("/materials")
-    async def get_materials(material_type: Optional[str] = None):
-        """Get all materials, optionally filtered by type"""
+    async def get_materials(
+        family: Optional[str] = None,
+        material_type: Optional[str] = None  # Backwards compatibility
+    ):
+        """Get all materials, optionally filtered by family"""
         query = {"is_active": {"$ne": False}, "isActive": {"$ne": False}}
         
-        # If material_type is provided, try to filter
-        # But also include materials without material_type for backwards compatibility
-        if material_type:
+        # Filter by material_family
+        if family:
+            query["$or"] = [
+                {"material_family": family},
+                {"material_family": {"$regex": family, "$options": "i"}},
+                {"material_family": {"$exists": False}}  # Include old materials
+            ]
+        elif material_type:
+            # Backwards compatibility
             query["$or"] = [
                 {"material_type": material_type},
-                {"material_type": {"$exists": False}}  # Include old materials
+                {"material_family": material_type},
+                {"material_family": {"$exists": False}}
             ]
         
         materials = []
@@ -618,6 +628,13 @@ def create_configurable_calculator_router(db):
             mat["_id"] = str(mat["_id"])
             materials.append(mat)
         return materials
+    
+    @router.get("/materials/families")
+    async def get_material_families():
+        """Get distinct material families"""
+        families = await db.materials.distinct("material_family", {"is_active": {"$ne": False}})
+        # Filter out None values
+        return [f for f in families if f]
     
     @router.get("/materials/types")
     async def get_material_types():

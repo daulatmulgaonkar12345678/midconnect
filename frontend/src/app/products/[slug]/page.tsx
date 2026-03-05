@@ -17,7 +17,7 @@ import {
 import { ProductJsonLd, CitySellerGroup, SEOContentSection, InternalLinksSection } from '@/components/ProductSEO';
 import MaterialCalculatorCard, { CalculationResult } from '@/components/calculator/MaterialCalculatorCard';
 import SellerPriceComparison, { RawMaterialSeller } from '@/components/calculator/SellerPriceComparison';
-import DynamicCalculator from '@/components/calculator/DynamicCalculator';
+import ModernDynamicCalculator from '@/components/calculator/ModernDynamicCalculator';
 import CalculatorSellerCards from '@/components/calculator/CalculatorSellerCards';
 import {
   Package,
@@ -1083,14 +1083,14 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
             </div>
 
             <div className="max-w-2xl mx-auto mb-8">
-              <DynamicCalculator
+              <ModernDynamicCalculator
                 calculatorId={linkedCalculatorId}
                 showPriceField={false}
                 onCalculate={(result) => {
                   setDynamicCalcResult(result);
                   console.log('Dynamic calculation result:', result);
                 }}
-                className="shadow-lg"
+                className="shadow-2xl"
               />
             </div>
             
