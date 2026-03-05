@@ -1367,6 +1367,83 @@ Build an Admin Spec Template System that supports raw material templates with fo
 4. ~~**Phase 4**: Seller Dashboard Display~~ ✅ COMPLETE
 5. ~~**Phase 5**: SEO Calculator Pages~~ ✅ COMPLETE
 
+---
+
+### Session: 2026-03-05 (21 Shapes + 14 Materials + 4 New SEO Pages)
+
+#### COMPLETE: Comprehensive Shape and Material Library
+
+**Problem Statement:**
+User requested to add all 21 industrial raw material shapes with their dependent dimension fields, 14 material types with accurate densities, and 4 new SEO calculator pages for Hex Bar, Angle, Channel, and Beam calculators.
+
+**Implementation:**
+
+1. **21 Shapes Added to Database** (`/app/backend/scripts/seed_shapes_and_materials.py`)
+   - **Solid Bars**: Round Bar, Square Bar, Hex Bar, Flat Bar, Rectangular Bar
+   - **Hollow Sections**: Pipe/Tube, Square Hollow Section (SHS), Rectangular Hollow Section (RHS)
+   - **Structural Sections**: Angle (L Angle), Channel (C Channel), I Beam, H Beam, T Section, Z Section
+   - **Flat Products**: Plate, Sheet, Chequered Plate, Perforated Sheet
+   - **Wire & Coil Products**: Wire Rod, Strip, Coil
+
+2. **14 Materials Added with Accurate Densities**
+   - **MS & Carbon Steel**: MS Steel (7,850 kg/m³), EN8 Steel (7,850 kg/m³), EN19 Steel (7,850 kg/m³)
+   - **Stainless Steel**: SS202 (7,900 kg/m³), SS304 (7,930 kg/m³), SS304L (7,930 kg/m³), SS316 (8,000 kg/m³), SS316L (8,000 kg/m³)
+   - **Aluminum**: Aluminum 6061 (2,700 kg/m³), Aluminum 6063 (2,700 kg/m³)
+   - **Other Metals**: Copper (8,960 kg/m³), Brass (8,500 kg/m³), Cast Iron (7,200 kg/m³), Titanium (4,500 kg/m³)
+
+3. **Backend Weight Calculator Updated** (`/app/backend/services/weight_calculator_service.py`)
+   - Added volume calculation functions for all shapes:
+     - `calculate_hex_bar_volume()`: V = (√3/2) × AF² × L
+     - `calculate_square_hollow_volume()`: V = (side² - (side-2t)²) × L
+     - `calculate_rectangular_hollow_volume()`: V = (W×H - (W-2t)×(H-2t)) × L
+     - `calculate_angle_volume()`: V = t × (A + B - t) × L
+     - `calculate_channel_volume()`: V = (web×tw + 2×flange×tf) × L
+     - `calculate_i_beam_volume()`: V = (2×W×tf + (H-2tf)×tw) × L
+     - `calculate_t_section_volume()`, `calculate_z_section_volume()`
+     - `calculate_chequered_plate_volume()` (1.05× for pattern)
+     - `calculate_perforated_sheet_volume()` (1 - open_area)
+
+4. **Frontend Calculator Updated** (`MaterialCalculatorCard.tsx`)
+   - Dynamic shape loading from `/api/raw-materials/shapes` API
+   - Client-side `calculateVolume()` function handles all 21 shapes
+   - Dynamic field rendering based on shape configuration
+
+5. **4 New SEO Calculator Pages Created**:
+   - `/tools/hex-bar-weight-calculator` - Hex Bar with Across Flats field
+   - `/tools/angle-weight-calculator` - L-Angle with Leg A, Leg B, Thickness
+   - `/tools/channel-weight-calculator` - C-Channel with Web/Flange dimensions
+   - `/tools/beam-weight-calculator` - I-Beam/H-Beam with structural dimensions
+
+**Testing Results** (100% - 25/25 backend + 4/4 frontend):
+- ✅ GET /api/raw-materials/shapes returns 21 shapes
+- ✅ GET /api/raw-materials/materials returns 15 materials (14 required + 1 original)
+- ✅ All shape calculations verified against expected weights:
+  - Hex Bar 25mm × 3m = 12.75 kg ✅
+  - Angle 65×65×6 × 6m = 35.04 kg ✅
+  - I-Beam ISMB 200 × 6m = 149.63 kg ✅
+  - Channel ISMC 150 × 6m = 97.16 kg ✅
+- ✅ All 4 new SEO pages load with correct default shapes
+- ✅ Dynamic fields render correctly for each shape
+
+**Files Created:**
+- `/app/backend/scripts/seed_shapes_and_materials.py` - Database seed script
+- `/app/frontend/src/app/tools/hex-bar-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/hex-bar-weight-calculator/client.tsx`
+- `/app/frontend/src/app/tools/angle-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/angle-weight-calculator/client.tsx`
+- `/app/frontend/src/app/tools/channel-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/channel-weight-calculator/client.tsx`
+- `/app/frontend/src/app/tools/beam-weight-calculator/page.tsx`
+- `/app/frontend/src/app/tools/beam-weight-calculator/client.tsx`
+- `/app/backend/tests/test_21_shapes_14_materials.py`
+
+**Files Modified:**
+- `/app/backend/services/weight_calculator_service.py` - Added all shape formulas
+- `/app/frontend/src/components/calculator/MaterialCalculatorCard.tsx` - Dynamic shape loading
+- `/app/frontend/src/components/seo/SEOCalculatorLayout.tsx` - Updated navigation links
+
+---
+
 ### P1: Deploy Backend to Render
 **CRITICAL**: User's production site is running outdated backend code. Recent fixes won't be live until redeployed.
 
