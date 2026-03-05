@@ -613,13 +613,15 @@ def create_configurable_calculator_router(db):
                 {"material_family": family},
                 {"material_family": {"$regex": family, "$options": "i"}},
                 {"material_family": {"$exists": False}}  # Include old materials
-            ]
+
+           ]
         elif material_type:
             # Backwards compatibility
             query["$or"] = [
                 {"material_type": material_type},
                 {"material_family": material_type},
                 {"material_family": {"$exists": False}}
+
             ]
         
         materials = []

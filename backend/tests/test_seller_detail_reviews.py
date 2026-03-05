@@ -11,7 +11,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://material-config.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-pricing-calc.preview.emergentagent.com').rstrip('/')
 
 # Test listing ID from context
 TEST_LISTING_ID = "699be9023cbe1a8c31591669"

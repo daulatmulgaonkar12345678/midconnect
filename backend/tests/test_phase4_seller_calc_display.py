@@ -12,7 +12,7 @@ import requests
 import os
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://material-config.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-pricing-calc.preview.emergentagent.com').rstrip('/')
 
 class TestPhase4SellerCalculationData:
     """Tests for Phase 4: Seller Dashboard Calculation Data Display"""

@@ -79,7 +79,7 @@
   "context_for_next_testing_agent": "Email verification architecture fully implemented and tested. Key endpoints: /api/auth/complete-profile (updates existing user), /api/auth/check-registration (returns status), /api/auth/cleanup-for-reregister (handles re-registration). Frontend types and api functions are in place. Firebase is NOT configured so actual end-to-end user registration cannot be tested. The background cleanup task runs hourly to remove unverified users past 24h deadline.",
 
   "test_environment": {
-    "api_url": "https://material-config.preview.emergentagent.com",
+    "api_url": "https://smart-pricing-calc.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"
   },

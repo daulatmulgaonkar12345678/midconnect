@@ -14,7 +14,7 @@ jobs:
         run: |
           BACKEND_URL="${{ secrets.BACKEND_URL }}"
           if [ -z "$BACKEND_URL" ]; then
-            BACKEND_URL="https://material-config.preview.emergentagent.com"
+            BACKEND_URL="https://smart-pricing-calc.preview.emergentagent.com"
           fi
           
           echo "Pinging $BACKEND_URL/api/health"
