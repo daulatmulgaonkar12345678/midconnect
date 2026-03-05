@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Calculator,
   Scale,
@@ -278,6 +278,12 @@ export default function MaterialCalculatorCard({
   compact = false,
   className = '',
 }: MaterialCalculatorProps) {
+  // Ref to store onCalculate callback (prevents infinite re-render)
+  const onCalculateRef = useRef(onCalculate);
+  useEffect(() => {
+    onCalculateRef.current = onCalculate;
+  }, [onCalculate]);
+
   // Data states
   const [materials, setMaterials] = useState<Material[]>(DEFAULT_MATERIALS);
   const [shapes] = useState<ShapeConfig[]>(DEFAULT_SHAPES);
@@ -369,10 +375,10 @@ export default function MaterialCalculatorCard({
 
     setResult(calculationResult);
     
-    if (calculationResult && onCalculate) {
-      onCalculate(calculationResult);
+    if (calculationResult && onCalculateRef.current) {
+      onCalculateRef.current(calculationResult);
     }
-  }, [currentMaterial, currentShape, selectedShape, dimensions, units, quantity, ratePerKg, onCalculate]);
+  }, [currentMaterial, currentShape, selectedShape, dimensions, units, quantity, ratePerKg]);
 
   // Auto-calculate when inputs change
   useEffect(() => {
