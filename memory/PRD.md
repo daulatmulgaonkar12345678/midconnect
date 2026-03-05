@@ -1055,6 +1055,58 @@ Build a Raw Material Smart Calculator system for calculating weight and price of
 
 ---
 
+### Session: 2026-03-05 (Raw Material Smart Calculator - Phase 4 Complete)
+
+#### COMPLETE: Seller Dashboard Integration for Raw Material Inquiries
+
+**Problem Statement:**
+Display raw material calculation data in the seller dashboard so sellers can immediately understand buyer requirements: material, shape, dimensions, quantity, calculated weight, and estimated price.
+
+**Implementation:**
+
+1. **Backend - Seller Inquiries Response** (`seller_products.py`)
+   - Modified `get_seller_inquiries` to include `calculationData` in response
+   - Serializes calculation data (material, shape, dimensions, weight, price)
+
+2. **Frontend - Seller Inquiry Type** (`types/index.ts`)
+   - Extended `SellerInquiry` interface with `calculationData` property
+   - Fields: material, shape, dimensions, quantity, weight_per_piece, total_weight, rate_per_kg, calculated_price
+
+3. **Frontend - Seller Inquiries Page** (`/seller/inquiries/page.tsx`)
+   - Added "Raw Material Calculation" section (only shown when calculationData exists)
+   - Displays material, shape, quantity, total weight
+   - Shows dimensions as tags (e.g., "diameter: 20 mm", "length: 6 meter")
+   - Visual price formula: Rate/kg × Weight = Buyer's Estimate
+   - Uses Calculator and Scale icons from lucide-react
+   - data-testid for testing: `calc-data-{inquiry._id}`
+
+**UI Layout:**
+```
+Inquiry Card
+├── Inquiry Header (product, buyer, status)
+├── Raw Material Calculation (if calculationData exists)
+│   ├── Material, Shape, Quantity, Total Weight
+│   ├── Dimensions (as tags)
+│   └── Price Formula: ₹Rate × Weight = ₹Estimate
+├── Actions (Accept, Reject, Report)
+└── Buyer Contact (if accepted)
+```
+
+**Testing Results** (100% - 12/12):
+- ✅ POST /api/inquiries accepts calculationData field
+- ✅ GET /api/seller/inquiries returns calculationData when present
+- ✅ SellerInquiry type includes calculationData property
+- ✅ Calculator and Scale icons imported
+- ✅ Raw Material Calculation section renders correctly
+- ✅ TypeScript compiles without errors
+
+**Files Modified:**
+- `/app/backend/seller_products.py` - Added calculationData to inquiry response
+- `/app/frontend/src/types/index.ts` - Extended SellerInquiry type
+- `/app/frontend/src/app/seller/inquiries/page.tsx` - Added calculation display section
+
+---
+
 ### Session: 2026-03-05 (Raw Material Smart Calculator - Phase 3 Complete)
 
 #### COMPLETE: Product Page Calculator Integration
@@ -1168,7 +1220,7 @@ Build an Admin Spec Template System that supports raw material templates with fo
 ### P0: Raw Material Calculator - Remaining Phases
 1. ~~**Phase 2**: Admin UI for Spec Templates specific to raw materials~~ ✅ COMPLETE
 2. ~~**Phase 3**: Integrate calculator into raw material product pages~~ ✅ COMPLETE
-3. **Phase 4**: Inquiry system extension - display calculation data in seller dashboard
+3. ~~**Phase 4**: Display calculation data in seller dashboard~~ ✅ COMPLETE
 4. **Phase 5**: SEO Calculator pages (/tools/steel-weight-calculator, etc.)
 
 ### P1: Deploy Backend to Render
