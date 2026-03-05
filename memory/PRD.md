@@ -1444,7 +1444,95 @@ User requested to add all 21 industrial raw material shapes with their dependent
 
 ---
 
-### P1: Deploy Backend to Render
+### Session: 2026-03-05 - Configurable Calculator System Refactoring
+
+#### COMPLETE: Flexible Admin-Configurable Calculator System
+
+**Problem Statement:**
+User requested to refactor the hardcoded raw material calculator into a fully configurable system where admins can create any type of calculator (steel, cement, chemicals, etc.) without code changes.
+
+**System Architecture Implemented:**
+
+1. **Unit Groups** (`/api/calculator/unit-groups`)
+   - Admin-managed unit conversion system
+   - 6 default groups: Length, Weight, Volume, Area, Quantity, Percentage
+   - Each unit has conversion factor to base unit
+   - Example: mm → 0.001 (to meters)
+
+2. **Calculator Templates** (`/api/calculator/calculators`)
+   - Admin-defined calculator configurations
+   - Each template has:
+     - Name, slug, description
+     - Dynamic fields (key, label, unit_group, default_unit)
+     - Formula expression (evaluated safely)
+     - Output unit and label
+     - Material type linking
+   - Safe formula evaluator supports: pi, pow, sqrt, sin, cos, tan, log, min, max, round, floor, ceil
+
+3. **Materials Table** (`/api/calculator/materials`)
+   - Material name and type
+   - Density (kg/m³) for volume calculations
+   - Weight per unit (for common sizes, permanent values)
+   - Example: "10mm_round_per_meter": 0.617 kg
+
+4. **Dynamic Calculator Component** (`DynamicCalculator.tsx`)
+   - Loads calculator from database
+   - Renders fields dynamically based on template
+   - Auto-calculates on value change
+   - Shows formula used
+
+**API Endpoints Created:**
+- `GET /api/calculator/unit-groups` - List all unit groups
+- `POST /api/calculator/unit-groups` - Create unit group
+- `PUT /api/calculator/unit-groups/{id}` - Update unit group
+- `GET /api/calculator/calculators` - List all calculators
+- `GET /api/calculator/calculators/{id}` - Get single calculator
+- `GET /api/calculator/calculators/by-category/{category_id}` - Get calculator for category
+- `POST /api/calculator/calculators` - Create calculator
+- `PUT /api/calculator/calculators/{id}` - Update calculator
+- `DELETE /api/calculator/calculators/{id}` - Delete calculator
+- `GET /api/calculator/materials` - List materials (with type filter)
+- `GET /api/calculator/materials/types` - Get material types
+- `POST /api/calculator/materials` - Create material
+- `PUT /api/calculator/materials/{id}` - Update material
+- `DELETE /api/calculator/materials/{id}` - Delete material
+- `POST /api/calculator/calculate` - Perform calculation
+- `POST /api/calculator/calculate-with-prices` - Calculate with seller prices
+
+**Admin Pages Created:**
+- `/admin/calculators` - Manage calculator templates with formula helper
+- `/admin/unit-groups` - Manage unit groups and conversions
+- `/admin/materials` - Updated to support material_type and weight_per_unit
+
+**Test Page:**
+- `/tools/dynamic-calculator` - Test page for the configurable calculator system
+
+**Sample Calculators Created:**
+1. Round Bar Calculator - `pi * pow(diameter / 2, 2) * length * density`
+2. Hex Bar Calculator - `0.866 * pow(across_flats, 2) * length * density`
+3. Pipe Calculator - `pi * (pow(OD/2, 2) - pow((OD-2t)/2, 2)) * length * density`
+4. Plate Calculator - `thickness * width * length * density`
+
+**Files Created:**
+- `/app/backend/routers/configurable_calculator.py` - Full CRUD API + formula evaluator
+- `/app/backend/scripts/seed_unit_groups.py` - Seed default unit groups
+- `/app/frontend/src/components/calculator/DynamicCalculator.tsx` - Dynamic calculator component
+- `/app/frontend/src/app/admin/calculators/page.tsx` - Calculator templates admin
+- `/app/frontend/src/app/admin/unit-groups/page.tsx` - Unit groups admin
+- `/app/frontend/src/app/tools/dynamic-calculator/page.tsx` - Test page
+
+**Files Modified:**
+- `/app/backend/server.py` - Added configurable calculator router
+- `/app/frontend/src/app/admin/materials/page.tsx` - Updated for new material structure
+
+**Key Benefits:**
+1. No code changes needed to add new calculators
+2. Admins define fields, formulas, and units through UI
+3. Safe formula evaluation prevents code injection
+4. Category-linked calculators for automatic loading
+5. Seller pricing integration for B2B marketplace
+
+---
 **CRITICAL**: User's production site is running outdated backend code. Recent fixes won't be live until redeployed.
 
 ### P1: Implement Token-Based Search

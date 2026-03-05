@@ -12705,6 +12705,11 @@ from routers.raw_material_router import create_raw_material_router
 raw_material_router = create_raw_material_router(db, require_admin)
 app.include_router(raw_material_router, prefix="/api/raw-materials")
 
+# ================== CONFIGURABLE CALCULATOR ROUTER ==================
+from routers.configurable_calculator import create_configurable_calculator_router
+configurable_calculator_router = create_configurable_calculator_router(db)
+app.include_router(configurable_calculator_router, prefix="/api/calculator")
+
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health
