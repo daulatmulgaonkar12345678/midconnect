@@ -1381,6 +1381,9 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
                 serialized["buyerInfo"] = buyer_info
                 serialized["buyerMasked"] = buyer_masked
                 serialized["buyerType"] = inq.get("buyerType")
+                # Include raw material calculation data if present
+                if inq.get("calculationData"):
+                    serialized["calculationData"] = serialize_mongo_doc(inq.get("calculationData"))
                 result.append(serialized)
             except Exception as e:
                 logger.warning(f"Error processing inquiry {inq.get('_id')}: {e}")
