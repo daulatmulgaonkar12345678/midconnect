@@ -8261,6 +8261,10 @@ async def get_spec_templates_by_category(category_id: str):
     """
     Get all active spec templates for a category.
     Used for product pages to load calculator configuration for raw materials.
+    
+    Returns isRawMaterial=True if:
+    - Category has categoryType='raw_material' OR
+    - Any spec template has templateType='raw_material'
     """
     try:
         category_oid = ObjectId(category_id)
@@ -8278,14 +8282,111 @@ async def get_spec_templates_by_category(category_id: str):
         "isActive": {"$ne": False}
     }).to_list(100)
     
+    # Check if category OR any template is raw_material type
+    is_raw_material = category.get("categoryType") == "raw_material"
+    
+    # Also check templates for raw_material type
+    raw_material_template = None
+    for t in templates:
+        if t.get("templateType") == "raw_material":
+            is_raw_material = True
+            raw_material_template = t
+            break
+    
+    # Serialize templates
+    serialized_templates = [serialize_mongo_doc(t) for t in templates]
+    
     return {
         "category": {
             "_id": str(category["_id"]),
             "name": category.get("name"),
             "categoryType": category.get("categoryType", "standard")
         },
-        "templates": [serialize_mongo_doc(t) for t in templates],
-        "isRawMaterial": category.get("categoryType") == "raw_material"
+        "templates": serialized_templates,
+        "isRawMaterial": is_raw_material,
+        # Include raw material template config if exists
+        "rawMaterialTemplate": serialize_mongo_doc(raw_material_template) if raw_material_template else None
+    }
+
+
+@api_router.get("/products/{product_id}/raw-material-config")
+async def get_product_raw_material_config(product_id: str):
+    """
+    Get raw material calculator configuration for a product.
+    Used by buyers to see calculator on product pages.
+    
+    Returns:
+    - isRawMaterial: boolean
+    - calculatorConfig: shape, fields, formula info
+    - materials: list of available materials with densities
+    """
+    try:
+        product_oid = ObjectId(product_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+    
+    # Get product
+    product = await db.products.find_one({"_id": product_oid})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get category
+    category_id = product.get("categoryId")
+    if not category_id:
+        return {"isRawMaterial": False, "message": "Product has no category"}
+    
+    category = await db.categories.find_one({"_id": category_id})
+    if not category:
+        return {"isRawMaterial": False, "message": "Category not found"}
+    
+    # Check category type
+    is_raw_material = category.get("categoryType") == "raw_material"
+    
+    # Get spec templates for this category
+    templates = await db.specTemplates.find({
+        "categoryId": category_id,
+        "isActive": {"$ne": False}
+    }).to_list(100)
+    
+    # Find raw material template
+    raw_material_template = None
+    for t in templates:
+        if t.get("templateType") == "raw_material":
+            is_raw_material = True
+            raw_material_template = t
+            break
+    
+    if not is_raw_material:
+        return {"isRawMaterial": False}
+    
+    # Get materials list
+    materials = await db.materials.find({}).to_list(100)
+    
+    # Build calculator config from template
+    calculator_config = None
+    if raw_material_template:
+        calculator_config = {
+            "templateId": str(raw_material_template["_id"]),
+            "templateName": raw_material_template.get("name"),
+            "formulaType": raw_material_template.get("formulaType"),
+            "supportedShapes": raw_material_template.get("supportedShapes", []),
+            "fields": raw_material_template.get("fields", [])
+        }
+    
+    return {
+        "isRawMaterial": True,
+        "product": {
+            "_id": str(product["_id"]),
+            "name": product.get("name"),
+            "categoryId": str(category_id)
+        },
+        "category": {
+            "_id": str(category["_id"]),
+            "name": category.get("name"),
+            "categoryType": category.get("categoryType", "standard")
+        },
+        "calculatorConfig": calculator_config,
+        "materials": [{"name": m.get("name"), "density": m.get("density")} for m in materials]
     }
 
     

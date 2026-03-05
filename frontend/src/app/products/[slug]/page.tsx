@@ -690,21 +690,35 @@ export default function EnterpriseProductPage() {
         setFacets(facetsData);
         setSellers(productData.sellers);
         
-        // Check if category is raw_material type (load spec templates)
-        if (productData.product.categoryId) {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
-          fetch(`${API_URL}/api/spec-templates/by-category/${productData.product.categoryId}`)
-            .then(res => res.json())
-            .then(data => {
-              if (data.isRawMaterial) {
-                setIsRawMaterial(true);
-              }
-            })
-            .catch(err => console.log('Category check failed:', err));
-        }
+        // Check if this is a raw material product (check category type OR template type)
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+        const actualProductId = productData.product._id;
+        
+        // First try product-specific config (uses actual _id, not slug)
+        fetch(`${API_URL}/api/products/${actualProductId}/raw-material-config`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.isRawMaterial) {
+              setIsRawMaterial(true);
+              console.log('Raw material product detected:', data);
+            }
+          })
+          .catch(err => {
+            console.log('Product raw material check failed, trying category:', err);
+            // Fallback to category-based check
+            if (productData.product.categoryId) {
+              fetch(`${API_URL}/api/spec-templates/by-category/${productData.product.categoryId}`)
+                .then(res => res.json())
+                .then(data => {
+                  if (data.isRawMaterial) {
+                    setIsRawMaterial(true);
+                  }
+                })
+                .catch(err2 => console.log('Category check also failed:', err2));
+            }
+          });
         
         // Load SEO data in background (non-blocking) - Enhanced for Marketplace v2.0
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
         fetch(`${API_URL}/api/products/${productId}/seo`)
           .then(res => res.json())
           .then(data => {

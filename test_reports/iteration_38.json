@@ -1,0 +1,79 @@
+{
+  "summary": "Raw material spec template visibility fix verified. Backend endpoints working correctly (14/14 tests passed). Fixed frontend bug where slug was used instead of product ObjectId for raw-material-config API call.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_raw_material_spec_visibility.py",
+    "/app/test_reports/pytest/raw_material_spec_visibility_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fixed duplicate API_URL const declaration in page.tsx line 721 (build error)",
+    "Fixed frontend calling raw-material-config with slug instead of product._id (line 698)"
+  ],
+  "updated_files": [
+    "/app/frontend/src/app/products/[slug]/page.tsx",
+    "/app/backend/tests/test_raw_material_spec_visibility.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "100% (API integration verified)"
+  },
+  "test_credentials": "N/A - Public endpoints tested",
+  "seed_data_creation": "Using existing products (Industrial Electric Motor 5HP, TEST_Product_ValidTemplate)",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Raw material spec template visibility feature working: 1) GET /api/spec-templates/by-category/{id} returns isRawMaterial=true when category.categoryType='raw_material' OR any template has templateType='raw_material' 2) GET /api/products/{id}/raw-material-config returns full calculator config when raw material, isRawMaterial=false otherwise 3) Frontend correctly calls these endpoints with product ObjectId (not slug) 4) Calculator UI shows only when isRawMaterial=true. Note: To test calculator UI, admin must mark a category as categoryType='raw_material' or create spec template with templateType='raw_material' in admin panel.",
+  "tests_executed": {
+    "backend_api_tests": {
+      "test_endpoint_exists_spec_templates_by_category": "PASS",
+      "test_valid_category_returns_proper_structure": "PASS",
+      "test_returns_raw_material_template_when_template_type_is_raw_material": "PASS",
+      "test_invalid_category_id_returns_400": "PASS",
+      "test_nonexistent_category_returns_404": "PASS",
+      "test_endpoint_exists_raw_material_config": "PASS",
+      "test_valid_product_returns_config": "PASS",
+      "test_raw_material_product_returns_calculator_config": "PASS",
+      "test_standard_product_returns_is_raw_material_false": "PASS",
+      "test_materials_list_structure": "PASS",
+      "test_invalid_product_id_returns_400": "PASS",
+      "test_nonexistent_product_returns_404": "PASS",
+      "test_both_detection_methods_work": "PASS",
+      "test_spec_template_by_category_checks_template_type": "PASS"
+    },
+    "frontend_tests": {
+      "product_page_loads": "PASS - Industrial Electric Motor 5HP page loads correctly",
+      "raw_material_config_api_call": "PASS - Uses ObjectId (699be9023cbe1a8c31591668) not slug",
+      "standard_product_no_calculator": "PASS - isRawMaterial=false, no calculator UI shown",
+      "spec_filter_panel": "PASS - Filter by Specs panel works",
+      "seller_card_display": "PASS - 1 seller found with pricing tiers"
+    }
+  },
+  "code_verification": {
+    "backend_spec_templates_by_category": "GET /api/spec-templates/by-category/{id} - Lines 8259-8309 in server.py. Returns isRawMaterial based on categoryType='raw_material' OR templateType='raw_material'",
+    "backend_product_raw_material_config": "GET /api/products/{id}/raw-material-config - Lines 8312-8390 in server.py. Returns calculator config with materials list when raw_material",
+    "frontend_raw_material_detection": "Lines 693-718 in page.tsx. Fixed to use productData.product._id instead of URL slug",
+    "frontend_calculator_ui": "Lines 1031-1106 in page.tsx. MaterialCalculatorCard and SellerPriceComparison render when isRawMaterial=true"
+  },
+  "bugs_fixed": [
+    {
+      "file": "/app/frontend/src/app/products/[slug]/page.tsx",
+      "line": 721,
+      "issue": "Duplicate const API_URL declaration causing build error",
+      "fix": "Removed duplicate declaration, reused existing API_URL from line 694"
+    },
+    {
+      "file": "/app/frontend/src/app/products/[slug]/page.tsx",
+      "line": 697,
+      "issue": "Using URL slug (productId) instead of actual product ObjectId for raw-material-config API call",
+      "fix": "Changed to use productData.product._id (actualProductId) for API call"
+    }
+  ]
+}
