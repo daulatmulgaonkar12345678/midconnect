@@ -1055,10 +1055,64 @@ Build a Raw Material Smart Calculator system for calculating weight and price of
 
 ---
 
+### Session: 2026-03-05 (Raw Material Smart Calculator - Phase 2 Complete)
+
+#### COMPLETE: Admin Spec Template System for Raw Materials
+
+**Problem Statement:**
+Build an Admin Spec Template System that supports raw material templates with formula types (round_bar, square_bar, pipe, plate, sheet), auto-populated dimension fields, and category type classification (standard vs raw_material).
+
+**Implementation:**
+
+1. **Backend - Extended Spec Template Models** (`server.py`)
+   - Added `templateType` field (standard | raw_material)
+   - Added `formulaType` field (round_bar | square_bar | pipe | plate | sheet)
+   - Added `supportedShapes` array field
+   - Updated `AdminSpecTemplateCreate` and `AdminSpecTemplateUpdate` models
+
+2. **Backend - Category Type Extension**
+   - Added `categoryType` field to `AdminCategoryUpdate` (standard | raw_material)
+   - Categories marked as raw_material will show calculator on product pages
+
+3. **Backend - New API Endpoint**
+   - `GET /api/spec-templates/by-category/{category_id}` - Returns:
+     - Category info with name and categoryType
+     - Associated spec templates
+     - `isRawMaterial` flag for easy frontend detection
+
+4. **Frontend - Admin Spec Templates Page** (`/admin/spec-templates/page.tsx`)
+   - Template Type selector (Standard / Raw Material with Calculator)
+   - Formula Type selection with 5 shape options
+   - Auto-populate dimension fields when formula type selected
+   - Supported Shapes multi-select
+   - Visual badges for raw material templates
+   - Filter by template type
+
+5. **Frontend - Admin Categories Page** (`/admin/categories/page.tsx`)
+   - Category Type radio buttons (Standard / Raw Materials)
+   - Visual badge for raw material categories
+   - Info text explaining raw material calculator behavior
+
+**Testing Results** (100% - 12/12 backend + all frontend):
+- ✅ All calculator shapes work (round_bar, square_bar, pipe, plate, sheet)
+- ✅ GET /spec-templates/by-category returns category with isRawMaterial flag
+- ✅ Admin spec templates page has raw material configuration
+- ✅ Admin categories page has categoryType selection
+- ✅ Auto-populate fields work for each formula type
+- ✅ Auth required for admin pages
+
+**Files Modified:**
+- `/app/backend/server.py` - Added templateType, formulaType, supportedShapes, categoryType
+- `/app/frontend/src/app/admin/spec-templates/page.tsx` - Raw material template creation
+- `/app/frontend/src/app/admin/categories/page.tsx` - Category type selection
+- `/app/frontend/src/types/index.ts` - Updated AdminSpecTemplate and Category types
+
+---
+
 ## Pending Tasks (Priority Order)
 
 ### P0: Raw Material Calculator - Remaining Phases
-1. **Phase 2**: Admin UI for Spec Templates specific to raw materials
+1. ~~**Phase 2**: Admin UI for Spec Templates specific to raw materials~~ ✅ COMPLETE
 2. **Phase 3**: Integrate calculator into raw material product pages
 3. **Phase 4**: Inquiry system extension with dimension/weight data
 4. **Phase 5**: SEO Calculator pages (/tools/steel-weight-calculator, etc.)
