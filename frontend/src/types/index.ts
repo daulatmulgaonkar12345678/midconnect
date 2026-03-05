@@ -18,6 +18,7 @@ export interface Category {
   isActive: boolean;
   productCount?: number;
   listingCount?: number;
+  categoryType?: 'standard' | 'raw_material';
 }
 
 export interface TechnicalSpec {
@@ -451,6 +452,10 @@ export interface AdminSpecTemplate {
     required?: boolean;
   }>;
   isActive?: boolean;
+  // Raw material template fields
+  templateType?: 'standard' | 'raw_material';
+  formulaType?: 'round_bar' | 'square_bar' | 'pipe' | 'plate' | 'sheet';
+  supportedShapes?: string[];
 }
 
 export interface AdminInquiry {

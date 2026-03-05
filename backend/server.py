@@ -7659,6 +7659,7 @@ class AdminCategoryUpdate(BaseModel):
     imageUrl: Optional[str] = Field(None, description="Category image URL (Firebase URL)")
     displayOrder: Optional[int] = Field(None, ge=0)
     isActive: Optional[bool] = None
+    categoryType: Optional[str] = Field(None, pattern="^(standard|raw_material)$", description="Category type: standard or raw_material")
 
 class SpecField(BaseModel):
     """
@@ -7673,14 +7674,24 @@ class SpecField(BaseModel):
     required: bool = Field(False, description="Whether field is required")
     displayOrder: int = Field(0, ge=0, description="Display order")
 
+
 class AdminSpecTemplateCreate(BaseModel):
     """
     Create a specification template (admin only).
     SSOT: All fields use camelCase to match database schema.
+    
+    For raw material templates:
+    - Set templateType to 'raw_material'
+    - Set formulaType to calculation formula (round_bar, square_bar, pipe, plate, sheet)
+    - Set supportedShapes to list of shapes the template supports
     """
     name: str = Field(..., min_length=2, max_length=100)
     categoryId: str = Field(..., description="Category ID (ObjectId string)")
     fields: List[SpecField]
+    # Raw material template fields
+    templateType: Optional[str] = Field(default="standard", pattern="^(standard|raw_material)$", description="Template type: standard or raw_material")
+    formulaType: Optional[str] = Field(default=None, pattern="^(round_bar|square_bar|pipe|plate|sheet)$", description="Formula type for weight calculation")
+    supportedShapes: Optional[List[str]] = Field(default=None, description="List of supported shapes for raw material templates")
 
 class AdminSpecTemplateUpdate(BaseModel):
     """
@@ -7690,6 +7701,10 @@ class AdminSpecTemplateUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=100)
     fields: Optional[List[SpecField]] = None
     isActive: Optional[bool] = None
+    # Raw material template fields
+    templateType: Optional[str] = Field(default=None, pattern="^(standard|raw_material)$", description="Template type: standard or raw_material")
+    formulaType: Optional[str] = Field(default=None, pattern="^(round_bar|square_bar|pipe|plate|sheet)$", description="Formula type for weight calculation")
+    supportedShapes: Optional[List[str]] = Field(default=None, description="List of supported shapes for raw material templates")
 
 class AdminProductCreate(BaseModel):
     """
@@ -7844,6 +7859,8 @@ async def admin_update_category(
         update_data["imageUrl"] = updates.imageUrl  # SSOT: camelCase - Firebase URL
     if updates.displayOrder is not None:
         update_data["displayOrder"] = updates.displayOrder  # SSOT: camelCase
+    if updates.categoryType is not None:
+        update_data["categoryType"] = updates.categoryType  # standard or raw_material
     
     await db.categories.update_one({"_id": ObjectId(category_id)}, {"$set": update_data})
     
@@ -8165,7 +8182,11 @@ async def admin_create_spec_template(
         "isActive": True,  # SSOT: camelCase
         "createdAt": datetime.now(timezone.utc),
         "createdBy": str(admin["_id"]),
-        "updatedAt": datetime.now(timezone.utc)
+        "updatedAt": datetime.now(timezone.utc),
+        # Raw material template fields
+        "templateType": template.templateType or "standard",
+        "formulaType": template.formulaType,
+        "supportedShapes": template.supportedShapes or []
     }
     
     await db.specTemplates.insert_one(template_doc)
@@ -8199,6 +8220,13 @@ async def admin_update_spec_template(
         update_data["fields"] = [field.model_dump() for field in updates.fields]
     if updates.isActive is not None:
         update_data["isActive"] = updates.isActive  # SSOT: camelCase in DB
+    # Raw material template fields
+    if updates.templateType is not None:
+        update_data["templateType"] = updates.templateType
+    if updates.formulaType is not None:
+        update_data["formulaType"] = updates.formulaType
+    if updates.supportedShapes is not None:
+        update_data["supportedShapes"] = updates.supportedShapes
     
     await db.specTemplates.update_one({"_id": ObjectId(template_id)}, {"$set": update_data})
     
@@ -8222,6 +8250,39 @@ async def get_spec_template(template_id: str):
         raise HTTPException(status_code=404, detail="Spec template not found")
 
     return serialize_mongo_doc(template)
+
+
+@api_router.get("/spec-templates/by-category/{category_id}")
+async def get_spec_templates_by_category(category_id: str):
+    """
+    Get all active spec templates for a category.
+    Used for product pages to load calculator configuration for raw materials.
+    """
+    try:
+        category_oid = ObjectId(category_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid category ID")
+    
+    # Get category to check type
+    category = await db.categories.find_one({"_id": category_oid})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Get templates for this category
+    templates = await db.specTemplates.find({
+        "categoryId": category_oid,
+        "isActive": {"$ne": False}
+    }).to_list(100)
+    
+    return {
+        "category": {
+            "_id": str(category["_id"]),
+            "name": category.get("name"),
+            "categoryType": category.get("categoryType", "standard")
+        },
+        "templates": [serialize_mongo_doc(t) for t in templates],
+        "isRawMaterial": category.get("categoryType") == "raw_material"
+    }
 
     
 @api_router.delete("/admin/spec-templates/{template_id}")

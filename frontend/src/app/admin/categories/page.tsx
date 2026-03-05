@@ -48,7 +48,8 @@ export default function CategoriesPage() {
     description: '',
     image: '',
     icon: '',
-    displayOrder: 0
+    displayOrder: 0,
+    categoryType: 'standard' as 'standard' | 'raw_material'
   });
   
   const [settingsData, setSettingsData] = useState<CategorySettings>({
@@ -100,7 +101,8 @@ export default function CategoriesPage() {
       description: '',
       image: '',
       icon: '',
-      displayOrder: categories.length
+      displayOrder: categories.length,
+      categoryType: 'standard'
     });
     setSettingsData({
       allowedUnits: ['pcs'],
@@ -123,7 +125,8 @@ export default function CategoriesPage() {
       description: category.description || '',
       image: category.image || '',
       icon: category.icon || '',
-      displayOrder: category.displayOrder ?? 0
+      displayOrder: category.displayOrder ?? 0,
+      categoryType: (category as unknown as { categoryType?: string }).categoryType as 'standard' | 'raw_material' || 'standard'
     });
     setSettingsData(category.settings || {
       allowedUnits: ['pcs'],
@@ -271,6 +274,11 @@ export default function CategoriesPage() {
                 />
               )}
               <div className="absolute top-2 right-2 flex gap-1">
+                {(category as unknown as { categoryType?: string }).categoryType === 'raw_material' && (
+                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                    Raw Material
+                  </span>
+                )}
                 <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                   category.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                 }`}>
@@ -469,6 +477,41 @@ export default function CategoriesPage() {
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
+                  </div>
+                  
+                  {/* Category Type */}
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Category Type</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="categoryType"
+                          value="standard"
+                          checked={formData.categoryType === 'standard'}
+                          onChange={() => setFormData({ ...formData, categoryType: 'standard' })}
+                          className="text-blue-600"
+                        />
+                        <span className="text-sm">Standard Products</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="categoryType"
+                          value="raw_material"
+                          checked={formData.categoryType === 'raw_material'}
+                          onChange={() => setFormData({ ...formData, categoryType: 'raw_material' })}
+                          className="text-orange-600"
+                          data-testid="raw-material-category"
+                        />
+                        <span className="text-sm">Raw Materials (with Calculator)</span>
+                      </label>
+                    </div>
+                    {formData.categoryType === 'raw_material' && (
+                      <p className="text-xs text-orange-600 mt-2">
+                        Products in this category will display the weight calculator for buyers to estimate material requirements.
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : (
