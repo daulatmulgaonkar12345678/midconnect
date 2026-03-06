@@ -1086,10 +1086,15 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
             <div className="mb-8">
               <ModernDynamicCalculator
                 calculatorId={linkedCalculatorId}
+                productName={product?.name}
                 showPriceField={false}
                 onCalculate={(result) => {
                   setDynamicCalcResult(result);
                   console.log('Dynamic calculation result:', result);
+                }}
+                onMaterialChange={(material) => {
+                  console.log('Material changed:', material);
+                  // Could update product page based on material selection
                 }}
               />
             </div>

@@ -21,14 +21,36 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
 
+// Shape types for materials
+const SHAPE_TYPES = [
+  { value: 'circular_bar', label: 'Circular Bar / Round Bar' },
+  { value: 'hollow_pipe', label: 'Hollow Pipe / Tube' },
+  { value: 'square_bar', label: 'Square Bar' },
+  { value: 'rectangular_bar', label: 'Rectangular Bar / Flat Bar' },
+  { value: 'hexagonal_bar', label: 'Hexagonal Bar' },
+  { value: 'sheet', label: 'Sheet / Plate' },
+  { value: 'angle', label: 'Angle' },
+  { value: 'channel', label: 'Channel' },
+  { value: 'beam', label: 'I-Beam / H-Beam' },
+];
+
 interface Material {
   _id: string;
   name: string;
   material_family: string;
+  shape_type?: string;
+  linked_product_slug?: string;
+  calculator_id?: string;
   density?: number;
   weight_per_unit?: Record<string, number>;
   description?: string;
   is_active?: boolean;
+}
+
+interface Calculator {
+  _id: string;
+  name: string;
+  slug: string;
 }
 
 interface WeightPerUnitEntry {
@@ -47,6 +69,7 @@ export default function MaterialsManagerPage() {
   
   const [materials, setMaterials] = useState<Material[]>([]);
   const [materialFamilies, setMaterialFamilies] = useState<string[]>([]);
+  const [calculators, setCalculators] = useState<Calculator[]>([]);
   const [newFamily, setNewFamily] = useState('');
   const [showNewFamilyInput, setShowNewFamilyInput] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -59,6 +82,9 @@ export default function MaterialsManagerPage() {
   const [formData, setFormData] = useState({
     name: '',
     material_family: '',
+    shape_type: '',
+    linked_product_slug: '',
+    calculator_id: '',
     density: '',
     description: ''
   });
@@ -76,19 +102,24 @@ export default function MaterialsManagerPage() {
 
   const loadMaterials = async () => {
     try {
-      const [materialsRes, familiesRes] = await Promise.all([
+      const [materialsRes, familiesRes, calculatorsRes] = await Promise.all([
         fetch(`${API_URL}/api/calculator/materials`),
-        fetch(`${API_URL}/api/calculator/materials/families`)
+        fetch(`${API_URL}/api/calculator/materials/families`),
+        fetch(`${API_URL}/api/calculator/calculators`)
       ]);
       
       const materialsData = materialsRes.ok ? await materialsRes.json() : [];
       const familiesData = familiesRes.ok ? await familiesRes.json() : [];
+      const calculatorsData = calculatorsRes.ok ? await calculatorsRes.json() : [];
       
-      // Map materials to use material_family
+      // Map materials to include new fields
       const mappedMaterials = materialsData.map((mat: any) => ({
         _id: mat._id,
         name: mat.name,
         material_family: mat.material_family || mat.material_type || 'General',
+        shape_type: mat.shape_type,
+        linked_product_slug: mat.linked_product_slug,
+        calculator_id: mat.calculator_id,
         density: mat.density,
         weight_per_unit: mat.weight_per_unit || {},
         description: mat.description,
@@ -96,6 +127,7 @@ export default function MaterialsManagerPage() {
       }));
       
       setMaterials(mappedMaterials);
+      setCalculators(calculatorsData);
       
       // Set families from API or extract from materials
       if (familiesData.length > 0) {
@@ -140,9 +172,15 @@ export default function MaterialsManagerPage() {
         }
       });
       
+      // Auto-generate linked_product_slug from name if not provided
+      const slug = formData.linked_product_slug || formData.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      
       const payload = {
         name: formData.name.trim(),
         material_family: formData.material_family,
+        shape_type: formData.shape_type || undefined,
+        linked_product_slug: slug,
+        calculator_id: formData.calculator_id || undefined,
         density: formData.density ? parseFloat(formData.density) : undefined,
         weight_per_unit: Object.keys(weightObj).length > 0 ? weightObj : undefined,
         description: formData.description || undefined
@@ -181,6 +219,9 @@ export default function MaterialsManagerPage() {
     setFormData({
       name: material.name,
       material_family: material.material_family || '',
+      shape_type: material.shape_type || '',
+      linked_product_slug: material.linked_product_slug || '',
+      calculator_id: material.calculator_id || '',
       density: material.density?.toString() || '',
       description: material.description || ''
     });
@@ -225,7 +266,15 @@ export default function MaterialsManagerPage() {
   const resetForm = () => {
     setShowForm(false);
     setEditingMaterial(null);
-    setFormData({ name: '', material_family: materialFamilies[0] || '', density: '', description: '' });
+    setFormData({ 
+      name: '', 
+      material_family: materialFamilies[0] || '', 
+      shape_type: '',
+      linked_product_slug: '',
+      calculator_id: '',
+      density: '', 
+      description: '' 
+    });
     setWeightPerUnit([]);
     setShowWeightSection(false);
     setShowNewFamilyInput(false);
@@ -412,6 +461,44 @@ export default function MaterialsManagerPage() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Shape Type
+                  </label>
+                  <select
+                    value={formData.shape_type}
+                    onChange={(e) => setFormData(prev => ({ ...prev, shape_type: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">-- Select Shape --</option>
+                    {SHAPE_TYPES.map(shape => (
+                      <option key={shape.value} value={shape.value}>
+                        {shape.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Determines which calculator formula to use</p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Linked Calculator
+                  </label>
+                  <select
+                    value={formData.calculator_id}
+                    onChange={(e) => setFormData(prev => ({ ...prev, calculator_id: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">-- Select Calculator --</option>
+                    {calculators.map(calc => (
+                      <option key={calc._id} value={calc._id}>
+                        {calc.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Calculator used for weight calculation</p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Density (kg/m³)
                   </label>
                   <input
@@ -541,15 +628,29 @@ export default function MaterialsManagerPage() {
             </div>
           ) : (
             <div className="divide-y">
-              {materials.map(material => (
+              {materials.map(material => {
+                const linkedCalc = calculators.find(c => c._id === material.calculator_id);
+                const shapeLabel = SHAPE_TYPES.find(s => s.value === material.shape_type)?.label;
+                
+                return (
                 <div key={material._id} className="p-4 hover:bg-gray-50">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-medium">{material.name}</h3>
                         <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded font-medium">
                           {material.material_family}
                         </span>
+                        {shapeLabel && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded font-medium">
+                            {shapeLabel}
+                          </span>
+                        )}
+                        {linkedCalc && (
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded font-medium">
+                            🧮 {linkedCalc.name}
+                          </span>
+                        )}
                         {material.is_active === false && (
                           <span className="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded">
                             Inactive
@@ -591,7 +692,8 @@ export default function MaterialsManagerPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>

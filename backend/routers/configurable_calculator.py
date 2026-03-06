@@ -93,8 +93,11 @@ class CalculatorTemplateUpdate(BaseModel):
 
 class MaterialCreate(BaseModel):
     """Create a material with density and per-unit weights"""
-    name: str = Field(..., description="Material name, e.g., 'SS304'")
+    name: str = Field(..., description="Material name, e.g., 'SS304 Circular bar'")
     material_family: str = Field(..., description="Family/group, e.g., 'Stainless Steel', 'Steel', 'Aluminum'")
+    shape_type: Optional[str] = Field(None, description="Shape type: circular_bar, hollow_pipe, square_bar, etc.")
+    linked_product_slug: Optional[str] = Field(None, description="Linked product slug for auto-matching")
+    calculator_id: Optional[str] = Field(None, description="Linked calculator ID for this material")
     density: Optional[float] = Field(None, description="Density in kg/m³")
     weight_per_unit: Optional[Dict[str, float]] = Field(
         default_factory=dict,
@@ -106,6 +109,9 @@ class MaterialUpdate(BaseModel):
     """Update a material"""
     name: Optional[str] = None
     material_family: Optional[str] = None
+    shape_type: Optional[str] = None
+    linked_product_slug: Optional[str] = None
+    calculator_id: Optional[str] = None
     density: Optional[float] = None
     weight_per_unit: Optional[Dict[str, float]] = None
     description: Optional[str] = None
@@ -667,6 +673,55 @@ def create_configurable_calculator_router(db):
         families = await db.materials.distinct("material_family", {"is_active": {"$ne": False}})
         # Filter out None values
         return [f for f in families if f]
+    
+    @router.get("/materials/by-product/{product_name}")
+    async def get_material_by_product_name(product_name: str):
+        """Find material that matches product name (case-insensitive, fuzzy match)"""
+        # Try exact match first (case-insensitive)
+        material = await db.materials.find_one({
+            "name": {"$regex": f"^{product_name}$", "$options": "i"},
+            "is_active": {"$ne": False}
+        })
+        
+        if material:
+            material["_id"] = str(material["_id"])
+            return material
+        
+        # Try partial match - product name contains material name or vice versa
+        # e.g., "SS304 Round Bar 10mm" should match "SS304 Round Bar"
+        materials = []
+        cursor = db.materials.find({"is_active": {"$ne": False}})
+        async for mat in cursor:
+            mat_name = mat.get("name", "").lower()
+            prod_name = product_name.lower()
+            
+            # Check if material name is contained in product name
+            if mat_name in prod_name or prod_name in mat_name:
+                mat["_id"] = str(mat["_id"])
+                mat["match_score"] = len(mat_name) if mat_name in prod_name else len(prod_name)
+                materials.append(mat)
+        
+        # Return best match (longest match)
+        if materials:
+            materials.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+            return materials[0]
+        
+        return None
+    
+    @router.get("/materials/search")
+    async def search_materials(q: str, limit: int = 10):
+        """Search materials by name (for autocomplete)"""
+        query = {
+            "name": {"$regex": q, "$options": "i"},
+            "is_active": {"$ne": False}
+        }
+        
+        materials = []
+        cursor = db.materials.find(query).sort("name", 1).limit(limit)
+        async for mat in cursor:
+            mat["_id"] = str(mat["_id"])
+            materials.append(mat)
+        return materials
     
     @router.get("/materials/types")
     async def get_material_types():

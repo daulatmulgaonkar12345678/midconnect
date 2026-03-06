@@ -85,7 +85,9 @@ interface CalculationResult {
 interface ModernDynamicCalculatorProps {
   calculatorId?: string;
   categoryId?: string;
+  productName?: string; // For auto-selecting material based on product
   onCalculate?: (result: CalculationResult) => void;
+  onMaterialChange?: (material: Material | null) => void; // Callback when material changes
   showPriceField?: boolean;
   className?: string;
 }
@@ -113,7 +115,9 @@ const extractFormulaVariables = (formula: string): Set<string> => {
 export default function ModernDynamicCalculator({
   calculatorId,
   categoryId,
+  productName,
   onCalculate,
+  onMaterialChange,
   showPriceField = false,
   className = ''
 }: ModernDynamicCalculatorProps) {
@@ -190,8 +194,24 @@ export default function ModernDynamicCalculator({
           if (matsRes.ok) {
             const mats = await matsRes.json();
             setMaterials(mats);
-            if (mats.length > 0) {
+            
+            // Auto-select material based on product name if provided
+            let autoSelectedMat = null;
+            if (productName && mats.length > 0) {
+              // Try to find matching material by name (case-insensitive, partial match)
+              const productNameLower = productName.toLowerCase();
+              autoSelectedMat = mats.find((m: Material) => {
+                const matNameLower = m.name.toLowerCase();
+                return productNameLower.includes(matNameLower) || matNameLower.includes(productNameLower);
+              });
+            }
+            
+            if (autoSelectedMat) {
+              setSelectedMaterial(autoSelectedMat._id);
+              onMaterialChange?.(autoSelectedMat);
+            } else if (mats.length > 0) {
               setSelectedMaterial(mats[0]._id);
+              onMaterialChange?.(mats[0]);
             }
           }
         }
@@ -400,7 +420,12 @@ export default function ModernDynamicCalculator({
             <div className="relative">
               <select
                 value={selectedMaterial}
-                onChange={(e) => setSelectedMaterial(e.target.value)}
+                onChange={(e) => {
+                  const matId = e.target.value;
+                  setSelectedMaterial(matId);
+                  const mat = materials.find(m => m._id === matId);
+                  onMaterialChange?.(mat || null);
+                }}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                 data-testid="material-selector"
               >
