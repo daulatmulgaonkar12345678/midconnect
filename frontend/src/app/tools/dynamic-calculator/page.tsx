@@ -106,6 +106,7 @@ export default function DynamicCalculatorTestPage() {
                   <ModernDynamicCalculator
                     calculatorId={selectedCalc}
                     showPriceField={true}
+                    enableNavigation={true}
                     onCalculate={(r) => setResult(r)}
                   />
                 </div>

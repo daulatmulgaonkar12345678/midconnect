@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Calculator,
   ChevronDown,
@@ -65,6 +66,9 @@ interface Material {
   _id: string;
   name: string;
   material_family?: string;
+  shape_type?: string;
+  linked_product_slug?: string;
+  calculator_id?: string;
   density?: number;
 }
 
@@ -88,6 +92,7 @@ interface ModernDynamicCalculatorProps {
   productName?: string; // For auto-selecting material based on product
   onCalculate?: (result: CalculationResult) => void;
   onMaterialChange?: (material: Material | null) => void; // Callback when material changes
+  enableNavigation?: boolean; // Enable navigation to product page when material changes
   showPriceField?: boolean;
   className?: string;
 }
@@ -118,9 +123,12 @@ export default function ModernDynamicCalculator({
   productName,
   onCalculate,
   onMaterialChange,
+  enableNavigation = false,
   showPriceField = false,
   className = ''
 }: ModernDynamicCalculatorProps) {
+  const router = useRouter();
+  
   // Data states
   const [calculator, setCalculator] = useState<CalculatorTemplate | null>(null);
   const [unitGroups, setUnitGroups] = useState<Record<string, UnitGroup>>({});
@@ -134,6 +142,9 @@ export default function ModernDynamicCalculator({
   const [fieldUnits, setFieldUnits] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState<number>(1);
   const [priceRate, setPriceRate] = useState<number | undefined>(undefined);
+  
+  // Track if initial load is complete (to prevent navigation on first load)
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Result
   const [result, setResult] = useState<CalculationResult | null>(null);
@@ -215,6 +226,9 @@ export default function ModernDynamicCalculator({
             }
           }
         }
+        
+        // Mark as initialized after first load
+        setTimeout(() => setIsInitialized(true), 500);
       } else {
         setError('Calculator not found');
       }
@@ -415,7 +429,7 @@ export default function ModernDynamicCalculator({
         {calculator.use_material_density && materials.length > 0 && (
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Select Material
+              Select Material / Product
             </label>
             <div className="relative">
               <select
@@ -425,6 +439,11 @@ export default function ModernDynamicCalculator({
                   setSelectedMaterial(matId);
                   const mat = materials.find(m => m._id === matId);
                   onMaterialChange?.(mat || null);
+                  
+                  // Navigate to product page if enabled and material has a linked slug
+                  if (enableNavigation && isInitialized && mat?.linked_product_slug) {
+                    router.push(`/products/${mat.linked_product_slug}`);
+                  }
                 }}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                 data-testid="material-selector"
@@ -440,6 +459,9 @@ export default function ModernDynamicCalculator({
             {selectedMaterialData?.material_family && (
               <p className="text-xs text-gray-500 mt-1.5">
                 Material Family: <span className="font-medium text-gray-700">{selectedMaterialData.material_family}</span>
+                {enableNavigation && selectedMaterialData.linked_product_slug && (
+                  <span className="ml-2 text-indigo-600">• Click to view product</span>
+                )}
               </p>
             )}
           </div>
