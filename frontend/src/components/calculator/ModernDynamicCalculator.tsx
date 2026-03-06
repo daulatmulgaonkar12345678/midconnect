@@ -40,6 +40,13 @@ interface CalculatorField {
   help_text?: string;
 }
 
+interface MaterialFormulaOverride {
+  material_ids: string[];
+  formula_expression: string;
+  fields?: CalculatorField[];
+  description?: string;
+}
+
 interface CalculatorTemplate {
   _id: string;
   name: string;
@@ -47,6 +54,7 @@ interface CalculatorTemplate {
   description?: string;
   fields: CalculatorField[];
   formula_expression: string;
+  material_formulas?: MaterialFormulaOverride[];
   output_unit: string;
   output_label: string;
   material_family?: string;
@@ -70,6 +78,8 @@ interface CalculationResult {
   total_value: number;
   quantity: number;
   field_summary: Record<string, string>;
+  formula_used?: string;
+  formula_description?: string;
 }
 
 interface ModernDynamicCalculatorProps {
@@ -426,18 +436,30 @@ export default function ModernDynamicCalculator({
 
         {/* Formula Info - Subtle display */}
         <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 px-4 py-2.5 rounded-lg mb-6 border border-gray-100">
-          <Info className="h-3.5 w-3.5" />
-          <span className="font-mono text-gray-500">{calculator.formula_expression}</span>
+          <Info className="h-3.5 w-3.5 flex-shrink-0" />
+          <div className="flex flex-col">
+            {result?.formula_description && (
+              <span className="text-gray-600 font-medium">{result.formula_description}</span>
+            )}
+            <span className="font-mono text-gray-500">{result?.formula_used || calculator.formula_expression}</span>
+          </div>
         </div>
 
         {/* Results - Professional green result card */}
         {result && result.total_value > 0 && (
           <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-xl p-6" data-testid="calculation-result">
-            <div className="flex items-center gap-2 mb-5">
-              <div className="p-2 bg-emerald-100 rounded-lg">
-                <Sparkles className="h-5 w-5 text-emerald-600" />
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <Sparkles className="h-5 w-5 text-emerald-600" />
+                </div>
+                <h4 className="font-bold text-lg text-emerald-800">Calculation Result</h4>
               </div>
-              <h4 className="font-bold text-lg text-emerald-800">Calculation Result</h4>
+              {result.formula_description && (
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-sm font-medium rounded-full">
+                  {result.formula_description}
+                </span>
+              )}
             </div>
             
             <div className="grid grid-cols-2 gap-4">

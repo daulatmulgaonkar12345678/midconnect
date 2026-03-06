@@ -51,6 +51,13 @@ class CalculatorFieldDefinition(BaseModel):
     placeholder: Optional[str] = None
     help_text: Optional[str] = None
 
+class MaterialFormulaOverride(BaseModel):
+    """Formula override for specific materials"""
+    material_ids: List[str] = Field(..., description="List of material IDs this formula applies to")
+    formula_expression: str = Field(..., description="Formula for these materials")
+    fields: Optional[List[CalculatorFieldDefinition]] = Field(None, description="Custom fields for this formula (optional)")
+    description: Optional[str] = Field(None, description="Description of this formula variant, e.g., 'Hollow Pipe', 'Solid Bar'")
+
 class CalculatorTemplateCreate(BaseModel):
     """Create a calculator template"""
     name: str = Field(..., description="Calculator name, e.g., 'Round Bar Calculator'")
@@ -58,7 +65,11 @@ class CalculatorTemplateCreate(BaseModel):
     category_id: Optional[str] = Field(None, description="Linked category ObjectId")
     description: Optional[str] = None
     fields: List[CalculatorFieldDefinition]
-    formula_expression: str = Field(..., description="Math formula, e.g., 'pi * pow(diameter/2, 2) * length * material_density'")
+    formula_expression: str = Field(..., description="Default math formula")
+    material_formulas: Optional[List[MaterialFormulaOverride]] = Field(
+        default=None, 
+        description="Material-specific formula overrides"
+    )
     output_unit: str = Field(default="kg", description="Output unit, e.g., 'kg', 'liter'")
     output_label: str = Field(default="Weight", description="Output label, e.g., 'Weight', 'Volume'")
     material_family: Optional[str] = Field(None, description="Material family for filtering, e.g., 'Steel', 'Stainless Steel'")
@@ -72,6 +83,7 @@ class CalculatorTemplateUpdate(BaseModel):
     category_id: Optional[str] = None
     fields: Optional[List[CalculatorFieldDefinition]] = None
     formula_expression: Optional[str] = None
+    material_formulas: Optional[List[MaterialFormulaOverride]] = None
     output_unit: Optional[str] = None
     output_label: Optional[str] = None
     material_family: Optional[str] = None
@@ -119,6 +131,7 @@ class CalculationResult(BaseModel):
     quantity: int
     field_summary: Dict[str, str]
     formula_used: str
+    formula_description: Optional[str] = None
 
 
 # ============================================================================
@@ -283,9 +296,10 @@ class ConfigurableCalculatorService:
         
         1. Load calculator template
         2. Load material (if needed)
-        3. Convert all field values to base units
-        4. Evaluate formula expression
-        5. Return result with summary
+        3. Check for material-specific formula override
+        4. Convert all field values to base units
+        5. Evaluate formula expression
+        6. Return result with summary
         """
         # Load calculator template
         try:
@@ -310,8 +324,24 @@ class ConfigurableCalculatorService:
             except:
                 pass
         
+        # Check for material-specific formula override
+        formula = calculator["formula_expression"]
+        fields_to_use = calculator["fields"]
+        formula_description = None
+        
+        if request.material_id and calculator.get("material_formulas"):
+            for override in calculator["material_formulas"]:
+                if request.material_id in override.get("material_ids", []):
+                    # Found a material-specific formula
+                    formula = override["formula_expression"]
+                    formula_description = override.get("description")
+                    # Use custom fields if provided, otherwise use default
+                    if override.get("fields"):
+                        fields_to_use = override["fields"]
+                    break
+        
         # Build field lookup
-        field_configs = {f["key"]: f for f in calculator["fields"]}
+        field_configs = {f["key"]: f for f in fields_to_use}
         
         # Convert all field values to base units
         converted_values = {}
@@ -337,7 +367,6 @@ class ConfigurableCalculatorService:
         converted_values["density"] = material_density  # Alias
         
         # Evaluate formula
-        formula = calculator["formula_expression"]
         try:
             calculated_value = SafeFormulaEvaluator.evaluate(formula, converted_values)
         except ValueError as e:
@@ -357,7 +386,8 @@ class ConfigurableCalculatorService:
             total_value=round(total_value, 4),
             quantity=request.quantity,
             field_summary=field_summary,
-            formula_used=formula
+            formula_used=formula,
+            formula_description=formula_description
         )
     
     async def get_calculator_for_category(self, category_id: str) -> Optional[Dict]:

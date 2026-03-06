@@ -49,6 +49,13 @@ interface CalculatorField {
   help_text?: string;
 }
 
+interface MaterialFormulaOverride {
+  material_ids: string[];
+  formula_expression: string;
+  fields?: CalculatorField[];
+  description?: string;
+}
+
 interface CalculatorTemplate {
   _id?: string;
   name: string;
@@ -57,12 +64,20 @@ interface CalculatorTemplate {
   description?: string;
   fields: CalculatorField[];
   formula_expression: string;
+  material_formulas?: MaterialFormulaOverride[];
   output_unit: string;
   output_label: string;
   material_family?: string;
   use_material_density: boolean;
   icon?: string;
   is_active?: boolean;
+}
+
+interface Material {
+  _id: string;
+  name: string;
+  material_family?: string;
+  density?: number;
 }
 
 interface Category {
@@ -280,6 +295,7 @@ export default function AdminCalculatorsPage() {
   const [unitGroups, setUnitGroups] = useState<UnitGroup[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [materialFamilies, setMaterialFamilies] = useState<string[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -288,6 +304,7 @@ export default function AdminCalculatorsPage() {
   // Editor state
   const [isEditing, setIsEditing] = useState(false);
   const [editingCalc, setEditingCalc] = useState<CalculatorTemplate | null>(null);
+  const [showMaterialFormulas, setShowMaterialFormulas] = useState(false);
   
   // Load data
   useEffect(() => {
@@ -297,17 +314,19 @@ export default function AdminCalculatorsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [calcsRes, unitsRes, catsRes, familiesRes] = await Promise.all([
+      const [calcsRes, unitsRes, catsRes, familiesRes, materialsRes] = await Promise.all([
         fetch(`${API_URL}/api/calculator/calculators`),
         fetch(`${API_URL}/api/calculator/unit-groups`),
         fetch(`${API_URL}/api/categories/all`),
-        fetch(`${API_URL}/api/calculator/materials/families`)
+        fetch(`${API_URL}/api/calculator/materials/families`),
+        fetch(`${API_URL}/api/calculator/materials`)
       ]);
       
       if (calcsRes.ok) setCalculators(await calcsRes.json());
       if (unitsRes.ok) setUnitGroups(await unitsRes.json());
       if (catsRes.ok) setCategories(await catsRes.json());
       if (familiesRes.ok) setMaterialFamilies(await familiesRes.json());
+      if (materialsRes.ok) setMaterials(await materialsRes.json());
     } catch (err) {
       setError('Failed to load data');
     } finally {
@@ -322,15 +341,18 @@ export default function AdminCalculatorsPage() {
       description: '',
       fields: [],
       formula_expression: '',
+      material_formulas: [],
       output_unit: 'kg',
       output_label: 'Weight',
       use_material_density: true,
     });
+    setShowMaterialFormulas(false);
     setIsEditing(true);
   };
   
   const handleEditCalculator = (calc: CalculatorTemplate) => {
-    setEditingCalc({ ...calc });
+    setEditingCalc({ ...calc, material_formulas: calc.material_formulas || [] });
+    setShowMaterialFormulas((calc.material_formulas?.length || 0) > 0);
     setIsEditing(true);
   };
   
@@ -376,10 +398,18 @@ export default function AdminCalculatorsPage() {
         ? `${API_URL}/api/calculator/calculators`
         : `${API_URL}/api/calculator/calculators/${editingCalc._id}`;
       
+      // Clean up empty material formulas
+      const payload = {
+        ...editingCalc,
+        material_formulas: editingCalc.material_formulas?.filter(
+          mf => mf.material_ids.length > 0 && mf.formula_expression.trim()
+        ) || []
+      };
+      
       const res = await fetch(url, {
         method: isNew ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingCalc)
+        body: JSON.stringify(payload)
       });
       
       if (res.ok) {
@@ -434,6 +464,58 @@ export default function AdminCalculatorsPage() {
   const handleInsertFormula = (text: string) => {
     if (!editingCalc) return;
     setEditingCalc({ ...editingCalc, formula_expression: text });
+  };
+  
+  // Material Formula Override Handlers
+  const handleAddMaterialFormula = () => {
+    if (!editingCalc) return;
+    
+    const newFormula: MaterialFormulaOverride = {
+      material_ids: [],
+      formula_expression: editingCalc.formula_expression || '', // Copy default formula
+      description: ''
+    };
+    
+    setEditingCalc({
+      ...editingCalc,
+      material_formulas: [...(editingCalc.material_formulas || []), newFormula]
+    });
+  };
+  
+  const handleUpdateMaterialFormula = (index: number, formula: MaterialFormulaOverride) => {
+    if (!editingCalc) return;
+    
+    const newFormulas = [...(editingCalc.material_formulas || [])];
+    newFormulas[index] = formula;
+    setEditingCalc({ ...editingCalc, material_formulas: newFormulas });
+  };
+  
+  const handleRemoveMaterialFormula = (index: number) => {
+    if (!editingCalc) return;
+    
+    const newFormulas = (editingCalc.material_formulas || []).filter((_, i) => i !== index);
+    setEditingCalc({ ...editingCalc, material_formulas: newFormulas });
+  };
+  
+  const handleToggleMaterialInFormula = (formulaIndex: number, materialId: string) => {
+    if (!editingCalc) return;
+    
+    const formulas = [...(editingCalc.material_formulas || [])];
+    const formula = formulas[formulaIndex];
+    
+    if (formula.material_ids.includes(materialId)) {
+      formula.material_ids = formula.material_ids.filter(id => id !== materialId);
+    } else {
+      formula.material_ids = [...formula.material_ids, materialId];
+    }
+    
+    setEditingCalc({ ...editingCalc, material_formulas: formulas });
+  };
+  
+  // Get materials filtered by current family
+  const getFilteredMaterials = () => {
+    if (!editingCalc?.material_family) return materials;
+    return materials.filter(m => m.material_family === editingCalc.material_family);
   };
   
   // Auto-generate slug from name
@@ -644,7 +726,7 @@ export default function AdminCalculatorsPage() {
               
               {/* Formula */}
               <div>
-                <label className="block text-sm font-medium mb-1">Formula Expression *</label>
+                <label className="block text-sm font-medium mb-1">Default Formula Expression *</label>
                 <textarea
                   value={editingCalc.formula_expression}
                   onChange={(e) => setEditingCalc({ ...editingCalc, formula_expression: e.target.value })}
@@ -659,6 +741,114 @@ export default function AdminCalculatorsPage() {
               </div>
               
               <FormulaHelperPanel onInsert={handleInsertFormula} />
+              
+              {/* Material-Specific Formulas */}
+              {editingCalc.use_material_density && (
+                <div className="border rounded-lg p-4 bg-amber-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-amber-800">
+                        Material-Specific Formulas (Optional)
+                      </label>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Override the default formula for specific materials (e.g., different formula for Hollow Pipe vs Solid Bar)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddMaterialFormula}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Formula Override
+                    </button>
+                  </div>
+                  
+                  {(!editingCalc.material_formulas || editingCalc.material_formulas.length === 0) ? (
+                    <div className="text-center py-6 text-amber-600 bg-amber-100/50 rounded-lg border-2 border-dashed border-amber-300">
+                      <p className="font-medium">No material-specific formulas</p>
+                      <p className="text-xs mt-1">All materials will use the default formula above</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {editingCalc.material_formulas.map((formula, index) => {
+                        const filteredMaterials = getFilteredMaterials();
+                        
+                        return (
+                          <div key={index} className="bg-white border border-amber-200 rounded-lg p-4 shadow-sm">
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={formula.description || ''}
+                                  onChange={(e) => handleUpdateMaterialFormula(index, { ...formula, description: e.target.value })}
+                                  className="w-full px-3 py-1.5 text-sm font-medium border rounded focus:ring-2 focus:ring-amber-500"
+                                  placeholder="Formula name (e.g., Hollow Pipe, Solid Round Bar)"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMaterialFormula(index)}
+                                className="ml-2 p-1.5 text-red-500 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                            
+                            {/* Material Selection */}
+                            <div className="mb-3">
+                              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                                Select Materials that use this formula:
+                              </label>
+                              <div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded-lg max-h-32 overflow-y-auto">
+                                {filteredMaterials.length === 0 ? (
+                                  <span className="text-xs text-gray-500 italic">
+                                    {editingCalc.material_family 
+                                      ? `No materials in "${editingCalc.material_family}" family` 
+                                      : 'No materials available'}
+                                  </span>
+                                ) : (
+                                  filteredMaterials.map(mat => (
+                                    <button
+                                      key={mat._id}
+                                      type="button"
+                                      onClick={() => handleToggleMaterialInFormula(index, mat._id)}
+                                      className={`px-2 py-1 text-xs rounded-full border transition-all ${
+                                        formula.material_ids.includes(mat._id)
+                                          ? 'bg-amber-600 text-white border-amber-600'
+                                          : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'
+                                      }`}
+                                    >
+                                      {mat.name}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Selected: {formula.material_ids.length} material(s)
+                              </p>
+                            </div>
+                            
+                            {/* Formula Expression */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                Formula Expression
+                              </label>
+                              <textarea
+                                value={formula.formula_expression}
+                                onChange={(e) => handleUpdateMaterialFormula(index, { ...formula, formula_expression: e.target.value })}
+                                className="w-full px-3 py-2 border rounded-lg font-mono text-xs"
+                                rows={2}
+                                placeholder="e.g., pi * (pow(outer_diameter / 2, 2) - pow((outer_diameter - 2 * thickness) / 2, 2)) * length * density"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* Actions */}
               <div className="flex items-center gap-3 pt-4 border-t">
