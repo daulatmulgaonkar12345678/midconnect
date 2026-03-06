@@ -286,7 +286,8 @@ def create_enterprise_product_router(db):
                 "description": product.get("description"),
                 "images": product_images,
                 "categoryId": product.get("categoryId"),
-                "categoryName": category.get("name") if category else None
+                "categoryName": category.get("name") if category else None,
+                "product_type": product.get("product_type", "standard_product")
             },
             "specTemplate": {
                 "templateId": spec_template["_id"] if spec_template else None,

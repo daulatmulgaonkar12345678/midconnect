@@ -397,16 +397,37 @@ class ConfigurableCalculatorService:
         )
     
     async def get_calculator_for_category(self, category_id: str) -> Optional[Dict]:
-        """Get the calculator template linked to a category"""
+        """Get the calculator template linked to a category.
+        
+        Supports two relationship patterns:
+        1. Calculator has category_id field pointing to category
+        2. Category has calculator_id field pointing to calculator
+        """
         try:
             cat_id = ObjectId(category_id)
         except:
             return None
         
+        # First, try to find calculator with category_id matching
         calculator = await self.db.calculator_templates.find_one({
             "category_id": cat_id,
             "is_active": {"$ne": False}
         })
+        
+        # If not found, check if category has calculator_id
+        if not calculator:
+            category = await self.db.categories.find_one({"_id": cat_id})
+            if category and category.get("calculator_id"):
+                calc_id = category["calculator_id"]
+                if isinstance(calc_id, str):
+                    try:
+                        calc_id = ObjectId(calc_id)
+                    except:
+                        pass
+                calculator = await self.db.calculator_templates.find_one({
+                    "_id": calc_id,
+                    "is_active": {"$ne": False}
+                })
         
         if calculator:
             calculator["_id"] = str(calculator["_id"])

@@ -93,6 +93,7 @@ export default function RawMaterialSellerCard({
             <p className="text-xs text-gray-500">Rate</p>
             <p className="text-sm font-bold text-gray-900">
               {formatPrice(seller.rate)}/{seller.rate_unit || 'kg'}
+
             </p>
           </div>
         </div>
@@ -127,6 +128,7 @@ export default function RawMaterialSellerCard({
         {/* Price breakdown */}
         <p className="text-xs text-emerald-700 mt-2 text-center">
           {calculationResult.total_value.toFixed(2)} {calculationResult.output_unit} × {formatPrice(seller.rate)}/{seller.rate_unit || 'kg'}
+
         </p>
       </div>
 

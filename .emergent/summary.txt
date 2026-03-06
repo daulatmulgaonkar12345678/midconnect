@@ -1,88 +1,69 @@
 <analysis>**original_problem_statement:**
-The user initially requested to build a Seller Detail Page, an OTP password reset system, and a Raw Material Smart Calculator. The project's focus shifted heavily towards the calculator, which was first built with hardcoded logic.
-
-Following user feedback, the primary goal became a major architectural refactor: to transform the hardcoded calculator into a **fully dynamic and configurable system managed via an admin panel**. This new system should allow administrators to create different types of calculators (e.g., for steel, cement, chemicals) with custom fields and formulas without any code changes. The user also requested a more modern UI for the calculator and seller price cards, and the introduction of a Material Family concept to group similar materials (e.g., all Steel types) under a single calculator template.
+The user's primary goal is to create a robust e-commerce platform for industrial materials. The core feature is a dynamic, admin-configurable Raw Material Smart Calculator that allows buyers to calculate the weight and price of materials based on dimensions.
 
 **PRODUCT REQUIREMENTS (Latest):**
-1.  **Admin-Managed Calculators:** Create admin panels to manage Calculator Templates, Unit Groups, and Materials.
-2.  **Dynamic Calculator Templates:** An admin must be able to define a calculator with a name, assign it to a product category and a material family, define custom input fields (e.g., diameter, length), and specify the calculation formula as a string expression (e.g., ).
-3.  **Material Families:** Group materials (e.g., MS Steel, EN8 Steel) into families (e.g., Steel). Calculators should be linked to a family, not individual materials.
-4.  **Dynamic Frontend:** The calculator component on the product page must be rendered dynamically based on the configuration fetched from the database for that product's category.
-5.  **Integrated Pricing:** The calculated quantity/weight from the calculator must be used to compute a Final Price on each seller's price card, which should update in real-time as the buyer changes calculator inputs.
-6.  **Modernized UI:** The calculator and seller price cards should use an updated, more attractive design as specified by the user.
+1.  **Unified  System:** The most recent and critical requirement is to refactor the product page architecture to differentiate between raw_material and standard_product types. This will fix the issue of showing two different seller card types on the same page.
+    *    pages must show the dynamic calculator and a  with prices based on calculated weight.
+    *    pages must hide the calculator and show a  with per-item pricing.
+2.  **Admin-Managed Calculators:** Admins must be able to create Calculator Templates with custom fields (e.g., diameter, length) and mathematical formulas (e.g., ).
+3.  **Material-Specific Formulas:** Within a single calculator template, different materials should be able to have their own specific formula overrides (e.g., a Pipe formula for hollow bars and a Solid Bar formula for solid bars, both under the Steel family).
+4.  **Dynamic Frontend Calculator:** The product page must dynamically render the correct calculator and its fields based on the product's assigned calculator template. Fields not present in the formula should be hidden.
+5.  **Bidirectional Navigation:** The system must support seamless navigation between product pages and the calculator.
+    *   Searching for a product and landing on its page should auto-select that material in the calculator.
+    *   Selecting a different material in the calculator dropdown should navigate the user to that material's corresponding product page.
+6.  **Admin-Managed Materials:** The admin panel for materials () should be the single source of truth for creating materials, their grades, densities, and linking them to a  and a specific calculator.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The initial hardcoded calculator has been entirely superseded by a new, fully dynamic, and configurable system.
--   **Backend:**
-    -   New database collections (, ) and APIs have been created for managing the dynamic calculator system. The  collection was updated to support  and .
-    -   The backend service () now includes a function to safely evaluate mathematical formulas provided as strings from the database.
--   **Frontend:**
-    -   New admin pages have been created: , , and .
-    -   The admin sidebar () has been updated with links to these new management panels.
-    -   A new, styled  component has been created. It fetches its configuration from the API and renders the form dynamically.
-    -   The product page () has been refactored to load and display this  if a calculator is linked to the product's category.
-    -   A new  component has been created to display seller information and calculated prices.
+The application has a fully dynamic and configurable calculator system with admin panels for managing calculator templates, unit groups, and materials. A major architectural refactor was started to introduce a  field to distinguish between raw materials and standard products.
+
+-   **Backend**: The  model has been updated to include a  field. APIs for creating/updating products have been modified to handle this new field.
+-   **Frontend**:
+    -   New seller card components ( and ) have been created.
+    -   The main product page () has been partially refactored to include state and conditional logic based on the fetched .
+    -   The admin product creation page () has been updated with a dropdown to select the .
+    -   The system for dynamic field visibility (showing only fields used in a formula) and material-specific formulas has been implemented.
+    -   Bidirectional navigation between the calculator and product pages has been implemented.
 
 **Last working item**:
--   Last item agent was working: Implementing the **Material Family** concept and **modernizing the calculator's UI**. This involved creating the new  component, updating the backend to support , and integrating these changes into the product page.
+-   Last item agent was working: Implementing the ** architecture** to fix the dual product card issue. The agent created the new seller card components, updated the backend models/APIs, and was in the middle of refactoring the main product page () to conditionally render the correct UI based on whether the product is a  or .
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
 -   Which testing method agent to use? both
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   Issue 1: Verify Modernized UI and Material Family Implementation (P0)
--   Issue 2: Verify Real-Time Price Updates on Seller Cards (P1)
--   Issue 3: Verify Full-Width Calculator Layout (P2)
+-   Issue 1: Complete and Verify the  System Implementation (P0)
 
 **Issues Detail:**
--   **Issue 1: Verify Modernized UI and Material Family Implementation (P0)**
-    -   **Attempted fixes:** The agent created the  component, updated the backend  model and API to include , created a script to update the database, and integrated the new component into the product page.
+-   **Issue 1: Complete and Verify the  System Implementation (P0)**
+    -   **Attempted fixes:** The agent has created  and . The backend  model and admin APIs were updated. The product page () has been partially modified to include the conditional rendering logic. The admin product create/edit page has been updated.
     -   **Next debug checklist**:
-        1.  Take a screenshot of a product page (e.g., for Industrial Electric Motor 5HP) that belongs to a category with a linked calculator.
-        2.  Confirm that the new, modernized calculator UI is displayed.
-        3.  Check the Material dropdown within the calculator to ensure it correctly fetches and displays only the materials belonging to the  specified in the calculator's template.
-    -   **Why fix this issue and what will be achieved with the fix?** This will complete the user's latest request for an improved user experience and a more robust, maintainable material management system.
+        1.  **Resume refactoring **. The logic is partially in place but needs to be completed to ensure  is shown for  types and  for  types, with no overlap.
+        2.  **Create a backend script** or one-time update to set  for all existing products in the database to establish a default.
+        3.  **Implement filter logic**: For  pages, remove unnecessary filters and ensure only the specified Sort By options (, , ) are shown.
+        4.  **Verify the entire flow**:
+            -   Test a  product page: Confirm the calculator and  appear, and the standard card/filters are hidden.
+            -   Test a  page: Confirm the  and filters appear, and the calculator/raw material card are hidden.
+            -   Test the admin panel by creating/editing a product of each type.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a critical architectural fix to resolve a major UX bug (showing two conflicting seller cards). It will create a clean, maintainable structure for handling different product types across the platform.
     -   **Status**: IN PROGRESS
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** Both.
     -   **Blocked on other issue:** None.
 
--   **Issue 2: Verify Real-Time Price Updates on Seller Cards (P1)**
-    -   **Attempted fixes:** The agent created the  component and a new backend endpoint () to fetch seller data. This was integrated into the product page.
-    -   **Next debug checklist**:
-        1.  On the product page, enter valid dimensions into the  to get a calculated weight.
-        2.  Observe the  components displayed below the calculator.
-        3.  Confirm that the Final Price on each seller card updates automatically and correctly reflects the calculated weight multiplied by that seller's .
-    -   **Why fix this issue and what will be achieved with the fix?** This is a critical feature that connects the calculator to the marketplace, providing instant price estimates to the buyer and enabling them to send informed inquiries.
-    -   **Status**: TESTING PENDING
-    -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** Frontend.
-    -   **Blocked on other issue:** Issue 1.
-
--   **Issue 3: Verify Full-Width Calculator Layout (P2)**
-    -   **Attempted fixes:** This was addressed in a previous session for the old calculator.
-    -   **Next debug checklist**:
-        1.  Once the  is confirmed to be working, check its layout on the product page.
-        2.  Ensure it spans the full width of the main content column, with the seller cards appearing directly underneath it, as per the user's original design request.
-    -   **Why fix this issue and what will be achieved with the fix?** To ensure the UI layout aligns with the user's explicit design requirements.
-    -   **Status**: TESTING PENDING
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** Frontend.
-    -   **Blocked on other issue:** Issue 1.
-
 **In progress Task List**:
--   **Task 1: Complete and Verify the Dynamic Calculator System (P0)**
-    -   **Where to resume**: The code for the Material Family and Modern UI features is in place. The next step is to test and verify the implementation, starting with a screenshot to confirm the new  renders correctly on the product page.
-    -   **What will be achieved with this?** A fully functional, admin-configurable calculator system with an improved UI that meets all recent user requirements.
+-   **Task 1: Complete  refactor (P0)**
+    -   **Where to resume**: Continue editing  to finalize the conditional rendering logic based on the  state.
+    -   **What will be achieved with this?** A clean product page architecture that correctly displays UI components based on product type, resolving the core user complaint.
     -   **Status**: IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** Both.
     -   **Blocked on something**: None.
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
+    -   **P1**: Clean up old calculator system: Remove obsolete hardcoded components (, , etc.).
     -   **P1**: Implement token-based, order-independent search.
     -   **P1**: Implement weighted ranking for search results.
 -   **Future Tasks:**
@@ -92,63 +73,82 @@ The initial hardcoded calculator has been entirely superseded by a new, fully dy
     -   **P2**: Refactor the main  file into smaller, more manageable modules.
 
 **Completed work in this session**
--   **Major Refactor to a Dynamic Calculator System:**
-    -   Replaced the entire hardcoded raw material calculator with a fully configurable system driven by database templates.
-    -   **Backend:** Created new models, APIs, and a dynamic formula evaluation service for Calculators, Unit Groups, and Materials.
-    -   **Frontend:** Built new admin panels for managing the calculator system, created a  component that renders based on DB configuration, and integrated it into the product page.
--   **Modernized UI Components:**
-    -   Created and integrated the  for displaying calculated prices.
-    -   Created and integrated the  with improved styling.
--   **Admin Panel Integration:** Added links to the new calculator management pages in the main admin sidebar for easy access.
--   **Category-Based Loading:** Implemented the logic on the product page to automatically detect the product's category and load the appropriate calculator.
-
-**Areas that need refactoring**:
--   The old, now obsolete, hardcoded calculator components (, ), related API endpoints, and seed scripts should be removed to eliminate technical debt and prevent confusion.
+-   **Material-Specific Formulas**: Implemented a system allowing admins to define different formulas for different materials within the same calculator template.
+-   **Dynamic Field Visibility**: The calculator now intelligently shows only the input fields that are actually used in the active formula.
+-   **Bidirectional Navigation**: Implemented navigation between the calculator and product pages. Selecting a material in the dropdown navigates to its product page.
+-   **UI/UX Fixes**:
+    -   Resolved the calculating... toggling/flickering issue for a smoother UX.
+    -   Fixed the alignment of unit selectors (, ) to appear correctly on the right side of input fields.
+    -   Refined the calculator's visual design to be full-width with a white body and dark text.
+-   **Dynamic Material Family Management**: Refactored the  page to allow admins to dynamically create and assign  via a dropdown, removing hardcoded values.
+-   **Partial  Implementation**:
+    -   Updated backend models and APIs to support .
+    -   Created  and .
+    -   Updated the admin UI for product creation to include .
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Database-Driven UI:** The calculator's entire structure (fields, formulas, etc.) is defined in the database via an admin panel, not in code.
--   **Dynamic Formula Evaluation:** The backend evaluates mathematical formulas stored as strings in the database to perform calculations.
--   **Material Families:** An abstraction () allows a single calculator template to work for a group of similar materials (e.g., a Steel calculator for all steel types).
--   **Component-Based Architecture:** The application is structured with reusable React components, with clear separation between display logic, data fetching, and state management.
+-   **Database-Driven UI:** The calculator's structure (fields, formulas) is defined in the database.
+-   **Conditional Rendering:** The product page will use the  field to decide which components (calculator, seller cards, filters) to render.
+-   **Dynamic Formula Evaluation:** The backend evaluates math formulas stored as strings.
+-   **Bidirectional Linking**: Using product slugs and material names to link the calculator state with the current product page.
 
 **key DB schema**
--   **calculator_templates (New):** 
--   **unit_groups (New):** 
+-   **products (Modified):** 
+-   **calculator_templates (Modified):** 
 -   **materials (Modified):** 
 
 **All files of reference**
--    **(Critical)**
--    **(Critical)**
--    **(Critical)**
--    **(Critical)**
+-    **(Critical, In-Progress Refactor)**
+-   
+-    **(New)**
+-    **(New)**
 -   
 -   
 -   
 
 **key api endpoints**
--   : Fetches the correct calculator for a product page.
--   : Fetches materials for the calculator's dropdown.
--   : The endpoint that evaluates the formula with user-provided inputs.
--   : Fetches seller listings with pricing info for the seller cards.
--   CRUD endpoints for , , .
+-   : Fetches product data, which now should include .
+-   CRUD endpoints for : Modified to accept and save .
 
 **Critical Info for New Agent**
-1.  **Top Priority: Verification.** The immediate task is to verify the latest major refactor. The code for the Material Family and Modern UI is written but has not been visually confirmed. Start by taking a screenshot of the product page to ensure the  renders correctly and functions as expected.
-2.  **Test the Full Loop:** The most critical unverified feature is the real-time price update. After confirming the calculator UI, you must test the complete flow: enter dimensions in the calculator -> see the calculated weight -> verify that the Final Price on the seller cards below updates automatically.
-3.  **The System is Dynamic:** All future calculator work must be done through the admin-configurable template system. Do not write any more hardcoded calculator logic. The user has been very clear about this requirement.
-4.  **Production is Out of Sync:** This is a recurring blocker. The user's live site does not have any of the recent features. Remind the user that deployment is necessary for them to see the completed work.
+1.  **Resume the  Refactor**: Your immediate and highest priority task is to complete the implementation outlined by the user to fix the dual seller card issue. Your starting point is .
+2.  **Follow the User's Plan**: The user has provided a very detailed, step-by-step implementation plan for the  system. Adhere to it closely. This includes setting a default  for existing products and adjusting the filters on raw material pages.
+3.  **Data Consistency is Key**: The bidirectional navigation feature relies on  names/slugs matching  names/slugs. This is a core architectural concept the user wants. Ensure the admin workflows support this.
+4.  **No New Features Until Stable**: Do not begin work on Search Improvements or other tasks until the  system is fully implemented, tested, and verified to be working correctly.
+
+**documents and test reports created in this job**
+-   
 
 **Last 10 User Messages and any pending HUMAN messages**
--   **1. **: User requested adding the Material Family concept and improving the calculator's UI. **(Status: IN PROGRESS)**
--   **2. **: User confirmed the need to show calculated final prices on seller cards and requested a modern card design. **(Status: IN PROGRESS)**
--   **3. **: User reported that the dynamic calculator wasn't appearing on product pages. **(Status: COMPLETED, Agent fixed the integration).**
--   **4. **: User couldn't find the new admin panels. **(Status: COMPLETED, Agent added links to the admin sidebar).**
--   **5. **: User approved continuing with the seller card implementation.
--   **6. **: User clarified requirements for the dynamic system, confirming seller specs are fine but buyer calculators must be fully admin-configurable.
--   **7. **: User provided the detailed architectural plan for the new, fully configurable calculator system. This is the primary directive for the current workstream.
--   **8. **: The user's key question that initiated the entire refactor away from a hardcoded system.
--   **9. **: The user's initial request to expand the *old* hardcoded system, which was completed before the major refactor began.
--   **10. **: User's initial instruction at the start of the session.</analysis>
+1.  ****: User provided a detailed 11-step plan to fix the dual product card issue by introducing a  field. **(Status: IN PROGRESS)**
+2.  ****: User clarified that existing products should default to  and specified the exact Sort By options for raw material pages. **(Status: IN PROGRESS)**
+3.  ****: User reported that navigation from the calculator dropdown to the product page was not working. **(Status: COMPLETED)**
+4.  ****: User reported that while product links worked, the calculator on the product page wasn't updating or allowing navigation. **(Status: COMPLETED)**
+5.  ****: User detailed the requirement for bidirectional navigation and syncing between product pages and the calculator selection. **(Status: COMPLETED)**
+6.  ****: User proposed a unified Material Grade system to align products, calculators, and seller specs. **(Status: COMPLETED)**
+7.  ****: User reported a UI flickering issue on the calculator. **(Status: COMPLETED)**
+8.  ****: User requested that the calculator only show input fields relevant to the current formula. **(Status: COMPLETED)**
+9.  ****: User requested the ability to have different formulas for different materials within the same material family (e.g., hollow pipe vs. solid bar). **(Status: COMPLETED)**
+10. ****: User requested that Material Family/Type be dynamically managed from the admin panel, not hardcoded. **(Status: COMPLETED)**
+
+**Project Health Check:**
+-   **Broken**: The main product page is in a broken state due to the ongoing refactor. It may render incorrectly or not at all until the  conditional logic is fully implemented.
+-   **Mocked**: No mocked components.
+
+**3rd Party Integrations**
+- No new 3rd party integrations were added in this session.
+
+**Testing status**
+-   **Testing agent used after significant changes**: YES, the agent used the testing agent to verify the dynamic calculator functionality before the latest refactor began.
+-   **Troubleshoot agent used after agent stuck in loop**: NO
+-   **Test files created**: 
+-   **Known regressions**: The main product page () is currently in a partially refactored state and will not function correctly for either product type until the work is completed.
+
+**What agent forgot to execute**
+The agent was in the middle of a large, user-directed refactor. The key remaining steps from the user's plan are:
+1.  Creating a script/process to update all existing products in the database to have .
+2.  Completing the conditional rendering logic in .
+3.  Implementing the specific filter logic for  pages (i.e., removing unnecessary filters and keeping only the three specified Sort By options).</analysis>

@@ -278,193 +278,6 @@ function FilterPanel({
   );
 }
 
-// ==================== SELLER CARD ====================
-
-function SellerCard({
-  seller,
-  productSlug,
-  onInquiry,
-  onCompare,
-  isComparing,
-  compareSelected
-}: {
-  seller: EnterpriseProductSeller;
-  productSlug?: string;
-  onInquiry: () => void;
-  onCompare: () => void;
-  isComparing: boolean;
-  compareSelected: boolean;
-}) {
-  const lowestPrice = seller.lowestPrice || (seller.pricingTiers[0]?.pricePerUnit);
-
-  return (
-    <div 
-      className={`bg-white border rounded-lg overflow-hidden transition-all ${
-        compareSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-200 hover:border-slate-300'
-      }`}
-      data-testid={`seller-card-${seller.listingId}`}
-    >
-      {/* Spec Strip Header */}
-      <div className="bg-slate-800 text-white px-4 py-3">
-        <SpecStrip 
-          attributes={seller.searchableAttributes} 
-          labels={seller.attributeLabels} 
-        />
-      </div>
-
-      <div className="p-4">
-        {/* UdyogConnect Badge - Priority display above seller info */}
-        {seller.badgeType && seller.badgeType !== 'none' && (
-          <div className="mb-3">
-            <UdyogConnectBadge badgeType={seller.badgeType} />
-          </div>
-        )}
-        
-        {/* Seller Info Row */}
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold text-slate-900" data-testid="seller-name">{seller.companyName || 'Verified Seller'}</span>
-              <SellerRoleBadge role={seller.sellerRole} />
-            </div>
-            <div className="flex items-center gap-1 text-sm text-slate-500" data-testid="seller-location">
-              <MapPin className="h-4 w-4" />
-              {seller.city && seller.state 
-                ? `${seller.city}, ${seller.state}`
-                : seller.city || seller.state || seller.location || 'India'}
-            </div>
-          </div>
-          
-          {/* Compare Checkbox */}
-          {isComparing && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={compareSelected}
-                onChange={onCompare}
-                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-              />
-              <span className="text-sm text-slate-600">Compare</span>
-            </label>
-          )}
-        </div>
-
-        {/* Rating Display */}
-        {seller.totalReviews !== undefined && seller.totalReviews > 0 && (
-          <div className="flex items-center gap-2 mb-3" data-testid={`seller-rating-${seller.listingId}`}>
-            <div className="flex items-center gap-1">
-              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-              <span className="font-semibold text-slate-900">{seller.avgRating?.toFixed(1) || '0.0'}</span>
-            </div>
-            <span className="text-sm text-slate-500">({seller.totalReviews} reviews)</span>
-          </div>
-        )}
-
-        {/* Price & Stock Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-            <div className="text-xs text-green-600 uppercase font-medium">Starting</div>
-            <div className="text-xl font-bold text-green-700">
-              ₹{lowestPrice?.toLocaleString() || 'RFQ'}
-            </div>
-          </div>
-          
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-            <div className="text-xs text-slate-500 uppercase font-medium">MOQ</div>
-            <div className="text-xl font-bold text-slate-800">
-              {seller.moq.toLocaleString()}
-            </div>
-          </div>
-          
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-            <div className="text-xs text-slate-500 uppercase font-medium">Lead Time</div>
-            <div className="text-xl font-bold text-slate-800">
-              {seller.leadTimeDays ? `${seller.leadTimeDays}d` : '-'}
-            </div>
-          </div>
-          
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-            <div className="text-xs text-slate-500 uppercase font-medium">Stock</div>
-            <div className="text-xl font-bold text-slate-800">
-              {seller.stock > 0 ? seller.stock.toLocaleString() : 'MTO'}
-            </div>
-          </div>
-        </div>
-
-        {/* Product Demo Videos */}
-        {seller.videos && seller.videos.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Video className="h-4 w-4 text-purple-600" />
-              <span className="text-xs text-slate-500 uppercase font-medium">Product Demo</span>
-              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                {seller.videos.length} video{seller.videos.length > 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className={`grid ${seller.videos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-              {seller.videos.map((videoUrl, idx) => (
-                <div key={idx} className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                  <video
-                    src={videoUrl}
-                    className="w-full h-full object-contain"
-                    controls
-                    preload="metadata"
-                    poster=""
-                    data-testid={`seller-video-${seller.listingId}-${idx}`}
-                  />
-                  {idx === 0 && seller.videos && seller.videos.length > 1 && (
-                    <span className="absolute top-2 left-2 px-2 py-0.5 bg-purple-600 text-white text-xs rounded flex items-center gap-1">
-                      <Play className="h-3 w-3" /> Main
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pricing Tiers */}
-        {seller.pricingTiers.length > 1 && (
-          <div className="mb-4">
-            <div className="text-xs text-slate-500 uppercase font-medium mb-2">Volume Pricing</div>
-            <div className="flex flex-wrap gap-2">
-              {seller.pricingTiers.slice(0, 3).map((tier, idx) => (
-                <span key={idx} className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded">
-                  {tier.minQty}+ @ ₹{tier.pricePerUnit.toLocaleString()}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <button
-            onClick={onInquiry}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            data-testid={`rfq-btn-${seller.listingId}`}
-          >
-            <Send className="h-4 w-4" />
-            Request Quote
-          </button>
-        </div>
-        
-        {/* View Details Link */}
-        {productSlug && (
-          <Link
-            href={`/products/${productSlug}/seller/${seller.listingId}`}
-            className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium transition-colors"
-            data-testid={`view-details-btn-${seller.listingId}`}
-          >
-            <Eye className="h-4 w-4" />
-            View Details & Reviews
-          </Link>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ==================== COMPARE MODAL ====================
 
 function CompareModal({
@@ -1255,16 +1068,30 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               </div>
             ) : (
               <div className="grid gap-4">
-                {sellers.map(seller => (
-                  <SellerCard
-                    key={seller.listingId}
-                    seller={seller}
-                    productSlug={productId || undefined}
-                    onInquiry={() => setInquiryModal({ open: true, seller })}
-                    onCompare={() => handleCompareToggle(seller.listingId)}
-                    isComparing={isComparing}
-                    compareSelected={compareItems.includes(seller.listingId)}
-                  />
+                {sellers.map((seller, index) => (
+                  <div key={seller.listingId} className="relative">
+                    {/* Compare Checkbox */}
+                    {isComparing && (
+                      <label className="absolute top-4 right-4 z-10 flex items-center gap-2 cursor-pointer bg-white px-2 py-1 rounded shadow-sm border">
+                        <input
+                          type="checkbox"
+                          checked={compareItems.includes(seller.listingId)}
+                          onChange={() => handleCompareToggle(seller.listingId)}
+                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-slate-600">Compare</span>
+                      </label>
+                    )}
+                    <StandardSellerCard
+                      seller={seller}
+                      productSlug={productId || undefined}
+                      rank={index === 0 ? 1 : undefined}
+                      onRequestQuote={(s) => setInquiryModal({ open: true, seller: s as EnterpriseProductSeller })}
+                      onViewDetails={(s) => {
+                        window.location.href = `/products/${productId}/seller/${s.listingId}`;
+                      }}
+                    />
+                  </div>
                 ))}
               </div>
             )}

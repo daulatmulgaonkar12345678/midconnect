@@ -24,7 +24,7 @@ import sys
 # Add backend to path for model imports
 sys.path.insert(0, '/app/backend')
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-pricing-calc.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://calc-product-sync.preview.emergentagent.com').rstrip('/')
 
 
 class TestPublicEndpoints:

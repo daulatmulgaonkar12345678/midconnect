@@ -1,5 +1,4 @@
 'use client';
-
 import { 
   Building2, 
   BadgeCheck, 
@@ -33,10 +32,11 @@ interface StandardSellerCardProps {
   rank?: number;
   onRequestQuote: (seller: Seller) => void;
   onViewDetails?: (seller: Seller) => void;
-}
+
 
 export default function StandardSellerCard({
   seller,
+
   rank,
   onRequestQuote,
   onViewDetails
@@ -136,8 +136,13 @@ export default function StandardSellerCard({
           >
             <ExternalLink className="h-4 w-4" />
           </button>
+
         )}
       </div>
     </div>
   );
 }
+
+
+// Export the Seller type for use in parent components
+export type { StandardSellerCardSeller };
