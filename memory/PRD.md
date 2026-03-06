@@ -1594,3 +1594,79 @@ Add caching layer for frequently accessed data.
 - Category ID: `699be9023cbe1a8c31591667`
 
 ---
+
+---
+
+### Session: 2026-03-06 (Product Type Architecture - Complete)
+
+#### COMPLETE: Product Type Differentiation System
+
+**Problem Statement:**
+User reported that both raw material and standard product seller cards were appearing on the same product page, causing UX confusion. Required implementing a `product_type` field to differentiate between `raw_material` and `standard_product` types, with each type having its own dedicated UI components.
+
+**Implementation:**
+
+1. **Backend - Product Type Field**
+   - Added `product_type` to enterprise product API response
+   - Modified `/api/products/{slug}/enterprise` to return `product_type: 'raw_material' | 'standard_product'`
+   - Default value: `standard_product` for existing products
+   - Calculator lookup updated to check both directions:
+     - Calculator with `category_id` pointing to category
+     - Category with `calculator_id` pointing to calculator
+
+2. **Frontend - Conditional Rendering**
+   - `raw_material` products:
+     - Show Calculator section
+     - Show RawMaterialSellerCard (₹/kg pricing)
+     - Hide Filter Panel
+     - Hide StandardSellerCard
+   - `standard_product` products:
+     - Show Filter Panel
+     - Show StandardSellerCard (₹/piece pricing)
+     - Hide Calculator section
+     - Hide RawMaterialSellerCard
+
+3. **StandardSellerCard Component** (`/components/product/StandardSellerCard.tsx`)
+   - Displays ₹/piece pricing
+   - Shows spec strip header
+   - UdyogConnect badge support
+   - Seller role badge
+   - Rating display
+   - Volume pricing tiers
+   - Request Quote button
+   - View Details link
+
+4. **RawMaterialSellerCard Component** (`/components/product/RawMaterialSellerCard.tsx`)
+   - Displays ₹/kg pricing
+   - Shows calculated price based on weight
+   - Displays price formula: `Weight × Rate = Total`
+
+5. **Calculator Lookup Fix**
+   - Updated `get_calculator_for_category()` in configurable_calculator.py
+   - Now checks both:
+     - `calculator_templates.category_id == category_id`
+     - `categories.calculator_id` → fetch that calculator
+
+**Testing Results (100% - 11/11 backend, all frontend verified):**
+- ✅ Standard product API returns `product_type: 'standard_product'`
+- ✅ Raw material API returns `product_type: 'raw_material'`
+- ✅ Standard product page shows Filter Panel + StandardSellerCard
+- ✅ Raw material page shows Calculator + RawMaterialSellerCard
+- ✅ No overlap between product types
+- ✅ Calculator loads correctly for raw materials
+
+**Files Modified:**
+- `/app/backend/routers/enterprise_products.py` - Added product_type to response
+- `/app/backend/routers/configurable_calculator.py` - Fixed calculator lookup
+- `/app/frontend/src/app/products/[slug]/page.tsx` - Conditional rendering
+- `/app/frontend/src/components/product/StandardSellerCard.tsx` - Rewritten
+- `/app/frontend/src/components/product/RawMaterialSellerCard.tsx` - ₹/kg unit
+
+**Business Impact:**
+- Clean separation of product types prevents user confusion
+- Raw materials show weight-based pricing (industry standard)
+- Standard products show per-piece pricing
+- Maintainable architecture for future product types
+
+---
+
