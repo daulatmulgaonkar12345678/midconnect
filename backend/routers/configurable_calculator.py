@@ -844,11 +844,14 @@ def create_configurable_calculator_router(db):
         cursor = db.sellerListings.find({
             "productId": prod_id,
             "status": "active",
-            "rate_per_unit": {"$exists": True, "$gt": 0}
+            "$or": [
+                {"rate_per_unit": {"$exists": True, "$gt": 0}},
+                {"rate_per_kg": {"$exists": True, "$gt": 0}}
+            ]
         })
         
         async for listing in cursor:
-            seller_rate = listing.get("rate_per_unit", 0)
+            seller_rate = listing.get("rate_per_unit") or listing.get("rate_per_kg") or 0
             seller_unit = listing.get("rate_unit", result.output_unit)
             
             # Calculate price
@@ -926,6 +929,7 @@ def create_configurable_calculator_router(db):
                     "_id": 1,
                     "sellerId": 1,
                     "rate_per_unit": 1,
+                    "rate_per_kg": 1,
                     "rate_unit": 1,
                     "moq": 1,
                     "stock": 1,
@@ -947,8 +951,8 @@ def create_configurable_calculator_router(db):
         async for listing in db.sellerListings.aggregate(pipeline):
             seller_info = listing.get("seller", {})
             
-            # Get rate from rate_per_unit or from pricingTiers
-            rate = listing.get("rate_per_unit", 0)
+            # Get rate from rate_per_unit, rate_per_kg, or from pricingTiers
+            rate = listing.get("rate_per_unit") or listing.get("rate_per_kg") or 0
             rate_unit = listing.get("rate_unit", "kg")
             
             if not rate and listing.get("pricingTiers"):
@@ -971,8 +975,11 @@ def create_configurable_calculator_router(db):
                 "badgeType": seller_info.get("badgeType"),
                 "rating": seller_info.get("rating"),
                 "reviewCount": seller_info.get("reviewCount"),
-                "rate_per_unit": rate,
+                "rate": rate,  # Frontend expects 'rate'
+                "rate_per_unit": rate,  # Keep for backward compatibility
+                "rate_per_kg": rate,  # Keep for backward compatibility
                 "rate_unit": rate_unit,
+                "moq": listing.get("moq", 1),
                 "minOrderQty": listing.get("moq", 1),
                 "leadTime": listing.get("leadTime"),
                 "stock": listing.get("stock"),
