@@ -91,6 +91,22 @@ interface ModernDynamicCalculatorProps {
 }
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+// Extract variables used in a formula expression
+const extractFormulaVariables = (formula: string): Set<string> => {
+  // Remove math functions and operators to get variable names
+  const cleaned = formula
+    .replace(/\b(pi|pow|sqrt|sin|cos|tan|abs|log|exp|ceil|floor|round|min|max)\b/gi, '')
+    .replace(/[\d\.\+\-\*\/\(\)\^\,\s]/g, ' ');
+  
+  // Extract word tokens (variable names)
+  const tokens = cleaned.split(/\s+/).filter(t => t.length > 0 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t));
+  return new Set(tokens);
+};
+
+// ============================================================================
 // COMPONENT
 // ============================================================================
 
@@ -190,13 +206,64 @@ export default function ModernDynamicCalculator({
     }
   };
 
+  // Get the active formula based on selected material
+  const getActiveFormula = useCallback(() => {
+    if (!calculator) return { formula: '', fields: [] as CalculatorField[], description: undefined as string | undefined };
+    
+    // Check if selected material has a specific formula override
+    if (selectedMaterial && calculator.material_formulas) {
+      for (const override of calculator.material_formulas) {
+        if (override.material_ids.includes(selectedMaterial)) {
+          // Use override fields if defined, otherwise filter default fields
+          const formulaFields = override.fields || calculator.fields;
+          return {
+            formula: override.formula_expression,
+            fields: formulaFields,
+            description: override.description
+          };
+        }
+      }
+    }
+    
+    // Default formula
+    return {
+      formula: calculator.formula_expression,
+      fields: calculator.fields,
+      description: undefined
+    };
+  }, [calculator, selectedMaterial]);
+
+  // Get fields that should be displayed based on the active formula
+  const getVisibleFields = useCallback(() => {
+    const { formula, fields } = getActiveFormula();
+    if (!formula || fields.length === 0) return [];
+    
+    const usedVariables = extractFormulaVariables(formula);
+    
+    // Always include 'density' and 'material_density' as valid formula variables (not shown as fields)
+    usedVariables.delete('density');
+    usedVariables.delete('material_density');
+    
+    // Filter fields to only those used in the formula
+    const visibleFields = fields.filter(field => usedVariables.has(field.key));
+    
+    // Sort by order
+    return visibleFields.sort((a, b) => a.order - b.order);
+  }, [getActiveFormula]);
+
   // Perform calculation
   const handleCalculate = useCallback(async () => {
     if (!calculator) return;
 
-    // Validate required fields
+    // Get active formula info to determine which fields are needed
+    const { formula } = getActiveFormula();
+    const usedVariables = extractFormulaVariables(formula);
+    usedVariables.delete('density');
+    usedVariables.delete('material_density');
+
+    // Validate only fields used in the formula
     for (const field of calculator.fields) {
-      if (field.required && !fieldValues[field.key]) {
+      if (usedVariables.has(field.key) && field.required && !fieldValues[field.key]) {
         return;
       }
     }
@@ -226,7 +293,7 @@ export default function ModernDynamicCalculator({
     } finally {
       setCalculating(false);
     }
-  }, [calculator, fieldValues, fieldUnits, selectedMaterial, quantity, onCalculate]);
+  }, [calculator, fieldValues, fieldUnits, selectedMaterial, quantity, onCalculate, getActiveFormula]);
 
   // Auto-calculate when values change
   useEffect(() => {
@@ -236,7 +303,7 @@ export default function ModernDynamicCalculator({
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [fieldValues, fieldUnits, selectedMaterial, quantity, calculator, loading]);
+  }, [fieldValues, fieldUnits, selectedMaterial, quantity, calculator, loading, handleCalculate]);
 
   // Format helpers
   const formatValue = (value: number, unit: string): string => {
@@ -285,8 +352,9 @@ export default function ModernDynamicCalculator({
     );
   }
 
-  // Sort fields by order
-  const sortedFields = [...calculator.fields].sort((a, b) => a.order - b.order);
+  // Get visible fields based on active formula
+  const visibleFields = getVisibleFields();
+  const { formula: activeFormula, description: formulaDescription } = getActiveFormula();
 
   return (
     <div className={`w-full rounded-xl border border-gray-200 shadow-lg overflow-hidden ${className}`} data-testid="modern-dynamic-calculator">
@@ -298,16 +366,23 @@ export default function ModernDynamicCalculator({
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-300 rounded-full blur-2xl transform -translate-x-10 translate-y-10"></div>
         </div>
         
-        <div className="relative flex items-center gap-4">
-          <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
-            <Calculator className="h-6 w-6 text-white" />
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
+              <Calculator className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h3 className="font-bold text-xl text-white">{calculator.name}</h3>
+              {calculator.description && (
+                <p className="text-white/80 text-sm mt-0.5">{calculator.description}</p>
+              )}
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-xl text-white">{calculator.name}</h3>
-            {calculator.description && (
-              <p className="text-white/80 text-sm mt-0.5">{calculator.description}</p>
-            )}
-          </div>
+          {formulaDescription && (
+            <span className="px-3 py-1 bg-white/20 backdrop-blur-sm text-white text-sm font-medium rounded-full">
+              {formulaDescription}
+            </span>
+          )}
         </div>
       </div>
 
@@ -342,9 +417,9 @@ export default function ModernDynamicCalculator({
           </div>
         )}
 
-        {/* Dynamic Fields - Grid layout */}
+        {/* Dynamic Fields - Grid layout - Only show fields used in formula */}
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-          {sortedFields.map(field => {
+          {visibleFields.map(field => {
             const unitGroup = unitGroups[field.unit_group];
             const units = unitGroup?.units || [];
 
@@ -438,10 +513,10 @@ export default function ModernDynamicCalculator({
         <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 px-4 py-2.5 rounded-lg mb-6 border border-gray-100">
           <Info className="h-3.5 w-3.5 flex-shrink-0" />
           <div className="flex flex-col">
-            {result?.formula_description && (
-              <span className="text-gray-600 font-medium">{result.formula_description}</span>
+            {formulaDescription && (
+              <span className="text-gray-600 font-medium">{formulaDescription}</span>
             )}
-            <span className="font-mono text-gray-500">{result?.formula_used || calculator.formula_expression}</span>
+            <span className="font-mono text-gray-500">{activeFormula}</span>
           </div>
         </div>
 
