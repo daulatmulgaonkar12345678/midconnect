@@ -681,7 +681,7 @@ export default function EnterpriseProductPage() {
     }
   };
 
-  // Raw material inquiry handler with calculation data
+  // Raw material inquiry handler with calculation data (LEGACY - uses calculationResult)
   const handleRawMaterialInquiry = async () => {
     if (!rawMaterialInquiry.seller || !calculationResult) return;
 
@@ -739,13 +739,98 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
     }
   };
 
+  // NEW: Raw material inquiry handler using dynamicCalcResult
+  const handleRawMaterialInquirySubmit = async () => {
+    if (!rawMaterialInquiry.seller || !dynamicCalcResult) return;
+
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
+    setSubmittingInquiry(true);
+
+    try {
+      const token = await getIdToken();
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const sellerRate = rawMaterialInquiry.seller.rate_per_kg || rawMaterialInquiry.seller.rate || 0;
+
+      await createInquiry(token, {
+        sellerId: rawMaterialInquiry.seller.sellerId,
+        listingId: rawMaterialInquiry.seller.listingId || rawMaterialInquiry.seller._id,
+        quantity: dynamicCalcResult.quantity || 1,
+        message: inquiryNote.trim() || 'Inquiry from weight calculator',
+        buyerType,
+        // Include structured calculation data from dynamic calculator
+        calculationData: {
+          calculator_name: dynamicCalcResult.calculator_name,
+          material_name: dynamicCalcResult.material_name,
+          formula_used: dynamicCalcResult.formula_used,
+          formula_description: dynamicCalcResult.formula_description,
+          field_summary: dynamicCalcResult.field_summary,
+          quantity: dynamicCalcResult.quantity,
+          weight_per_piece: dynamicCalcResult.value_per_piece,
+          total_weight: dynamicCalcResult.total_value,
+          output_unit: dynamicCalcResult.output_unit,
+          rate_per_kg: sellerRate,
+          calculated_price: rawMaterialInquiry.calculatedPrice
+        }
+      });
+
+      setInquirySuccess('Inquiry sent successfully! The seller will contact you soon.');
+      setRawMaterialInquiry({ open: false, seller: null, calculatedPrice: 0 });
+      setInquiryNote('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send inquiry');
+    } finally {
+      setSubmittingInquiry(false);
+    }
+  };
+
   // Handle calculation result from calculator
   const handleCalculationResult = (result: CalculationResult) => {
     setCalculationResult(result);
   };
 
+  // Generate calculation details for inquiry note
+  const generateCalculationNote = () => {
+    if (!dynamicCalcResult) return '';
+    
+    const lines = [
+      '=== WEIGHT CALCULATION DETAILS ===',
+      `Calculator: ${dynamicCalcResult.calculator_name || 'Weight Calculator'}`,
+      `Material: ${dynamicCalcResult.material_name || 'N/A'}`,
+      `Formula: ${dynamicCalcResult.formula_description || dynamicCalcResult.formula_used || 'Standard'}`,
+      '',
+      '--- Dimensions ---',
+    ];
+    
+    // Add dimension details
+    if (dynamicCalcResult.field_summary) {
+      Object.entries(dynamicCalcResult.field_summary).forEach(([key, value]) => {
+        const label = key.toUpperCase();
+        lines.push(`${label}: ${value}`);
+      });
+    }
+    
+    lines.push('');
+    lines.push('--- Calculation Results ---');
+    lines.push(`Quantity: ${dynamicCalcResult.quantity} pcs`);
+    lines.push(`Weight per piece: ${dynamicCalcResult.value_per_piece?.toFixed(3) || '0'} ${dynamicCalcResult.output_unit || 'kg'}`);
+    lines.push(`Total Weight: ${dynamicCalcResult.total_value?.toFixed(3) || '0'} ${dynamicCalcResult.output_unit || 'kg'}`);
+    
+    return lines.join('\n');
+  };
+
   // Handle raw material seller inquiry callback
   const handleRawMaterialSellerInquiry = (seller: RawMaterialSeller, calculatedPrice: number) => {
+    // Pre-populate inquiry note with calculation details
+    const calcNote = generateCalculationNote();
+    setInquiryNote(calcNote);
     setRawMaterialInquiry({ open: true, seller, calculatedPrice });
   };
 
@@ -935,12 +1020,14 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                       calculationResult={dynamicCalcResult}
                       rank={index + 1}
                       onRequestQuote={(s, price) => {
-                        setSelectedSellerForInquiry(s);
-                        setCalculatedPriceForInquiry(price);
-                        setInquiryModalOpen(true);
+                        // Use the proper handler that sets rawMaterialInquiry state
+                        handleRawMaterialSellerInquiry(s as RawMaterialSeller, price);
                       }}
                       onViewDetails={(s) => {
-                        window.location.href = `/seller/${s.sellerId}`;
+                        // Navigate to seller detail page
+                        if (productId) {
+                          window.location.href = `/products/${productId}/seller/${s._id}`;
+                        }
                       }}
                     />
                   ))
@@ -1195,7 +1282,7 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
       )}
 
       {/* ==================== RAW MATERIAL INQUIRY MODAL ==================== */}
-      {rawMaterialInquiry.open && rawMaterialInquiry.seller && calculationResult && (
+      {rawMaterialInquiry.open && rawMaterialInquiry.seller && dynamicCalcResult && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" data-testid="raw-material-inquiry-modal">
             <div className="p-4 border-b border-slate-200 sticky top-0 bg-white">
@@ -1209,7 +1296,7 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                 </button>
               </div>
               <p className="text-sm text-slate-500 mt-1">
-                {rawMaterialInquiry.seller.sellerName}
+                {rawMaterialInquiry.seller.sellerName || rawMaterialInquiry.seller.companyName}
                 {rawMaterialInquiry.seller.location && ` • ${rawMaterialInquiry.seller.location}`}
               </p>
             </div>
@@ -1223,26 +1310,28 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                 </h3>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-orange-600">Material:</span>
-                    <p className="font-medium text-orange-800">{calculationResult.material}</p>
+                    <span className="text-orange-600">Calculator:</span>
+                    <p className="font-medium text-orange-800">{dynamicCalcResult.calculator_name || 'Weight Calculator'}</p>
                   </div>
                   <div>
-                    <span className="text-orange-600">Shape:</span>
-                    <p className="font-medium text-orange-800 capitalize">{calculationResult.shape.replace('_', ' ')}</p>
+                    <span className="text-orange-600">Material:</span>
+                    <p className="font-medium text-orange-800">{dynamicCalcResult.material_name || 'N/A'}</p>
                   </div>
                   <div className="col-span-2">
                     <span className="text-orange-600">Dimensions:</span>
                     <p className="font-medium text-orange-800">
-                      {Object.entries(calculationResult.dimensions).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                      {dynamicCalcResult.field_summary 
+                        ? Object.entries(dynamicCalcResult.field_summary).map(([k, v]) => `${k}: ${v}`).join(' | ')
+                        : 'N/A'}
                     </p>
                   </div>
                   <div>
                     <span className="text-orange-600">Quantity:</span>
-                    <p className="font-medium text-orange-800">{calculationResult.quantity} pieces</p>
+                    <p className="font-medium text-orange-800">{dynamicCalcResult.quantity} pieces</p>
                   </div>
                   <div>
                     <span className="text-orange-600">Total Weight:</span>
-                    <p className="font-bold text-orange-800">{calculationResult.total_weight_display}</p>
+                    <p className="font-bold text-orange-800">{dynamicCalcResult.total_value?.toFixed(3)} {dynamicCalcResult.output_unit}</p>
                   </div>
                 </div>
               </div>
@@ -1252,13 +1341,24 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-green-600">Rate/kg</p>
-                    <p className="font-semibold text-green-800">₹{rawMaterialInquiry.seller.rate_per_kg.toLocaleString('en-IN')}</p>
+                    <p className="font-semibold text-green-800">₹{(rawMaterialInquiry.seller.rate_per_kg || rawMaterialInquiry.seller.rate || 0).toLocaleString('en-IN')}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-green-600">Estimated Total</p>
-                    <p className="text-2xl font-bold text-green-800">₹{rawMaterialInquiry.calculatedPrice.toLocaleString('en-IN')}</p>
+                    <p className="text-2xl font-bold text-green-800">₹{rawMaterialInquiry.calculatedPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Quantity Required</label>
+                <input
+                  type="number"
+                  value={dynamicCalcResult.quantity || 1}
+                  readOnly
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-700"
+                />
+                <p className="text-xs text-slate-500 mt-1">MOQ: {rawMaterialInquiry.seller.moq || 1}</p>
               </div>
 
               <div>
@@ -1277,22 +1377,27 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Additional Notes (Optional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Calculation Details (Sent to Seller)
+                </label>
                 <textarea
                   value={inquiryNote}
                   onChange={(e) => setInquiryNote(e.target.value)}
-                  placeholder="Any specific requirements, delivery details, or questions..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Calculation details will be auto-filled..."
+                  rows={8}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  Seller will see these details to verify and prepare quote
+                </p>
               </div>
             </div>
 
             <div className="p-4 border-t border-slate-200 sticky bottom-0 bg-white">
               <button
-                onClick={handleRawMaterialInquiry}
+                onClick={handleRawMaterialInquirySubmit}
                 disabled={submittingInquiry}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 data-testid="submit-raw-material-inquiry-btn"
               >
                 {submittingInquiry ? (
@@ -1303,7 +1408,7 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                 ) : (
                   <>
                     <Send className="h-4 w-4" />
-                    Send Inquiry with Calculation
+                    Send Inquiry
                   </>
                 )}
               </button>

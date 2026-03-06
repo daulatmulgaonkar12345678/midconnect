@@ -28,14 +28,21 @@ interface Seller {
   _id: string;
   sellerId: string;
   sellerName?: string;
+  companyName?: string;
   businessName?: string;
   rate: number;
+  rate_per_kg?: number;  // For modal compatibility
+  rate_per_unit?: number;
   rate_unit?: string;
   moq?: number;
   leadTime?: number;
   stock?: number;
   isVerified?: boolean;
   rating?: number;
+  city?: string;
+  state?: string;
+  location?: string;
+  listingId?: string;  // For inquiry
 }
 
 interface RawMaterialSellerCardProps {
@@ -162,7 +169,16 @@ export default function RawMaterialSellerCard({
       {/* Action Buttons */}
       <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex gap-2">
         <button
-          onClick={() => onRequestQuote(seller, estimatedPrice)}
+          onClick={() => {
+            // Enrich seller with rate_per_kg for modal compatibility
+            const enrichedSeller = {
+              ...seller,
+              rate_per_kg: seller.rate_per_kg || seller.rate || seller.rate_per_unit || 0,
+              listingId: seller.listingId || seller._id,
+              location: seller.location || (seller.city && seller.state ? `${seller.city}, ${seller.state}` : seller.city || seller.state || '')
+            };
+            onRequestQuote(enrichedSeller, estimatedPrice);
+          }}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm"
           data-testid="request-quote-btn"
         >

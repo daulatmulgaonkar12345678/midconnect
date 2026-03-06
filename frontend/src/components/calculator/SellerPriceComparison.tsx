@@ -15,16 +15,22 @@ import {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
 
 export interface RawMaterialSeller {
+  _id?: string;
   listingId: string;
   sellerId: string;
   sellerName: string;
+  companyName?: string;
   sellerBadge?: string;
   rate_per_kg: number;
+  rate?: number;
+  rate_per_unit?: number;
   material_supported?: string;
   moq?: number;
   stock?: number;
   leadTime?: number;
   location?: string;
+  city?: string;
+  state?: string;
   images?: string[];
 }
 

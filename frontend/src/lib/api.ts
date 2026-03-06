@@ -1627,14 +1627,22 @@ export const createInquiry = (
     message?: string;
     buyerType?: 'trader' | 'contractor' | 'oem' | 'manufacturer' | 'other';
     calculationData?: {
-      material: string;
-      shape: string;
-      dimensions: Record<string, string>;
-      quantity: number;
-      weight_per_piece: number;
-      total_weight: number;
-      rate_per_kg: number;
-      calculated_price: number;
+      // Legacy fields
+      material?: string;
+      shape?: string;
+      dimensions?: Record<string, string>;
+      quantity?: number;
+      weight_per_piece?: number;
+      total_weight?: number;
+      rate_per_kg?: number;
+      calculated_price?: number;
+      // New dynamic calculator fields
+      calculator_name?: string;
+      material_name?: string;
+      formula_used?: string;
+      formula_description?: string;
+      field_summary?: Record<string, string>;
+      output_unit?: string;
     };
   }
 ): Promise<{
