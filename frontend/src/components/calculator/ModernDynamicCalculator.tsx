@@ -434,15 +434,32 @@ export default function ModernDynamicCalculator({
             <div className="relative">
               <select
                 value={selectedMaterial}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const matId = e.target.value;
                   setSelectedMaterial(matId);
                   const mat = materials.find(m => m._id === matId);
                   onMaterialChange?.(mat || null);
                   
-                  // Navigate to product page if enabled and material has a linked slug
-                  if (enableNavigation && isInitialized && mat?.linked_product_slug) {
-                    router.push(`/products/${mat.linked_product_slug}`);
+                  // Navigate to product page if enabled
+                  if (enableNavigation && isInitialized && mat) {
+                    // First try linked_product_slug if it exists
+                    if (mat.linked_product_slug) {
+                      router.push(`/products/${mat.linked_product_slug}`);
+                      return;
+                    }
+                    
+                    // Otherwise, search for product by material name
+                    try {
+                      const searchRes = await fetch(`${API_URL}/api/products/search?q=${encodeURIComponent(mat.name)}&limit=1`);
+                      if (searchRes.ok) {
+                        const products = await searchRes.json();
+                        if (products.length > 0 && products[0].slug) {
+                          router.push(`/products/${products[0].slug}`);
+                        }
+                      }
+                    } catch (err) {
+                      console.error('Product search failed:', err);
+                    }
                   }
                 }}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
@@ -459,8 +476,8 @@ export default function ModernDynamicCalculator({
             {selectedMaterialData?.material_family && (
               <p className="text-xs text-gray-500 mt-1.5">
                 Material Family: <span className="font-medium text-gray-700">{selectedMaterialData.material_family}</span>
-                {enableNavigation && selectedMaterialData.linked_product_slug && (
-                  <span className="ml-2 text-indigo-600">• Click to view product</span>
+                {enableNavigation && (
+                  <span className="ml-2 text-indigo-600">• Select to view product</span>
                 )}
               </p>
             )}

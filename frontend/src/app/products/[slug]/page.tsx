@@ -1088,13 +1088,13 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                 calculatorId={linkedCalculatorId}
                 productName={product?.product?.name}
                 showPriceField={false}
+                enableNavigation={true}
                 onCalculate={(result) => {
                   setDynamicCalcResult(result);
                   console.log('Dynamic calculation result:', result);
                 }}
                 onMaterialChange={(material) => {
                   console.log('Material changed:', material);
-                  // Could update product page based on material selection
                 }}
               />
             </div>

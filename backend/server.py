@@ -5349,6 +5349,34 @@ async def get_product_seo_data(product_identifier: str):
 # ============== PRODUCT CATALOG - HIERARCHY & SEARCH ==============
 # NOTE: These routes MUST come BEFORE /products/{product_id} to avoid route conflicts
 
+@api_router.get("/products/search")
+async def search_products_by_name(q: str, limit: int = 10):
+    """Search products by name and return with slugs for navigation"""
+    if not q or len(q) < 2:
+        return []
+    
+    query = {
+        "$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"family": {"$regex": q, "$options": "i"}},
+            {"variant": {"$regex": q, "$options": "i"}}
+        ]
+    }
+    
+    products = await db.products.find(query).limit(limit).to_list(limit)
+    
+    results = []
+    for p in products:
+        results.append({
+            "_id": str(p["_id"]),
+            "name": p.get("name", ""),
+            "slug": p.get("slug", ""),
+            "family": p.get("family"),
+            "variant": p.get("variant")
+        })
+    
+    return results
+
 @api_router.get("/products/search/typeahead")
 async def product_typeahead(q: str, category_id: Optional[str] = None, limit: int = 20):
     """Type-ahead product search for vendor listing creation"""
