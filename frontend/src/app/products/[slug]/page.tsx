@@ -1086,7 +1086,7 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
             <div className="mb-8">
               <ModernDynamicCalculator
                 calculatorId={linkedCalculatorId}
-                productName={product?.name}
+                productName={product?.product?.name}
                 showPriceField={false}
                 onCalculate={(result) => {
                   setDynamicCalcResult(result);
