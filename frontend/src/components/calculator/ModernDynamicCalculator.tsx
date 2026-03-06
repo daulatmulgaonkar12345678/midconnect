@@ -133,7 +133,6 @@ export default function ModernDynamicCalculator({
 
   // Result
   const [result, setResult] = useState<CalculationResult | null>(null);
-  const [calculating, setCalculating] = useState(false);
 
   // Load calculator and data
   useEffect(() => {
@@ -261,15 +260,20 @@ export default function ModernDynamicCalculator({
     usedVariables.delete('density');
     usedVariables.delete('material_density');
 
-    // Validate only fields used in the formula
+    // Check if any required field is missing
+    let hasAllRequired = true;
     for (const field of calculator.fields) {
       if (usedVariables.has(field.key) && field.required && !fieldValues[field.key]) {
-        return;
+        hasAllRequired = false;
+        break;
       }
     }
+    
+    if (!hasAllRequired) {
+      return;
+    }
 
-    setCalculating(true);
-
+    // Don't show calculating indicator for quick updates
     try {
       const res = await fetch(`${API_URL}/api/calculator/calculate`, {
         method: 'POST',
@@ -290,8 +294,6 @@ export default function ModernDynamicCalculator({
       }
     } catch (err) {
       console.error('Calculation error:', err);
-    } finally {
-      setCalculating(false);
     }
   }, [calculator, fieldValues, fieldUnits, selectedMaterial, quantity, onCalculate, getActiveFormula]);
 
@@ -300,10 +302,11 @@ export default function ModernDynamicCalculator({
     if (calculator && !loading) {
       const timer = setTimeout(() => {
         handleCalculate();
-      }, 300);
+      }, 500); // Increased debounce time
       return () => clearTimeout(timer);
     }
-  }, [fieldValues, fieldUnits, selectedMaterial, quantity, calculator, loading, handleCalculate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldValues, fieldUnits, selectedMaterial, quantity, calculator, loading]);
 
   // Format helpers
   const formatValue = (value: number, unit: string): string => {
@@ -567,14 +570,6 @@ export default function ModernDynamicCalculator({
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Calculating indicator */}
-        {calculating && (
-          <div className="flex items-center gap-2 text-sm text-indigo-600 mt-4 bg-indigo-50 px-4 py-2 rounded-lg">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="font-medium">Calculating...</span>
           </div>
         )}
       </div>
