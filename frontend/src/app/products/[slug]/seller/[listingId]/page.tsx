@@ -581,7 +581,7 @@ export default function SellerDetailPage({ params }: Props) {
               {Object.entries(sellerListing.searchableAttributes).map(([key, value]) => (
                 <div key={key} className="border-l-2 border-gray-200 pl-3">
                   <div className="text-xs text-gray-500 uppercase">
-                    {sellerListing.attributeLabels?.[key] || key.replace(/_/g, ' ')}
+                    {sellerListing.attributeLabels?.[key] || (key ? key.replace(/_/g, ' ') : '')}
                   </div>
                   <div className="text-sm font-medium text-gray-900">{String(value)}</div>
                 </div>

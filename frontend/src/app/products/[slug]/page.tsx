@@ -103,7 +103,7 @@ function SpecStrip({ attributes, labels }: {
             {typeof value === 'number' ? value.toLocaleString() : value}
           </span>
           <span className="text-slate-500 ml-1">
-            {(labels[key] || key).split('(')[1]?.replace(')', '') || ''}
+            {(labels?.[key] || key || '').split('(')[1]?.replace(')', '') || ''}
           </span>
           {idx < entries.length - 1 && (
             <span className="mx-2 text-slate-300">|</span>

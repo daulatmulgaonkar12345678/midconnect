@@ -714,10 +714,10 @@ export default function MaterialCalculatorCard({
             {/* Dimension Summary */}
             <div className="mt-3 pt-3 border-t border-green-200 text-sm text-green-800">
               <span className="font-medium">{result.material}</span> • 
-              <span className="capitalize ml-1">{result.shape.replace('_', ' ')}</span> • 
-              {Object.entries(result.dimensions).map(([key, value]) => (
+              <span className="capitalize ml-1">{result.shape?.replace?.('_', ' ') || result.shape || ''}</span> • 
+              {Object.entries(result.dimensions || {}).map(([key, value]) => (
                 <span key={key} className="ml-2">
-                  {key.replace('_', ' ')}: {value}
+                  {key ? key.replace('_', ' ') : ''}: {value}
                 </span>
               ))}
             </div>

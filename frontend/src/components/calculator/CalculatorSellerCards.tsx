@@ -96,7 +96,7 @@ function CalculationSummary({ result }: { result: CalculationResult }) {
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white/60 backdrop-blur rounded-xl p-4 text-center">
           <p className="text-sm text-emerald-600 mb-1">Calculator</p>
-          <p className="font-bold text-emerald-800">{result.calculator_name.replace(' Calculator', '')}</p>
+          <p className="font-bold text-emerald-800">{result.calculator_name?.replace?.(' Calculator', '') || result.calculator_name || 'Calculator'}</p>
         </div>
         
         {result.material_name && (
