@@ -36,7 +36,8 @@ export default function ProductsPage() {
     family: '',
     variant: '',
     specTemplateIds: [] as string[], // SSOT: camelCase - ARRAY for multi-select
-    coverImageUrl: '' // Firebase URL for cover image
+    coverImageUrl: '', // Firebase URL for cover image
+    product_type: 'standard_product' as 'raw_material' | 'standard_product'
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,7 +168,8 @@ export default function ProductsPage() {
       family: '',
       variant: '',
       specTemplateIds: [], // Empty array for new products
-      coverImageUrl: ''
+      coverImageUrl: '',
+      product_type: 'standard_product'
     });
     setImagePreview(null);
     setUploadProgress(0);
@@ -189,7 +191,8 @@ export default function ProductsPage() {
       family: product.family || '',
       variant: product.variant || '',
       specTemplateIds: templateIds,
-      coverImageUrl: existingCoverImage
+      coverImageUrl: existingCoverImage,
+      product_type: (product as any).product_type || 'standard_product'
     });
     setImagePreview(existingCoverImage || null);
     setUploadProgress(existingCoverImage ? 100 : 0);

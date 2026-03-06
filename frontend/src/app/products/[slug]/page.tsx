@@ -19,6 +19,8 @@ import MaterialCalculatorCard, { CalculationResult } from '@/components/calculat
 import SellerPriceComparison, { RawMaterialSeller } from '@/components/calculator/SellerPriceComparison';
 import ModernDynamicCalculator from '@/components/calculator/ModernDynamicCalculator';
 import CalculatorSellerCards from '@/components/calculator/CalculatorSellerCards';
+import RawMaterialSellerCard from '@/components/product/RawMaterialSellerCard';
+import StandardSellerCard from '@/components/product/StandardSellerCard';
 import {
   Package,
   MapPin,
@@ -631,7 +633,7 @@ export default function EnterpriseProductPage() {
   const [inquirySuccess, setInquirySuccess] = useState<string | null>(null);
 
   // Raw material calculator state
-  const [isRawMaterial, setIsRawMaterial] = useState(false);
+  const [productType, setProductType] = useState<'raw_material' | 'standard_product'>('standard_product');
   const [calculationResult, setCalculationResult] = useState<CalculationResult | null>(null);
   const [rawMaterialInquiry, setRawMaterialInquiry] = useState<{
     open: boolean;
@@ -701,13 +703,18 @@ export default function EnterpriseProductPage() {
         setFacets(facetsData);
         setSellers(productData.sellers);
         
-        // Check if this is a raw material product (check category type OR template type)
+        // Set product type from product data (defaults to 'standard_product')
+        const pType = productData.product.product_type || 'standard_product';
+        setProductType(pType as 'raw_material' | 'standard_product');
+        console.log('Product type:', pType);
+        
+        // Only load calculator for raw_material products
         const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
         const actualProductId = productData.product._id;
         const categoryId = productData.product.categoryId;
         
-        // First check for configurable calculator linked to this category
-        if (categoryId) {
+        if (pType === 'raw_material' && categoryId) {
+          // Load configurable calculator for raw material products
           fetch(`${API_URL}/api/calculator/calculators/by-category/${categoryId}`)
             .then(res => {
               if (res.ok) return res.json();
@@ -729,33 +736,9 @@ export default function EnterpriseProductPage() {
               }
             })
             .catch(() => {
-              console.log('No configurable calculator, checking legacy raw material config...');
+              console.log('No configurable calculator found for raw material');
             });
         }
-        
-        // Also check legacy raw material config (for backwards compatibility)
-        fetch(`${API_URL}/api/products/${actualProductId}/raw-material-config`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.isRawMaterial) {
-              setIsRawMaterial(true);
-              console.log('Raw material product detected:', data);
-            }
-          })
-          .catch(err => {
-            console.log('Product raw material check failed, trying category:', err);
-            // Fallback to category-based check
-            if (categoryId) {
-              fetch(`${API_URL}/api/spec-templates/by-category/${categoryId}`)
-                .then(res => res.json())
-                .then(data => {
-                  if (data.isRawMaterial) {
-                    setIsRawMaterial(true);
-                  }
-                })
-                .catch(err2 => console.log('Category check also failed:', err2));
-            }
-          });
         
         // Load SEO data in background (non-blocking) - Enhanced for Marketplace v2.0
         fetch(`${API_URL}/api/products/${productId}/seo`)
@@ -1067,8 +1050,8 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
         </div>
       </div>
 
-      {/* ==================== CONFIGURABLE CALCULATOR SECTION ==================== */}
-      {linkedCalculatorId && (
+      {/* ==================== RAW MATERIAL SECTION (Calculator + RawMaterialSellerCards) ==================== */}
+      {productType === 'raw_material' && linkedCalculatorId && (
         <div className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 py-8">
             <div className="text-center mb-8">
@@ -1099,171 +1082,143 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               />
             </div>
             
-            {/* Seller Cards with Calculated Prices */}
-            {dynamicCalcResult && dynamicCalcResult.total_value > 0 && (
-              <div>
-                <CalculatorSellerCards
-                  calculationResult={dynamicCalcResult}
-                  sellers={sellersWithRates}
-                  onRequestQuote={(seller, calculatedPrice) => {
-                    setSelectedSellerForInquiry(seller);
-                    setCalculatedPriceForInquiry(calculatedPrice);
-                    setInquiryModalOpen(true);
-                  }}
-                  onViewDetails={(seller) => {
-                    // Navigate to seller details
-                    window.location.href = `/seller/${seller.sellerId}`;
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ==================== RAW MATERIAL CALCULATOR SECTION ==================== */}
-      {isRawMaterial && (
-        <div className="bg-gradient-to-b from-orange-50 to-white border-b border-orange-100">
-          <div className="max-w-7xl mx-auto px-4 py-8">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-medium mb-3">
-                <Calculator className="h-4 w-4" />
-                Weight Calculator Available
-              </div>
-              <h2 className="text-2xl font-bold text-slate-900">Calculate Your Requirements</h2>
-              <p className="text-slate-600 mt-1">
-                Enter dimensions to calculate weight and compare prices from sellers
-              </p>
-            </div>
-
-            {/* Full Width Calculator */}
-            <div className="mb-8">
-              <MaterialCalculatorCard
-                onCalculate={handleCalculationResult}
-                defaultMaterial="MS Steel"
-                defaultShape="round_bar"
-                showPriceField={false}
-                className="shadow-lg"
-              />
-            </div>
-
-            {/* Calculation Result & Seller Comparison - Below Calculator */}
-            {calculationResult && calculationResult.total_weight > 0 && (
-              <div className="space-y-6">
-                {/* Calculation Summary - Full Width */}
-                <div className="bg-white rounded-xl shadow-lg border border-green-200 p-6">
-                  <h3 className="font-semibold text-green-800 mb-4 text-lg flex items-center gap-2">
-                    <Scale className="h-5 w-5" />
-                    Your Calculation Result
+            {/* Sort By for Raw Materials */}
+            {dynamicCalcResult && dynamicCalcResult.total_value > 0 && sellersWithRates.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Compare Sellers ({sellersWithRates.length})
                   </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-green-50 rounded-lg p-4 text-center">
-                      <p className="text-sm text-green-600 mb-1">Material</p>
-                      <p className="font-bold text-green-800">{calculationResult.material}</p>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4 text-center">
-                      <p className="text-sm text-green-600 mb-1">Shape</p>
-                      <p className="font-bold text-green-800 capitalize">{calculationResult.shape.replace('_', ' ')}</p>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4 text-center">
-                      <p className="text-sm text-green-600 mb-1">Quantity</p>
-                      <p className="font-bold text-green-800">{calculationResult.quantity} pcs</p>
-                    </div>
-                    <div className="bg-green-100 rounded-lg p-4 text-center border-2 border-green-300">
-                      <p className="text-sm text-green-600 mb-1">Total Weight</p>
-                      <p className="font-bold text-green-800 text-xl">{calculationResult.total_weight_display}</p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Sort by:</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'price' | 'leadTime' | 'stock')}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="price">Lowest Price</option>
+                      <option value="leadTime">Fastest Delivery</option>
+                      <option value="stock">Highest Stock</option>
+                    </select>
                   </div>
                 </div>
-
-                {/* Seller Price Comparison - Full Width */}
-                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-                  <h3 className="font-semibold text-gray-900 mb-4 text-lg">Compare Seller Prices</h3>
-                  <SellerPriceComparison
-                    productId={product.product._id}
-                    material={calculationResult.material}
-                    totalWeight={calculationResult.total_weight}
-                    onInquiry={handleRawMaterialSellerInquiry}
-                  />
-                </div>
+              </div>
+            )}
+            
+            {/* Raw Material Seller Cards */}
+            {dynamicCalcResult && dynamicCalcResult.total_value > 0 && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {sellersWithRates
+                  .sort((a, b) => {
+                    if (sortBy === 'price') return a.rate - b.rate;
+                    if (sortBy === 'leadTime') return (a.leadTime || 999) - (b.leadTime || 999);
+                    if (sortBy === 'stock') return (b.stock || 0) - (a.stock || 0);
+                    return 0;
+                  })
+                  .map((seller, index) => (
+                    <RawMaterialSellerCard
+                      key={seller._id}
+                      seller={seller}
+                      calculationResult={dynamicCalcResult}
+                      rank={index + 1}
+                      onRequestQuote={(s, price) => {
+                        setSelectedSellerForInquiry(s);
+                        setCalculatedPriceForInquiry(price);
+                        setInquiryModalOpen(true);
+                      }}
+                      onViewDetails={(s) => {
+                        window.location.href = `/seller/${s.sellerId}`;
+                      }}
+                    />
+                  ))
+                }
+              </div>
+            )}
+            
+            {/* No sellers message */}
+            {dynamicCalcResult && dynamicCalcResult.total_value > 0 && sellersWithRates.length === 0 && (
+              <div className="text-center py-8 bg-gray-50 rounded-xl">
+                <Package className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500">No sellers available for this product yet.</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ==================== MAIN CONTENT ==================== */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Success Message */}
-        {inquirySuccess && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 text-green-700">
-            <Check className="h-5 w-5" />
-            {inquirySuccess}
-            <button onClick={() => setInquirySuccess(null)} className="ml-auto">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+      {/* ==================== STANDARD PRODUCT SECTION (Filters + StandardSellerCards) ==================== */}
+      {productType === 'standard_product' && (
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {/* Success Message */}
+          {inquirySuccess && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 text-green-700">
+              <Check className="h-5 w-5" />
+              {inquirySuccess}
+              <button onClick={() => setInquirySuccess(null)} className="ml-auto">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
-        {/* Fallback Message */}
-        {fallbackMessage && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-amber-700">
-            <AlertCircle className="h-5 w-5" />
-            {fallbackMessage}
-          </div>
-        )}
+          {/* Fallback Message */}
+          {fallbackMessage && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+              {fallbackMessage}
+            </div>
+          )}
 
-        <div className="flex gap-8">
-          {/* ==================== SECTION 2: FILTER PANEL ==================== */}
-          <div className="hidden lg:block w-72 flex-shrink-0">
-            <div className="sticky top-24">
-              <FilterPanel
-                facets={facets}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                onClearFilters={handleClearFilters}
-                loading={filterLoading}
-              />
+          <div className="flex gap-8">
+            {/* ==================== SECTION 2: FILTER PANEL ==================== */}
+            <div className="hidden lg:block w-72 flex-shrink-0">
+              <div className="sticky top-24">
+                <FilterPanel
+                  facets={facets}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  onClearFilters={handleClearFilters}
+                  loading={filterLoading}
+                />
 
-              {/* Sort Options */}
-              <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Sort By</h3>
-                <select
-                  value={`${sortBy}-${sortOrder}`}
-                  onChange={(e) => {
-                    const [field, order] = e.target.value.split('-');
-                    setSortBy(field as 'price' | 'leadTime' | 'stock');
-                    setSortOrder(order as 'asc' | 'desc');
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  data-testid="sort-select"
-                >
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
-                  <option value="leadTime-asc">Lead Time: Fastest</option>
-                  <option value="stock-desc">Stock: Highest</option>
-                </select>
+                {/* Sort Options */}
+                <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Sort By</h3>
+                  <select
+                    value={`${sortBy}-${sortOrder}`}
+                    onChange={(e) => {
+                      const [field, order] = e.target.value.split('-');
+                      setSortBy(field as 'price' | 'leadTime' | 'stock');
+                      setSortOrder(order as 'asc' | 'desc');
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    data-testid="sort-select"
+                  >
+                    <option value="price-asc">Price: Low to High</option>
+                    <option value="price-desc">Price: High to Low</option>
+                    <option value="leadTime-asc">Lead Time: Fastest</option>
+                    <option value="stock-desc">Stock: Highest</option>
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* ==================== SECTION 3: SELLER CARDS ==================== */}
-          <div className="flex-1">
-            {/* Compare Toggle Bar */}
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
-              <div className="text-slate-600">
-                <span className="font-semibold text-slate-900">{sellers.length}</span> sellers found
-              </div>
-              
-              <div className="flex items-center gap-4">
-                {isComparing && compareItems.length >= 2 && (
-                  <button
-                    onClick={() => setShowCompareModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    data-testid="compare-now-btn"
-                  >
-                    <GitCompare className="h-4 w-4" />
-                    Compare ({compareItems.length})
+            {/* ==================== SECTION 3: STANDARD SELLER CARDS ==================== */}
+            <div className="flex-1">
+              {/* Compare Toggle Bar */}
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+                <div className="text-slate-600">
+                  <span className="font-semibold text-slate-900">{sellers.length}</span> sellers found
+                </div>
+                
+                <div className="flex items-center gap-4">
+                  {isComparing && compareItems.length >= 2 && (
+                    <button
+                      onClick={() => setShowCompareModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      data-testid="compare-now-btn"
+                    >
+                      <GitCompare className="h-4 w-4" />
+                      Compare ({compareItems.length})
                   </button>
                 )}
                 
@@ -1316,6 +1271,7 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
           </div>
         </div>
       </div>
+      )}
 
       {/* ==================== INQUIRY MODAL ==================== */}
       {inquiryModal.open && inquiryModal.seller && (

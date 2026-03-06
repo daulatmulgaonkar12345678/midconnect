@@ -7757,6 +7757,9 @@ class AdminProductCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=200, description="Product name")
     categoryId: str = Field(..., description="Category ID (ObjectId string)")
     
+    # Product type - determines how the product page renders
+    product_type: str = Field(default="standard_product", description="Product type: 'raw_material' or 'standard_product'")
+    
     # Optional user-provided fields
     coverImageUrl: Optional[str] = Field(None, description="Product cover image URL (Cloudinary URL)")
     description: Optional[str] = Field(None, max_length=2000, description="Product description")
@@ -7764,6 +7767,14 @@ class AdminProductCreate(BaseModel):
     family: Optional[str] = Field(None, max_length=100)
     variant: Optional[str] = Field(None, max_length=100)
     unit: Optional[str] = Field(None, max_length=20, description="Unit of measurement")
+    
+    @field_validator('product_type')
+    @classmethod
+    def validate_product_type(cls, v):
+        allowed = ['raw_material', 'standard_product']
+        if v not in allowed:
+            raise ValueError(f"product_type must be one of: {allowed}")
+        return v
     
     @field_validator('coverImageUrl')
     @classmethod
@@ -7787,6 +7798,17 @@ class AdminProductUpdate(BaseModel):
     coverImageUrl: Optional[str] = None
     unit: Optional[str] = None
     isActive: Optional[bool] = None
+    product_type: Optional[str] = Field(None, description="Product type: 'raw_material' or 'standard_product'")
+    
+    @field_validator('product_type')
+    @classmethod
+    def validate_product_type(cls, v):
+        if v is None:
+            return v
+        allowed = ['raw_material', 'standard_product']
+        if v not in allowed:
+            raise ValueError(f"product_type must be one of: {allowed}")
+        return v
     
     @field_validator('coverImageUrl')
     @classmethod

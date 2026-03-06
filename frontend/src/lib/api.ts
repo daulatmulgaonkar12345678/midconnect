@@ -1807,6 +1807,7 @@ export interface EnterpriseProductResponse {
     images: string[];
     categoryId?: string;
     categoryName?: string;
+    product_type?: 'raw_material' | 'standard_product';
   };
   specTemplate?: {
     templateId: string;
