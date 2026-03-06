@@ -374,15 +374,26 @@ export interface SellerInquiry {
   whatsappLink?: string;
   quote?: InquiryQuote;
   // Raw material calculation data (if inquiry was from calculator)
+  // Supports both legacy format and new dynamic calculator format
   calculationData?: {
-    material: string;
-    shape: string;
-    dimensions: Record<string, string>;
-    quantity: number;
-    weight_per_piece: number;
-    total_weight: number;
-    rate_per_kg: number;
-    calculated_price: number;
+    // Legacy fields
+    material?: string;
+    shape?: string;
+    dimensions?: Record<string, string>;
+    quantity?: number;
+    weight_per_piece?: number;
+    total_weight?: number;
+    rate_per_kg?: number;
+    calculated_price?: number;
+    // New dynamic calculator fields
+    calculator_name?: string;
+    material_name?: string;
+    formula_used?: string;
+    formula_description?: string;
+    field_summary?: Record<string, string>;
+    total_value?: number;
+    value_per_piece?: number;
+    output_unit?: string;
   };
   createdAt: string;
 }

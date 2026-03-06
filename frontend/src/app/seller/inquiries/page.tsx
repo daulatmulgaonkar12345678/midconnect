@@ -513,24 +513,24 @@ export default function SellerInquiriesPage() {
                       {/* Material */}
                       <div>
                         <p className="text-orange-600 text-xs uppercase font-medium mb-1">Material</p>
-                        <p className="font-semibold text-gray-900">{inquiry.calculationData.material}</p>
+                        <p className="font-semibold text-gray-900">{inquiry.calculationData?.material || inquiry.calculationData?.material_name || 'N/A'}</p>
                       </div>
                       {/* Shape */}
                       <div>
                         <p className="text-orange-600 text-xs uppercase font-medium mb-1">Shape</p>
-                        <p className="font-semibold text-gray-900 capitalize">{inquiry.calculationData.shape.replace('_', ' ')}</p>
+                        <p className="font-semibold text-gray-900 capitalize">{inquiry.calculationData?.shape?.replace?.('_', ' ') || inquiry.calculationData?.formula_description || 'N/A'}</p>
                       </div>
                       {/* Quantity */}
                       <div>
                         <p className="text-orange-600 text-xs uppercase font-medium mb-1">Quantity</p>
-                        <p className="font-semibold text-gray-900">{inquiry.calculationData.quantity} pieces</p>
+                        <p className="font-semibold text-gray-900">{inquiry.calculationData?.quantity || 1} pieces</p>
                       </div>
                       {/* Calculated Weight */}
                       <div>
                         <p className="text-orange-600 text-xs uppercase font-medium mb-1">Total Weight</p>
                         <p className="font-bold text-gray-900 flex items-center gap-1">
                           <Scale className="h-4 w-4 text-orange-500" />
-                          {inquiry.calculationData.total_weight.toFixed(2)} kg
+                          {(inquiry.calculationData?.total_weight || inquiry.calculationData?.total_value || 0).toFixed(2)} {inquiry.calculationData?.output_unit || 'kg'}
                         </p>
                       </div>
                     </div>
@@ -539,12 +539,12 @@ export default function SellerInquiriesPage() {
                     <div className="mt-3 pt-3 border-t border-orange-200">
                       <p className="text-orange-600 text-xs uppercase font-medium mb-2">Dimensions</p>
                       <div className="flex flex-wrap gap-2">
-                        {Object.entries(inquiry.calculationData.dimensions).map(([key, value]) => (
+                        {Object.entries(inquiry.calculationData?.dimensions || inquiry.calculationData?.field_summary || {}).map(([key, value]) => (
                           <span 
                             key={key} 
                             className="px-3 py-1 bg-white border border-orange-200 rounded-full text-sm text-gray-700"
                           >
-                            <span className="capitalize">{key.replace('_', ' ')}</span>: {value}
+                            <span className="capitalize">{key ? key.replace('_', ' ') : ''}</span>: {value}
                           </span>
                         ))}
                       </div>
@@ -554,17 +554,17 @@ export default function SellerInquiriesPage() {
                     <div className="mt-3 pt-3 border-t border-orange-200 flex flex-wrap items-center gap-4">
                       <div className="bg-white border border-orange-200 rounded-lg px-4 py-2">
                         <p className="text-xs text-orange-600">Rate/kg</p>
-                        <p className="font-bold text-gray-900">₹{inquiry.calculationData.rate_per_kg.toLocaleString('en-IN')}</p>
+                        <p className="font-bold text-gray-900">₹{(inquiry.calculationData?.rate_per_kg || 0).toLocaleString('en-IN')}</p>
                       </div>
                       <div className="text-2xl text-orange-300">×</div>
                       <div className="bg-white border border-orange-200 rounded-lg px-4 py-2">
                         <p className="text-xs text-orange-600">Weight</p>
-                        <p className="font-bold text-gray-900">{inquiry.calculationData.total_weight.toFixed(2)} kg</p>
+                        <p className="font-bold text-gray-900">{(inquiry.calculationData?.total_weight || inquiry.calculationData?.total_value || 0).toFixed(2)} {inquiry.calculationData?.output_unit || 'kg'}</p>
                       </div>
                       <div className="text-2xl text-orange-300">=</div>
                       <div className="bg-green-100 border border-green-300 rounded-lg px-4 py-2">
                         <p className="text-xs text-green-600">Buyer's Estimate</p>
-                        <p className="font-bold text-green-800 text-lg">₹{inquiry.calculationData.calculated_price.toLocaleString('en-IN')}</p>
+                        <p className="font-bold text-green-800 text-lg">₹{(inquiry.calculationData?.calculated_price || 0).toLocaleString('en-IN')}</p>
                       </div>
                     </div>
                   </div>
