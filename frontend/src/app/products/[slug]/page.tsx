@@ -77,7 +77,7 @@ function SpecGrid({ attributes, labels }: {
       {entries.map(([key, value]) => (
         <div key={key} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
           <div className="text-xs text-slate-500 uppercase tracking-wide font-medium">
-            {labels[key] || key.replace(/_/g, ' ')}
+            {labels[key] || (key ? key.replace(/_/g, ' ') : '')}
           </div>
           <div className="text-lg font-semibold text-slate-900 mt-1">
             {typeof value === 'number' ? value.toLocaleString() : value}
@@ -701,30 +701,30 @@ export default function EnterpriseProductPage() {
 
       // Create inquiry with calculation data embedded in message
       const calculationDetails = `
-Material: ${calculationResult.material}
-Shape: ${calculationResult.shape.replace('_', ' ')}
-Dimensions: ${Object.entries(calculationResult.dimensions).map(([k, v]) => `${k}: ${v}`).join(', ')}
-Quantity: ${calculationResult.quantity} pieces
-Calculated Weight: ${calculationResult.total_weight_display}
-Rate/kg: ₹${rawMaterialInquiry.seller.rate_per_kg}
-Estimated Total: ₹${rawMaterialInquiry.calculatedPrice.toLocaleString('en-IN')}
+Material: ${calculationResult?.material || 'N/A'}
+Shape: ${calculationResult?.shape?.replace?.('_', ' ') || 'N/A'}
+Dimensions: ${calculationResult?.dimensions ? Object.entries(calculationResult.dimensions).map(([k, v]) => `${k}: ${v}`).join(', ') : 'N/A'}
+Quantity: ${calculationResult?.quantity || 1} pieces
+Calculated Weight: ${calculationResult?.total_weight_display || 'N/A'}
+Rate/kg: ₹${rawMaterialInquiry.seller?.rate_per_kg || 0}
+Estimated Total: ₹${rawMaterialInquiry.calculatedPrice?.toLocaleString?.('en-IN') || 0}
 ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
 
       await createInquiry(token, {
         sellerId: rawMaterialInquiry.seller.sellerId,
         listingId: rawMaterialInquiry.seller.listingId,
-        quantity: calculationResult.quantity,
+        quantity: calculationResult?.quantity || 1,
         message: calculationDetails.trim(),
         buyerType,
         // Include structured calculation data
         calculationData: {
-          material: calculationResult.material,
-          shape: calculationResult.shape,
-          dimensions: calculationResult.dimensions,
-          quantity: calculationResult.quantity,
-          weight_per_piece: calculationResult.weight_per_piece,
-          total_weight: calculationResult.total_weight,
-          rate_per_kg: rawMaterialInquiry.seller.rate_per_kg,
+          material: calculationResult?.material,
+          shape: calculationResult?.shape,
+          dimensions: calculationResult?.dimensions,
+          quantity: calculationResult?.quantity,
+          weight_per_piece: calculationResult?.weight_per_piece,
+          total_weight: calculationResult?.total_weight,
+          rate_per_kg: rawMaterialInquiry.seller?.rate_per_kg,
           calculated_price: rawMaterialInquiry.calculatedPrice
         }
       });
