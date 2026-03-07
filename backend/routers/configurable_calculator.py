@@ -846,12 +846,19 @@ def create_configurable_calculator_router(db):
             "status": "active",
             "$or": [
                 {"rate_per_unit": {"$exists": True, "$gt": 0}},
-                {"rate_per_kg": {"$exists": True, "$gt": 0}}
+                {"rate_per_kg": {"$exists": True, "$gt": 0}},
+                {"pricingTiers.0.pricePerUnit": {"$exists": True, "$gt": 0}}
             ]
         })
         
         async for listing in cursor:
+            # Get rate from rate_per_unit, rate_per_kg, or from pricingTiers
             seller_rate = listing.get("rate_per_unit") or listing.get("rate_per_kg") or 0
+            if not seller_rate and listing.get("pricingTiers"):
+                tiers = listing["pricingTiers"]
+                if tiers and len(tiers) > 0:
+                    seller_rate = tiers[0].get("pricePerUnit", 0)
+            
             seller_unit = listing.get("rate_unit", result.output_unit)
             
             # Calculate price

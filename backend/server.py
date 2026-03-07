@@ -5918,16 +5918,21 @@ async def update_listing(listing_id: str, update: ListingUpdate, user: dict = De
         pricing_tiers = []
         for slab in update_data["pricingSlabs"]:
             if isinstance(slab, dict):
+                # Handle multiple field name formats (frontend sends minQty, backend model has minQuantity)
+                min_qty = slab.get("minQty") or slab.get("minQuantity") or slab.get("min_quantity") or 1
+                max_qty = slab.get("maxQty") or slab.get("maxQuantity") or slab.get("max_quantity")
+                price = slab.get("pricePerUnit") or slab.get("price_per_unit") or 0
                 pricing_tiers.append({
-                    "minQty": slab.get("min_quantity", 1),
-                    "maxQty": slab.get("max_quantity"),
-                    "pricePerUnit": slab.get("pricePerUnit", 0)
+                    "minQty": min_qty,
+                    "maxQty": max_qty,
+                    "pricePerUnit": price
                 })
             else:
+                # Handle Pydantic model objects
                 pricing_tiers.append({
-                    "minQty": slab.min_quantity,
-                    "maxQty": slab.max_quantity,
-                    "pricePerUnit": slab.price_per_unit
+                    "minQty": getattr(slab, 'minQty', getattr(slab, 'minQuantity', getattr(slab, 'min_quantity', 1))),
+                    "maxQty": getattr(slab, 'maxQty', getattr(slab, 'maxQuantity', getattr(slab, 'max_quantity', None))),
+                    "pricePerUnit": getattr(slab, 'pricePerUnit', getattr(slab, 'price_per_unit', 0))
                 })
         update_dict["pricingTiers"] = pricing_tiers
     
