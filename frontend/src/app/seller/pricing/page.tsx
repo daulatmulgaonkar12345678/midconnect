@@ -169,7 +169,7 @@ export default function QuickPricingPage() {
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      // Build slabs - base price as first slab
+      // Build slabs - base price as first slab (ALWAYS include at least one slab)
       const allSlabs: PricingSlab[] = [
         {
           minQty: 1,
@@ -179,9 +179,10 @@ export default function QuickPricingPage() {
         ...editState.slabs
       ];
 
+      // Always send pricingSlabs to ensure the price is updated
       await quickPriceUpdate(token, listingId, {
         basePrice: editState.basePrice,
-        pricingSlabs: allSlabs.length > 1 ? allSlabs : undefined,
+        pricingSlabs: allSlabs,
         validTill: editState.validTill,
         stockStatus: editState.stockStatus
       });

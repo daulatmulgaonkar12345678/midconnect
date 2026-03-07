@@ -21,7 +21,7 @@ import requests
 import os
 
 # Get BASE_URL from environment (frontend env for public testing)
-BASE_URL = "https://calc-product-sync.preview.emergentagent.com"
+BASE_URL = "https://pricing-portal-21.preview.emergentagent.com"
 
 # Expected test data (from seed data)
 EXPECTED_PRODUCT_ID = "6981a9a74108b0cbd93aa631"

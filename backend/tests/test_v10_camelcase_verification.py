@@ -12,7 +12,7 @@ import requests
 import os
 
 # Get API URL from environment - use frontend's .env for public testing
-BASE_URL = "https://calc-product-sync.preview.emergentagent.com"
+BASE_URL = "https://pricing-portal-21.preview.emergentagent.com"
 
 
 class TestHealthAndBasicEndpoints:

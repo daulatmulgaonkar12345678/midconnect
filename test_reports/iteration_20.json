@@ -64,7 +64,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://calc-product-sync.preview.emergentagent.com"
+    "api_url": "https://pricing-portal-21.preview.emergentagent.com"
   },
   
   "seed_data_creation": "None needed",

@@ -95,6 +95,9 @@ class ListingUpdate(BaseModel):
     # Raw material pricing fields (sellers can update rate daily)
     rate_per_kg: Optional[float] = Field(None, gt=0, description="Price per kg for raw materials")
     material_supported: Optional[str] = Field(None, description="Material this listing supports")
+    # Quick price update fields (for /seller/pricing page)
+    pricingSlabs: Optional[List[PricingTier]] = Field(None, max_length=10, description="Pricing tiers for quick price update")
+    stockStatus: Optional[Literal["in_stock", "limited", "made_to_order", "out_of_stock"]] = Field(None, description="Stock availability status")
 
 
 class PricingUpdate(BaseModel):
@@ -807,6 +810,27 @@ def create_seller_router(db, require_auth, require_verified_seller, require_gst_
             update_data["rate_per_kg"] = data.rate_per_kg
         if data.material_supported is not None:
             update_data["material_supported"] = data.material_supported
+        
+        # Quick price update fields - pricingSlabs and stockStatus
+        if data.pricingSlabs is not None:
+            # Convert pricingSlabs to pricingTiers format (store price history)
+            new_tiers = [{"minQty": t.minQty, "maxQty": t.maxQty, "pricePerUnit": t.pricePerUnit} for t in data.pricingSlabs]
+            old_tiers = listing.get("pricingTiers", [])
+            
+            if old_tiers != new_tiers:
+                # Store price history for audit trail
+                await db.sellerListings.update_one(
+                    {"_id": listing_oid},
+                    {"$push": {"priceHistory": {"timestamp": now, "oldTiers": old_tiers, "action": "quickPriceUpdate"}}}
+                )
+            
+            update_data["pricingTiers"] = new_tiers
+            # Update minPrice for search
+            if new_tiers:
+                update_data["minPrice"] = min(t["pricePerUnit"] for t in new_tiers)
+        
+        if data.stockStatus is not None:
+            update_data["stockStatus"] = data.stockStatus
         
         # ============================================================
         # ENTERPRISE GUARD: Validate update data

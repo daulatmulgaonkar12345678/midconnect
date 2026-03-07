@@ -1156,7 +1156,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://calc-product-sync.preview.emergentagent.com",
+        "https://pricing-portal-21.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
@@ -1680,6 +1680,7 @@ class ListingUpdate(BaseModel):
     packagingSize: Optional[str] = None
     deliveryLocations: Optional[List[str]] = None
     sellerNotes: Optional[str] = None
+    stockStatus: Optional[Literal["in_stock", "limited", "made_to_order", "out_of_stock"]] = None
     
     @field_validator('images')
     @classmethod
@@ -5906,7 +5907,8 @@ async def update_listing(listing_id: str, update: ListingUpdate, user: dict = De
         "leadTime": "leadTime",
         "packagingSize": "packagingSize",
         "deliveryLocations": "deliveryLocations",
-        "sellerNotes": "sellerNotes"
+        "sellerNotes": "sellerNotes",
+        "stockStatus": "stockStatus"
     }
     
     for old_key, new_key in field_mapping.items():
