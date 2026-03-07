@@ -1670,3 +1670,48 @@ User reported that both raw material and standard product seller cards were appe
 
 ---
 
+### Session: 2026-03-07
+
+#### P0: Quick Price Update Fix - COMPLETE
+**Issue:**
+The Quick Price Update feature on `/seller/pricing` was not working. When a seller updated the product price, the update didn't persist to the database.
+
+**Root Cause Analysis:**
+1. **Frontend Issue**: `pricingSlabs` was conditionally sent (`pricingSlabs: allSlabs.length > 1 ? allSlabs : undefined`) - when only updating base price without tiers, the pricing data was never sent.
+2. **Backend Issue**: The `ListingUpdate` model in `seller_products.py` was missing `pricingSlabs` and `stockStatus` fields. These fields were silently ignored by Pydantic validation.
+
+**Fix Applied:**
+1. **Frontend (`/app/frontend/src/app/seller/pricing/page.tsx`):**
+   - Changed to always send `pricingSlabs: allSlabs` (line 185)
+   - Ensures pricing is always updated even for single-tier prices
+
+2. **Backend (`/app/backend/seller_products.py`):**
+   - Added `pricingSlabs: Optional[List[PricingTier]]` to ListingUpdate model (line 98)
+   - Added `stockStatus: Optional[Literal[...]]` to ListingUpdate model (line 99)
+   - Added handler to convert `pricingSlabs` → `pricingTiers` format (lines 814-830)
+   - Added price history tracking for audit trail
+   - Updates `minPrice` for search optimization
+
+3. **Backend (`/app/backend/server.py`):**
+   - Added `stockStatus` to ListingUpdate model (line 1683)
+   - Added `stockStatus` to field_mapping (line 5910)
+
+**Testing Results (100% - 8/8 backend tests passed):**
+- ✅ Health check passes
+- ✅ Seller listings endpoint exists
+- ✅ Endpoint accepts `pricingSlabs` field
+- ✅ Endpoint accepts `stockStatus` field
+- ✅ Full quick price payload accepted
+
+**Files Modified:**
+- `/app/frontend/src/app/seller/pricing/page.tsx` - Always send pricingSlabs
+- `/app/backend/seller_products.py` - Added fields and handler
+- `/app/backend/server.py` - Added stockStatus field
+
+**Business Impact:**
+- Sellers can now update prices correctly from the Quick Price Update page
+- Price history is tracked for audit/analytics
+- Stock status can be updated alongside price
+
+---
+
