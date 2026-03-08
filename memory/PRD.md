@@ -1791,3 +1791,33 @@ User has 1 listed product but category page showed 5 products. The categoryId in
 
 ---
 
+### P0: /products Endpoint SSOT Fix - COMPLETE
+**Issue:**
+Products were not showing when clicking on a category, even though the category count was correct.
+
+**Root Cause:**
+The category filter was applied AFTER the `$group` stage in the `/products` endpoint. This meant we were trying to filter on `firstCategoryId` after grouping, but the filter needed to be applied BEFORE grouping to filter individual listings.
+
+**Fix Applied:**
+Completely rewrote `/api/products` endpoint:
+```python
+# Stage 1: Filter BEFORE grouping (SSOT)
+base_match = {
+    "status": "active",
+    "categoryId": ObjectId(category_id)  # Filter by listing's categoryId
+}
+pipeline = [{"$match": base_match}, ...]
+```
+
+**Key Changes:**
+1. Category filter now applied in Stage 1 (BEFORE `$group`)
+2. Simplified pipeline from 8+ stages to 7 stages
+3. All fields derived from listing data (not products table)
+4. Removed complex fallback logic
+
+**Testing Results:**
+- Categories: 1 category with 1 product, 1 listing ✅
+- Products API with categoryId filter: Returns 1 product ✅
+
+---
+

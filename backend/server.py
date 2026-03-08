@@ -4534,124 +4534,80 @@ async def get_products(
     category_id: Optional[str] = Query(None, alias="categoryId"),  # Support both snake_case and camelCase
 ):
     """
-    Get products that have at least 1 ACTIVE/PUBLISHED seller listing.
-    Seller-listing-driven visibility - catalog products without listings are hidden.
+    SSOT: sellerListings is the SINGLE SOURCE OF TRUTH.
     
-    PRODUCT IDENTITY GOVERNANCE:
-    - Groups by productId (canonical product reference)
-    - Shows single card per product with:
-      - Seller count (number of unique sellers)
-      - Lowest starting price (from all pricingTiers)
-    - Joins with products collection for canonical product info
+    Get products that have at least 1 ACTIVE seller listing.
+    Categories are visible ONLY based on listing's categoryId field.
     """
-    # Debug: Log total listings before filter
-    total_listings = await db.sellerListings.count_documents({})
-    active_listings = await db.sellerListings.count_documents({"status": "active", "isActive": True})
-    logger.info(f"[Products API] Total listings: {total_listings}, Active: {active_listings}")
+    logger.info(f"[Products API] Request with categoryId={category_id}")
     
-    # FALLBACK: If no products found via canonical pipeline, try direct listing display
-    # This handles cases where seller created listings without proper product catalog entries
+    # Build base match filter
+    base_match = {
+        "status": "active",
+        "$or": [
+            {"isActive": True},
+            {"isActive": {"$exists": False}}
+        ]
+    }
     
-    # Build aggregation pipeline - CANONICAL SSOT: ObjectId-only joins
-    # Start from seller_listings, group by productId, join with products
+    # SSOT: Filter by listing's categoryId BEFORE grouping
+    if category_id:
+        try:
+            base_match["categoryId"] = ObjectId(category_id)
+            logger.info(f"[Products API] Filtering by categoryId: {category_id}")
+        except Exception as e:
+            logger.error(f"[Products API] Invalid categoryId: {e}")
+    
     pipeline = [
-        # Stage 1: Only ACTIVE listings - case-insensitive status check
-        {"$match": {
-            "$and": [
-                # Status check - handle both lowercase and potential variations
-                {"$or": [
-                    {"status": "active"},
-                    {"status": "Active"},
-                    {"status": {"$regex": "^active$", "$options": "i"}}
-                ]},
-                # isActive must be true OR not exist (default to active)
-                {"$or": [
-                    {"isActive": True},
-                    {"isActive": {"$exists": False}}
-                ]},
-                # isDeleted must be false OR not exist
-                {"$or": [
-                    {"isDeleted": False},
-                    {"isDeleted": {"$exists": False}}
-                ]}
-            ]
-        }},
-        # Stage 2: Group by productId (MUST be ObjectId - no fallbacks)
+        # Stage 1: Filter active listings (and by category if specified)
+        {"$match": base_match},
+        # Stage 2: Group by productId
         {"$group": {
-            "_id": "$productId",  # CANONICAL: No fallback to legacy fields
+            "_id": "$productId",
             "seller_ids": {"$addToSet": "$sellerId"},
             "allPrices": {"$push": "$pricingTiers"},
             "firstDescription": {"$first": "$description"},
             "firstImages": {"$first": "$images"},
-            "firstProductName": {"$first": "$productName"},  # Capture listing's productName
-            "firstCategoryId": {"$first": "$categoryId"},    # Capture listing's categoryId
-            "firstCategoryName": {"$first": "$categoryName"} # Capture listing's categoryName
+            "firstProductName": {"$first": "$productName"},
+            "firstCategoryId": {"$first": "$categoryId"},
+            "firstCategoryName": {"$first": "$categoryName"}
         }},
-        # Stage 3: Lookup product info from products collection
+        # Stage 3: Lookup product info
         {"$lookup": {
             "from": "products",
             "localField": "_id",
             "foreignField": "_id",
             "as": "product_info"
         }},
-        # Stage 4: Unwind product info - ALLOW MISSING to support listing-first workflow
         {"$unwind": {
             "path": "$product_info",
-            "preserveNullAndEmptyArrays": True  # FLEXIBLE: Show listings even without catalog entry
+            "preserveNullAndEmptyArrays": True
         }},
-        # Stage 5: Lookup category from categories collection
-        {"$lookup": {
-            "from": "categories",
-            "localField": "product_info.categoryId",
-            "foreignField": "_id",
-            "as": "category_info"
-        }},
-        # Stage 5b: Also try to lookup category from listing's categoryId
+        # Stage 4: Lookup category from listing's categoryId
         {"$lookup": {
             "from": "categories",
             "localField": "firstCategoryId",
             "foreignField": "_id",
-            "as": "listing_category_info"
+            "as": "category_info"
         }},
-        # Stage 6: Unwind category info
         {"$unwind": {
             "path": "$category_info",
             "preserveNullAndEmptyArrays": True
         }},
-        {"$unwind": {
-            "path": "$listing_category_info",
-            "preserveNullAndEmptyArrays": True
-        }},
-    ]
-    
-    # Stage 7: Filter by category if requested - USE LISTING's categoryId (SSOT)
-    if category_id:
-        pipeline.append({
-            "$match": {"firstCategoryId": ObjectId(category_id)}
-        })
-    
-    # Stage 8: Project final shape - USE LISTING DATA AS FALLBACK
-    pipeline.append({
-        "$project": {
+        # Stage 5: Project final shape
+        {"$project": {
             "_id": {"$toString": "$_id"},
-            # Name: prefer product catalog, fallback to listing's productName
             "name": {"$ifNull": ["$product_info.name", "$firstProductName"]},
             "slug": "$product_info.slug",
             "description": {"$ifNull": ["$product_info.description", "$firstDescription"]},
-            # CategoryId: prefer product catalog, fallback to listing's categoryId
-            "categoryId": {
-                "$toString": {
-                    "$ifNull": ["$product_info.categoryId", "$firstCategoryId"]
-                }
-            },
-            # CategoryName: prefer product's category, fallback to listing's category
-            "categoryName": {"$ifNull": ["$category_info.name", "$listing_category_info.name", "$firstCategoryName"]},
+            "categoryId": {"$toString": "$firstCategoryId"},
+            "categoryName": {"$ifNull": ["$category_info.name", "$firstCategoryName"]},
             "images": {"$ifNull": ["$product_info.images", "$firstImages"]},
             "sellerCount": {"$size": "$seller_ids"},
             "minPrice": {
                 "$min": {
                     "$reduce": {
-                        "input": "$allPrices",  # FIXED: was all_prices
+                        "input": "$allPrices",
                         "initialValue": [],
                         "in": {
                             "$concatArrays": [
@@ -4665,72 +4621,22 @@ async def get_products(
                         }
                     }
                 }
-            },
-            "normalizedSpecHash": "$product_info.normalizedSpecHash"
-        }
-    })
-    
-    # Filter out products with null names
-    pipeline.append({
-        "$match": {
-            "name": {"$ne": None, "$ne": ""}
-        }
-    })
-    
-    # Stage 7: Sort by seller count (most popular first)
-    pipeline.append({"$sort": {"sellerCount": -1, "name": 1}})
-    
-    # Stage 8: Limit results
-    pipeline.append({"$limit": 500})
+            }
+        }},
+        # Stage 6: Filter out null names
+        {"$match": {"name": {"$ne": None, "$ne": ""}}},
+        # Stage 7: Sort and limit
+        {"$sort": {"sellerCount": -1, "name": 1}},
+        {"$limit": 500}
+    ]
     
     try:
-        # Debug: Count listings after filter (STRICT: status = "active" only)
-        filter_stage = {
-            "$and": [
-                {"status": "active"},  # STRICT: Only "active" status is public
-                {"$or": [
-                    {"isActive": True},
-                    {"isActive": {"$exists": False}}
-                ]},
-                {"$or": [
-                    {"isDeleted": False},
-                    {"isDeleted": {"$exists": False}}
-                ]}
-            ]
-        }
-        filtered_count = await db.sellerListings.count_documents(filter_stage)
-        logger.info(f"[Products API] Listings after filter: {filtered_count}")
-        
-        products_raw = await db.sellerListings.aggregate(pipeline).to_list(500)
-        logger.info(f"[Products API] Raw aggregation results: {len(products_raw)}")
+        products = await db.sellerListings.aggregate(pipeline).to_list(500)
+        logger.info(f"[Products API] Found {len(products)} products")
+        return products
     except Exception as e:
-        logger.error(f"[Products API] Aggregation error: {e}", exc_info=True)
-        products_raw = []
-    
-    # Transform results for frontend compatibility
-    products = []
-    for p in products_raw:
-        product_id = p.get("_id")
-        if not product_id:
-            continue
-        
-        products.append({
-            "_id": product_id,
-            "name": p.get("name"),
-            "slug": p.get("slug"),  # SEO-friendly URL identifier
-            "description": p.get("description"),
-            "categoryId": p.get("categoryId"),
-            "categoryName": p.get("categoryName"),
-            "images": p.get("images", []),
-            "sellerCount": p.get("sellerCount", 0),
-            "minPrice": p.get("minPrice")
-        })
-    
-    # Debug logging
-    logger.info(f"[Products API] Final products count: {len(products)}")
-    
-    # ENTERPRISE STANDARD: Return flat array (not wrapped)
-    return products
+        logger.error(f"[Products API] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============== SELLER PRODUCT CREATION (PROTECTED) ==============
