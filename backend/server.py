@@ -4247,42 +4247,47 @@ Crawl-delay: 1
 
 @api_router.get("/categories")
 async def get_categories():
-    """Get all categories with at least 1 active listing"""
-    # Get categories that have at least one published listing
-    # SSOT: Use isActive (camelCase)
+    """
+    SSOT: sellerListings is the SINGLE SOURCE OF TRUTH.
+    Returns categories that have at least 1 active seller listing.
+    Uses listing.categoryId directly.
+    """
     pipeline = [
-        {"$match": {"isActive": True}},
+        # Only ACTIVE listings with categoryId
+        {"$match": {
+            "status": "active",
+            "categoryId": {"$ne": None}
+        }},
+        # Group by categoryId from listing
+        {"$group": {
+            "_id": "$categoryId",
+            "listingCount": {"$sum": 1}
+        }},
+        # Lookup category details
         {"$lookup": {
-            "from": "products",
+            "from": "categories",
             "localField": "_id",
-            "foreignField": "categoryId",
-            "as": "products"
+            "foreignField": "_id",
+            "as": "category"
         }},
-        {"$lookup": {
-            "from": "sellerListings",
-            "let": {"product_ids": "$products._id"},
-            "pipeline": [
-                {"$match": {
-                    "$expr": {"$in": ["$productId", "$$product_ids"]},
-                    "status": "active"
-                }}
-            ],
-            "as": "listings"
-        }},
-        {"$match": {"$expr": {"$gt": [{"$size": "$listings"}, 0]}}},
+        {"$unwind": "$category"},
+        # Only active categories
+        {"$match": {"category.isActive": {"$ne": False}}},
+        # Final shape
         {"$project": {
-            "_id": 1,
-            "name": 1,
-            "slug": 1,  # SEO v2.0: Include slug for sitemap and routing
-            "description": 1,
-            "icon": 1,
-            "image": 1,  # Include category image
-            "listingCount": {"$size": "$listings"}
-        }}
+            "_id": {"$toString": "$_id"},
+            "name": "$category.name",
+            "slug": "$category.slug",
+            "description": "$category.description",
+            "icon": "$category.icon",
+            "image": "$category.image",
+            "listingCount": 1
+        }},
+        {"$sort": {"name": 1}}
     ]
     
-    categories = await db.categories.aggregate(pipeline).to_list(100)
-    return serialize_doc(categories)
+    categories = await db.sellerListings.aggregate(pipeline).to_list(100)
+    return categories
 
 @api_router.get("/categories/all")
 async def get_all_categories():
@@ -4305,79 +4310,57 @@ async def get_all_categories():
 @api_router.get("/categories/public")
 async def get_public_categories():
     """
-    Get categories that have at least 1 ACTIVE seller listing.
-    Seller-listing-driven visibility - empty categories are hidden from public.
+    SSOT: sellerListings is the SINGLE SOURCE OF TRUTH.
     
-    IMPORTANT: productCount = number of products WITH active seller listings (not total products)
+    Categories are visible ONLY if they have active seller listings.
+    productCount = unique products with active listings
+    listingCount = total active listings
+    
+    Uses listing.categoryId directly (NOT product.categoryId)
     """
-    # Aggregate from seller listings to get accurate counts of products with active sellers
     pipeline = [
         # Stage 1: Only ACTIVE seller listings
         {"$match": {
-            "$and": [
-                {"$or": [
-                    {"status": "active"},
-                    {"status": "Active"},
-                    {"status": {"$regex": "^active$", "$options": "i"}}
-                ]},
-                {"$or": [
-                    {"isActive": True},
-                    {"isActive": {"$exists": False}}
-                ]},
-                {"$or": [
-                    {"isDeleted": False},
-                    {"isDeleted": {"$exists": False}}
-                ]}
-            ]
+            "status": "active",
+            "$or": [
+                {"isActive": True},
+                {"isActive": {"$exists": False}}
+            ],
+            "$or": [
+                {"isDeleted": False},
+                {"isDeleted": {"$exists": False}}
+            ],
+            "categoryId": {"$ne": None}  # Must have categoryId
         }},
-        # Stage 2: Group by productId to get unique products with listings
+        # Stage 2: Group by categoryId directly from listing
         {"$group": {
-            "_id": "$productId",
+            "_id": "$categoryId",
+            "productIds": {"$addToSet": "$productId"},
             "listingCount": {"$sum": 1}
         }},
-        # Stage 3: Lookup product to get categoryId
-        {"$lookup": {
-            "from": "products",
-            "localField": "_id",
-            "foreignField": "_id",
-            "as": "product"
+        # Stage 3: Calculate product count
+        {"$addFields": {
+            "productCount": {"$size": "$productIds"}
         }},
-        # Stage 4: Unwind product (only keep products that exist in catalog)
-        {"$unwind": "$product"},
-        # Stage 5: Filter only active products
-        {"$match": {
-            "$or": [
-                {"product.isActive": True},
-                {"product.isActive": {"$exists": False}}
-            ]
-        }},
-        # Stage 6: Group by categoryId to count products per category
-        {"$group": {
-            "_id": "$product.categoryId",
-            "productCount": {"$sum": 1},
-            "listingCount": {"$sum": "$listingCount"}
-        }},
-        # Stage 7: Filter out null categories
-        {"$match": {"_id": {"$ne": None}}},
-        # Stage 8: Lookup category details
+        # Stage 4: Lookup category details
         {"$lookup": {
             "from": "categories",
             "localField": "_id",
             "foreignField": "_id",
             "as": "category"
         }},
-        # Stage 9: Unwind category
+        # Stage 5: Unwind category
         {"$unwind": "$category"},
-        # Stage 10: Only include active categories
-        {"$match": {"category.isActive": True}},
-        # Stage 11: Project final shape
+        # Stage 6: Only active categories
+        {"$match": {"category.isActive": {"$ne": False}}},
+        # Stage 7: Final shape
         {"$project": {
             "_id": {"$toString": "$_id"},
             "name": "$category.name",
             "slug": "$category.slug",
             "image": "$category.image",
             "icon": "$category.icon",
-            "productCount": 1,  # This is now products WITH active listings
+            "productCount": 1,
             "listingCount": 1
         }},
         {"$sort": {"name": 1}}
@@ -4385,7 +4368,7 @@ async def get_public_categories():
     
     categories_raw = await db.sellerListings.aggregate(pipeline).to_list(100)
     
-    logger.info(f"[Public Categories] Found {len(categories_raw)} categories with active sellers")
+    logger.info(f"[SSOT Categories] Found {len(categories_raw)} categories from active listings")
     for cat in categories_raw[:5]:
         logger.info(f"  - {cat.get('name')}: {cat.get('productCount')} products, {cat.get('listingCount')} listings")
     
@@ -4641,10 +4624,10 @@ async def get_products(
         }},
     ]
     
-    # Stage 7: Filter by category if requested
+    # Stage 7: Filter by category if requested - USE LISTING's categoryId (SSOT)
     if category_id:
         pipeline.append({
-            "$match": {"product_info.categoryId": ObjectId(category_id)}
+            "$match": {"firstCategoryId": ObjectId(category_id)}
         })
     
     # Stage 8: Project final shape - USE LISTING DATA AS FALLBACK

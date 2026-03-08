@@ -1745,3 +1745,49 @@ The `/categories/public` endpoint was counting ALL products in a category (from 
 
 ---
 
+### P0: SSOT sellerListings Fix - COMPLETE
+**Issue:**
+User has 1 listed product but category page showed 5 products. The categoryId in the listing didn't match the category page being viewed.
+
+**Root Cause:**
+1. `/products` endpoint was filtering by `product_info.categoryId` instead of `listing.categoryId`
+2. `/categories` and `/categories/public` were using complex joins through products table instead of directly using listing's categoryId
+
+**SSOT Principle Applied:**
+**sellerListings is now the SINGLE SOURCE OF TRUTH for public visibility:**
+- Category visibility is determined by listings having that categoryId
+- Product visibility is determined by listing.categoryId directly
+- Product counts come from counting listings, not products table
+
+**Fixes Applied:**
+
+1. **`/api/categories`** (`line 4248`):
+   - Now aggregates from `sellerListings` directly
+   - Groups by `listing.categoryId`
+   - Only shows categories with active listings
+
+2. **`/api/categories/public`** (`line 4310`):
+   - Same SSOT approach as `/categories`
+   - `productCount` = unique products in active listings
+   - `listingCount` = total active listings
+
+3. **`/api/products?categoryId=X`** (`line 4627`):
+   - Changed filter from `product_info.categoryId` to `firstCategoryId` (listing's categoryId)
+   - Products now filter by their listing's categoryId, not the products table
+
+**Testing Results:**
+- Category with 1 active listing shows `productCount: 1`, `listingCount: 1` ✅
+- Products endpoint returns only 1 product for that category ✅
+- Categories without listings don't appear ✅
+
+**Key Change:**
+```python
+# BEFORE (wrong - used product's categoryId)
+{"$match": {"product_info.categoryId": ObjectId(category_id)}}
+
+# AFTER (correct - uses listing's categoryId)
+{"$match": {"firstCategoryId": ObjectId(category_id)}}
+```
+
+---
+
