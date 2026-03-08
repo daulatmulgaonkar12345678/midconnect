@@ -4308,65 +4308,158 @@ async def get_public_categories():
     Get categories that have at least 1 ACTIVE seller listing.
     Seller-listing-driven visibility - empty categories are hidden from public.
     
-    Uses the same logic as /categories endpoint to ensure consistency.
+    IMPORTANT: productCount = number of products WITH active seller listings (not total products)
     """
-    # Use same pipeline as /categories for consistency
-    # This ensures dropdown and categories page show the same categories
+    # Aggregate from seller listings to get accurate counts of products with active sellers
     pipeline = [
-        {"$match": {"isActive": True}},
+        # Stage 1: Only ACTIVE seller listings
+        {"$match": {
+            "$and": [
+                {"$or": [
+                    {"status": "active"},
+                    {"status": "Active"},
+                    {"status": {"$regex": "^active$", "$options": "i"}}
+                ]},
+                {"$or": [
+                    {"isActive": True},
+                    {"isActive": {"$exists": False}}
+                ]},
+                {"$or": [
+                    {"isDeleted": False},
+                    {"isDeleted": {"$exists": False}}
+                ]}
+            ]
+        }},
+        # Stage 2: Group by productId to get unique products with listings
+        {"$group": {
+            "_id": "$productId",
+            "listingCount": {"$sum": 1}
+        }},
+        # Stage 3: Lookup product to get categoryId
         {"$lookup": {
             "from": "products",
             "localField": "_id",
-            "foreignField": "categoryId",
-            "as": "products"
+            "foreignField": "_id",
+            "as": "product"
         }},
+        # Stage 4: Unwind product (only keep products that exist in catalog)
+        {"$unwind": "$product"},
+        # Stage 5: Filter only active products
+        {"$match": {
+            "$or": [
+                {"product.isActive": True},
+                {"product.isActive": {"$exists": False}}
+            ]
+        }},
+        # Stage 6: Group by categoryId to count products per category
+        {"$group": {
+            "_id": "$product.categoryId",
+            "productCount": {"$sum": 1},
+            "listingCount": {"$sum": "$listingCount"}
+        }},
+        # Stage 7: Filter out null categories
+        {"$match": {"_id": {"$ne": None}}},
+        # Stage 8: Lookup category details
         {"$lookup": {
-            "from": "sellerListings",
-            "let": {"product_ids": "$products._id"},
-            "pipeline": [
-                {"$match": {
-                    "$expr": {"$in": ["$productId", "$$product_ids"]},
-                    "status": "active"
-                }}
-            ],
-            "as": "listings"
+            "from": "categories",
+            "localField": "_id",
+            "foreignField": "_id",
+            "as": "category"
         }},
-        {"$match": {"$expr": {"$gt": [{"$size": "$listings"}, 0]}}},
+        # Stage 9: Unwind category
+        {"$unwind": "$category"},
+        # Stage 10: Only include active categories
+        {"$match": {"category.isActive": True}},
+        # Stage 11: Project final shape
         {"$project": {
-            "_id": 1,
-            "name": 1,
-            "slug": 1,
-            "description": 1,
-            "icon": 1,
-            "image": 1,
-            "productCount": {"$size": "$products"},
-            "listingCount": {"$size": "$listings"}
+            "_id": {"$toString": "$_id"},
+            "name": "$category.name",
+            "slug": "$category.slug",
+            "image": "$category.image",
+            "icon": "$category.icon",
+            "productCount": 1,  # This is now products WITH active listings
+            "listingCount": 1
         }},
         {"$sort": {"name": 1}}
     ]
     
-    categories_raw = await db.categories.aggregate(pipeline).to_list(100)
+    categories_raw = await db.sellerListings.aggregate(pipeline).to_list(100)
     
-    # Transform to expected format
-    categories = []
-    for cat in categories_raw:
-        cat_id = cat.get("_id")
-        if isinstance(cat_id, ObjectId):
-            cat_id = str(cat_id)
+    logger.info(f"[Public Categories] Found {len(categories_raw)} categories with active sellers")
+    for cat in categories_raw[:5]:
+        logger.info(f"  - {cat.get('name')}: {cat.get('productCount')} products, {cat.get('listingCount')} listings")
+    
+    return categories_raw
+
+
+
+@api_router.get("/admin/debug/category-listings/{category_id}")
+async def debug_category_listings(category_id: str, user: dict = Depends(require_admin)):
+    """
+    Debug endpoint to diagnose category visibility issues.
+    Shows why a category might appear in dropdown but show no products in the page.
+    """
+    try:
+        cat_oid = ObjectId(category_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid category ID")
+    
+    # Get category info
+    category = await db.categories.find_one({"_id": cat_oid})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Get all products in this category
+    products = await db.products.find({"categoryId": cat_oid}).to_list(100)
+    product_ids = [p["_id"] for p in products]
+    
+    # Get all listings for these products
+    listings = await db.sellerListings.find({
+        "productId": {"$in": product_ids}
+    }).to_list(1000)
+    
+    # Get active listings
+    active_listings = [l for l in listings if l.get("status") == "active"]
+    
+    # Analyze issues
+    issues = []
+    
+    for product in products:
+        product_listings = [l for l in listings if l.get("productId") == product["_id"]]
+        active_product_listings = [l for l in product_listings if l.get("status") == "active"]
         
-        categories.append({
-            "_id": cat_id,
-            "name": cat.get("name"),
-            "slug": cat.get("slug"),
-            "image": cat.get("image"),
-            "icon": cat.get("icon"),
-            "productCount": cat.get("productCount", 0),
-            "listingCount": cat.get("listingCount", 0)
-        })
+        if not product_listings:
+            issues.append(f"Product '{product.get('name')}' has NO seller listings")
+        elif not active_product_listings:
+            issues.append(f"Product '{product.get('name')}' has {len(product_listings)} listings but NONE are active (status != 'active')")
     
-    logger.info(f"[Public Categories] Found {len(categories)} categories with active sellers")
-    
-    return categories
+    return {
+        "category": {
+            "_id": str(category["_id"]),
+            "name": category.get("name"),
+            "isActive": category.get("isActive", True)
+        },
+        "summary": {
+            "totalProducts": len(products),
+            "totalListings": len(listings),
+            "activeListings": len(active_listings),
+            "productsWithActiveListings": len([p for p in products if any(
+                l.get("productId") == p["_id"] and l.get("status") == "active" for l in listings
+            )])
+        },
+        "issues": issues,
+        "products": [
+            {
+                "_id": str(p["_id"]),
+                "name": p.get("name"),
+                "isActive": p.get("isActive", True),
+                "listingCount": len([l for l in listings if l.get("productId") == p["_id"]]),
+                "activeListingCount": len([l for l in listings if l.get("productId") == p["_id"] and l.get("status") == "active"])
+            }
+            for p in products
+        ]
+    }
+
 
 # ============== PRODUCT ENDPOINTS ==============
 

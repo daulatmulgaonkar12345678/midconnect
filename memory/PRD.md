@@ -1715,3 +1715,33 @@ The Quick Price Update feature on `/seller/pricing` was not working. When a sell
 
 ---
 
+### Session: 2026-03-07 (Continued)
+
+#### P0: Categories/Products Visibility Fix - COMPLETE
+**Issue:**
+The sidebar showed category counts (e.g., "Cleaning products: 5") that included ALL products in the category, but the main content area only showed products with active seller listings. This caused user confusion - clicking on a category with "5" products would show "No products available".
+
+**Root Cause:**
+The `/categories/public` endpoint was counting ALL products in a category (from the products table), instead of counting only products that have active seller listings.
+
+**Fix Applied:**
+1. **Refactored `/api/categories/public`** (`/app/backend/server.py`):
+   - Changed aggregation to start from `sellerListings` (not `categories`)
+   - Now aggregates: active listings → unique products → category
+   - `productCount` now correctly represents products WITH active seller listings
+   - Only shows categories that have at least 1 product with active listings
+
+2. **Added Debug Endpoint** (`/api/admin/debug/category-listings/{category_id}`):
+   - Helps diagnose why categories appear in dropdown but show no products
+   - Shows breakdown of products and their listing status
+
+**New Business Logic:**
+- A category is visible ONLY if it has at least 1 product with at least 1 active seller listing
+- `productCount` = number of unique products that have active seller listings (not total products)
+- `listingCount` = total number of active seller listings in the category
+
+**Files Modified:**
+- `/app/backend/server.py` - Refactored `/categories/public` endpoint
+
+---
+
