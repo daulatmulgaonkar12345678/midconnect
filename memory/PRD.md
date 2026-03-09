@@ -1821,3 +1821,74 @@ pipeline = [{"$match": base_match}, ...]
 
 ---
 
+### Session: 2026-03-09
+
+#### Multi-WhatsApp Numbers Feature - COMPLETE
+
+**Objective:**
+Allow sellers to add multiple WhatsApp numbers and select one as primary contact. The primary number is used for automatic buyer connection after inquiry submission.
+
+**Implementation:**
+
+1. **Backend APIs** (`/app/backend/routers/seller_whatsapp_router.py`):
+   - `GET /api/seller/whatsapp/contacts` - Get all seller's WhatsApp contacts
+   - `POST /api/seller/whatsapp/contacts` - Add new contact (E.164 validation)
+   - `PATCH /api/seller/whatsapp/contacts/{id}` - Update contact
+   - `DELETE /api/seller/whatsapp/contacts/{id}` - Delete contact
+   - `POST /api/seller/whatsapp/contacts/{id}/set-primary` - Set as primary
+   - `GET /api/seller/whatsapp/settings` - Get autoWhatsappConnect setting
+   - `PATCH /api/seller/whatsapp/settings` - Toggle auto connect
+   - `GET /api/seller/whatsapp/seller/{id}/primary` - Public endpoint for buyer flow
+
+2. **Database Schema** (`sellerWhatsappContacts` collection):
+   ```json
+   {
+     "sellerId": ObjectId,
+     "phoneNumber": "+919876543210",
+     "label": "Sales",
+     "isPrimary": true,
+     "createdAt": datetime,
+     "updatedAt": datetime
+   }
+   ```
+
+3. **Seller Dashboard** (`/app/frontend/src/app/seller/whatsapp/page.tsx`):
+   - Table to manage WhatsApp numbers
+   - Add/Edit/Delete contacts
+   - Set primary contact
+   - Toggle auto-connect setting
+
+4. **Buyer Inquiry Flow** (`/app/frontend/src/components/enterprise/InquiryModal.tsx`):
+   - After inquiry submission, shows success page
+   - "Connect with Seller on WhatsApp" button using primary number
+   - WhatsApp link opens in new tab with pre-filled message
+
+5. **Seller Inquiry Page** (`/app/frontend/src/app/seller/inquiries/page.tsx`):
+   - WhatsApp contact dropdown on each inquiry
+   - Seller can choose which number to use for contacting buyer
+
+**Business Logic:**
+- First contact added automatically becomes primary
+- Only one contact can be primary at a time
+- When primary is deleted, oldest remaining contact becomes primary
+- International numbers supported (E.164 format)
+- Auto-connect can be disabled by seller
+
+**Testing Results:**
+- 20/20 backend tests passed
+- CRUD operations verified
+- E.164 phone validation working
+- Primary contact switching logic correct
+- Public endpoint for buyer flow functional
+
+**Files Created/Modified:**
+- `/app/backend/routers/seller_whatsapp_router.py` (NEW)
+- `/app/backend/server.py` (router registration + inquiry response)
+- `/app/frontend/src/app/seller/whatsapp/page.tsx` (NEW)
+- `/app/frontend/src/app/seller/page.tsx` (dashboard link)
+- `/app/frontend/src/app/seller/inquiries/page.tsx` (WhatsApp dropdown)
+- `/app/frontend/src/components/enterprise/InquiryModal.tsx` (WhatsApp connect)
+- `/app/frontend/src/lib/api.ts` (API functions)
+
+---
+
