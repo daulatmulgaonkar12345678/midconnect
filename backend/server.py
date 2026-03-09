@@ -1156,7 +1156,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://pricing-portal-21.preview.emergentagent.com",
+        "https://auth-overhaul-33.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
@@ -1826,6 +1826,18 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             now = datetime.now(timezone.utc)
             verification_deadline = now + timedelta(hours=24)
             
+            # OTP-BASED VERIFICATION: Check if email was verified via OTP
+            # If OTP was verified recently, mark user as email verified immediately
+            is_email_verified = False
+            try:
+                from services.otp_service import get_registration_otp_service
+                otp_service = get_registration_otp_service(db)
+                is_email_verified = await otp_service.is_email_verified_via_otp(email)
+                if is_email_verified:
+                    logger.info(f"🔐 Auth: Email {email} verified via OTP, setting isEmailVerified=True")
+            except Exception as otp_err:
+                logger.warning(f"OTP verification check failed: {otp_err}")
+            
             user = {
                 "_id": ObjectId(),
                 "firebaseUid": firebaseUid,
@@ -1839,8 +1851,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     "status": None,
                     "verified": False
                 },
-                "isEmailVerified": False,  # SSOT: Always start as false, verify via our system
-                "status": "pending",
+                "isEmailVerified": is_email_verified,  # SSOT: True if OTP verified, else False
+                "status": "active" if is_email_verified else "pending",
                 "verificationDeadline": verification_deadline,
                 "accountStatus": "active",
                 "canLogin": True,
@@ -1863,7 +1875,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 "updatedAt": now
             }
             await db.users.insert_one(user)
-            logger.info(f"🔐 Auth: Created pending user: {email}")
+            logger.info(f"🔐 Auth: Created user: {email}, isEmailVerified={is_email_verified}")
         else:
             logger.info(f"🔐 Auth: User found in DB for firebaseUid={masked_uid}")
         
@@ -2284,6 +2296,172 @@ async def resend_verification_email(
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to send email"))
     
     return result
+
+
+# ============== OTP-BASED REGISTRATION VERIFICATION ==============
+# 
+# This replaces the email verification link system.
+# OTP acts as a verification layer BEFORE the existing registration flow.
+# 
+# Flow:
+# 1. User enters name + email + password on frontend
+# 2. Frontend calls /api/auth/register/request-otp
+# 3. User receives 6-digit OTP via email
+# 4. User enters OTP on frontend
+# 5. Frontend calls /api/auth/register/verify-otp
+# 6. On success, frontend proceeds with Firebase signup + existing flow
+#
+
+class OTPRequestModel(BaseModel):
+    """Request model for OTP request"""
+    email: EmailStr
+    name: Optional[str] = None
+    
+    @field_validator('email')
+    @classmethod
+    def normalize_email(cls, v):
+        return v.lower().strip()
+
+class OTPVerifyModel(BaseModel):
+    """Request model for OTP verification"""
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
+    
+    @field_validator('email')
+    @classmethod
+    def normalize_email(cls, v):
+        return v.lower().strip()
+    
+    @field_validator('otp')
+    @classmethod
+    def validate_otp_format(cls, v):
+        if not v.isdigit():
+            raise ValueError('OTP must contain only digits')
+        return v
+
+
+@api_router.post("/auth/register/request-otp")
+@limiter.limit("5/minute")
+async def request_registration_otp(
+    request: Request,
+    data: OTPRequestModel
+):
+    """
+    Request OTP for registration verification.
+    
+    This is the first step in the OTP-based registration flow.
+    OTP is sent to the user's email address.
+    
+    Security:
+    - Rate limited: 5 requests per minute
+    - Max 5 OTP requests per email per hour
+    - 30-second cooldown between requests
+    
+    Returns:
+        - success: bool
+        - message: str
+        - expires_at: ISO timestamp (when OTP expires)
+        - cooldown_until: ISO timestamp (when can request again)
+    """
+    from services.otp_service import get_registration_otp_service
+    
+    otp_service = get_registration_otp_service(db)
+    result = await otp_service.request_otp(data.email, data.name)
+    
+    if not result["success"]:
+        error_code = result.get("error_code", "unknown")
+        
+        if error_code == "rate_limit_exceeded":
+            raise HTTPException(status_code=429, detail=result["message"])
+        elif error_code == "cooldown":
+            raise HTTPException(
+                status_code=429, 
+                detail={
+                    "message": result["message"],
+                    "cooldown_remaining": result.get("cooldown_remaining")
+                }
+            )
+        elif error_code == "email_already_registered":
+            raise HTTPException(status_code=409, detail=result["message"])
+        else:
+            raise HTTPException(status_code=400, detail=result["message"])
+    
+    return result
+
+
+@api_router.post("/auth/register/verify-otp")
+@limiter.limit("10/minute")
+async def verify_registration_otp(
+    request: Request,
+    data: OTPVerifyModel
+):
+    """
+    Verify OTP for registration.
+    
+    This is the second step in the OTP-based registration flow.
+    After successful verification, the frontend proceeds with Firebase signup.
+    
+    Security:
+    - Rate limited: 10 requests per minute
+    - Max 5 verification attempts per OTP
+    - OTP expires after 10 minutes
+    
+    Returns:
+        - success: bool
+        - message: str
+        - verified: bool (true if OTP is valid)
+        - email: str (confirmed email if verified)
+        - attempts_remaining: int (if verification failed)
+    """
+    from services.otp_service import get_registration_otp_service
+    
+    otp_service = get_registration_otp_service(db)
+    result = await otp_service.verify_otp(data.email, data.otp)
+    
+    if not result["success"]:
+        error_code = result.get("error_code", "unknown")
+        
+        if error_code == "max_attempts_exceeded":
+            raise HTTPException(status_code=429, detail=result["message"])
+        elif error_code == "otp_expired":
+            raise HTTPException(status_code=410, detail=result["message"])
+        elif error_code == "invalid_otp":
+            # Return 400 but include attempts remaining
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "message": result["message"],
+                    "attempts_remaining": result.get("attempts_remaining")
+                }
+            )
+        else:
+            raise HTTPException(status_code=400, detail=result["message"])
+    
+    return result
+
+
+@api_router.get("/auth/register/otp-status")
+async def check_otp_status(email: str):
+    """
+    Check OTP verification status for an email.
+    
+    Used by frontend to check if user has already verified OTP.
+    This is helpful when user refreshes the page during registration.
+    
+    Returns:
+        - verified: bool
+        - message: str
+    """
+    from services.otp_service import get_registration_otp_service
+    
+    email = email.lower().strip()
+    otp_service = get_registration_otp_service(db)
+    is_verified = await otp_service.is_email_verified_via_otp(email)
+    
+    return {
+        "verified": is_verified,
+        "message": "Email verified via OTP" if is_verified else "Email not verified"
+    }
 
 
 @api_router.post("/auth/complete-profile")

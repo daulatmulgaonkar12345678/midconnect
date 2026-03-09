@@ -1341,6 +1341,82 @@ export const resendVerificationEmail = (token: string): Promise<{
   method: 'POST',
 });
 
+// ==================== OTP-Based Registration ====================
+
+/**
+ * Request OTP for registration verification
+ * 
+ * This replaces the email verification link system.
+ * OTP is sent to the user's email address.
+ * 
+ * Security:
+ * - Rate limited: 5 requests per minute
+ * - Max 5 OTP requests per email per hour
+ * - 30-second cooldown between requests
+ */
+export interface OTPRequestResponse {
+  success: boolean;
+  message: string;
+  expires_at?: string;
+  cooldown_until?: string;
+  error_code?: string;
+  cooldown_remaining?: number;
+  _mock?: boolean;
+  _otp?: string; // Only in mock mode for testing
+}
+
+export const requestRegistrationOTP = (
+  email: string,
+  name?: string
+): Promise<OTPRequestResponse> => 
+  fetchAPI<OTPRequestResponse>('/auth/register/request-otp', {
+    method: 'POST',
+    body: { email: email.toLowerCase().trim(), name },
+  });
+
+/**
+ * Verify OTP for registration
+ * 
+ * This verifies the 6-digit OTP entered by the user.
+ * After successful verification, proceed with Firebase signup.
+ * 
+ * Security:
+ * - Rate limited: 10 requests per minute
+ * - Max 5 verification attempts per OTP
+ * - OTP expires after 10 minutes
+ */
+export interface OTPVerifyResponse {
+  success: boolean;
+  message: string;
+  verified?: boolean;
+  email?: string;
+  error_code?: string;
+  attempts_remaining?: number;
+}
+
+export const verifyRegistrationOTP = (
+  email: string,
+  otp: string
+): Promise<OTPVerifyResponse> =>
+  fetchAPI<OTPVerifyResponse>('/auth/register/verify-otp', {
+    method: 'POST',
+    body: { email: email.toLowerCase().trim(), otp: otp.trim() },
+  });
+
+/**
+ * Check OTP verification status for an email
+ * 
+ * Used to check if user has already verified OTP.
+ * Helpful when user refreshes the page during registration.
+ */
+export interface OTPStatusResponse {
+  verified: boolean;
+  message: string;
+}
+
+export const checkOTPStatus = (email: string): Promise<OTPStatusResponse> =>
+  fetchAPI<OTPStatusResponse>(`/auth/register/otp-status?email=${encodeURIComponent(email.toLowerCase().trim())}`);
+
 // Category Spec Template
 export const getCategorySpecTemplate = (
   token: string,

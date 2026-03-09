@@ -39,7 +39,7 @@ interface AuthContextType extends AuthState {
   needsEmailVerification: boolean;
   
   signIn: (email: string, password: string) => Promise<{ needsRegistration: boolean; needsEmailVerification: boolean }>;
-  signUp: (email: string, password: string) => Promise<{ needsEmailVerification: boolean }>;
+  signUp: (email: string, password: string, skipVerificationEmail?: boolean) => Promise<{ needsEmailVerification: boolean; needsRegistration?: boolean }>;
   completeRegistration: (profileData: ProfileCompleteData) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -180,8 +180,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * 
    * IMPORTANT: We must get the token IMMEDIATELY after signup and call
    * the verification endpoint before onAuthStateChanged causes re-renders.
+   * 
+   * OTP FLOW: If OTP was already verified, skip sending verification email.
+   * The backend will detect OTP verification and mark user as verified.
    */
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, skipVerificationEmail: boolean = false) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
       // Step 1: Create Firebase auth user
@@ -190,23 +193,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Step 2: Get token IMMEDIATELY (before onAuthStateChanged triggers)
       const token = await result.user.getIdToken();
       
-      // Step 3: Call backend to send verification email using TOKEN (not email)
-      // This is the ENTERPRISE FIX - backend gets email from token
+      // Step 3: Trigger backend user creation by fetching profile
+      // This will create the user in MongoDB and check OTP verification status
+      let profile = null;
       try {
-        const { sendVerificationEmail } = await import('@/lib/api');
-        await sendVerificationEmail(token);
-        console.log('[Auth] Verification email sent successfully');
-      } catch (emailError) {
-        // Log but don't fail signup if email sending fails
-        console.error('[Auth] Error sending verification email:', emailError);
+        profile = await fetchProfile(result.user);
+      } catch (profileError) {
+        console.log('[Auth] Profile not created yet, backend will create on next auth check');
       }
       
+      // Step 4: Only send verification email if OTP was NOT already verified
+      // In OTP flow, skipVerificationEmail is true because OTP is already verified
+      if (!skipVerificationEmail && !profile?.isEmailVerified) {
+        try {
+          const { sendVerificationEmail } = await import('@/lib/api');
+          await sendVerificationEmail(token);
+          console.log('[Auth] Verification email sent successfully');
+        } catch (emailError) {
+          // Log but don't fail signup if email sending fails
+          console.error('[Auth] Error sending verification email:', emailError);
+        }
+      }
+      
+      // Determine registration state based on profile
+      const isVerified = profile?.isEmailVerified || false;
+      const regState: RegistrationState = isVerified 
+        ? (profile?.profileComplete ? 'complete' : 'incomplete')
+        : 'email_not_verified';
+      
       setState(prev => ({
-        ...prev, user: result.user, profile: null, loading: false,
-        error: null, registrationState: 'email_not_verified',
+        ...prev, user: result.user, profile, loading: false,
+        error: null, registrationState: regState,
       }));
       
-      return { needsEmailVerification: true };
+      return { 
+        needsEmailVerification: !isVerified,
+        needsRegistration: isVerified && !profile?.profileComplete
+      };
       
     } catch (error: unknown) {
       const message = getAuthErrorMessage(error);
