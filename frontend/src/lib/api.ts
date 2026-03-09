@@ -1650,6 +1650,14 @@ export const createInquiry = (
   message: string;
   inquiryId: string;
   status: string;
+  productName?: string;
+  sellerName?: string;
+  whatsapp?: {
+    enabled: boolean;
+    phoneNumber: string;
+    label?: string | null;
+    sellerName?: string;
+  } | null;
 }> => fetchWithAuth('/inquiries', token, {
   method: 'POST',
   body: {
@@ -2098,6 +2106,94 @@ export const getQuoteAnalytics = (
   acceptedValue: number;
 }> =>
   fetchWithAuth(`/quotes/analytics?days=${days}`, token);
+
+// ==================== SELLER WHATSAPP CONTACTS ====================
+
+export interface WhatsAppContact {
+  id: string;
+  phoneNumber: string;
+  label: string | null;
+  isPrimary: boolean;
+  createdAt: string;
+}
+
+export interface WhatsAppSettings {
+  autoWhatsappConnect: boolean;
+  primaryContact: WhatsAppContact | null;
+}
+
+// Get seller's WhatsApp contacts
+export const getWhatsAppContacts = (token: string): Promise<{
+  contacts: WhatsAppContact[];
+}> => fetchWithAuth('/seller/whatsapp/contacts', token);
+
+// Add WhatsApp contact
+export const addWhatsAppContact = (
+  token: string,
+  data: { phoneNumber: string; label?: string; isPrimary?: boolean }
+): Promise<{
+  success: boolean;
+  message: string;
+  contact: WhatsAppContact;
+}> => fetchWithAuth('/seller/whatsapp/contacts', token, {
+  method: 'POST',
+  body: data
+});
+
+// Update WhatsApp contact
+export const updateWhatsAppContact = (
+  token: string,
+  contactId: string,
+  data: { phoneNumber?: string; label?: string; isPrimary?: boolean }
+): Promise<{
+  success: boolean;
+  message: string;
+  contact: WhatsAppContact;
+}> => fetchWithAuth(`/seller/whatsapp/contacts/${contactId}`, token, {
+  method: 'PATCH',
+  body: data
+});
+
+// Delete WhatsApp contact
+export const deleteWhatsAppContact = (
+  token: string,
+  contactId: string
+): Promise<{ success: boolean; message: string }> =>
+  fetchWithAuth(`/seller/whatsapp/contacts/${contactId}`, token, {
+    method: 'DELETE'
+  });
+
+// Set contact as primary
+export const setWhatsAppPrimaryContact = (
+  token: string,
+  contactId: string
+): Promise<{ success: boolean; message: string }> =>
+  fetchWithAuth(`/seller/whatsapp/contacts/${contactId}/set-primary`, token, {
+    method: 'POST'
+  });
+
+// Get WhatsApp settings
+export const getWhatsAppSettings = (token: string): Promise<WhatsAppSettings> =>
+  fetchWithAuth('/seller/whatsapp/settings', token);
+
+// Update WhatsApp settings
+export const updateWhatsAppSettings = (
+  token: string,
+  data: { autoWhatsappConnect: boolean }
+): Promise<{
+  success: boolean;
+  message: string;
+  autoWhatsappConnect: boolean;
+}> => fetchWithAuth('/seller/whatsapp/settings', token, {
+  method: 'PATCH',
+  body: data
+});
+
+// Get seller's primary contact (public - for buyer inquiry flow)
+export const getSellerPrimaryWhatsApp = (sellerId: string): Promise<{
+  contact: { phoneNumber: string; label: string | null } | null;
+  autoConnect: boolean;
+}> => fetchAPI(`/seller/whatsapp/seller/${sellerId}/primary`);
 
 // Re-export ApiError for consumers
 export { ApiError };

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Send, Loader2, AlertCircle } from 'lucide-react';
+import { X, Send, Loader2, AlertCircle, MessageCircle, Check } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { createInquiry } from '@/lib/api';
 import type { EnterpriseProductSeller } from '@/lib/api';
@@ -17,6 +17,13 @@ interface InquiryModalProps {
 
 type BuyerType = 'trader' | 'contractor' | 'oem' | 'manufacturer' | 'other';
 
+interface WhatsAppInfo {
+  enabled: boolean;
+  phoneNumber: string;
+  label?: string | null;
+  sellerName: string;
+}
+
 export default function InquiryModal({ 
   isOpen, 
   onClose, 
@@ -25,7 +32,7 @@ export default function InquiryModal({
   productName 
 }: InquiryModalProps) {
   const router = useRouter();
-  const { user, getIdToken, isAuthenticated, profile, registrationState, needsEmailVerification: needsVerification } = useAuth();
+  const { user, getIdToken, isAuthenticated, profile, registrationState } = useAuth();
   
   const [quantity, setQuantity] = useState<number>(seller?.moq || 1);
   const [message, setMessage] = useState('');
@@ -33,6 +40,7 @@ export default function InquiryModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [whatsappInfo, setWhatsappInfo] = useState<WhatsAppInfo | null>(null);
 
   if (!isOpen || !seller) return null;
 
@@ -68,7 +76,7 @@ export default function InquiryModal({
       const token = await getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      await createInquiry(token, {
+      const response = await createInquiry(token, {
         productId,
         sellerId: seller.sellerId,
         listingId: seller.listingId,
@@ -78,17 +86,51 @@ export default function InquiryModal({
       });
 
       setSuccess(true);
-      setTimeout(() => {
-        onClose();
-        setSuccess(false);
-        setQuantity(seller?.moq || 1);
-        setMessage('');
-      }, 2000);
+      
+      // Store WhatsApp info if available
+      if (response.whatsapp?.enabled && response.whatsapp?.phoneNumber) {
+        setWhatsappInfo({
+          enabled: true,
+          phoneNumber: response.whatsapp.phoneNumber,
+          label: response.whatsapp.label,
+          sellerName: response.sellerName || seller.companyName
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send inquiry');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleWhatsAppConnect = () => {
+    if (!whatsappInfo?.phoneNumber) return;
+    
+    // Generate WhatsApp message
+    const messageText = `Hello, I sent an inquiry on UdyogConnect.
+
+Product: ${productName}
+Quantity: ${quantity}
+
+Let's discuss further.`;
+    
+    // Clean phone number (remove + for wa.me)
+    const cleanPhone = whatsappInfo.phoneNumber.replace(/^\+/, '');
+    
+    // Open WhatsApp
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+    window.open(waUrl, '_blank');
+  };
+
+  const handleClose = () => {
+    onClose();
+    // Reset state after a delay to prevent flickering
+    setTimeout(() => {
+      setSuccess(false);
+      setWhatsappInfo(null);
+      setQuantity(seller?.moq || 1);
+      setMessage('');
+    }, 200);
   };
 
   const formatPrice = (price?: number) => {
@@ -109,11 +151,11 @@ export default function InquiryModal({
         {/* Header */}
         <div className="bg-gray-50 px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-gray-900">Request Quote</h3>
+            <h3 className="font-semibold text-gray-900">{success ? 'Inquiry Sent!' : 'Request Quote'}</h3>
             <p className="text-sm text-gray-500">{seller.companyName}</p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             aria-label="Close"
           >
@@ -121,16 +163,49 @@ export default function InquiryModal({
           </button>
         </div>
 
-        {/* Success State */}
+        {/* Success State with WhatsApp Option */}
         {success ? (
-          <div className="p-8 text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Send className="h-8 w-8 text-green-600" />
+          <div className="p-6">
+            {/* Success Message */}
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Check className="h-8 w-8 text-green-600" />
+              </div>
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">Your inquiry has been sent!</h4>
+              <p className="text-gray-600 text-sm">
+                {whatsappInfo?.sellerName || seller.companyName} will review and respond with a quote.
+              </p>
             </div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Inquiry Sent!</h4>
-            <p className="text-gray-600">
-              {seller.companyName} will review and respond with a quote.
-            </p>
+
+            {/* WhatsApp Connect Button */}
+            {whatsappInfo?.enabled && whatsappInfo?.phoneNumber && (
+              <div className="border-t pt-6">
+                <p className="text-center text-sm text-gray-600 mb-4">
+                  Want to discuss your requirements directly?
+                </p>
+                <button
+                  onClick={handleWhatsAppConnect}
+                  className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+                  data-testid="whatsapp-connect-btn"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Connect with Seller on WhatsApp
+                </button>
+                {whatsappInfo.label && (
+                  <p className="text-center text-xs text-gray-500 mt-2">
+                    {whatsappInfo.label} Contact
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Done Button */}
+            <button
+              onClick={handleClose}
+              className="w-full mt-4 px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+            >
+              Done
+            </button>
           </div>
         ) : (
           <div className="p-5 space-y-4">
@@ -271,7 +346,7 @@ export default function InquiryModal({
                 )}
               </button>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium transition-colors"
               >
                 Cancel

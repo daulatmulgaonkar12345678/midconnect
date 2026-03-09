@@ -7,8 +7,10 @@ import {
   getSellerInquiries,
   acceptInquiry,
   rejectInquiry,
-  reportInquiry
+  reportInquiry,
+  getWhatsAppContacts
 } from '@/lib/api';
+import type { WhatsAppContact } from '@/lib/api';
 import type { SellerInquiry } from '@/types';
 import { 
   Loader2, 
@@ -29,7 +31,8 @@ import {
   Bell,
   RefreshCw,
   Calculator,
-  Scale
+  Scale,
+  MessageCircle
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -103,6 +106,22 @@ export default function SellerInquiriesPage() {
   // Report form
   const [reportType, setReportType] = useState('');
   const [reportDetails, setReportDetails] = useState('');
+  
+  // WhatsApp contacts
+  const [whatsappContacts, setWhatsappContacts] = useState<WhatsAppContact[]>([]);
+  const [selectedWhatsappContact, setSelectedWhatsappContact] = useState<Record<string, string>>({});
+
+  // Load WhatsApp contacts
+  const loadWhatsappContacts = useCallback(async () => {
+    try {
+      const token = await getIdToken();
+      if (!token) return;
+      const data = await getWhatsAppContacts(token);
+      setWhatsappContacts(data.contacts);
+    } catch (err) {
+      console.error('Failed to load WhatsApp contacts:', err);
+    }
+  }, [getIdToken]);
 
   const loadInquiries = useCallback(async () => {
     try {
@@ -143,9 +162,10 @@ export default function SellerInquiriesPage() {
         router.push('/login');
       } else {
         loadInquiries();
+        loadWhatsappContacts();
       }
     }
-  }, [user, authLoading, loadInquiries, router]);
+  }, [user, authLoading, loadInquiries, loadWhatsappContacts, router]);
 
   // Polling for new inquiries every 30 seconds
   useEffect(() => {
@@ -162,6 +182,31 @@ export default function SellerInquiriesPage() {
     setHasNewInquiry(false);
     setLoading(true);
     loadInquiries();
+  };
+
+  // WhatsApp connect function
+  const handleWhatsAppConnect = (inquiry: SellerInquiry, contactId?: string) => {
+    // Get selected contact or primary
+    const contact = contactId 
+      ? whatsappContacts.find(c => c.id === contactId)
+      : whatsappContacts.find(c => c.isPrimary) || whatsappContacts[0];
+    
+    if (!contact) return;
+    
+    // Generate message
+    const messageText = `Hello ${inquiry.buyerName || 'there'},
+
+I am following up on your inquiry on UdyogConnect.
+
+Product: ${inquiry.productName || 'N/A'}
+Quantity: ${inquiry.quantity || 'N/A'}
+
+Let me know your requirements.`;
+    
+    // Clean phone for wa.me (remove + prefix)
+    const cleanPhone = contact.phoneNumber.replace(/^\+/, '');
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+    window.open(waUrl, '_blank');
   };
 
   const openAction = (inquiryId: string, type: 'accept' | 'reject' | 'report') => {
@@ -650,6 +695,35 @@ export default function SellerInquiriesPage() {
                           <Phone className="h-4 w-4" />
                           Call Buyer
                         </a>
+                      )}
+                      
+                      {/* Multi-WhatsApp Contact Selector */}
+                      {whatsappContacts.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedWhatsappContact[inquiry._id] || whatsappContacts.find(c => c.isPrimary)?.id || whatsappContacts[0]?.id || ''}
+                            onChange={(e) => setSelectedWhatsappContact(prev => ({
+                              ...prev,
+                              [inquiry._id]: e.target.value
+                            }))}
+                            className="px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500"
+                            data-testid={`whatsapp-select-${inquiry._id}`}
+                          >
+                            {whatsappContacts.map(contact => (
+                              <option key={contact.id} value={contact.id}>
+                                {contact.label || contact.phoneNumber} {contact.isPrimary ? '(Primary)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleWhatsAppConnect(inquiry, selectedWhatsappContact[inquiry._id])}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                            data-testid={`whatsapp-connect-${inquiry._id}`}
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            WhatsApp
+                          </button>
+                        </div>
                       )}
                     </div>
                     {inquiry.quote && (

@@ -20,7 +20,8 @@ import {
   Crown,
   Clock,
   XCircle,
-  Ban
+  Ban,
+  MessageCircle
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -291,7 +292,7 @@ export default function SellerDashboardPage() {
 
         {/* Primary Actions - Card Grid */}
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <Link
             href="/seller/pricing"
             className="flex items-center gap-4 bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-xl shadow-sm p-6 hover:shadow-md transition group border border-yellow-200"
@@ -346,10 +347,25 @@ export default function SellerDashboardPage() {
               <Package className="h-6 w-6 text-gray-600" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-gray-900">🔹 My Listings</h3>
+              <h3 className="font-semibold text-gray-900">My Listings</h3>
               <p className="text-sm text-gray-600">View all your products</p>
             </div>
             <ArrowRight className="h-5 w-5 text-gray-400" />
+          </Link>
+          
+          <Link
+            href="/seller/whatsapp"
+            className="flex items-center gap-4 bg-gradient-to-r from-green-50 to-green-100 rounded-xl shadow-sm p-6 hover:shadow-md transition group border border-green-200"
+            data-testid="whatsapp-settings-action"
+          >
+            <div className="p-3 bg-green-600 rounded-lg group-hover:bg-green-700 transition">
+              <MessageCircle className="h-6 w-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-900">WhatsApp Settings</h3>
+              <p className="text-sm text-gray-600">Manage inquiry contacts</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-green-600" />
           </Link>
         </div>
 

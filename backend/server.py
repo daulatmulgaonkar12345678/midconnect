@@ -6924,11 +6924,47 @@ async def create_inquiry(
     
     logger.info(f"Inquiry created: buyer={user.get('email')}, seller={str(seller_oid)}, product={product_name}")
     
+    # ===== WhatsApp Extension Layer =====
+    # Fetch seller's WhatsApp settings AFTER inquiry is saved (does NOT affect inquiry flow)
+    whatsapp_info = None
+    try:
+        # Check seller's auto-connect setting
+        auto_connect = seller.get("whatsappSettings", {}).get("autoWhatsappConnect", True)
+        
+        if auto_connect:
+            # Get primary WhatsApp contact
+            primary_contact = await db.sellerWhatsappContacts.find_one({
+                "sellerId": seller_oid,
+                "isPrimary": True
+            })
+            
+            if primary_contact:
+                whatsapp_info = {
+                    "enabled": True,
+                    "phoneNumber": primary_contact.get("phoneNumber"),
+                    "label": primary_contact.get("label"),
+                    "sellerName": seller.get("businessName") or seller.get("name") or "Seller"
+                }
+                
+                # Track WhatsApp redirect availability for analytics
+                await db.inquiries.update_one(
+                    {"_id": inquiry_doc["_id"]},
+                    {"$set": {
+                        "whatsappAvailable": True,
+                        "primaryWhatsappUsed": primary_contact.get("phoneNumber")
+                    }}
+                )
+    except Exception as e:
+        logger.warning(f"WhatsApp extension error (non-blocking): {e}")
+    
     return {
         "success": True,
         "message": "Inquiry sent successfully",
         "inquiryId": str(inquiry_doc["_id"]),
-        "status": "pending"
+        "status": "pending",
+        "productName": product_name,
+        "sellerName": seller.get("businessName") or seller.get("name") or "Seller",
+        "whatsapp": whatsapp_info
     }
 
 # NEW: Buyer inquiries endpoint
@@ -12682,6 +12718,11 @@ app.include_router(raw_material_router, prefix="/api/raw-materials")
 from routers.configurable_calculator import create_configurable_calculator_router
 configurable_calculator_router = create_configurable_calculator_router(db)
 app.include_router(configurable_calculator_router, prefix="/api/calculator")
+
+# ================== SELLER WHATSAPP ROUTER ==================
+from routers.seller_whatsapp_router import create_seller_whatsapp_router
+seller_whatsapp_router = create_seller_whatsapp_router(db, require_verified_seller)
+app.include_router(seller_whatsapp_router, prefix="/api")
 
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
