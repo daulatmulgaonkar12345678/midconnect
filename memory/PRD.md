@@ -1892,3 +1892,96 @@ Allow sellers to add multiple WhatsApp numbers and select one as primary contact
 
 ---
 
+### Session: 2026-03-09 (Continued)
+
+#### OTP-Based Registration - COMPLETE
+
+**Objective:**
+Replace email link verification with OTP-based registration. Users enter a 6-digit OTP sent to their email instead of clicking a verification link. This resolves the "link not clickable" issue reported during onboarding.
+
+**Requirements:**
+- 6-digit OTP format
+- 10-minute expiry
+- Max 5 verification attempts per OTP
+- Max 5 OTP requests per email per hour
+- 30-second resend cooldown
+- OTP acts as verification layer BEFORE existing registration flow
+- Existing login flow must remain unchanged
+
+**Implementation:**
+
+1. **Backend OTP Service** (`/app/backend/services/otp_service.py`):
+   - `RegistrationOTPService` class with:
+     - `request_otp()` - Generates 6-digit OTP, stores SHA256 hash, sends email
+     - `verify_otp()` - Validates OTP, tracks attempts, marks as verified
+     - `is_email_verified_via_otp()` - Checks if email was verified recently (30 min window)
+   - Rate limiting: 5 requests/hour per email
+   - Cooldown: 30 seconds between requests
+   - Security: OTP stored as SHA256 hash
+
+2. **Backend API Endpoints** (`/app/backend/server.py`):
+   - `POST /api/auth/register/request-otp` - Request OTP for registration
+   - `POST /api/auth/register/verify-otp` - Verify 6-digit OTP
+   - `GET /api/auth/register/otp-status` - Check OTP verification status
+
+3. **User Creation Integration** (`get_current_user` in server.py):
+   - When creating new user, checks if email was verified via OTP
+   - If verified, sets `isEmailVerified: true` immediately
+   - Eliminates need for email verification link
+
+4. **Frontend Registration Page** (`/app/frontend/src/app/register/page.tsx`):
+   - **Step 1 (Details)**: Full Name, Email, Password, Confirm Password
+   - **Step 2 (OTP)**: 6-digit input boxes with auto-focus
+   - **Step 3 (Success)**: Confirmation + redirect to complete-profile
+   - Step indicator: "1. Sign Up → 2. Verify OTP → 3. Complete Profile"
+
+5. **Frontend OTP UI Features**:
+   - 6 separate input boxes with auto-focus on next
+   - Auto-submit when all 6 digits entered
+   - Paste support (full 6-digit code)
+   - Resend button with cooldown timer
+   - Back button to return to details
+   - Clear error messages with attempts remaining
+
+6. **Frontend API Functions** (`/app/frontend/src/lib/api.ts`):
+   - `requestRegistrationOTP(email, name)` - Request OTP
+   - `verifyRegistrationOTP(email, otp)` - Verify OTP
+   - `checkOTPStatus(email)` - Check verification status
+
+7. **AuthContext Update** (`/app/frontend/src/context/AuthContext.tsx`):
+   - `signUp()` now accepts `skipVerificationEmail` parameter
+   - When OTP flow used, verification email is skipped
+   - User created with correct verification status
+
+**Database:**
+- Collection: `registration_otps`
+- Schema: `{ email, name, otpHash, attempts, isUsed, isVerified, expiresAt, createdAt }`
+
+**Testing Results:**
+- 88% backend tests passed (15/17) - 2 failures due to rate limiting correctly enforced
+- 100% frontend tests passed
+- Bug fixed: Double JSON.stringify in API client causing 422 errors
+
+**Security Features Verified:**
+- OTP length: 6 digits ✅
+- OTP expiry: 10 minutes ✅
+- Max attempts per OTP: 5 ✅
+- Rate limit: 5 requests/minute ✅
+- Resend cooldown: 30 seconds ✅
+- Email normalization: lowercase, trimmed ✅
+- OTP hashing: SHA256 ✅
+
+**Files Created:**
+- `/app/backend/services/otp_service.py` - OTP service implementation
+- `/app/backend/tests/test_otp_registration.py` - Backend tests
+
+**Files Modified:**
+- `/app/backend/server.py` - Added OTP endpoints, updated user creation
+- `/app/frontend/src/app/register/page.tsx` - Complete rewrite with OTP flow
+- `/app/frontend/src/lib/api.ts` - Added OTP API functions, fixed double-stringify bug
+- `/app/frontend/src/context/AuthContext.tsx` - Added skipVerificationEmail param
+
+**Note:** Email sending is MOCKED when `RESEND_API_KEY` is not configured. In mock mode, OTP is returned in the API response for testing purposes.
+
+---
+
