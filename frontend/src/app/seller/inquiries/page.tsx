@@ -193,12 +193,15 @@ export default function SellerInquiriesPage() {
     
     if (!contact) return;
     
+    // Get buyer name from buyerInfo
+    const buyerName = inquiry.buyerInfo?.name || inquiry.buyerInfo?.companyName || 'there';
+    
     // Generate message
-    const messageText = `Hello ${inquiry.buyerName || 'there'},
+    const messageText = `Hello ${buyerName},
 
 I am following up on your inquiry on UdyogConnect.
 
-Product: ${inquiry.productName || 'N/A'}
+Product: ${inquiry.listingName || 'N/A'}
 Quantity: ${inquiry.quantity || 'N/A'}
 
 Let me know your requirements.`;
