@@ -85,17 +85,28 @@ export default function InquiryModal({
         buyerType
       });
 
-      setSuccess(true);
+      console.log('[InquiryModal] Response received:', response);
+      console.log('[InquiryModal] WhatsApp data:', response.whatsapp);
       
-      // Store WhatsApp info if available
+      // Store WhatsApp info BEFORE setting success to ensure it's available when success renders
       if (response.whatsapp?.enabled && response.whatsapp?.phoneNumber) {
-        setWhatsappInfo({
+        console.log('[InquiryModal] Setting WhatsApp info');
+        const waInfo = {
           enabled: true,
           phoneNumber: response.whatsapp.phoneNumber,
           label: response.whatsapp.label,
           sellerName: response.sellerName || seller.companyName
+        };
+        setWhatsappInfo(waInfo);
+      } else {
+        console.log('[InquiryModal] WhatsApp not available:', {
+          enabled: response.whatsapp?.enabled,
+          phoneNumber: response.whatsapp?.phoneNumber
         });
       }
+      
+      // Set success AFTER whatsapp info to ensure proper render order
+      setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send inquiry');
     } finally {
@@ -178,7 +189,7 @@ Let's discuss further.`;
             </div>
 
             {/* WhatsApp Connect Button */}
-            {whatsappInfo?.enabled && whatsappInfo?.phoneNumber && (
+            {whatsappInfo?.enabled && whatsappInfo?.phoneNumber ? (
               <div className="border-t pt-6">
                 <p className="text-center text-sm text-gray-600 mb-4">
                   Want to discuss your requirements directly?
@@ -197,7 +208,7 @@ Let's discuss further.`;
                   </p>
                 )}
               </div>
-            )}
+            ) : null}
 
             {/* Done Button */}
             <button
