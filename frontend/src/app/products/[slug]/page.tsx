@@ -49,7 +49,8 @@ import {
   Video,
   Eye,
   Calculator,
-  Scale
+  Scale,
+  MessageCircle
 } from 'lucide-react';
 
 // ==================== TYPES ====================
@@ -461,6 +462,15 @@ export default function EnterpriseProductPage() {
   const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
   const [selectedSellerForInquiry, setSelectedSellerForInquiry] = useState<any>(null);
   const [calculatedPriceForInquiry, setCalculatedPriceForInquiry] = useState<number>(0);
+  
+  // WhatsApp state for inquiry modal
+  const [inquirySubmitted, setInquirySubmitted] = useState(false);
+  const [whatsappInfo, setWhatsappInfo] = useState<{
+    enabled: boolean;
+    phoneNumber: string;
+    label?: string | null;
+    sellerName?: string;
+  } | null>(null);
 
   // Check for 301 redirect (old ObjectId or legacy slug URLs)
   useEffect(() => {
@@ -662,7 +672,7 @@ export default function EnterpriseProductPage() {
         return;
       }
 
-      await createInquiry(token, {
+      const response = await createInquiry(token, {
         sellerId: inquiryModal.seller.sellerId,
         listingId: inquiryModal.seller.listingId,
         quantity: inquiryQuantity,
@@ -670,8 +680,18 @@ export default function EnterpriseProductPage() {
         buyerType
       });
 
-      setInquirySuccess('Inquiry sent successfully! The seller will contact you soon.');
-      setInquiryModal({ open: false, seller: null });
+      // Check for WhatsApp data in response
+      if (response.whatsapp?.enabled && response.whatsapp?.phoneNumber) {
+        setWhatsappInfo({
+          enabled: true,
+          phoneNumber: response.whatsapp.phoneNumber,
+          label: response.whatsapp.label,
+          sellerName: response.sellerName || inquiryModal.seller.companyName
+        });
+      }
+      
+      // Show success state in modal instead of closing
+      setInquirySubmitted(true);
       setInquiryQuantity(1);
       setInquiryNote('');
     } catch (err) {
@@ -679,6 +699,30 @@ export default function EnterpriseProductPage() {
     } finally {
       setSubmittingInquiry(false);
     }
+  };
+  
+  // Close inquiry modal and reset state
+  const closeInquiryModal = () => {
+    setInquiryModal({ open: false, seller: null });
+    setInquirySubmitted(false);
+    setWhatsappInfo(null);
+  };
+  
+  // Handle WhatsApp connect from inquiry modal
+  const handleWhatsAppConnect = () => {
+    if (!whatsappInfo?.phoneNumber) return;
+    
+    const productName = product?.product?.name || 'N/A';
+    const messageText = `Hello, I sent an inquiry on UdyogConnect.
+
+Product: ${productName}
+Quantity: ${inquiryQuantity}
+
+Let's discuss further.`;
+    
+    const cleanPhone = whatsappInfo.phoneNumber.replace(/^\+/, '');
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(messageText)}`;
+    window.open(waUrl, '_blank');
   };
 
   // Raw material inquiry handler with calculation data (LEGACY - uses calculationResult)
@@ -1193,9 +1237,11 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
           <div className="bg-white rounded-xl max-w-md w-full" data-testid="inquiry-modal">
             <div className="p-4 border-b border-slate-200">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">Request Quote</h2>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {inquirySubmitted ? 'Inquiry Sent!' : 'Request Quote'}
+                </h2>
                 <button 
-                  onClick={() => setInquiryModal({ open: false, seller: null })}
+                  onClick={closeInquiryModal}
                   className="p-2 hover:bg-slate-100 rounded-lg"
                 >
                   <X className="h-5 w-5 text-slate-500" />
@@ -1206,69 +1252,116 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               </p>
             </div>
 
-            <div className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Quantity Required</label>
-                <input
-                  type="number"
-                  value={inquiryQuantity}
-                  onChange={(e) => setInquiryQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  min={inquiryModal.seller.moq}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  data-testid="inquiry-quantity"
-                />
-                <p className="text-xs text-slate-500 mt-1">MOQ: {inquiryModal.seller.moq}</p>
-              </div>
+            {/* Success State with WhatsApp */}
+            {inquirySubmitted ? (
+              <div className="p-6">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Check className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-slate-900 mb-2">Your inquiry has been sent!</h4>
+                  <p className="text-slate-600 text-sm">
+                    {whatsappInfo?.sellerName || inquiryModal.seller.companyName} will review and respond with a quote.
+                  </p>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Business Type</label>
-                <select
-                  value={buyerType}
-                  onChange={(e) => setBuyerType(e.target.value as typeof buyerType)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  data-testid="buyer-type"
-                >
-                  <option value="manufacturer">Manufacturer</option>
-                  <option value="contractor">Contractor</option>
-                  <option value="oem">OEM</option>
-                  <option value="trader">Trader</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Additional Notes</label>
-                <textarea
-                  value={inquiryNote}
-                  onChange={(e) => setInquiryNote(e.target.value)}
-                  placeholder="Any specific requirements..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  data-testid="inquiry-note"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200">
-              <button
-                onClick={handleInquiry}
-                disabled={submittingInquiry}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                data-testid="submit-inquiry-btn"
-              >
-                {submittingInquiry ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    Send Inquiry
-                  </>
+                {/* WhatsApp Connect Button */}
+                {whatsappInfo?.enabled && whatsappInfo?.phoneNumber && (
+                  <div className="border-t pt-6">
+                    <p className="text-center text-sm text-slate-600 mb-4">
+                      Want to discuss your requirements directly?
+                    </p>
+                    <button
+                      onClick={handleWhatsAppConnect}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+                      data-testid="whatsapp-connect-btn"
+                    >
+                      <MessageCircle className="h-5 w-5" />
+                      Connect with Seller on WhatsApp
+                    </button>
+                    {whatsappInfo.label && (
+                      <p className="text-center text-xs text-slate-500 mt-2">
+                        {whatsappInfo.label} Contact
+                      </p>
+                    )}
+                  </div>
                 )}
-              </button>
-            </div>
+
+                <button
+                  onClick={closeInquiryModal}
+                  className="w-full mt-4 px-4 py-2.5 text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 font-medium transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              /* Form State */
+              <>
+                <div className="p-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Quantity Required</label>
+                    <input
+                      type="number"
+                      value={inquiryQuantity}
+                      onChange={(e) => setInquiryQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                      min={inquiryModal.seller.moq}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      data-testid="inquiry-quantity"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">MOQ: {inquiryModal.seller.moq}</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Business Type</label>
+                    <select
+                      value={buyerType}
+                      onChange={(e) => setBuyerType(e.target.value as typeof buyerType)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      data-testid="buyer-type"
+                    >
+                      <option value="manufacturer">Manufacturer</option>
+                      <option value="contractor">Contractor</option>
+                      <option value="oem">OEM</option>
+                      <option value="trader">Trader</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Additional Notes</label>
+                    <textarea
+                      value={inquiryNote}
+                      onChange={(e) => setInquiryNote(e.target.value)}
+                      placeholder="Any specific requirements..."
+                      rows={3}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      data-testid="inquiry-note"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-200">
+                  <button
+                    onClick={handleInquiry}
+                    disabled={submittingInquiry}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    data-testid="submit-inquiry-btn"
+                  >
+                    {submittingInquiry ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Send Inquiry
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
