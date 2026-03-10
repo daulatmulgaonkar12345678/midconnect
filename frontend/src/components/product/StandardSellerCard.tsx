@@ -147,9 +147,20 @@ export default function StandardSellerCard({
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Building2 className="h-4 w-4 text-gray-400" />
-              <span className="font-semibold text-gray-900" data-testid="seller-name">
-                {seller.companyName || 'Verified Seller'}
-              </span>
+              {seller.sellerSlug ? (
+                <Link 
+                  href={`/seller-catalog/${seller.sellerSlug}`}
+                  className="font-semibold text-gray-900 hover:text-blue-600 transition-colors relative group"
+                  data-testid="seller-name"
+                >
+                  {seller.companyName || 'Verified Seller'}
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 group-hover:w-full transition-all duration-300" />
+                </Link>
+              ) : (
+                <span className="font-semibold text-gray-900" data-testid="seller-name">
+                  {seller.companyName || 'Verified Seller'}
+                </span>
+              )}
               <SellerRoleBadge role={seller.sellerRole} />
             </div>
             <div className="flex items-center gap-1 text-sm text-gray-500" data-testid="seller-location">

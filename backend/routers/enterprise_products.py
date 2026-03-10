@@ -186,7 +186,8 @@ def create_enterprise_product_router(db):
                     "businessName": {"$ifNull": ["$sellerData.profile.businessName", "$sellerData.businessName"]},
                     "city": "$sellerData.profile.city",
                     "state": "$sellerData.profile.state",
-                    "badgeType": {"$ifNull": ["$sellerData.badgeType", "none"]}
+                    "badgeType": {"$ifNull": ["$sellerData.badgeType", "none"]},
+                    "sellerSlug": "$sellerData.sellerSlug"
                 }
             }}
         ]
@@ -250,6 +251,7 @@ def create_enterprise_product_router(db):
                 "city": seller_profile.get("city"),
                 "state": seller_profile.get("state"),
                 "sellerRole": listing.get("sellerRole", "dealer"),
+                "sellerSlug": seller_profile.get("sellerSlug"),  # For clickable seller name
                 "badgeType": seller_profile.get("badgeType", "none"),
                 "searchableAttributes": searchable_attrs,
                 "attributeLabels": attribute_labels,
@@ -500,7 +502,8 @@ def create_enterprise_product_router(db):
                     "businessName": profile.get("businessName") or "Verified Seller",
                     "city": profile.get("city"),
                     "state": profile.get("state"),
-                    "badgeType": s.get("badgeType", "none")
+                    "badgeType": s.get("badgeType", "none"),
+                    "sellerSlug": s.get("sellerSlug")  # For clickable seller name
                 }
         
         # Enrich results with seller data
@@ -511,6 +514,7 @@ def create_enterprise_product_router(db):
             r["badgeType"] = seller_data.get("badgeType", "none")
             r["city"] = seller_data.get("city")
             r["state"] = seller_data.get("state")
+            r["sellerSlug"] = seller_data.get("sellerSlug")
         
         fallback_level = 0
         fallback_message = None

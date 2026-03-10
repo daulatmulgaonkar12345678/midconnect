@@ -684,6 +684,9 @@ export interface ProfileCompleteData {
   state: string;
   pincode: string;
   gstNumber?: string;
+  // NEW: Seller catalog fields
+  enterpriseEstablishmentYear?: number;  // When company was founded (sellers only, editable once)
+  sellerBannerImage?: string;  // Optional banner image for seller catalog
 }
 
 export interface ProfileCompleteResponse {
@@ -742,6 +745,106 @@ export const deleteAccount = (token: string, reason: string = '') =>
     method: 'POST',
     body: { confirmation: true, reason: sanitizeInput(reason) },
   });
+
+// ==================== Seller Catalog API ====================
+
+export interface SellerCatalogResponse {
+  seller: {
+    id: string;
+    slug: string;
+    companyName: string;
+    logo: string | null;
+    bannerImage: string | null;
+    location: {
+      city: string;
+      state: string;
+      address: string;
+    };
+    phone: string;
+    email: string;
+    enterpriseEstablishmentYear: number | null;
+    platformRegistrationYear: number | null;
+    gstVerified: boolean;
+    badgeType: string | null;
+    rating: {
+      avgRating: number;
+      totalReviews: number;
+      ratingDistribution: Record<number, number>;
+    };
+  };
+  categories: Array<{
+    categoryId: string;
+    categoryName: string;
+    categorySlug: string;
+    categoryIcon: string;
+    avgRating: number;
+    totalReviews: number;
+    totalProducts: number;
+    products: Array<{
+      listingId: string;
+      productId: string;
+      productName: string;
+      productSlug: string;
+      description: string;
+      images: string[];
+      pricingSlabs: Array<{minQty: number; maxQty: number; price: number}>;
+      moq: number;
+      avgRating: number;
+      totalReviews: number;
+      stockStatus: string;
+    }>;
+  }>;
+  totalCategories: number;
+  totalProducts: number;
+}
+
+export const getSellerCatalog = (
+  slug: string, 
+  productsPerCategory: number = 4
+): Promise<SellerCatalogResponse> =>
+  fetchAPI<SellerCatalogResponse>(
+    `/seller-catalog/${slug}?products_per_category=${productsPerCategory}`
+  );
+
+export interface SellerCategoryProductsResponse {
+  category: {
+    id: string;
+    name: string;
+    slug: string;
+    icon: string;
+    avgRating: number;
+    totalReviews: number;
+  };
+  products: Array<{
+    listingId: string;
+    productId: string;
+    productName: string;
+    productSlug: string;
+    description: string;
+    images: string[];
+    pricingSlabs: Array<{minQty: number; maxQty: number; price: number}>;
+    moq: number;
+    avgRating: number;
+    totalReviews: number;
+    stockStatus: string;
+  }>;
+  pagination: {
+    skip: number;
+    limit: number;
+    total: number;
+    hasMore: boolean;
+  };
+}
+
+export const getSellerCategoryProducts = (
+  sellerSlug: string,
+  categorySlug: string,
+  skip: number = 0,
+  limit: number = 20
+): Promise<SellerCategoryProductsResponse> =>
+  fetchAPI<SellerCategoryProductsResponse>(
+    `/seller-catalog/${sellerSlug}/category/${categorySlug}?skip=${skip}&limit=${limit}`
+  );
 
 // ==================== Seller API ====================
 
@@ -1871,6 +1974,7 @@ export interface EnterpriseProductSeller {
   city?: string;
   state?: string;
   sellerRole: string;
+  sellerSlug?: string;  // Seller catalog page slug
   badgeType?: 'none' | 'choice' | 'trusted';  // UdyogConnect seller badge
   searchableAttributes: Record<string, string | number>;
   attributeLabels: Record<string, string>;

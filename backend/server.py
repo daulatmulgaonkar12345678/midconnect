@@ -1300,6 +1300,43 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     
     return R * c
 
+
+def generate_seller_slug(business_name: str) -> str:
+    """
+    Generate SEO-friendly seller slug from business name.
+    
+    Rules:
+    - Convert to lowercase
+    - Replace spaces with hyphens
+    - Remove special characters
+    - Max 90 characters
+    
+    Examples:
+    - "ABC Industries" -> "abc-industries"
+    - "Sharma Industrial Supplies" -> "sharma-industrial-supplies"
+    - "R.K. Engineering & Co." -> "rk-engineering-co"
+    """
+    if not business_name:
+        return ""
+    
+    # Convert to lowercase
+    slug = business_name.lower().strip()
+    
+    # Remove special characters except spaces and hyphens
+    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
+    
+    # Replace multiple spaces/hyphens with single hyphen
+    slug = re.sub(r'[\s-]+', '-', slug)
+    
+    # Remove leading/trailing hyphens
+    slug = slug.strip('-')
+    
+    # Limit to 90 characters
+    if len(slug) > 90:
+        slug = slug[:90].rsplit('-', 1)[0]  # Don't cut in middle of word
+    
+    return slug
+
 # ============== PYDANTIC MODELS ==============
 
 class UserCreate(BaseModel):
@@ -1376,6 +1413,13 @@ class ProfileCompleteCreate(BaseModel):
     # GST - ONLY for sellers
     gstNumber: Optional[str] = None
     
+    # NEW: Enterprise Establishment Year - ONLY for sellers
+    # When was the company originally founded
+    enterpriseEstablishmentYear: Optional[int] = None
+    
+    # NEW: Optional banner image for seller catalog page
+    sellerBannerImage: Optional[str] = None
+    
     model_config = {"extra": "forbid"}  # Reject unknown fields
     
     @field_validator('phone')
@@ -1403,11 +1447,34 @@ class ProfileCompleteCreate(BaseModel):
             return v.upper()
         return v
     
+    @field_validator('enterpriseEstablishmentYear')
+    @classmethod
+    def validate_establishment_year(cls, v):
+        if v is not None:
+            current_year = datetime.now().year
+            if v < 1800 or v > current_year:
+                raise ValueError(f'Enterprise establishment year must be between 1800 and {current_year}')
+        return v
+    
+    @field_validator('sellerBannerImage')
+    @classmethod
+    def validate_banner_image(cls, v):
+        if v:
+            # Validate Cloudinary URL format
+            CLOUDINARY_CLOUD_NAME = 'dco24qmoq'
+            valid_prefix = f'https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/'
+            if not v.startswith(valid_prefix):
+                raise ValueError('Banner image must be from Cloudinary')
+        return v
+    
     @model_validator(mode='after')
-    def validate_seller_gst(self):
-        """Seller MUST provide GST number"""
-        if self.role == "seller" and not self.gstNumber:
-            raise ValueError('GST number is required for seller registration')
+    def validate_seller_fields(self):
+        """Seller MUST provide GST number and establishment year"""
+        if self.role == "seller":
+            if not self.gstNumber:
+                raise ValueError('GST number is required for seller registration')
+            if not self.enterpriseEstablishmentYear:
+                raise ValueError('Enterprise establishment year is required for seller registration')
         return self
 
 class InitialRegisterCreate(BaseModel):
@@ -2546,10 +2613,38 @@ async def complete_profile(
             roles = ["buyer", "seller"]
             gst_number = profile_data.gstNumber
             gst_status = "pending"
+            
+            # Generate seller slug from business name
+            seller_slug = generate_seller_slug(profile_data.businessName)
+            
+            # Check for slug uniqueness and append suffix if needed
+            existing_slugs = await db.users.distinct("sellerSlug")
+            if seller_slug in existing_slugs:
+                counter = 2
+                while f"{seller_slug}-{counter}" in existing_slugs:
+                    counter += 1
+                seller_slug = f"{seller_slug}-{counter}"
+            
+            # Platform registration year (auto-generated from account creation)
+            platform_registration_year = now.year
+            if existing and existing.get("createdAt"):
+                created_at = existing.get("createdAt")
+                if hasattr(created_at, 'year'):
+                    platform_registration_year = created_at.year
+            
+            # Enterprise establishment year (user input, editable only once)
+            enterprise_establishment_year = profile_data.enterpriseEstablishmentYear
+            
+            # Seller banner image (optional)
+            seller_banner = profile_data.sellerBannerImage
         else:
             roles = ["buyer"]
             gst_number = None
             gst_status = None
+            seller_slug = None
+            platform_registration_year = None
+            enterprise_establishment_year = None
+            seller_banner = None
         
         # Build update document
         update_doc = {
@@ -2585,6 +2680,15 @@ async def complete_profile(
             },
             "updatedAt": now
         }
+        
+        # Add seller-specific fields if seller
+        if profile_data.role == "seller":
+            update_doc["sellerSlug"] = seller_slug
+            update_doc["platformRegistrationYear"] = platform_registration_year
+            update_doc["enterpriseEstablishmentYear"] = enterprise_establishment_year
+            update_doc["sellerBannerImage"] = seller_banner
+            # Track that establishment year has been set (cannot be edited again)
+            update_doc["establishmentYearLocked"] = True
         
         if existing:
             # UPDATE existing user
@@ -12901,6 +13005,11 @@ app.include_router(configurable_calculator_router, prefix="/api/calculator")
 from routers.seller_whatsapp_router import create_seller_whatsapp_router
 seller_whatsapp_router = create_seller_whatsapp_router(db, require_verified_seller)
 app.include_router(seller_whatsapp_router, prefix="/api")
+
+# ================== SELLER CATALOG ROUTER ==================
+from routers.seller_catalog_router import init_seller_catalog_routes
+seller_catalog_router = init_seller_catalog_routes(db)
+app.include_router(seller_catalog_router, prefix="/api")
 
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
