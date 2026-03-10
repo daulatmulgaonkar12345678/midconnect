@@ -376,7 +376,8 @@ def create_reviews_router(db, get_current_user):
                         "state": profile.get("state") or seller.get("state"),
                         "badgeType": seller.get("badgeType", "none"),
                         "gstNumber": profile.get("gstNumber") or seller.get("gst", {}).get("number"),
-                        "establishedYear": profile.get("establishedYear")
+                        "establishedYear": profile.get("establishedYear") or seller.get("enterpriseEstablishmentYear"),
+                        "sellerSlug": seller.get("sellerSlug")  # For clickable seller name
                     }
                 else:
                     # Fallback to sellers collection (legacy)
@@ -389,7 +390,8 @@ def create_reviews_router(db, get_current_user):
                             "state": seller.get("state"),
                             "badgeType": seller.get("badgeType", "none"),
                             "gstNumber": seller.get("gst", {}).get("number") if seller.get("gst") else None,
-                            "establishedYear": seller.get("establishedYear")
+                            "establishedYear": seller.get("establishedYear"),
+                            "sellerSlug": seller.get("sellerSlug")
                         }
             except Exception as e:
                 logger.error(f"Error fetching seller profile: {e}")
@@ -403,7 +405,8 @@ def create_reviews_router(db, get_current_user):
                 "state": None,
                 "badgeType": "none",
                 "gstNumber": None,
-                "establishedYear": None
+                "establishedYear": None,
+                "sellerSlug": None
             }
         
         # Get category

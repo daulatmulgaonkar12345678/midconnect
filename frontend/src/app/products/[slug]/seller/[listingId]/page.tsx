@@ -70,6 +70,7 @@ interface SellerDetailData {
     badgeType: 'none' | 'choice' | 'trusted';
     gstNumber?: string;
     establishedYear?: number;
+    sellerSlug?: string;  // For clickable seller name
   };
   category: {
     _id: string;
@@ -351,7 +352,17 @@ export default function SellerDetailPage({ params }: Props) {
                 {product.name}
               </Link>
               <ChevronRight className="h-4 w-4 mx-1 shrink-0" />
-              <span className="text-gray-900 font-medium truncate">{seller?.businessName || 'Verified Seller'}</span>
+              {seller?.sellerSlug ? (
+                <Link 
+                  href={`/seller-catalog/${seller.sellerSlug}`}
+                  className="text-gray-900 font-medium truncate hover:text-blue-600 transition-colors relative group"
+                >
+                  {seller?.businessName || 'Verified Seller'}
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 group-hover:w-full transition-all duration-300" />
+                </Link>
+              ) : (
+                <span className="text-gray-900 font-medium truncate">{seller?.businessName || 'Verified Seller'}</span>
+              )}
             </nav>
           </div>
         </div>
@@ -451,7 +462,18 @@ export default function SellerDetailPage({ params }: Props) {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold text-gray-900">{seller?.businessName || 'Verified Seller'}</h2>
+                    {seller?.sellerSlug ? (
+                      <Link 
+                        href={`/seller-catalog/${seller.sellerSlug}`}
+                        className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors relative group"
+                        data-testid="seller-name-link"
+                      >
+                        {seller?.businessName || 'Verified Seller'}
+                        <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 group-hover:w-full transition-all duration-300" />
+                      </Link>
+                    ) : (
+                      <h2 className="text-lg font-semibold text-gray-900">{seller?.businessName || 'Verified Seller'}</h2>
+                    )}
                     {seller?.badgeType === 'trusted' && (
                       <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                         <Shield className="h-3 w-3" /> Trusted
