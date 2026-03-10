@@ -1985,3 +1985,78 @@ Replace email link verification with OTP-based registration. Users enter a 6-dig
 
 ---
 
+
+### Session: 2026-03-10 (Seller Catalog System)
+
+#### Seller Catalog System - P0 COMPLETE ✅
+
+**Objective:**
+Create a comprehensive seller catalog system allowing sellers to have their own digital catalog page that can be shared with buyers. Includes new seller fields, category-wise product display, clickable seller names, and SEO optimization.
+
+**Implementation:**
+
+1. **New Seller Fields (Backend)**:
+   - `enterpriseEstablishmentYear`: User input during profile completion (required for sellers, 1800-current year, editable once)
+   - `platformRegistrationYear`: Auto-generated from account creation year (never editable)
+   - `sellerSlug`: Auto-generated from business name (lowercase, hyphenated, max 90 chars)
+   - `sellerBannerImage`: Optional banner image for catalog page
+
+2. **Seller Slug Generation** (`generate_seller_slug()`):
+   - Convert to lowercase
+   - Remove special characters
+   - Replace spaces with hyphens
+   - Max 90 characters (don't cut mid-word)
+   - Auto-append suffix for duplicates (e.g., `abc-industries-2`)
+
+3. **Backend API Endpoints** (`/app/backend/routers/seller_catalog_router.py`):
+   - `GET /api/seller-catalog/{slug}` - Get seller catalog with products by category
+   - `GET /api/seller-catalog/{slug}/category/{category_slug}` - Get products for specific category
+   - `GET /api/seller-catalog/by-id/{seller_id}` - Redirect to slug-based URL
+
+4. **Frontend Profile Completion** (`/app/frontend/src/app/complete-profile/page.tsx`):
+   - Added "Enterprise Establishment Year" dropdown for sellers
+   - Validation: Required for sellers, 1800-current year
+   - Shows help text explaining the field purpose
+
+5. **Seller Catalog Page** (`/app/frontend/src/app/seller-catalog/[slug]/`):
+   - SEO-optimized metadata generation
+   - Banner section (custom or gradient default)
+   - Seller info card (logo, name, location, badges, rating)
+   - Stats display (products count, categories count)
+   - Action buttons (Send Inquiry, Call Seller)
+   - Category-wise product display (4 products per category, random rotation)
+   - Product cards with inquiry button
+
+6. **Clickable Seller Names**:
+   - Updated `StandardSellerCard` to link seller names to catalog page
+   - Hover animation with underline transition
+   - Added `sellerSlug` to `EnterpriseProductSeller` interface
+   - Backend returns `sellerSlug` in seller data
+
+7. **Reusable Component** (`/app/frontend/src/components/SellerNameLink.tsx`):
+   - Consistent seller name linking across platform
+   - Animated underline on hover
+
+**Testing Results:**
+- 100% backend tests passed (15/15)
+- 100% frontend components render correctly
+- API correctly handles 404 for non-existent sellers
+
+**Files Created:**
+- `/app/backend/routers/seller_catalog_router.py`
+- `/app/frontend/src/app/seller-catalog/[slug]/page.tsx`
+- `/app/frontend/src/app/seller-catalog/[slug]/SellerCatalogPage.tsx`
+- `/app/frontend/src/components/SellerNameLink.tsx`
+- `/app/backend/tests/test_seller_catalog_feature.py`
+
+**Files Modified:**
+- `/app/backend/server.py` - Added seller fields, generate_seller_slug(), updated ProfileCompleteCreate
+- `/app/backend/routers/enterprise_products.py` - Added sellerSlug to seller data
+- `/app/frontend/src/app/complete-profile/page.tsx` - Added establishment year field
+- `/app/frontend/src/lib/api.ts` - Added seller catalog API types and functions
+- `/app/frontend/src/components/product/StandardSellerCard.tsx` - Made seller name clickable
+
+**Note:** Legacy sellers don't have `sellerSlug` field. Their names appear as plain text. New sellers registered after this update will have `sellerSlug` auto-generated, making their names clickable links to their catalog pages.
+
+---
+
