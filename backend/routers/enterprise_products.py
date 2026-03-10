@@ -156,11 +156,13 @@ def create_enterprise_product_router(db):
         ]
         
         # Phase 2: Get paginated listings with seller lookup (only for the page)
+        # Dual lookup: first from users collection, then from legacy sellers collection
         listings_pipeline = [
             {"$match": {"productId": product_oid, "status": "active"}},
             {"$sort": {"pricingTiers.0.pricePerUnit": 1}},
             {"$skip": skip},
             {"$limit": limit},
+            # Primary lookup: users collection (current)
             {"$lookup": {
                 "from": "users",
                 "localField": "sellerId",
@@ -168,6 +170,14 @@ def create_enterprise_product_router(db):
                 "as": "sellerData"
             }},
             {"$unwind": {"path": "$sellerData", "preserveNullAndEmptyArrays": True}},
+            # Fallback lookup: legacy sellers collection (if no match in users)
+            {"$lookup": {
+                "from": "sellers",
+                "localField": "sellerId",
+                "foreignField": "_id",
+                "as": "legacySellerData"
+            }},
+            {"$unwind": {"path": "$legacySellerData", "preserveNullAndEmptyArrays": True}},
             {"$project": {
                 "_id": 1,
                 "sellerId": 1,
@@ -183,11 +193,16 @@ def create_enterprise_product_router(db):
                 "sellerRole": 1,
                 "updatedAt": 1,
                 "sellerProfile": {
-                    "businessName": {"$ifNull": ["$sellerData.profile.businessName", "$sellerData.businessName"]},
-                    "city": "$sellerData.profile.city",
-                    "state": "$sellerData.profile.state",
-                    "badgeType": {"$ifNull": ["$sellerData.badgeType", "none"]},
-                    "sellerSlug": "$sellerData.sellerSlug"
+                    "businessName": {"$ifNull": [
+                        "$sellerData.profile.businessName", 
+                        "$sellerData.businessName",
+                        "$legacySellerData.businessName",
+                        "Verified Seller"
+                    ]},
+                    "city": {"$ifNull": ["$sellerData.profile.city", "$legacySellerData.city"]},
+                    "state": {"$ifNull": ["$sellerData.profile.state", "$legacySellerData.state"]},
+                    "badgeType": {"$ifNull": ["$sellerData.badgeType", "$legacySellerData.badgeType", "none"]},
+                    "sellerSlug": {"$ifNull": ["$sellerData.sellerSlug", "$legacySellerData.sellerSlug"]}
                 }
             }}
         ]
@@ -489,22 +504,46 @@ def create_enterprise_product_router(db):
         total = await db.sellerListings.count_documents(match)
         
         # Phase 2: Batch lookup seller profiles for companyName and badgeType
+        # Dual lookup: first from users collection, then from legacy sellers collection
         seller_ids = list(set(r.get("sellerId") for r in results if r.get("sellerId")))
         seller_profiles = {}
+        
         if seller_ids:
-            sellers = await db.users.find(
+            # Primary lookup: users collection
+            users = await db.users.find(
                 {"_id": {"$in": seller_ids}},
-                {"profile.businessName": 1, "profile.city": 1, "profile.state": 1, "badgeType": 1}
+                {"profile.businessName": 1, "profile.city": 1, "profile.state": 1, "badgeType": 1, "sellerSlug": 1}
             ).to_list(None)
-            for s in sellers:
+            
+            found_ids = set()
+            for s in users:
                 profile = s.get("profile", {})
                 seller_profiles[str(s["_id"])] = {
                     "businessName": profile.get("businessName") or "Verified Seller",
                     "city": profile.get("city"),
                     "state": profile.get("state"),
                     "badgeType": s.get("badgeType", "none"),
-                    "sellerSlug": s.get("sellerSlug")  # For clickable seller name
+                    "sellerSlug": s.get("sellerSlug")
                 }
+                found_ids.add(s["_id"])
+            
+            # Fallback: legacy sellers collection for IDs not found in users
+            missing_ids = [sid for sid in seller_ids if sid not in found_ids]
+            
+            if missing_ids:
+                legacy_sellers = await db.sellers.find(
+                    {"_id": {"$in": missing_ids}},
+                    {"businessName": 1, "city": 1, "state": 1, "badgeType": 1, "sellerSlug": 1}
+                ).to_list(None)
+                for s in legacy_sellers:
+                    sid_str = str(s["_id"])
+                    seller_profiles[sid_str] = {
+                        "businessName": s.get("businessName") or "Verified Seller",
+                        "city": s.get("city"),
+                        "state": s.get("state"),
+                        "badgeType": s.get("badgeType", "none"),
+                        "sellerSlug": s.get("sellerSlug")
+                    }
         
         # Enrich results with seller data
         for r in results:
@@ -694,8 +733,9 @@ def create_enterprise_product_router(db):
                 "companyName": listing.get("companyName", "Verified Seller"),  # Phase 2: Seller name
                 "city": listing.get("city"),  # Phase 2: City
                 "state": listing.get("state"),  # Phase 2: State
-                "location": f"{listing.get('city', '')}, {listing.get('state', '')}".strip(", ") or "India",
+                "location": f"{listing.get('city') or ''}, {listing.get('state') or ''}".strip(", ") or "India",
                 "badgeType": listing.get("badgeType", "none"),  # Seller badge (choice/trusted)
+                "sellerSlug": listing.get("sellerSlug"),  # For clickable seller name links
                 "searchableAttributes": searchable_attrs,
                 "attributeLabels": attribute_labels,
                 "pricingTiers": pricing,

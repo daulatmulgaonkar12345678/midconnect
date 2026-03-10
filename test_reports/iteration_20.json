@@ -64,7 +64,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://auth-overhaul-33.preview.emergentagent.com"
+    "api_url": "https://catalog-system-dev.preview.emergentagent.com"
   },
   
   "seed_data_creation": "None needed",

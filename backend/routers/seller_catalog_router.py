@@ -47,9 +47,9 @@ def serialize_doc(doc):
 async def get_seller_by_slug(db, slug: str) -> Optional[Dict]:
     """
     Get seller by slug.
-    Falls back to ObjectId lookup if slug not found.
+    Falls back to legacy sellers collection, then ObjectId lookup if slug not found.
     """
-    # First try by slug
+    # First try by slug in users collection
     seller = await db.users.find_one({
         "sellerSlug": slug,
         "roles": "seller",
@@ -59,16 +59,40 @@ async def get_seller_by_slug(db, slug: str) -> Optional[Dict]:
     if seller:
         return seller
     
-    # Fallback: try by ObjectId
+    # Fallback: try legacy sellers collection
+    seller = await db.sellers.find_one({
+        "sellerSlug": slug
+    })
+    
+    if seller:
+        # Add accountStatus for compatibility
+        seller["accountStatus"] = seller.get("accountStatus", "active")
+        return seller
+    
+    # Fallback: try by ObjectId in users
     try:
         seller = await db.users.find_one({
             "_id": ObjectId(slug),
             "roles": "seller",
             "accountStatus": "active"
         })
-        return seller
+        if seller:
+            return seller
     except Exception:
-        return None
+        pass
+    
+    # Fallback: try by ObjectId in legacy sellers
+    try:
+        seller = await db.sellers.find_one({
+            "_id": ObjectId(slug)
+        })
+        if seller:
+            seller["accountStatus"] = seller.get("accountStatus", "active")
+            return seller
+    except Exception:
+        pass
+    
+    return None
 
 
 async def calculate_seller_rating(db, seller_id: ObjectId) -> Dict:
@@ -297,21 +321,29 @@ def init_seller_catalog_routes(app_db):
                 cat["totalReviews"] = cat_rating["totalReviews"]
         
         # Build response
+        # Handle both users collection (profile nested) and legacy sellers (flat structure)
         profile = seller.get("profile", {})
+        
+        # For legacy sellers, use flat structure
+        company_name = profile.get("businessName") or seller.get("businessName")
+        city = profile.get("city") or seller.get("city")
+        state = profile.get("state") or seller.get("state")
+        address = profile.get("address") or seller.get("address")
+        phone = profile.get("phone") or seller.get("phone")
         
         response = {
             "seller": {
                 "id": str(seller_id),
                 "slug": seller.get("sellerSlug"),
-                "companyName": profile.get("businessName"),
+                "companyName": company_name,
                 "logo": seller.get("logo"),
                 "bannerImage": seller.get("sellerBannerImage"),
                 "location": {
-                    "city": profile.get("city"),
-                    "state": profile.get("state"),
-                    "address": profile.get("address")
+                    "city": city,
+                    "state": state,
+                    "address": address
                 },
-                "phone": profile.get("phone"),
+                "phone": phone,
                 "email": seller.get("email"),
                 "enterpriseEstablishmentYear": seller.get("enterpriseEstablishmentYear"),
                 "platformRegistrationYear": seller.get("platformRegistrationYear"),
