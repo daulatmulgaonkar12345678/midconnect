@@ -8,7 +8,7 @@ import {
   ChevronRight, MessageSquare, Package,
   Building2, Award, RefreshCw
 } from 'lucide-react';
-import { getSellerCatalog, type SellerCatalogResponse } from '@/lib/api';
+import { getSellerCatalog, type SellerCatalogResponse, type EnterpriseProductSeller } from '@/lib/api';
 import InquiryModal from '@/components/enterprise/InquiryModal';
 
 interface SellerCatalogPageProps {
@@ -21,10 +21,9 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<{
-    listingId: string;
+    seller: EnterpriseProductSeller;
+    productId: string;
     productName: string;
-    sellerId: string;
-    sellerName: string;
   } | null>(null);
 
   useEffect(() => {
@@ -43,14 +42,39 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
     fetchCatalog();
   }, [slug]);
 
-  const handleInquiry = (product?: { listingId: string; productName: string }) => {
+  const handleInquiry = (product?: { 
+    listingId: string; 
+    productName: string;
+    productId?: string;
+  }) => {
     if (!catalog) return;
     
-    setSelectedProduct({
+    // Create a minimal EnterpriseProductSeller object for the modal
+    const sellerForModal: EnterpriseProductSeller = {
       listingId: product?.listingId || '',
-      productName: product?.productName || 'General Inquiry',
       sellerId: catalog.seller.id,
-      sellerName: catalog.seller.companyName || ''
+      companyName: catalog.seller.companyName || 'Seller',
+      location: catalog.seller.location?.city && catalog.seller.location?.state 
+        ? `${catalog.seller.location.city}, ${catalog.seller.location.state}` 
+        : 'India',
+      city: catalog.seller.location?.city,
+      state: catalog.seller.location?.state,
+      sellerRole: 'dealer',
+      sellerSlug: catalog.seller.slug,
+      badgeType: catalog.seller.badgeType as 'none' | 'choice' | 'trusted' | undefined,
+      searchableAttributes: {},
+      attributeLabels: {},
+      pricingTiers: [],
+      moq: 1,
+      stock: 100,
+      images: [],
+      stockStatus: 'in_stock'
+    };
+    
+    setSelectedProduct({
+      seller: sellerForModal,
+      productId: product?.productId || product?.listingId || '',
+      productName: product?.productName || 'General Inquiry'
     });
     setInquiryModalOpen(true);
   };
@@ -324,9 +348,9 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
                         product={product}
                         sellerSlug={slug}
                         sellerName={seller.companyName || ''}
-                        sellerId={seller.id}
                         onInquiry={() => handleInquiry({
                           listingId: product.listingId,
+                          productId: product.productId,
                           productName: product.productName
                         })}
                       />
@@ -347,10 +371,9 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
             setInquiryModalOpen(false);
             setSelectedProduct(null);
           }}
-          listingId={selectedProduct.listingId}
+          seller={selectedProduct.seller}
+          productId={selectedProduct.productId}
           productName={selectedProduct.productName}
-          sellerId={selectedProduct.sellerId}
-          sellerName={selectedProduct.sellerName}
         />
       )}
 
@@ -401,7 +424,6 @@ interface ProductCardProps {
   };
   sellerSlug: string;
   sellerName: string;
-  sellerId: string;
   onInquiry: () => void;
 }
 
