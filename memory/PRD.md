@@ -2494,3 +2494,68 @@ Fully overhauled the Composite Products system so composite products behave exac
 - Clean up unused Pydantic models in `business_tools.py`
 
 ---
+
+
+#### Product Pricing System (Purchase Price + Selling Price) - COMPLETE
+
+**What was done:**
+Implemented a complete pricing system with `purchase_price` and `selling_price` fields on `sellerListings`, enabling profit tracking and financial reporting.
+
+**Key Changes:**
+
+1. **Backend Model (`business_tools.py`):**
+   - Added `VIEW_PURCHASE_PRICE` permission to RBAC Permission enum
+   - Added `purchase_price` and `selling_price` to `InventoryUpdate` model
+
+2. **Inventory Router (`inventory_router.py`):**
+   - Added `has_permission()` helper (non-throwing)
+   - Returns `canViewPurchasePrice` flag in response
+   - Completely removes `purchase_price` field (not null) when user lacks `view_purchase_price` permission
+   - Accepts `purchase_price` and `selling_price` in inventory update
+   - Blocks `purchase_price` change for composite products (400 error - auto-calculated)
+   - Also updates `pricingTiers` when `selling_price` changes (for marketplace display)
+
+3. **Reports Router (`reports_router.py`) - 3 new endpoints:**
+   - `GET /reports/profit-summary` - Revenue, cost, profit, margin per month/quarter
+   - `GET /reports/product-profit` - Per-product profit breakdown
+   - `GET /reports/inventory-value` - Stock value and potential revenue per item
+
+4. **Invoice Router (`invoice_router.py`):**
+   - Stores `purchase_price` per item at invoice creation time
+   - For composite products, dynamically calculates from component `purchase_price` fields
+   - Enables profit tracking on historical invoice data
+
+5. **Server.py:**
+   - `ListingCreate` model accepts optional `purchase_price` and `selling_price`
+   - Both stored on new and updated listings
+
+6. **Composite Products:**
+   - `purchase_price` dynamically calculated: `sum(component purchase_price * quantity)`
+   - NOT permanently stored - recalculated on every read
+   - Manual `purchase_price` change blocked for composite products
+
+7. **Frontend - Inventory Page:**
+   - Added Selling Price column (always visible)
+   - Added Purchase Price column (conditional on `canViewPurchasePrice`)
+   - Both editable in edit mode (composites excluded)
+
+8. **Frontend - Reports Page:**
+   - Added 3 new tabs: Profit Summary, Product Profit, Inventory Value
+   - Profit summary shows revenue/cost/profit/margin with bar charts
+   - Product profit shows per-product breakdown table
+   - Inventory value shows stock value and potential revenue per item
+
+**Access Control:**
+- `purchase_price` field completely absent from API response for users without `view_purchase_price`
+- Marketplace listing (`GET /api/listings/{id}`) does NOT expose `purchase_price`
+- Invoices only show `selling_price` to buyers
+- Reports require `view_reports` permission
+
+**Testing:**
+- Iteration 53: 10/10 passed, 2 skipped (manually verified)
+- All report endpoints verified
+- Composite purchase_price calculation verified (500*1 + 200*2 = 900)
+- Purchase_price blocked for composite edits (400 error)
+- Marketplace correctly hides purchase_price
+
+---
