@@ -123,7 +123,7 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         return int(avail) if avail != float('inf') else 0
 
     async def calc_purchase_price(components):
-        """Calculate purchase_price = sum(component_price * quantity) for each component."""
+        """Calculate purchase_price = sum(component purchase_price * quantity) dynamically."""
         total = 0.0
         for comp in components:
             lid = comp.get("listingId")
@@ -131,12 +131,7 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
                 lid = ObjectId(lid)
             listing = await db.sellerListings.find_one({"_id": lid})
             if listing:
-                # Get price from pricingTiers or minPrice
-                tiers = listing.get("pricingTiers", [])
-                if tiers:
-                    price = tiers[0].get("pricePerUnit", 0)
-                else:
-                    price = listing.get("minPrice", 0) or 0
+                price = listing.get("purchase_price") or 0
                 total += price * comp.get("quantity", 1)
         return round(total, 2)
 
@@ -217,11 +212,7 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
                 prod = await db.products.find_one({"_id": listing.get("productId")})
                 if prod:
                     comp_product_name = prod.get("name", "Unknown")
-                tiers = listing.get("pricingTiers", [])
-                if tiers:
-                    comp_price = tiers[0].get("pricePerUnit", 0)
-                else:
-                    comp_price = listing.get("minPrice", 0) or 0
+                comp_price = listing.get("purchase_price") or 0
 
             qty = comp.get("quantity", 1)
             purchase_price += comp_price * qty

@@ -1696,6 +1696,8 @@ class ListingCreate(BaseModel):
     deliveryLocations: List[str] = []  # Cities/states vendor delivers to
     sellerNotes: Optional[str] = None  # Non-technical notes
     isDraft: bool = True
+    purchase_price: Optional[float] = Field(None, ge=0, description="Seller's buying cost per unit")
+    selling_price: Optional[float] = Field(None, ge=0, description="Seller's selling price per unit")
     
     @field_validator('productId')
     @classmethod
@@ -5924,6 +5926,10 @@ async def create_listing(listing: ListingCreate, user: dict = Depends(require_au
             "sellerNotes": listing.sellerNotes,
             "updatedAt": now,
         }
+        if listing.purchase_price is not None:
+            update_data["purchase_price"] = listing.purchase_price
+        if listing.selling_price is not None:
+            update_data["selling_price"] = listing.selling_price
         
         # Update lastStockUpdate and publishedAt only if publishing
         if not listing.isDraft:
@@ -5963,6 +5969,9 @@ async def create_listing(listing: ListingCreate, user: dict = Depends(require_au
         "leadTime": listing.leadTime or "7 days",
         "currency": "INR",
         "pricingTiers": pricing_tiers,
+        # Pricing fields
+        "purchase_price": listing.purchase_price,
+        "selling_price": listing.selling_price,
         # Additional seller-specific data
         "sellerRole": listing.sellerRole,
         "specifications": listing.specifications,

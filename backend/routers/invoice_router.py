@@ -192,11 +192,32 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             gst_amount = round(line_subtotal * item.gstPercent / 100, 2)
             line_total = round(line_subtotal + gst_amount, 2)
 
+            # Get purchase_price for profit tracking
+            item_purchase_price = 0
+            if item.productId:
+                try:
+                    pp_listing = await db.sellerListings.find_one({"_id": ObjectId(item.productId), "sellerId": ObjectId(seller_id)})
+                    if pp_listing:
+                        if pp_listing.get("productType") == "composite":
+                            # Dynamically calculate from components
+                            cp_id = pp_listing.get("compositeProductId")
+                            if cp_id:
+                                comps = await db.composite_product_items.find({"compositeProductId": cp_id}).to_list(50)
+                                for c in comps:
+                                    cl = await db.sellerListings.find_one({"_id": c["listingId"]})
+                                    if cl:
+                                        item_purchase_price += (cl.get("purchase_price") or 0) * c.get("quantity", 1)
+                        else:
+                            item_purchase_price = pp_listing.get("purchase_price") or 0
+                except Exception:
+                    pass
+
             invoice_items.append({
                 "productId": item.productId,
                 "productName": product_name,
                 "quantity": item.quantity,
                 "price": item.price,
+                "purchase_price": round(item_purchase_price, 2),
                 "gstPercent": item.gstPercent,
                 "gstAmount": gst_amount,
                 "total": line_total

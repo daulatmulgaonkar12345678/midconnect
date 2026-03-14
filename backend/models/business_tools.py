@@ -25,6 +25,7 @@ class Permission(str, Enum):
     MANAGE_SUPPLIERS = "manage_suppliers"
     CREATE_INVOICE = "create_invoice"
     VIEW_REPORTS = "view_reports"
+    VIEW_PURCHASE_PRICE = "view_purchase_price"
     MANAGE_EMPLOYEES = "manage_employees"
     MANAGE_ROLES = "manage_roles"
 
@@ -190,6 +191,8 @@ class InventoryUpdate(BaseModel):
     stockQuantity: Optional[int] = Field(None, ge=0)
     lowStockAlert: Optional[int] = Field(None, ge=0)
     warehouseLocation: Optional[str] = Field(None, max_length=100)
+    purchase_price: Optional[float] = Field(None, ge=0)
+    selling_price: Optional[float] = Field(None, ge=0)
 
 
 class InventoryLogType(str, Enum):

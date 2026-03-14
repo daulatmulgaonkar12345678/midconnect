@@ -28,6 +28,8 @@ interface InventoryItem {
   stock: number;
   lowStockAlert: number;
   warehouseLocation: string;
+  purchase_price?: number | null;
+  selling_price?: number | null;
   minPrice?: number;
   status: string;
   images: string[];
@@ -47,6 +49,7 @@ export default function InventoryPage() {
   const [adjustModal, setAdjustModal] = useState<InventoryItem | null>(null);
   const [adjustData, setAdjustData] = useState({ changeType: 'adjustment', quantity: 0, note: '' });
   const [saving, setSaving] = useState(false);
+  const [canViewPurchasePrice, setCanViewPurchasePrice] = useState(false);
 
   const loadInventory = useCallback(async () => {
     try {
@@ -64,6 +67,7 @@ export default function InventoryPage() {
       const data = await response.json();
       setInventory(data.inventory || []);
       setLowStockCount(data.lowStockCount || 0);
+      setCanViewPurchasePrice(data.canViewPurchasePrice || false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load inventory');
     } finally {
@@ -236,7 +240,10 @@ export default function InventoryPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Alert At</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Selling Price</th>
+                  {canViewPurchasePrice && (
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
@@ -293,18 +300,40 @@ export default function InventoryPage() {
                         {item.stock}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      {editingItem === item.listingId ? (
+                    <td className="px-6 py-4 text-right">
+                      {editingItem === item.listingId && item.productType !== 'composite' ? (
                         <input
                           type="number"
-                          defaultValue={item.lowStockAlert}
-                          className="w-16 px-2 py-1 border rounded text-sm text-center"
-                          onBlur={(e) => handleUpdateInventory(item, { lowStockAlert: parseInt(e.target.value) })}
+                          defaultValue={item.selling_price ?? ''}
+                          className="w-24 px-2 py-1 border rounded text-sm text-right"
+                          placeholder="0"
+                          onBlur={(e) => handleUpdateInventory(item, { selling_price: parseFloat(e.target.value) || 0 })}
+                          data-testid={`selling-price-input-${item.listingId}`}
                         />
                       ) : (
-                        <span className="text-gray-600">{item.lowStockAlert}</span>
+                        <span className="text-gray-700 font-medium">
+                          {item.selling_price != null ? `₹${item.selling_price.toLocaleString('en-IN')}` : '-'}
+                        </span>
                       )}
                     </td>
+                    {canViewPurchasePrice && (
+                      <td className="px-6 py-4 text-right">
+                        {editingItem === item.listingId && item.productType !== 'composite' ? (
+                          <input
+                            type="number"
+                            defaultValue={item.purchase_price ?? ''}
+                            className="w-24 px-2 py-1 border rounded text-sm text-right"
+                            placeholder="0"
+                            onBlur={(e) => handleUpdateInventory(item, { purchase_price: parseFloat(e.target.value) || 0 })}
+                            data-testid={`purchase-price-input-${item.listingId}`}
+                          />
+                        ) : (
+                          <span className="text-gray-500">
+                            {item.purchase_price != null ? `₹${item.purchase_price.toLocaleString('en-IN')}` : '-'}
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-6 py-4">
                       {editingItem === item.listingId ? (
                         <input

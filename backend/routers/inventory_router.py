@@ -122,6 +122,18 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
                 detail=f"Permission denied: {permission} required"
             )
     
+    async def has_permission(user: dict, permission: str) -> bool:
+        """Check if user has a specific permission (non-throwing)."""
+        if user.get("accountType", "seller") == "seller":
+            return True
+        role_id = user.get("roleId")
+        if not role_id:
+            return False
+        role = await db.roles.find_one({"_id": ObjectId(role_id), "isActive": True})
+        if not role:
+            return False
+        return permission in role.get("permissions", [])
+    
     # ===========================================
     # INVENTORY ENDPOINTS
     # ===========================================
@@ -138,6 +150,8 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         seller_id = await get_seller_id(user)
+        
+        can_view_purchase_price = await has_permission(user, Permission.VIEW_PURCHASE_PRICE.value)
         
         # Build aggregation pipeline
         pipeline = [
@@ -159,6 +173,8 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
                 "stock": {"$ifNull": ["$stock", 0]},
                 "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]},
                 "warehouseLocation": {"$ifNull": ["$warehouseLocation", ""]},
+                "purchase_price": {"$ifNull": ["$purchase_price", None]},
+                "selling_price": {"$ifNull": ["$selling_price", None]},
                 "minPrice": 1,
                 "status": 1,
                 "images": {"$slice": ["$images", 1]},
@@ -193,8 +209,15 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         
         items = await db.sellerListings.aggregate(pipeline).to_list(limit)
         
+        # Strip purchase_price if user doesn't have permission
+        serialized = serialize_doc(items)
+        if not can_view_purchase_price:
+            for item in serialized:
+                item.pop("purchase_price", None)
+        
         return {
-            "inventory": serialize_doc(items),
+            "inventory": serialized,
+            "canViewPurchasePrice": can_view_purchase_price,
             "total": total,
             "lowStockCount": await db.sellerListings.count_documents({
                 "sellerId": ObjectId(seller_id),
@@ -233,6 +256,10 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         if listing.get("productType") == "composite" and data.stockQuantity is not None:
             raise HTTPException(status_code=400, detail="Composite product stock is calculated automatically from components.")
         
+        # Block purchase_price change for composite products (auto-calculated)
+        if listing.get("productType") == "composite" and data.purchase_price is not None:
+            raise HTTPException(status_code=400, detail="Composite product purchase price is calculated automatically from components.")
+        
         update_fields = {"updatedAt": datetime.now(timezone.utc)}
         
         if data.sku is not None:
@@ -243,6 +270,12 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
             update_fields["lowStockAlert"] = data.lowStockAlert
         if data.warehouseLocation is not None:
             update_fields["warehouseLocation"] = data.warehouseLocation
+        if data.purchase_price is not None:
+            update_fields["purchase_price"] = data.purchase_price
+        if data.selling_price is not None:
+            update_fields["selling_price"] = data.selling_price
+            # Also update pricingTiers for marketplace display
+            update_fields["pricingTiers"] = [{"minQty": 1, "maxQty": None, "pricePerUnit": data.selling_price}]
         
         await db.sellerListings.update_one({"_id": listing_oid}, {"$set": update_fields})
         

@@ -290,4 +290,201 @@ def init_reports_router(db, verify_token_func):
 
         return {"buyers": buyers}
 
+    @router.get("/reports/profit-summary")
+    async def profit_summary(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        period: str = "monthly"
+    ):
+        """Profit summary: revenue - cost per period from invoice items."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate) or now
+
+        match_stage = {
+            "sellerId": ObjectId(seller_id),
+            "createdAt": {"$gte": start, "$lte": end},
+            "status": {"$in": ["draft", "sent", "paid"]}
+        }
+
+        if period == "quarterly":
+            group_id = {
+                "year": {"$year": "$createdAt"},
+                "quarter": {"$ceil": {"$divide": [{"$month": "$createdAt"}, 3]}}
+            }
+        else:
+            group_id = {
+                "year": {"$year": "$createdAt"},
+                "month": {"$month": "$createdAt"}
+            }
+
+        pipeline = [
+            {"$match": match_stage},
+            {"$unwind": "$items"},
+            {"$group": {
+                "_id": group_id,
+                "revenue": {"$sum": "$items.total"},
+                "cost": {"$sum": {"$multiply": [
+                    {"$ifNull": ["$items.purchase_price", 0]},
+                    "$items.quantity"
+                ]}},
+                "invoiceCount": {"$sum": 1},
+                "totalQuantity": {"$sum": "$items.quantity"}
+            }},
+            {"$addFields": {
+                "profit": {"$subtract": ["$revenue", "$cost"]},
+                "margin": {"$cond": [
+                    {"$gt": ["$revenue", 0]},
+                    {"$multiply": [{"$divide": [{"$subtract": ["$revenue", "$cost"]}, "$revenue"]}, 100]},
+                    0
+                ]}
+            }},
+            {"$sort": {"_id.year": 1, "_id.month": 1} if period == "monthly" else {"_id.year": 1, "_id.quarter": 1}}
+        ]
+
+        results = await db.invoices.aggregate(pipeline).to_list(100)
+
+        # Overall totals
+        totals_pipeline = [
+            {"$match": match_stage},
+            {"$unwind": "$items"},
+            {"$group": {
+                "_id": None,
+                "totalRevenue": {"$sum": "$items.total"},
+                "totalCost": {"$sum": {"$multiply": [
+                    {"$ifNull": ["$items.purchase_price", 0]},
+                    "$items.quantity"
+                ]}},
+                "totalQuantity": {"$sum": "$items.quantity"},
+                "invoiceCount": {"$sum": 1}
+            }}
+        ]
+        totals = await db.invoices.aggregate(totals_pipeline).to_list(1)
+        overall = totals[0] if totals else {"totalRevenue": 0, "totalCost": 0, "totalQuantity": 0, "invoiceCount": 0}
+        if "_id" in overall:
+            del overall["_id"]
+        overall["totalProfit"] = round(overall.get("totalRevenue", 0) - overall.get("totalCost", 0), 2)
+        rev = overall.get("totalRevenue", 0)
+        overall["profitMargin"] = round((overall["totalProfit"] / rev * 100) if rev > 0 else 0, 2)
+
+        months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        period_data = []
+        for r in results:
+            entry = {
+                "year": r["_id"]["year"],
+                "revenue": round(r["revenue"], 2),
+                "cost": round(r["cost"], 2),
+                "profit": round(r["profit"], 2),
+                "margin": round(r.get("margin", 0), 2),
+                "invoiceCount": r["invoiceCount"],
+                "totalQuantity": r["totalQuantity"]
+            }
+            if period == "quarterly":
+                entry["quarter"] = r["_id"]["quarter"]
+                entry["label"] = f"Q{r['_id']['quarter']} {r['_id']['year']}"
+            else:
+                entry["month"] = r["_id"]["month"]
+                entry["label"] = f"{months[r['_id']['month']]} {r['_id']['year']}"
+            period_data.append(entry)
+
+        return {"overall": {k: round(v, 2) if isinstance(v, float) else v for k, v in overall.items()}, "periods": period_data}
+
+    @router.get("/reports/product-profit")
+    async def product_profit(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        limit: int = 20
+    ):
+        """Per-product profit breakdown from invoice items."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate) or now
+
+        pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lte": end}, "status": {"$in": ["draft", "sent", "paid"]}}},
+            {"$unwind": "$items"},
+            {"$group": {
+                "_id": "$items.productName",
+                "totalQuantity": {"$sum": "$items.quantity"},
+                "totalRevenue": {"$sum": "$items.total"},
+                "totalCost": {"$sum": {"$multiply": [
+                    {"$ifNull": ["$items.purchase_price", 0]},
+                    "$items.quantity"
+                ]}},
+                "invoiceCount": {"$sum": 1}
+            }},
+            {"$addFields": {
+                "profit": {"$subtract": ["$totalRevenue", "$totalCost"]},
+                "margin": {"$cond": [
+                    {"$gt": ["$totalRevenue", 0]},
+                    {"$multiply": [{"$divide": [{"$subtract": ["$totalRevenue", "$totalCost"]}, "$totalRevenue"]}, 100]},
+                    0
+                ]}
+            }},
+            {"$sort": {"profit": -1}},
+            {"$limit": limit}
+        ]
+
+        results = await db.invoices.aggregate(pipeline).to_list(limit)
+        products = [{
+            "productName": r["_id"],
+            "totalQuantity": r["totalQuantity"],
+            "totalRevenue": round(r["totalRevenue"], 2),
+            "totalCost": round(r["totalCost"], 2),
+            "profit": round(r["profit"], 2),
+            "margin": round(r.get("margin", 0), 2),
+            "invoiceCount": r["invoiceCount"]
+        } for r in results]
+
+        return {"products": products}
+
+    @router.get("/reports/inventory-value")
+    async def inventory_value(authorization: str = Header(...)):
+        """Inventory value report: purchase_price * stock for each listing."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {
+                "productName": "$prod.name",
+                "productType": {"$ifNull": ["$productType", "single"]},
+                "stock": {"$ifNull": ["$stock", 0]},
+                "purchase_price": {"$ifNull": ["$purchase_price", 0]},
+                "selling_price": {"$ifNull": ["$selling_price", 0]},
+                "stockValue": {"$multiply": [{"$ifNull": ["$purchase_price", 0]}, {"$ifNull": ["$stock", 0]}]},
+                "potentialRevenue": {"$multiply": [{"$ifNull": ["$selling_price", 0]}, {"$ifNull": ["$stock", 0]}]}
+            }},
+            {"$sort": {"stockValue": -1}}
+        ]
+
+        items = await db.sellerListings.aggregate(pipeline).to_list(200)
+        total_value = sum(i.get("stockValue", 0) for i in items)
+        total_potential = sum(i.get("potentialRevenue", 0) for i in items)
+        total_stock = sum(i.get("stock", 0) for i in items)
+
+        return {
+            "summary": {
+                "totalInventoryValue": round(total_value, 2),
+                "totalPotentialRevenue": round(total_potential, 2),
+                "totalPotentialProfit": round(total_potential - total_value, 2),
+                "totalItems": len(items),
+                "totalStockUnits": total_stock
+            },
+            "items": serialize_doc(items)
+        }
+
     return router
