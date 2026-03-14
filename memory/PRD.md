@@ -2335,22 +2335,74 @@ manage_roles       - Create and manage roles & permissions
 - Placeholders for Invoices, Composite Products, Reports
 
 **Testing Status (2026-03-14):**
-- Backend: 23/23 tests passed (100% success rate)
+- Backend: 23/23 tests passed (100% success rate) - Phase 1 RBAC
+- Backend: 40/40 tests passed (100% success rate) - Phase 2-5 (ERP modules)
 - Verified: All RBAC endpoints, role CRUD, employee CRUD, permission enforcement, role deletion constraints
+- Verified: Composite Products CRUD + sell, Invoices CRUD + GST + PDF + auto-numbering, Reports (4 types), Activity Logs
 - Firebase Auth: MOCKED in dev - uses dev fallback UID for employee creation
-- Test file: `/app/backend/tests/test_business_tools_rbac.py`
+- Test files: `/app/backend/tests/test_business_tools_rbac.py`, `/app/backend/tests/test_business_tools_erp.py`
 
-**Phase 2 (Upcoming):**
-- Buyers CRM module (backend done, frontend needs polishing)
-- Suppliers management (backend done, frontend needs polishing)
-- Inventory management (backend done, frontend needs polishing)
+### Session: 2026-03-14 (Phase 2-6 Implementation)
 
-**Phase 3 (Future):**
-- Invoice system with auto-generated numbers and PDF generation
-- Composite products with inventory auto-deduction
+**Composite Products (DONE):**
+- CRUD for product bundles referencing sellerListings
+- Sell endpoint auto-deducts component stock with inventory logs
+- Frontend: Create/edit/delete bundles, sell with quantity input, expandable component view
 
-**Phase 4 (Future):**
-- Reports module with sales analytics
-- Full permission enforcement across ALL modules (API + UI)
+**Invoice System (DONE):**
+- Auto-incrementing invoice numbers: INV-{sellerId_suffix}-{sequence}
+- Per-item GST: each item has configurable gstPercent (0%, 5%, 12%, 18%, 28%)
+- gstAmount = price * qty * gstPercent / 100, total = subtotal + gstAmount
+- Stock deduction on invoice creation (with validation)
+- PDF generation using ReportLab (seller/buyer details, items table, GST, totals)
+- Status workflow: draft -> sent -> paid / cancelled
+- Delete only draft/cancelled invoices
+- Frontend: Full CRUD, PDF download, status management, buyer selection
+
+**Reports Module (DONE):**
+- Sales Summary: Monthly/Quarterly grouping with overall totals (revenue, GST, invoice count, avg)
+- Product Sales: Top products by revenue from invoice items
+- Inventory Status: Total items, low stock count, out of stock count
+- Top Buyers: By invoice total with company info
+- All with date range filters
+- Frontend: Tab-based reports with bar charts, stat cards, tables
+
+**Activity Log System (DONE):**
+- Tracks: employee_created, role_created, stock_adjusted, buyer_created, supplier_created, invoice_created, composite_product_created, composite_product_sold
+- Integrated into all existing routers (business_tools, inventory, composite products, invoices)
+- Frontend: Timeline view with module filter, pagination, relative time display
+
+**Permission Enforcement (DONE):**
+- All new endpoints check RBAC permissions: manage_inventory (composite products), create_invoice (invoices), view_reports (reports), manage_roles (activity logs)
+- HTTP 403 returned for unauthorized access
+- Frontend: UI modules hidden based on permissions via layout navItems + hasPermission checks
+
+**New Collections:**
+- `composite_products` - Bundle definitions (sellerId, name, description)
+- `composite_product_items` - Bundle components (compositeProductId, productId, quantity)
+- `invoices` - Invoice records (invoiceNumber, sellerId, buyerId, items, subtotal, gst, total, status)
+- `activity_logs` - Audit trail (sellerId, userId, action, module, entityId, timestamp)
+
+**Extended Collections:**
+- `users` - Added `invoiceCounter` field for auto-incrementing invoice numbers
+
+**New API Endpoints:**
+- Composite Products: GET/POST /composite-products, PUT/DELETE /composite-products/{id}, POST /composite-products/{id}/sell
+- Invoices: GET/POST /invoices, GET /invoices/{id}, PUT /invoices/{id}/status, GET /invoices/{id}/pdf, DELETE /invoices/{id}
+- Reports: GET /reports/sales-summary, /reports/product-sales, /reports/inventory-status, /reports/top-buyers
+- Activity Logs: GET /activity-logs
+
+**New Frontend Pages:**
+- `/seller/business-tools/composite-products` - Full CRUD + sell
+- `/seller/business-tools/invoices` - Full CRUD + PDF download + status management
+- `/seller/business-tools/reports` - Tab-based reports with charts/tables
+- `/seller/business-tools/activity-logs` - Audit timeline with filters
+
+**Remaining/Future:**
+- Refactor inline inquiry modal to use shared `InquiryModal.tsx`
+- Advanced token-based search system
+- Admin search insights dashboard
+- Redis caching
+- Refactor monolithic `server.py`
 
 ---
