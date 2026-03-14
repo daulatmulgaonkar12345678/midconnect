@@ -95,7 +95,7 @@
   "context_for_next_testing_agent": "Enterprise Subscription Enforcement fully tested. Key findings: (1) SSOT is subscription_service.py which reads from subscriptions collection. (2) PRO plan = unlimited (isUnlimited=true, counter NOT incremented). (3) Free/Expired = 5 leads/month limit (counter IS incremented). (4) Trial has DEFINED limit per SSOT (not unlimited). (5) Admin activation initializes enquiriesUsed=0 and enquiriesResetAt. (6) Monthly reset mechanism works via check_and_update_monthly_usage(). All existing inquiries are in 'accepted' status.",
 
   "test_environment": {
-    "api_url": "https://catalog-system-dev.preview.emergentagent.com",
+    "api_url": "https://erp-foundation-setup.preview.emergentagent.com",
     "firebase_status": "MOCKED with dev-test-token",
     "mongodb_status": "CONNECTED"
   },

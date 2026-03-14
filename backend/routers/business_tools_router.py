@@ -7,7 +7,6 @@ from typing import Optional, List
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
-import bcrypt
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 
@@ -349,18 +348,26 @@ def init_business_tools_router(db, verify_token_func):
         
         # Create Firebase user
         try:
+            # Check if Firebase is initialized
+            firebase_app = firebase_admin.get_app()
             firebase_user = firebase_auth.create_user(
                 email=data.email.lower(),
                 password=data.password,
                 display_name=data.name
             )
+            firebase_uid = firebase_user.uid
+        except ValueError:
+            # Firebase not initialized (dev mode) - generate a placeholder UID
+            import uuid
+            firebase_uid = f"dev-emp-{uuid.uuid4().hex[:16]}"
+            logger.warning(f"Firebase not initialized - using dev UID: {firebase_uid}")
         except firebase_admin.exceptions.FirebaseError as e:
             logger.error(f"Firebase error creating employee: {e}")
             raise HTTPException(status_code=400, detail=f"Failed to create account: {str(e)}")
         
         now = datetime.now(timezone.utc)
         employee_doc = {
-            "firebaseUid": firebase_user.uid,
+            "firebaseUid": firebase_uid,
             "email": data.email.lower(),
             "name": data.name,
             "phone": data.phone,

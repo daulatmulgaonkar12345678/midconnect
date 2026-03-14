@@ -31,7 +31,7 @@ import re
 from datetime import datetime, timezone
 
 # API configuration
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://catalog-system-dev.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-foundation-setup.preview.emergentagent.com')
 DEV_TOKEN = "dev-test-token"
 
 # Test data from the main agent
