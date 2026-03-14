@@ -17,7 +17,7 @@ from models.business_tools import (
 logger = logging.getLogger(__name__)
 
 
-def init_inventory_router(db, verify_token_func, activity_log_service=None):
+def init_inventory_router(db, verify_token_func, activity_log_service=None, composite_router=None):
     """Initialize the inventory router."""
     
     router = APIRouter(tags=["Inventory"])
@@ -152,6 +152,7 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None):
             {"$project": {
                 "listingId": "$_id",
                 "productId": 1,
+                "productType": {"$ifNull": ["$productType", "single"]},
                 "productName": "$productData.name",
                 "categoryName": "$productData.categoryName",
                 "sku": {"$ifNull": ["$sku", ""]},
@@ -228,6 +229,10 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None):
         if not listing:
             raise HTTPException(status_code=404, detail="Listing not found")
         
+        # Block stock quantity change for composite products
+        if listing.get("productType") == "composite" and data.stockQuantity is not None:
+            raise HTTPException(status_code=400, detail="Composite product stock is calculated automatically from components.")
+        
         update_fields = {"updatedAt": datetime.now(timezone.utc)}
         
         if data.sku is not None:
@@ -273,6 +278,10 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None):
         if not listing:
             raise HTTPException(status_code=404, detail="Listing not found")
         
+        # Block manual stock adjustment for composite products
+        if listing.get("productType") == "composite":
+            raise HTTPException(status_code=400, detail="Composite product stock is calculated automatically from components. Adjust component stock instead.")
+        
         previous_stock = listing.get("stock", 0)
         
         # Calculate new stock based on change type
@@ -314,6 +323,10 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None):
         
         if activity_log_service:
             await activity_log_service.log(seller_id, str(user.get("_id")), "stock_adjusted", "inventory", str(listing_oid), f"{data.changeType.value}: {data.quantity}")
+
+        # Recalculate composite products that use this component
+        if composite_router and hasattr(composite_router, 'sync_all_composites_for_component'):
+            await composite_router.sync_all_composites_for_component(str(listing_oid))
 
         return {
             "message": "Inventory adjusted",

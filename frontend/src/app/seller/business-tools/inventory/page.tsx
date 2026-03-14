@@ -21,6 +21,7 @@ interface InventoryItem {
   id?: string;
   listingId: string;
   productId: string;
+  productType?: string;
   productName: string;
   categoryName?: string;
   sku: string;
@@ -259,7 +260,12 @@ export default function InventoryPage() {
                           </div>
                         )}
                         <div>
-                          <p className="font-medium text-gray-900">{item.productName}</p>
+                          <p className="font-medium text-gray-900">
+                            {item.productName}
+                            {item.productType === 'composite' && (
+                              <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-medium">Composite</span>
+                            )}
+                          </p>
                           {item.categoryName && (
                             <p className="text-xs text-gray-500">{item.categoryName}</p>
                           )}
@@ -313,26 +319,32 @@ export default function InventoryPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => setAdjustModal(item)}
-                          className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"
-                        >
-                          Adjust
-                        </button>
-                        {editingItem === item.listingId ? (
-                          <button
-                            onClick={() => setEditingItem(null)}
-                            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg"
-                          >
-                            <Save className="h-4 w-4" />
-                          </button>
+                        {item.productType === 'composite' ? (
+                          <span className="px-3 py-1.5 text-xs text-gray-400" title="Composite stock is auto-calculated from components">Auto</span>
                         ) : (
-                          <button
-                            onClick={() => setEditingItem(item.listingId)}
-                            className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-                          >
-                            Edit
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setAdjustModal(item)}
+                              className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"
+                            >
+                              Adjust
+                            </button>
+                            {editingItem === item.listingId ? (
+                              <button
+                                onClick={() => setEditingItem(null)}
+                                className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg"
+                              >
+                                <Save className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setEditingItem(item.listingId)}
+                                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>

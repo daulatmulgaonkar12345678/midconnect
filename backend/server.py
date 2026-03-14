@@ -1156,7 +1156,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://erp-foundation-setup.preview.emergentagent.com",
+        "https://product-assemblies.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
@@ -13019,16 +13019,16 @@ from routers.business_tools_router import init_business_tools_router
 business_tools_router = init_business_tools_router(db, verify_firebase_token, activity_log_service)
 app.include_router(business_tools_router, prefix="/api/business-tools")
 
-from routers.inventory_router import init_inventory_router
-inventory_router = init_inventory_router(db, verify_firebase_token, activity_log_service)
-app.include_router(inventory_router, prefix="/api/business-tools")
-
 from routers.composite_products_router import init_composite_products_router
 composite_products_router = init_composite_products_router(db, verify_firebase_token, activity_log_service)
 app.include_router(composite_products_router, prefix="/api/business-tools")
 
+from routers.inventory_router import init_inventory_router
+inventory_router = init_inventory_router(db, verify_firebase_token, activity_log_service, composite_router=composite_products_router)
+app.include_router(inventory_router, prefix="/api/business-tools")
+
 from routers.invoice_router import init_invoice_router
-invoice_router_bt = init_invoice_router(db, verify_firebase_token, activity_log_service)
+invoice_router_bt = init_invoice_router(db, verify_firebase_token, activity_log_service, composite_router=composite_products_router)
 app.include_router(invoice_router_bt, prefix="/api/business-tools")
 
 from routers.reports_router import init_reports_router

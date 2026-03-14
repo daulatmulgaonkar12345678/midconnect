@@ -8,13 +8,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface Category { id: string; name: string; }
 interface AdminProduct { id: string; name: string; }
-interface SellerInventoryItem { listingId: string; productName: string; stock: number; sku: string; }
+interface SellerInventoryItem { listingId: string; productName: string; stock: number; sku: string; unitPrice: number; }
 
 interface CompositeComponent {
   listingId: string;
   productName?: string;
   quantity: number;
   currentStock?: number;
+  unitPrice?: number;
 }
 
 interface CompositeProduct {
@@ -26,6 +27,8 @@ interface CompositeProduct {
   name: string;
   description?: string;
   price?: number;
+  sellingPrice?: number;
+  purchasePrice?: number;
   components: CompositeComponent[];
   availableStock: number;
   createdAt: string;
@@ -252,7 +255,7 @@ export default function CompositeProductsPage() {
                           <option value="">Select inventory item</option>
                           {sellerInventory.map(item => (
                             <option key={item.listingId} value={item.listingId}>
-                              {item.productName} (Stock: {item.stock})
+                              {item.productName} (Stock: {item.stock}{item.unitPrice ? `, ₹${item.unitPrice}` : ""})
                             </option>
                           ))}
                         </select>
@@ -318,10 +321,13 @@ export default function CompositeProductsPage() {
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
                       {cp.categoryName && <span className="text-indigo-500">{cp.categoryName}</span>}
                       <span>{cp.components?.length || 0} components</span>
-                      {cp.price != null && (
+                      {(cp.sellingPrice ?? cp.price) != null && (
                         <span className="flex items-center gap-0.5 font-medium text-gray-700">
-                          <IndianRupee className="w-3 h-3" />{cp.price.toLocaleString("en-IN")}
+                          <IndianRupee className="w-3 h-3" />{(cp.sellingPrice ?? cp.price ?? 0).toLocaleString("en-IN")}
                         </span>
+                      )}
+                      {(cp.purchasePrice != null && cp.purchasePrice > 0) && (
+                        <span className="text-gray-400">Cost: {cp.purchasePrice.toLocaleString("en-IN")}</span>
                       )}
                       <span className={`font-medium ${cp.availableStock > 0 ? "text-green-600" : "text-red-500"}`}>
                         {cp.availableStock > 0 ? `${cp.availableStock} available` : "Out of stock"}
@@ -359,6 +365,7 @@ export default function CompositeProductsPage() {
                       <tr className="text-gray-500 text-xs uppercase">
                         <th className="text-left pb-2">Component</th>
                         <th className="text-right pb-2">Qty/Unit</th>
+                        <th className="text-right pb-2">Unit Price</th>
                         <th className="text-right pb-2">In Stock</th>
                         <th className="text-right pb-2">Status</th>
                       </tr>
@@ -370,6 +377,7 @@ export default function CompositeProductsPage() {
                           <tr key={idx} className="border-t border-gray-100">
                             <td className="py-2 text-gray-700 font-medium">{comp.productName || "Unknown"}</td>
                             <td className="py-2 text-right text-gray-700">{comp.quantity}</td>
+                            <td className="py-2 text-right text-gray-500">{comp.unitPrice ? `₹${comp.unitPrice.toLocaleString("en-IN")}` : "-"}</td>
                             <td className="py-2 text-right text-gray-700">{comp.currentStock ?? 0}</td>
                             <td className="py-2 text-right">
                               {(comp.currentStock || 0) === 0 ? (

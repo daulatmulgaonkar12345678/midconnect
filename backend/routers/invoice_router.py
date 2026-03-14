@@ -15,7 +15,7 @@ from services.invoice_pdf_service import generate_invoice_pdf
 logger = logging.getLogger(__name__)
 
 
-def init_invoice_router(db, verify_token_func, activity_log_service):
+def init_invoice_router(db, verify_token_func, activity_log_service, composite_router=None):
     router = APIRouter(tags=["Invoices"])
 
     def serialize_doc(doc):
@@ -156,14 +156,33 @@ def init_invoice_router(db, verify_token_func, activity_log_service):
                         prod = await db.products.find_one({"_id": listing.get("productId")})
                         if prod:
                             product_name = prod.get("name", product_name)
-                        # Validate stock if deducting
+                        # Validate stock - handle composite products differently
                         if data.deductStock:
-                            current_stock = listing.get("stock", 0)
-                            if current_stock < item.quantity:
-                                raise HTTPException(
-                                    status_code=400,
-                                    detail=f"Insufficient stock for {product_name}: need {item.quantity}, have {current_stock}"
-                                )
+                            if listing.get("productType") == "composite":
+                                # For composites, validate component stock
+                                cp_id = listing.get("compositeProductId")
+                                if cp_id:
+                                    components = await db.composite_product_items.find({"compositeProductId": cp_id}).to_list(50)
+                                    for comp in components:
+                                        comp_listing = await db.sellerListings.find_one({"_id": comp["listingId"]})
+                                        if not comp_listing:
+                                            raise HTTPException(status_code=400, detail=f"Component inventory item not found for {product_name}")
+                                        required = comp["quantity"] * item.quantity
+                                        comp_stock = comp_listing.get("stock", 0)
+                                        if comp_stock < required:
+                                            comp_prod = await db.products.find_one({"_id": comp_listing.get("productId")})
+                                            comp_name = comp_prod.get("name", "Unknown") if comp_prod else "Unknown"
+                                            raise HTTPException(
+                                                status_code=400,
+                                                detail=f"Insufficient stock for component {comp_name} in {product_name}: need {required}, have {comp_stock}"
+                                            )
+                            else:
+                                current_stock = listing.get("stock", 0)
+                                if current_stock < item.quantity:
+                                    raise HTTPException(
+                                        status_code=400,
+                                        detail=f"Insufficient stock for {product_name}: need {item.quantity}, have {current_stock}"
+                                    )
                 except HTTPException:
                     raise
                 except Exception:
@@ -218,24 +237,61 @@ def init_invoice_router(db, verify_token_func, activity_log_service):
                     try:
                         listing = await db.sellerListings.find_one({"_id": ObjectId(item["productId"])})
                         if listing:
-                            prev_stock = listing.get("stock", 0)
-                            new_stock = max(0, prev_stock - item["quantity"])
-                            await db.sellerListings.update_one(
-                                {"_id": ObjectId(item["productId"])},
-                                {"$set": {"stock": new_stock, "updatedAt": now}}
-                            )
-                            await db.inventory_logs.insert_one({
-                                "sellerId": ObjectId(seller_id),
-                                "listingId": ObjectId(item["productId"]),
-                                "productName": item["productName"],
-                                "changeType": "sale",
-                                "quantity": -item["quantity"],
-                                "previousStock": prev_stock,
-                                "newStock": new_stock,
-                                "note": f"Invoice {invoice_number}",
-                                "createdBy": str(user["_id"]),
-                                "createdAt": now
-                            })
+                            if listing.get("productType") == "composite":
+                                # Composite: deduct from component items
+                                cp_id = listing.get("compositeProductId")
+                                if cp_id:
+                                    components = await db.composite_product_items.find({"compositeProductId": cp_id}).to_list(50)
+                                    for comp in components:
+                                        comp_listing = await db.sellerListings.find_one({"_id": comp["listingId"]})
+                                        if comp_listing:
+                                            prev_stock = comp_listing.get("stock", 0)
+                                            deduct_qty = comp["quantity"] * item["quantity"]
+                                            new_stock = max(0, prev_stock - deduct_qty)
+                                            await db.sellerListings.update_one(
+                                                {"_id": comp["listingId"]},
+                                                {"$set": {"stock": new_stock, "updatedAt": now}}
+                                            )
+                                            comp_prod = await db.products.find_one({"_id": comp_listing.get("productId")})
+                                            comp_name = comp_prod.get("name", "Unknown") if comp_prod else "Unknown"
+                                            await db.inventory_logs.insert_one({
+                                                "sellerId": ObjectId(seller_id),
+                                                "listingId": comp["listingId"],
+                                                "productName": comp_name,
+                                                "changeType": "sale",
+                                                "quantity": -deduct_qty,
+                                                "previousStock": prev_stock,
+                                                "newStock": new_stock,
+                                                "note": f"Invoice {invoice_number} (composite: {item['productName']})",
+                                                "createdBy": str(user["_id"]),
+                                                "createdAt": now
+                                            })
+                                    # Recalculate composite stock
+                                    if composite_router and hasattr(composite_router, 'sync_composite_stock'):
+                                        await composite_router.sync_composite_stock(cp_id)
+                            else:
+                                # Regular listing: deduct directly
+                                prev_stock = listing.get("stock", 0)
+                                new_stock = max(0, prev_stock - item["quantity"])
+                                await db.sellerListings.update_one(
+                                    {"_id": ObjectId(item["productId"])},
+                                    {"$set": {"stock": new_stock, "updatedAt": now}}
+                                )
+                                await db.inventory_logs.insert_one({
+                                    "sellerId": ObjectId(seller_id),
+                                    "listingId": ObjectId(item["productId"]),
+                                    "productName": item["productName"],
+                                    "changeType": "sale",
+                                    "quantity": -item["quantity"],
+                                    "previousStock": prev_stock,
+                                    "newStock": new_stock,
+                                    "note": f"Invoice {invoice_number}",
+                                    "createdBy": str(user["_id"]),
+                                    "createdAt": now
+                                })
+                                # Recalculate composites that use this component
+                                if composite_router and hasattr(composite_router, 'sync_all_composites_for_component'):
+                                    await composite_router.sync_all_composites_for_component(str(item["productId"]))
                     except Exception as e:
                         logger.warning(f"Stock deduction failed for {item['productId']}: {e}")
 
