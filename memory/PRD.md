@@ -2410,3 +2410,82 @@ manage_roles       - Create and manage roles & permissions
 - Refactor monolithic `server.py`
 
 ---
+
+
+### Session: 2026-03-14
+
+#### P0: Composite Products Marketplace Integration - COMPLETE
+
+**What was done:**
+Fully overhauled the Composite Products system so composite products behave exactly like regular marketplace products for buyers, while internally using component-based inventory management.
+
+**Key Changes:**
+
+1. **Backend - `composite_products_router.py` (full rewrite):**
+   - Composite product creation now creates a `sellerListings` record with `productType: "composite"` and the admin `productId` (not the composite product's own ID)
+   - This ensures composite products appear in: marketplace search, category pages, seller product pages, invoices, reports
+   - Stock is dynamically calculated: `min(component_stock / component_qty)` for each component
+   - `purchase_price` auto-calculated from component prices
+   - `selling_price` manually set by seller
+   - `sync_composite_stock()` helper recalculates stock whenever components change
+   - `sync_all_composites_for_component()` triggers recalculation when any component's stock changes
+
+2. **Backend - `inventory_router.py` updated:**
+   - Returns `productType` field in inventory list for UI badge display
+   - Manual stock adjustment blocked for composite products (400 error)
+   - Stock quantity update via PUT blocked for composite products
+   - After any regular stock adjustment, triggers composite stock recalculation for affected composites
+
+3. **Backend - `invoice_router.py` updated:**
+   - When invoicing a composite product, deducts stock from component items (not the composite listing)
+   - Validates component stock before creating invoice
+   - After deduction, recalculates composite stock via `sync_composite_stock()`
+   - Creates proper inventory_logs for each component deduction
+
+4. **MongoDB Index Update:**
+   - Dropped old unique index `(productId, sellerId)` on `sellerListings`
+   - Created new unique index `(productId, sellerId, productType)` to allow both regular AND composite listings for the same admin product
+
+5. **Frontend - `composite-products/page.tsx` updated:**
+   - Shows `purchasePrice` (auto-calculated) and `sellingPrice`
+   - Component table shows `unitPrice` column
+   - Inventory dropdown shows component unit price
+   - Updated TypeScript interfaces for new data fields
+
+6. **Frontend - `inventory/page.tsx` updated:**
+   - Shows "Composite" badge next to composite product names
+   - Disables "Adjust" and "Edit" buttons for composite products (shows "Auto" instead)
+   - Prevents accidental manual stock changes for composites
+
+**Data Model - `sellerListings` for composite products:**
+```
+{
+  sellerId: ObjectId,
+  productId: ObjectId (admin product, for marketplace visibility),
+  categoryId: ObjectId,
+  productType: "composite",
+  compositeProductId: ObjectId (links to composite_products collection),
+  description: string,
+  status: "active",
+  isActive: true,
+  stock: number (dynamically calculated),
+  pricingTiers: [{minQty: 1, pricePerUnit: selling_price}],
+  images: [],
+  createdAt, updatedAt, lastStockUpdate, publishedAt
+}
+```
+
+**Testing:**
+- 27/27 backend tests passed (100%)
+- Test report: `/app/test_reports/iteration_51.json`
+- All features verified: CRUD, stock calculation, invoice deduction, RBAC, duplicate prevention, inventory integration
+
+**Remaining/Future:**
+- Refactor inline inquiry modal to use shared `InquiryModal.tsx`
+- Advanced token-based search system
+- Admin search insights dashboard
+- Redis caching
+- Refactor monolithic `server.py`
+- Clean up unused Pydantic models in `business_tools.py`
+
+---
