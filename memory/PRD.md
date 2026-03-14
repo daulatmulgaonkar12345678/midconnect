@@ -2334,9 +2334,23 @@ manage_roles       - Create and manage roles & permissions
 - `/seller/business-tools/inventory` - Stock tracking
 - Placeholders for Invoices, Composite Products, Reports
 
+**Testing Status (2026-03-14):**
+- Backend: 23/23 tests passed (100% success rate)
+- Verified: All RBAC endpoints, role CRUD, employee CRUD, permission enforcement, role deletion constraints
+- Firebase Auth: MOCKED in dev - uses dev fallback UID for employee creation
+- Test file: `/app/backend/tests/test_business_tools_rbac.py`
+
 **Phase 2 (Upcoming):**
+- Buyers CRM module (backend done, frontend needs polishing)
+- Suppliers management (backend done, frontend needs polishing)
+- Inventory management (backend done, frontend needs polishing)
+
+**Phase 3 (Future):**
 - Invoice system with auto-generated numbers and PDF generation
 - Composite products with inventory auto-deduction
+
+**Phase 4 (Future):**
 - Reports module with sales analytics
+- Full permission enforcement across ALL modules (API + UI)
 
 ---
