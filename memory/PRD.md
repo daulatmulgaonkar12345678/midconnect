@@ -2107,4 +2107,61 @@ GET /api/products/.../enterprise → returns sellerSlug ✓
 
 ---
 
+### Session: 2026-03-14 (Enhanced WhatsApp Inquiry Message)
+
+#### Enhanced WhatsApp Message for Buyer-Seller Communication - COMPLETE ✅
+
+**Problem:**
+When buyers send inquiries via WhatsApp, the message was too basic:
+```
+Hello, I sent an inquiry on UdyogConnect.
+Product: Safety Hand Gloves
+Quantity: 1
+Let's discuss further.
+```
+Sellers received minimal information and couldn't identify specific products.
+
+**Solution:**
+Enhanced the WhatsApp message to include comprehensive product details:
+- Product specifications (from seller's searchableAttributes)
+- Product description (truncated to 200 chars for readability)
+- Product image URL (clickable link)
+- Listed price and MOQ
+- Quantity required
+
+**New WhatsApp Message Format:**
+```
+Hello, I sent an inquiry on UdyogConnect.
+
+🛒 *Product:* Industrial Electric Motor 5HP
+📊 *Quantity Required:* 10 units
+💰 *Listed Price:* ₹9,500 per unit
+📦 *MOQ:* 5 units
+
+📋 *Specifications:*
+• Power: 5 HP
+• Voltage: 415V
+• Phase: 3 Phase
+• RPM: 1440
+
+📝 *Description:*
+High-performance 5HP industrial electric motor suitable for various industrial applications...
+
+🖼️ *Product Image:*
+https://example.com/image.jpg
+
+Let's discuss further.
+```
+
+**WhatsApp Limitation Note:**
+WhatsApp's `wa.me` links only support text content - images cannot be directly attached. The product image is included as a clickable URL that sellers can view.
+
+**Files Modified:**
+- `/app/frontend/src/components/enterprise/InquiryModal.tsx` - Enhanced `handleWhatsAppConnect()` function, added `productDescription` prop
+- `/app/frontend/src/app/products/[slug]/page.tsx` - Enhanced `handleWhatsAppConnect()` function
+- `/app/frontend/src/app/seller-catalog/[slug]/SellerCatalogPage.tsx` - Updated `handleInquiry()` to pass product details, added description/images to modal
+- `/app/frontend/src/app/ep/[slug]/page.tsx` - Added `productDescription` prop to InquiryModal
+
+---
+
 

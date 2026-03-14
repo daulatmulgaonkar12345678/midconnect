@@ -713,10 +713,52 @@ export default function EnterpriseProductPage() {
     if (!whatsappInfo?.phoneNumber) return;
     
     const productName = product?.product?.name || 'N/A';
+    const productDesc = product?.product?.description;
+    
+    // Build specifications text from inquiryModal seller's searchableAttributes
+    let specsText = '';
+    if (inquiryModal.seller?.searchableAttributes && Object.keys(inquiryModal.seller.searchableAttributes).length > 0) {
+      const specLines: string[] = [];
+      for (const [key, value] of Object.entries(inquiryModal.seller.searchableAttributes)) {
+        if (value !== null && value !== undefined && value !== '') {
+          // Use the human-readable label if available
+          const label = inquiryModal.seller.attributeLabels?.[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+          specLines.push(`• ${label}: ${value}`);
+        }
+      }
+      if (specLines.length > 0) {
+        specsText = `\n\n📋 *Specifications:*\n${specLines.join('\n')}`;
+      }
+    }
+    
+    // Build description text (limit to 200 chars)
+    let descText = '';
+    if (productDesc) {
+      const shortDesc = productDesc.length > 200 
+        ? productDesc.substring(0, 200) + '...' 
+        : productDesc;
+      descText = `\n\n📝 *Description:*\n${shortDesc}`;
+    }
+    
+    // Get product image URL
+    let imageText = '';
+    if (inquiryModal.seller?.images && inquiryModal.seller.images.length > 0) {
+      imageText = `\n\n🖼️ *Product Image:*\n${inquiryModal.seller.images[0]}`;
+    }
+    
+    // Build pricing info
+    let pricingText = '';
+    if (inquiryModal.seller?.lowestPrice) {
+      pricingText = `\n💰 *Listed Price:* ₹${inquiryModal.seller.lowestPrice.toLocaleString('en-IN')} per unit`;
+    }
+    if (inquiryModal.seller?.moq) {
+      pricingText += `\n📦 *MOQ:* ${inquiryModal.seller.moq} units`;
+    }
+    
     const messageText = `Hello, I sent an inquiry on UdyogConnect.
 
-Product: ${productName}
-Quantity: ${inquiryQuantity}
+🛒 *Product:* ${productName}
+📊 *Quantity Required:* ${inquiryQuantity} units${pricingText}${specsText}${descText}${imageText}
 
 Let's discuss further.`;
     

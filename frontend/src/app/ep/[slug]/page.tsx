@@ -508,6 +508,7 @@ export default function EnterpriseProductPage() {
         seller={inquirySeller}
         productId={product._id}
         productName={product.name}
+        productDescription={product.description}
       />
 
       {/* Floating Compare Bar */}

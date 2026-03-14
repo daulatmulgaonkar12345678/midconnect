@@ -24,6 +24,7 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
     seller: EnterpriseProductSeller;
     productId: string;
     productName: string;
+    productDescription?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -46,8 +47,17 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
     listingId: string; 
     productName: string;
     productId?: string;
+    description?: string;
+    images?: string[];
+    moq?: number;
+    pricingSlabs?: Array<{minQty: number; maxQty: number; price: number}>;
   }) => {
     if (!catalog) return;
+    
+    // Calculate lowest price from pricing slabs
+    const lowestPrice = product?.pricingSlabs && product.pricingSlabs.length > 0
+      ? Math.min(...product.pricingSlabs.map(p => p.price))
+      : undefined;
     
     // Create a minimal EnterpriseProductSeller object for the modal
     const sellerForModal: EnterpriseProductSeller = {
@@ -65,16 +75,18 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
       searchableAttributes: {},
       attributeLabels: {},
       pricingTiers: [],
-      moq: 1,
+      moq: product?.moq || 1,
       stock: 100,
-      images: [],
+      images: product?.images || [],
+      lowestPrice: lowestPrice,
       stockStatus: 'in_stock'
     };
     
     setSelectedProduct({
       seller: sellerForModal,
       productId: product?.productId || product?.listingId || '',
-      productName: product?.productName || 'General Inquiry'
+      productName: product?.productName || 'General Inquiry',
+      productDescription: product?.description
     });
     setInquiryModalOpen(true);
   };
@@ -351,7 +363,11 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
                         onInquiry={() => handleInquiry({
                           listingId: product.listingId,
                           productId: product.productId,
-                          productName: product.productName
+                          productName: product.productName,
+                          description: product.description,
+                          images: product.images,
+                          moq: product.moq,
+                          pricingSlabs: product.pricingSlabs
                         })}
                       />
                     ))}
@@ -374,6 +390,7 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
           seller={selectedProduct.seller}
           productId={selectedProduct.productId}
           productName={selectedProduct.productName}
+          productDescription={selectedProduct.productDescription}
         />
       )}
 

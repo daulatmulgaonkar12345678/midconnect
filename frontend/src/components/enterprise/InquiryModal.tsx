@@ -13,6 +13,7 @@ interface InquiryModalProps {
   seller: EnterpriseProductSeller | null;
   productId: string;
   productName: string;
+  productDescription?: string;  // Optional product description for WhatsApp message
 }
 
 type BuyerType = 'trader' | 'contractor' | 'oem' | 'manufacturer' | 'other';
@@ -29,7 +30,8 @@ export default function InquiryModal({
   onClose, 
   seller, 
   productId,
-  productName 
+  productName,
+  productDescription
 }: InquiryModalProps) {
   const router = useRouter();
   const { user, getIdToken, isAuthenticated, profile, registrationState } = useAuth();
@@ -117,11 +119,51 @@ export default function InquiryModal({
   const handleWhatsAppConnect = () => {
     if (!whatsappInfo?.phoneNumber) return;
     
-    // Generate WhatsApp message
+    // Build specifications text from seller's searchableAttributes
+    let specsText = '';
+    if (seller?.searchableAttributes && Object.keys(seller.searchableAttributes).length > 0) {
+      const specLines: string[] = [];
+      for (const [key, value] of Object.entries(seller.searchableAttributes)) {
+        if (value !== null && value !== undefined && value !== '') {
+          // Use the human-readable label if available, otherwise use the key
+          const label = seller.attributeLabels?.[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          specLines.push(`• ${label}: ${value}`);
+        }
+      }
+      if (specLines.length > 0) {
+        specsText = `\n\n📋 *Specifications:*\n${specLines.join('\n')}`;
+      }
+    }
+    
+    // Build description text (limit to 200 chars to keep message concise)
+    let descText = '';
+    if (productDescription) {
+      const shortDesc = productDescription.length > 200 
+        ? productDescription.substring(0, 200) + '...' 
+        : productDescription;
+      descText = `\n\n📝 *Description:*\n${shortDesc}`;
+    }
+    
+    // Get product image URL (first image from seller's listing)
+    let imageText = '';
+    if (seller?.images && seller.images.length > 0) {
+      imageText = `\n\n🖼️ *Product Image:*\n${seller.images[0]}`;
+    }
+    
+    // Build pricing info
+    let pricingText = '';
+    if (seller?.lowestPrice) {
+      pricingText = `\n💰 *Listed Price:* ₹${seller.lowestPrice.toLocaleString('en-IN')} per unit`;
+    }
+    if (seller?.moq) {
+      pricingText += `\n📦 *MOQ:* ${seller.moq} units`;
+    }
+    
+    // Generate enhanced WhatsApp message
     const messageText = `Hello, I sent an inquiry on UdyogConnect.
 
-Product: ${productName}
-Quantity: ${quantity}
+🛒 *Product:* ${productName}
+📊 *Quantity Required:* ${quantity} units${pricingText}${specsText}${descText}${imageText}
 
 Let's discuss further.`;
     
