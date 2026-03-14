@@ -81,9 +81,10 @@ export default function CompositeProductsPage() {
     if (catProducts[categoryId]) return;
     try {
       const res = await fetch(`${API_URL}/api/products/by-category/${categoryId}`);
+      const data = await res.json();
       setCatProducts(prev => ({
         ...prev,
-        [categoryId]: (await res.json() || []).map((p: Record<string, string>) => ({ id: p.id || p._id, name: p.name }))
+        [categoryId]: (data || []).map((p: Record<string, string>) => ({ id: p.id || p._id, name: p.name }))
       }));
     } catch { /* empty */ }
   };
