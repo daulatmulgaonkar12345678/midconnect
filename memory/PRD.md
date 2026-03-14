@@ -2559,3 +2559,27 @@ Implemented a complete pricing system with `purchase_price` and `selling_price` 
 - Marketplace correctly hides purchase_price
 
 ---
+
+
+#### Bug Fix: Inventory Pricing Input + Composite Price Control - COMPLETE
+
+**Issue 1 - Inventory edit form auto-closes:**
+- Root cause: `onBlur` handlers on each input field immediately called `handleUpdateInventory` which set `editingItem(null)` and triggered `loadInventory()` refresh
+- Fix: Rewrote inventory page with proper controlled state management:
+  - Edit values stored in `editState` (not individual onBlur handlers)
+  - `isEditing` ref guards against auto-refresh while editing
+  - Explicit Save/Cancel buttons - editor stays open until user clicks one
+  - Inputs use `onChange` → state, not `onBlur` → API
+
+**Issue 2 - Composite product selling_price locked:**
+- Root cause: Frontend condition `item.productType !== 'composite'` blocked ALL editing for composites
+- Fix: 
+  - Edit button now shown for ALL products including composites
+  - Selling price editable for both single and composite products
+  - Purchase price input only shown for non-composite (shows "auto" for composites)
+  - Stock adjustment button hidden for composites (shows "auto")
+  - Backend: selling_price update syncs to `composite_products.price` for consistency
+
+**Testing:** Iteration 54: 8/8 backend tests passed (100%)
+
+---
