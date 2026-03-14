@@ -2344,10 +2344,15 @@ manage_roles       - Create and manage roles & permissions
 
 ### Session: 2026-03-14 (Phase 2-6 Implementation)
 
-**Composite Products (DONE):**
-- CRUD for product bundles referencing sellerListings
-- Sell endpoint auto-deducts component stock with inventory logs
-- Frontend: Create/edit/delete bundles, sell with quantity input, expandable component view
+**Composite Products (DONE - UPDATED 2026-03-14):**
+- Components reference sellerListings (not base products) via listingId
+- Category → Product cascading dropdown (categories from admin, products filtered by seller's listings)
+- Stock NOT stored independently - calculated dynamically: `min(component_stock / component_qty)`
+- Price set manually by seller (supports bundle discounts/premiums)
+- When created, also creates sellerListing with `productType: "composite"` and `productId = compositeProductId`
+- Appears in: Inventory, Invoices, Reports, Marketplace
+- Fixed: MongoDB unique index conflict resolved by setting productId = compositeProductId
+- Frontend: Create/edit/delete bundles, sell with quantity input, expandable component view with category info
 
 **Invoice System (DONE):**
 - Auto-incrementing invoice numbers: INV-{sellerId_suffix}-{sequence}

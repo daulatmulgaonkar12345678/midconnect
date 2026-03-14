@@ -261,6 +261,7 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         # Create a sellerListing with productType="composite" so it appears everywhere
         composite_listing = {
             "sellerId": ObjectId(seller_id),
+            "productId": cp_id,  # Use composite product ID as productId for uniqueness
             "productType": "composite",
             "compositeProductId": cp_id,
             "status": "active",
