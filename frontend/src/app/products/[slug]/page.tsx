@@ -429,6 +429,7 @@ export default function EnterpriseProductPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [filterLoading, setFilterLoading] = useState(false);
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
+  const [locationFilter, setLocationFilter] = useState<string>('all');
 
   // Compare state
   const [isComparing, setIsComparing] = useState(false);
@@ -924,6 +925,14 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
     return sellers.filter(s => compareItems.includes(s.listingId));
   }, [sellers, compareItems]);
 
+  // Filter sellers by location
+  const filteredSellers = useMemo(() => {
+    if (locationFilter === 'all') return sellers;
+    return sellers.filter(s => 
+      s.city === locationFilter || s.state === locationFilter
+    );
+  }, [sellers, locationFilter]);
+
   // Loading state
   if (loading) {
     return (
@@ -1185,6 +1194,31 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                     <option value="stock-desc">Stock: Highest</option>
                   </select>
                 </div>
+
+                {/* Location Filter */}
+                <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Filter by Location</h3>
+                  <select
+                    value={locationFilter}
+                    onChange={(e) => setLocationFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    data-testid="location-filter-select"
+                  >
+                    <option value="all">All Locations</option>
+                    {/* Get unique cities/states from sellers */}
+                    {Array.from(new Set(sellers.map(s => s.city || s.state).filter(Boolean))).sort().map(location => (
+                      <option key={location} value={location || ''}>{location}</option>
+                    ))}
+                  </select>
+                  {locationFilter !== 'all' && (
+                    <button
+                      onClick={() => setLocationFilter('all')}
+                      className="mt-2 text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Clear location filter
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1193,7 +1227,12 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               {/* Compare Toggle Bar */}
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
                 <div className="text-slate-600">
-                  <span className="font-semibold text-slate-900">{sellers.length}</span> sellers found
+                  <span className="font-semibold text-slate-900">{filteredSellers.length}</span> sellers found
+                  {locationFilter !== 'all' && (
+                    <span className="text-sm text-slate-500 ml-2">
+                      in {locationFilter}
+                    </span>
+                  )}
                 </div>
                 
                 <div className="flex items-center gap-4">
@@ -1227,13 +1266,20 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
             </div>
 
             {/* Seller Cards Grid */}
-            {sellers.length === 0 ? (
+            {filteredSellers.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
                 <Package className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-900 mb-2">No sellers found</h3>
-                <p className="text-slate-500 mb-4">Try adjusting your filters</p>
+                <p className="text-slate-500 mb-4">
+                  {locationFilter !== 'all' 
+                    ? `No sellers in ${locationFilter}. Try a different location.`
+                    : 'Try adjusting your filters'}
+                </p>
                 <button
-                  onClick={handleClearFilters}
+                  onClick={() => {
+                    handleClearFilters();
+                    setLocationFilter('all');
+                  }}
                   className="text-blue-600 hover:text-blue-800"
                 >
                   Clear all filters
@@ -1241,7 +1287,7 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               </div>
             ) : (
               <div className="grid gap-4">
-                {sellers.map((seller, index) => (
+                {filteredSellers.map((seller, index) => (
                   <div key={seller.listingId} className="relative">
                     {/* Compare Checkbox */}
                     {isComparing && (

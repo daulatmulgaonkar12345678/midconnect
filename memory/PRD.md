@@ -2209,4 +2209,44 @@ Added a product image gallery section to the `StandardSellerCard` component:
 
 ---
 
+### Session: 2026-03-14 (Location Filter Added)
+
+#### Added Location Filter to Product Page - COMPLETE ✅
+
+**Problem:**
+Buyers couldn't filter sellers by location. They had to scroll through all sellers manually to find ones in their preferred city/state.
+
+**Solution:**
+Added a "Filter by Location" dropdown below the "Sort By" section in the filter sidebar.
+
+**Features:**
+- Dropdown shows "All Locations" by default
+- Lists unique cities/states from available sellers
+- Filters sellers in real-time when location is selected
+- Updates seller count to show "X sellers found in [Location]"
+- "Clear location filter" link to reset
+- Works in combination with spec filters and sort options
+
+**UI Location:**
+```
+Filter by Specs
+├── Power (HP)
+├── Voltage (V)
+├── Phase
+├── RPM
+├── Efficiency Class
+├── Sort By         ← Price: Low to High
+└── Filter by Location  ← NEW: All Locations dropdown
+```
+
+**Files Modified:**
+- `/app/frontend/src/app/products/[slug]/page.tsx`:
+  - Added `locationFilter` state
+  - Added `filteredSellers` computed value using useMemo
+  - Added "Filter by Location" dropdown UI
+  - Updated seller count display to show filtered count
+  - Updated empty state message for location filtering
+
+---
+
 
