@@ -2583,3 +2583,20 @@ Implemented a complete pricing system with `purchase_price` and `selling_price` 
 **Testing:** Iteration 54: 8/8 backend tests passed (100%)
 
 ---
+
+#### Product Specification Support in Invoice Items - COMPLETE
+
+**What was done:**
+Added optional product specification support to the invoice system. Sellers can include/exclude specs from admin catalog per invoice item, add custom specs, and all specs appear in compact format in both the UI and generated PDFs.
+
+**Key Changes:**
+
+1. **Backend Model:** Added `selected_specifications: Optional[List[dict]]` to `InvoiceItemCreate`
+2. **Backend Invoice Router:** New `GET /invoice-products` endpoint returns listings with product specs from admin catalog. Invoice creation stores specs per item.
+3. **Backend PDF Service:** Specs rendered as compact single-line under product name using `<br/><font>` tags: `Voltage: 440V | Phase: 3 | Power: 5HP`
+4. **Frontend Invoice Page (full rewrite):** Product dropdown shows spec preview. After selection, checkbox spec selector appears (all checked by default). Can uncheck unwanted specs. Can add custom key-value specs. Invoice detail modal shows specs inline.
+
+**Testing:** Iteration 55: 11/11 backend tests passed (100%)
+
+---
+
