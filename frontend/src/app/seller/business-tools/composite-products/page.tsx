@@ -31,6 +31,9 @@ interface CompositeProduct {
   purchasePrice?: number;
   components: CompositeComponent[];
   availableStock: number;
+  hasListing: boolean;
+  listingId?: string | null;
+  listingStatus?: string | null;
   createdAt: string;
 }
 
@@ -128,6 +131,16 @@ export default function CompositeProductsPage() {
     if (!res.ok) { alert(data.detail || "Failed to sell"); return; }
     alert(`Sold! Stock deducted for ${data.deductions?.length || 0} components`);
     fetchProducts(); fetchSellerInventory();
+  };
+
+  const handleCreateListing = async (id: string) => {
+    const res = await fetch(`${API_URL}/api/business-tools/composite-products/${id}/create-listing`, {
+      method: "POST", headers: authHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.detail || "Failed to create listing"); return; }
+    alert("Marketplace listing created successfully!");
+    fetchProducts();
   };
 
   const startEdit = (cp: CompositeProduct) => {
@@ -332,11 +345,23 @@ export default function CompositeProductsPage() {
                       <span className={`font-medium ${cp.availableStock > 0 ? "text-green-600" : "text-red-500"}`}>
                         {cp.availableStock > 0 ? `${cp.availableStock} available` : "Out of stock"}
                       </span>
+                      {cp.hasListing ? (
+                        <span className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-medium" data-testid={`listing-active-${cp.id}`}>Listed</span>
+                      ) : (
+                        <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-medium" data-testid={`listing-missing-${cp.id}`}>Not Listed</span>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {cp.availableStock > 0 && (
+                  {!cp.hasListing && (
+                    <button onClick={e => { e.stopPropagation(); handleCreateListing(cp.id); }}
+                      className="flex items-center gap-1 bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-amber-600 mr-1"
+                      data-testid={`create-listing-btn-${cp.id}`}>
+                      Create Marketplace Listing
+                    </button>
+                  )}
+                  {cp.hasListing && cp.availableStock > 0 && (
                     <div className="flex items-center gap-1 mr-2">
                       <input type="number" min={1} max={cp.availableStock} value={sellQty[cp.id] || 1}
                         onChange={e => setSellQty(p => ({ ...p, [cp.id]: parseInt(e.target.value) || 1 }))}

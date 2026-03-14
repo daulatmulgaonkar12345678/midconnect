@@ -237,6 +237,16 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         cp["availableStock"] = await calc_available_stock(components)
         cp["purchasePrice"] = round(purchase_price, 2)
         cp["sellingPrice"] = cp.get("price", 0)
+
+        # Check if sellerListing exists for marketplace visibility
+        linked_listing = await db.sellerListings.find_one({
+            "compositeProductId": cp["_id"],
+            "productType": "composite"
+        })
+        cp["hasListing"] = linked_listing is not None
+        cp["listingId"] = str(linked_listing["_id"]) if linked_listing else None
+        cp["listingStatus"] = linked_listing.get("status") if linked_listing else None
+
         return cp
 
     # ===== Helper endpoints =====
@@ -481,6 +491,63 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         await db.composite_products.delete_one({"_id": cp_oid})
 
         return {"message": "Composite product deleted"}
+
+    @router.post("/composite-products/{cp_id}/create-listing")
+    async def create_composite_listing(cp_id: str, authorization: str = Header(...)):
+        """Fallback: manually create a sellerListing for a composite product that is missing one."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_INVENTORY.value)
+        seller_id = await get_seller_id(user)
+
+        try:
+            cp_oid = ObjectId(cp_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid composite product ID")
+
+        cp = await db.composite_products.find_one({"_id": cp_oid, "sellerId": ObjectId(seller_id)})
+        if not cp:
+            raise HTTPException(status_code=404, detail="Composite product not found")
+
+        # Check if listing already exists
+        existing = await db.sellerListings.find_one({
+            "compositeProductId": cp_oid,
+            "productType": "composite"
+        })
+        if existing:
+            return {"message": "Listing already exists", "listingId": str(existing["_id"])}
+
+        # Get admin product for images
+        product = await db.products.find_one({"_id": cp.get("productId")})
+
+        # Calculate current stock
+        components = await db.composite_product_items.find({"compositeProductId": cp_oid}).to_list(50)
+        calculated_stock = await calc_available_stock(components)
+
+        now = datetime.now(timezone.utc)
+        composite_listing = {
+            "sellerId": ObjectId(seller_id),
+            "productId": cp.get("productId"),
+            "categoryId": cp.get("categoryId"),
+            "productType": "composite",
+            "compositeProductId": cp_oid,
+            "description": cp.get("description", ""),
+            "status": "active",
+            "isActive": True,
+            "stock": calculated_stock,
+            "pricingTiers": [{"minQty": 1, "maxQty": None, "pricePerUnit": cp.get("price", 0)}],
+            "images": product.get("images", []) if product else [],
+            "createdAt": now,
+            "updatedAt": now,
+            "lastStockUpdate": now,
+            "publishedAt": now
+        }
+
+        try:
+            result = await db.sellerListings.insert_one(composite_listing)
+            return {"message": "Marketplace listing created", "listingId": str(result.inserted_id)}
+        except Exception as e:
+            logger.error(f"Failed to create fallback listing: {e}")
+            raise HTTPException(status_code=409, detail="Could not create listing. A listing for this product may already exist.")
 
     @router.post("/composite-products/{cp_id}/sell")
     async def sell_composite_product(cp_id: str, data: CompositeProductSellInput, authorization: str = Header(...)):

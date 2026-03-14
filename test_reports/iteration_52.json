@@ -1,0 +1,110 @@
+{
+  "summary": "Tested Composite Products Marketplace Listing features. All 15 backend API tests pass (100%). Frontend code review confirms hasListing/listingStatus badges and 'Create Marketplace Listing' fallback button implemented. Inventory page shows 'Composite' badge and 'Auto' label for composite items. Firebase auth required for UI testing.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Seller Dashboard", "issues": ["Requires Firebase auth to test UI - dev-test-token only works for API"]}
+    ]
+  },
+
+  "passed_tests": [
+    "GET /api/business-tools/composite-products returns hasListing, listingId, listingStatus fields",
+    "Composite with listing shows hasListing=true and valid listingId",
+    "POST /api/business-tools/composite-products/{id}/create-listing returns 'already exists' for composite with listing",
+    "POST /api/business-tools/composite-products/{id}/create-listing returns 400 for invalid ID",
+    "POST /api/business-tools/composite-products/{id}/create-listing returns 404 for non-existent composite",
+    "POST /api/search/products returns productType per seller entry ('single' or 'composite')",
+    "GET /api/listings/{listing_id} includes productType field",
+    "GET /api/business-tools/inventory returns productType field for each item",
+    "Inventory shows productType='composite' for composite listings",
+    "POST /api/business-tools/inventory/{id}/adjust returns 400 for composite products",
+    "PUT /api/business-tools/inventory/{id} with stockQuantity returns 400 for composite",
+    "POST /api/business-tools/composite-products/{id}/sell deducts from component stocks",
+    "DELETE /api/business-tools/composite-products/{id} also deletes sellerListing",
+    "All composite endpoints require authentication (401 without token)",
+    "Invalid token returns 401"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_composite_marketplace_listing.py",
+    "/app/test_reports/pytest/composite_marketplace_listing_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "composite_products_router.py: hasListing/listingId/listingStatus fields properly added via enrich_composite() at lines 242-248",
+    "composite_products_router.py: create-listing fallback endpoint at lines 495-550 correctly checks for existing listing",
+    "server.py line 6598: productType field included in marketplace search sellers array",
+    "server.py line 6777: productType field included in listing detail response",
+    "inventory_router.py lines 155-156: productType field added to inventory projection",
+    "Frontend composite-products/page.tsx lines 348-363: 'Listed'/'Not Listed' badges and 'Create Marketplace Listing' button implemented with data-testids",
+    "Frontend inventory/page.tsx lines 265-267, 322-324: 'Composite' badge and 'Auto' label for composite items implemented"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_composite_marketplace_listing.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (15/15 tests passed)",
+    "frontend": "Code review passed - requires Firebase auth for UI testing"
+  },
+
+  "test_credentials": "dev-test-token for API access",
+
+  "seed_data_creation": "Created test composite during testing: ID 69b5ba2bbf9d23241f3f1cc5 with Motor and Steel components, hasListing=true, listingId=69b5ba2bbf9d23241f3f1cc8",
+
+  "mocked_integrations": {
+    "Firebase Authentication": "NOT CONFIGURED - dev-test-token available for API testing only",
+    "Resend Email": "MOCKED"
+  },
+
+  "api_response_verified": {
+    "composite_products_new_fields": {
+      "hasListing": "boolean - true if sellerListing exists for marketplace",
+      "listingId": "string - ID of the sellerListing (null if not listed)",
+      "listingStatus": "string - status of listing (active/paused/draft, null if not listed)"
+    },
+    "create_listing_fallback_endpoint": {
+      "path": "POST /api/business-tools/composite-products/{id}/create-listing",
+      "success_new_listing": "{'message': 'Marketplace listing created', 'listingId': '...'}",
+      "already_exists": "{'message': 'Listing already exists', 'listingId': '...'}"
+    },
+    "marketplace_search_productType": {
+      "path": "POST /api/search/products",
+      "sellers_array_includes": "productType: 'single' | 'composite'"
+    },
+    "listing_detail_productType": {
+      "path": "GET /api/listings/{listing_id}",
+      "response_includes": "productType: 'single' | 'composite'"
+    }
+  },
+
+  "features_verified": {
+    "hasListing_listingId_listingStatus_in_composite_response": "PASS - enrich_composite() adds these fields",
+    "create_listing_fallback_endpoint": "PASS - POST /create-listing creates or returns existing",
+    "productType_in_marketplace_search": "PASS - productType in sellers array",
+    "productType_in_listing_detail": "PASS - productType in listing detail response",
+    "productType_in_inventory": "PASS - productType field in inventory items",
+    "composite_stock_adjustment_blocked": "PASS - returns 400 with explanation",
+    "composite_sell_deducts_components": "PASS - tested with real data",
+    "delete_composite_deletes_listing": "PASS - sellerListing removed",
+    "frontend_listed_not_listed_badges": "PASS (code review) - composite-products page.tsx lines 348-352",
+    "frontend_create_listing_button": "PASS (code review) - composite-products page.tsx lines 357-363",
+    "frontend_composite_badge_inventory": "PASS (code review) - inventory page.tsx lines 265-267",
+    "frontend_auto_label_inventory": "PASS (code review) - inventory page.tsx lines 322-324"
+  },
+
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+
+  "context_for_next_testing_agent": "All composite products marketplace listing features tested successfully. New fields hasListing/listingId/listingStatus work correctly. Fallback create-listing endpoint works. productType is returned in search, listing detail, and inventory. Frontend code correctly implements all required badges and buttons but requires Firebase auth for UI testing. Test composite created: 69b5ba2bbf9d23241f3f1cc5."
+}

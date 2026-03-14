@@ -6595,6 +6595,7 @@ async def search_products_deduplicated(request: Request, search: SearchQuery):
                     "badgeType": {"$ifNull": ["$seller.badgeType", "none"]},
                     "pricingTiers": "$pricingTiers",
                     "stock": "$stock",
+                    "productType": {"$ifNull": ["$productType", "single"]},
                     "specifications": "$specifications"
                 }
             },
@@ -6773,6 +6774,7 @@ async def get_listing_detail(
             "productId": str(listing.get("productId", "")),
             "productName": product.get("name", ""),
             "productUnit": product.get("unit", "pieces"),
+            "productType": listing.get("productType", "single"),
             "categoryName": category.get("name", ""),
             "sellerRole": listing.get("sellerRole", ""),
             "sellerArea": seller.get("city", ""),
