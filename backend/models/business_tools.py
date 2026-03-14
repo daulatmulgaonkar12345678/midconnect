@@ -256,6 +256,7 @@ class InvoiceItemCreate(BaseModel):
     quantity: int = Field(..., ge=1)
     price: float = Field(..., ge=0)
     gstPercent: float = Field(0, ge=0, le=100)
+    selected_specifications: Optional[List[dict]] = Field(None, description="List of {key, value} specs")
 
 class InvoiceCreate(BaseModel):
     buyerId: str

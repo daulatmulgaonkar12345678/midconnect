@@ -118,9 +118,16 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict) -> bytes:
         gst_pct = item.get("gstPercent", 0)
         gst_amt = item.get("gstAmount", 0)
         total = item.get("total", 0)
+        product_text = str(item.get("productName", "Item"))
+        # Add specs in compact single line
+        specs = item.get("selected_specifications", [])
+        if specs:
+            spec_parts = [f"{s.get('key', '')}: {s.get('value', '')}" for s in specs if s.get('key') and s.get('value')]
+            if spec_parts:
+                product_text += f"<br/><font size='7' color='#666'>{' | '.join(spec_parts)}</font>"
         row = [
             str(i),
-            str(item.get("productName", "Item")),
+            Paragraph(product_text, normal_style),
             str(qty),
             f"{price:,.2f}",
             f"{gst_pct}%",

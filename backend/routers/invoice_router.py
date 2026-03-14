@@ -91,6 +91,48 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         short_id = seller_id[-6:].upper()
         return f"INV-{short_id}-{counter:04d}"
 
+    @router.get("/invoice-products")
+    async def get_invoice_products(authorization: str = Header(...)):
+        """Get seller's inventory listings with product specifications for invoice creation."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.CREATE_INVOICE.value)
+        seller_id = await get_seller_id(user)
+
+        listings = await db.sellerListings.find({
+            "sellerId": ObjectId(seller_id),
+            "status": {"$in": ["active", "paused"]}
+        }).to_list(500)
+
+        items = []
+        for listing in listings:
+            prod = await db.products.find_one({"_id": listing.get("productId")})
+            if not prod:
+                continue
+            tiers = listing.get("pricingTiers", [])
+            price = listing.get("selling_price") or (tiers[0].get("pricePerUnit", 0) if tiers else 0)
+            # Get specifications from admin product
+            specs = prod.get("specifications", {})
+            spec_list = []
+            if isinstance(specs, dict):
+                for k, v in specs.items():
+                    if v:
+                        spec_list.append({"key": str(k), "value": str(v)})
+            elif isinstance(specs, list):
+                for s in specs:
+                    if isinstance(s, dict):
+                        spec_list.append({"key": str(s.get("key", s.get("name", ""))), "value": str(s.get("value", ""))})
+
+            items.append({
+                "id": str(listing["_id"]),
+                "productName": prod.get("name", "Unknown"),
+                "productType": listing.get("productType", "single"),
+                "stock": listing.get("stock", 0),
+                "price": price,
+                "specifications": spec_list
+            })
+
+        return {"products": items}
+
     @router.get("/invoices")
     async def list_invoices(
         authorization: str = Header(...),
@@ -220,7 +262,8 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "purchase_price": round(item_purchase_price, 2),
                 "gstPercent": item.gstPercent,
                 "gstAmount": gst_amount,
-                "total": line_total
+                "total": line_total,
+                "selected_specifications": item.selected_specifications or []
             })
             subtotal += line_subtotal
 
