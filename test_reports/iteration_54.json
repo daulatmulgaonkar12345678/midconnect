@@ -1,0 +1,83 @@
+{
+  "summary": "Tested inventory edit fix (2 issues): 1) Edit form auto-close fix - uses controlled state instead of onBlur, isEditing ref blocks auto-refresh, explicit Save/Cancel buttons. 2) Composite product selling_price now editable, purchase_price blocked with 400 error. All 8 backend tests PASSED. Frontend requires Firebase auth for UI testing.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Inventory Page", "issues": ["Requires Firebase auth to test - dev-test-token only works for API"]}
+    ]
+  },
+
+  "passed_tests": [
+    "PUT /api/business-tools/inventory/{composite_id} - selling_price update succeeds",
+    "PUT /api/business-tools/inventory/{composite_id} - purchase_price update blocked with 400 'auto-calculated' message",
+    "PUT /api/business-tools/inventory/{composite_id} - stock quantity update blocked with 400 'auto-calculated' message",
+    "PUT /api/business-tools/inventory/{regular_id} - selling_price and purchase_price update succeeds",
+    "PUT /api/business-tools/inventory/{regular_id} - SKU and warehouse location update succeeds",
+    "GET /api/business-tools/inventory - Returns productType for all items",
+    "GET /api/business-tools/inventory - Returns canViewPurchasePrice=true for seller admin",
+    "PUT composite selling_price syncs to composite_products collection (via compositeProductId)"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_inventory_edit_composite.py",
+    "/app/test_reports/pytest/inventory_edit_composite_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "inventory/page.tsx line 52: isEditing useRef correctly blocks auto-refresh during editing",
+    "inventory/page.tsx lines 80-95: startEditing/cancelEditing properly toggle isEditing.current ref",
+    "inventory/page.tsx lines 97-131: saveEditing only triggered on explicit Save click, no onBlur handlers",
+    "inventory/page.tsx lines 107-110: purchase_price correctly excluded from payload for composite products",
+    "inventory/page.tsx lines 273-281: selling_price input shown for ALL items including composite",
+    "inventory/page.tsx lines 283-296: purchase_price input only shown for non-composite items",
+    "inventory/page.tsx line 269, 293: 'auto' labels shown for composite stock and purchase_price",
+    "inventory_router.py lines 259-261: Correctly blocks purchase_price update for composite with 400 error",
+    "inventory_router.py lines 283-289: Syncs selling_price to composite_products.price when updating composite listing"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_inventory_edit_composite.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (8/8 passed)",
+    "frontend": "Code review passed - Firebase auth required for UI testing"
+  },
+
+  "test_credentials": "dev-test-token for API access",
+
+  "seed_data_verified": {
+    "composite_listing": "69b5c25c2972a896e0a78417 - productType=composite, selling_price updated to 2800 (test verified sync)",
+    "regular_motor_listing": "69b57c730ed7999c085b3656 - productType=single, prices and SKU updated",
+    "regular_steel_listing": "69b57c730ed7999c085b3657 - productType=single"
+  },
+
+  "mocked_integrations": {
+    "Firebase Authentication": "NOT CONFIGURED - dev-test-token available for API testing only",
+    "Resend Email": "MOCKED"
+  },
+
+  "features_verified": {
+    "fix1_edit_form_no_auto_close": "PASS (code review) - No onBlur handlers, uses controlled state, isEditing ref blocks auto-refresh",
+    "fix1_explicit_save_cancel": "PASS (code review) - Save/Cancel buttons with proper handlers",
+    "fix2_composite_selling_price_editable": "PASS - API update succeeds with 200",
+    "fix2_composite_purchase_price_blocked": "PASS - API returns 400 with 'auto-calculated' message",
+    "fix2_composite_stock_blocked": "PASS - API returns 400 with 'auto-calculated' message",
+    "fix2_regular_product_full_edit": "PASS - selling_price, purchase_price, SKU, location all editable",
+    "fix2_selling_price_sync_to_composite_products": "PASS - compositeProductId present, sync code in router verified"
+  },
+
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+
+  "context_for_next_testing_agent": "Inventory edit fix fully tested via backend API tests (8/8 passed). Fix 1 (auto-close): Frontend code correctly uses isEditing ref to block auto-refresh, controlled state instead of onBlur. Fix 2 (composite selling_price): Backend allows selling_price update for composite, blocks purchase_price/stock with 400 error. Frontend shows Edit button for all products, selling_price editable for all, purchase_price only for non-composite. Firebase auth required for actual UI testing - dev-test-token only works for API."
+}

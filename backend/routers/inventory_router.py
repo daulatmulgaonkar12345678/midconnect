@@ -279,6 +279,15 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         
         await db.sellerListings.update_one({"_id": listing_oid}, {"$set": update_fields})
         
+        # If this is a composite listing and selling_price changed, sync to composite_products
+        if listing.get("productType") == "composite" and data.selling_price is not None:
+            cp_id = listing.get("compositeProductId")
+            if cp_id:
+                await db.composite_products.update_one(
+                    {"_id": cp_id},
+                    {"$set": {"price": data.selling_price, "updatedAt": datetime.now(timezone.utc)}}
+                )
+        
         updated = await db.sellerListings.find_one({"_id": listing_oid})
         
         # Get product name
