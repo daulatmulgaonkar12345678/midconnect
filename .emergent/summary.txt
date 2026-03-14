@@ -1,80 +1,78 @@
 <analysis>**original_problem_statement:**
-The user's initial request was to replace the existing email-link-based registration with a secure OTP-based system. Following its completion, the user provided a series of feature requests, culminating in a large-scale project to build a comprehensive ERP/Business Tools system for sellers within their dashboard.
+The user's initial request was to replace the existing email-link-based registration with a secure OTP-based system. Following its completion, the user provided a series of feature requests, culminating in a large-scale project to build a comprehensive ERP/Business Tools system for sellers.
+
+The most recent and active project is to upgrade the invoicing system into a complete professional billing and payment tracking system.
 
 **PRODUCT REQUIREMENTS:**
-The Business Tools suite should include:
-1.  **Foundation & RBAC:** Employee management with role-based access control.
-2.  **CRM:** Buyer and Supplier management.
-3.  **Inventory Management:** Track stock, log adjustments, and set low-stock alerts.
-4.  **Composite Products:** Allow sellers to bundle their inventory items into new products (kits/assemblies). The logic for this has been iteratively refined by the user.
-5.  **Invoicing:** Create invoices with per-item GST, auto-incrementing invoice numbers, and PDF generation.
-6.  **Reporting:** Generate sales, inventory, and product reports.
-7.  **Activity Logs:** Track all significant actions performed by sellers and their employees.
-8.  **Permission Enforcement:** All modules must be protected by the RBAC system.
-
-The latest user directive (Message 287) specifies that composite products must be fully integrated into the marketplace, appearing as normal products to buyers but using component inventory. They must be created as , draw their name/category from the super-admin's product catalog, and use the seller's own inventory items () as components.
+The Advanced Invoice, Payment Tracking, and Seller Notification System will be implemented in phases.
+*   **Phase 1 (In Progress):** Advanced Payment Tracking. Invoices must support multiple partial payments with a full payment history. Key fields include , , , and  (, , , , , ). Sellers must be able to manually add payment entries (Amount, Date, Method, Account, Notes).
+*   **Phase 2:** Receipt Upload & Communication. Mandate payment proof (receipts) for / statuses, storing files on **Cloudinary**. Add a Follow Up on WhatsApp button using a  link with a prefilled message. Enhance invoice headers with seller branding (Logo, contact info).
+*   **Phase 3:** Dashboards & Notifications. Create a central seller notification center for payments, stock, and orders. Add key metrics to the seller dashboard (Total Sales, Pending Payments, etc.).
+*   **Phase 4:** Customization. Allow sellers to upload a logo and a preferred invoice template (PDF/Image) to be used as a design reference.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a B2B e-commerce platform with a FastAPI backend, React/Next.js frontend, and MongoDB. The OTP registration and initial feature requests are complete.
+The application is a B2B e-commerce platform with a FastAPI backend, React/Next.js frontend, and MongoDB. The initial ERP/Business Tools suite is functionally complete and tested, including RBAC, Inventory, Composite Products, Reports, and Activity Logs. The agent has successfully implemented multiple complex features in this session, such as a full composite product overhaul, a purchase/selling price system with profit reporting, and the ability to add product specifications to invoices.
 
-The Business Tools ERP system is substantially complete. The backend and frontend for the following modules have been implemented and tested:
-*   **RBAC & Employee Management**
-*   **Inventory Management** (including logging)
-*   **Invoicing System** (including PDF generation via )
-*   **Reports Module**
-*   **Activity Logs**
-*   **Composite Products** (A functional version exists, but it needs to be overhauled based on the latest user requirements).
-
-The agent has successfully resolved several issues during the session, including backend dependency/startup problems and a frontend build failure on the Vercel deployment platform.
+The agent has just begun work on the multi-phase Advanced Invoice, Payment Tracking, and Seller Notification System as requested by the user.
 
 **Last working item**:
--   Last item agent was working: The agent was about to begin the implementation of a major refinement to the **Composite Products** feature, as per the detailed user specifications in Message 287. The goal is to make composite products behave exactly like regular marketplace products () for buyers, while internally managing component-based inventory. The agent has already formulated and received user approval for the implementation plan.
--   Status: NOT STARTED
+-   Last item agent was working: The agent started implementing **Phase 1: Advanced Payment Tracking System**. Work began on the backend by defining the new Pydantic models (, ) required to store payment information. The next step is to complete these models and then rewrite the  to handle the creation and tracking of payments.
+-   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? both
 -   User Testing Done: N
+-   Which testing method agent to use? both
 
 **All Pending/In progress Issue list**:
 -   None.
 
 **In progress Task List**:
--   Task 1: Re-implement Composite Product Logic for Marketplace Visibility (P0)
+-   Task 1: Implement Phase 1: Advanced Payment Tracking System (P0)
 
 **Task Detail:**
--   **Task 1: Re-implement Composite Product Logic for Marketplace Visibility (P0)**
+-   **Task 1: Implement Phase 1: Advanced Payment Tracking System (P0)**
     -   **Where to resume**:
-        -   **Backend ():** The entire router needs to be refactored to align with the new logic. When a composite product is created, it must now also create a corresponding entry in the  collection with . The component list () should reference the  of the components. Stock calculation and sale deduction logic must be updated to work with this new structure.
-        -   **Frontend ():** The creation form needs to be validated against the new backend logic. The UI should guide the seller to select a base product name from the admin catalog and then add components from their own inventory ().
-    -   **What will be achieved with this?** Composite products will be seamlessly integrated into the main marketplace, discoverable via search and category pages. Buyers will see them as regular products, while the backend correctly manages the underlying component stock for the seller.
-    -   **Status**: NOT STARTED
+        -   **Backend ():** The agent was in the process of adding the  and  Pydantic models. This needs to be completed.
+        -   **Backend ():** After the models are defined, this router must be refactored to:
+            1.  Add a new endpoint:  to record a new payment.
+            2.  When a payment is added, automatically recalculate and update the parent invoice's , , and .
+            3.  Update the  endpoint to return the list of associated payments.
+        -   **Frontend ():** This page needs a major update to:
+            1.  Display the new invoice status, total paid, and pending amount.
+            2.  Include a Payment History section for each invoice.
+            3.  Add an Add Payment form/modal to submit new payment entries.
+    -   **What will be achieved with this?** Sellers will be able to record partial or full payments against invoices, with the system automatically tracking the payment status and pending balance.
+    -   **Status**: IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** Both
     -   **Blocked on something**: None
 
 **Upcoming and Future Tasks**
--   **Upcoming Tasks:**
-    -   None. The current focus is solely on completing the Composite Product overhaul.
--   **Future Tasks:**
-    -   **P1**: Refactor the inline inquiry modal on the product page () to use the shared .
-    -   **P1**: Implement an advanced token-based search system.
-    -   **P2**: Create an admin search insights dashboard.
-    -   **P2**: Add Redis caching for global performance improvement.
-    -   **P2**: Refactor the monolithic  by breaking out remaining logic into smaller, modular routers.
-    -   **P2**: Clean up unused Pydantic models in .
+-   **Upcoming Tasks (Per User's Phased Plan):**
+    -   **P0: Phase 2 - Receipt Upload & Communication:**
+        -   Integrate Cloudinary for payment receipt uploads (JPG, PNG, PDF).
+        -   Make receipt upload mandatory for  or  statuses.
+        -   Add a Follow Up on WhatsApp  link to invoices.
+        -   Enhance invoice PDF headers with seller's company name, address, GST, etc.
+    -   **P0: Phase 3 - Dashboards & Notifications:**
+        -   Create a central notification center on the seller dashboard.
+        -   Display key metrics (Total Sales, Pending Payments) on the dashboard.
+    -   **P0: Phase 4 - Customization:**
+        -   Allow sellers to upload a logo for invoice branding.
+        -   Implement a system for sellers to upload a reference invoice template.
+-   **Future Tasks (Backlog from previous sessions):**
+    -   **P1:** Refactor the inline inquiry modal on the product page to use the shared .
+    -   **P1:** Implement an advanced token-based search system.
+    -   **P2:** Create an admin search insights dashboard.
+    -   **P2:** Add Redis caching for global performance improvement.
+    -   **P2:** Refactor the monolithic  into smaller, modular routers.
+    -   **P2:** Clean up unused Pydantic models in .
 
 **Completed work in this session**
--   **Business Tools ERP Implementation (DONE):**
-    -   Implemented backend and frontend for **RBAC/Employees**, **Invoices**, **Reports**, and **Activity Logs**.
-    -   Integrated **Permission Enforcement** across all new API endpoints.
-    -   Added  for server-side **PDF invoice generation**.
--   **Composite Products (Iteratively Developed):**
-    -   Built and refined the composite products module over multiple iterations based on evolving user requirements.
--   **Bug Fixes & Environment Management (DONE):**
-    -   Fixed backend startup failure by removing an erroneous  import.
-    -   Resolved a Render deployment failure by removing an unused  package from .
-    -   Fixed a Vercel frontend build failure caused by using  in a non-async function.
-    -   Fixed a  in composite product creation logic, identified by the testing agent.
+-   **Composite Product Overhaul (DONE):** Fully refactored composite products to be integrated into the main marketplace as . This included implementing dynamic stock calculation, marketplace visibility, and a manual fallback linking mechanism.
+-   **Product Pricing System (DONE):** Added  and  to . Implemented RBAC to restrict  visibility, dynamic cost calculation for composites, and new profit-based reports.
+-   **Inventory Price Input Fix (DONE):** Fixed a UI bug where the inventory price editor would close on input. Enabled  editing for composite products in the inventory view.
+-   **Invoice Product Specifications (DONE):** Enhanced the invoice creation process to allow sellers to select and include product specifications (e.g., Voltage: 440V) in a compact, single-line format on the final PDF.
 
 **Earlier issues found/mentioned but not fixed**
 -   None.
@@ -86,29 +84,25 @@ The agent has successfully resolved several issues during the session, including
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, MongoDB, Firebase Admin SDK.
--   **Frontend:** React, Next.js, TypeScript, Tailwind CSS.
--   **PDF Generation:**  library is used on the backend.
--   **Architecture:** Modular backend with feature-specific routers. A shared  is used for centralized auditing. A  decorator enforces RBAC on API endpoints.
+-   **Backend:** FastAPI, MongoDB, Pydantic
+-   **Frontend:** React, Next.js, TypeScript, Tailwind CSS
+-   **PDF Generation:** 
+-   **File Storage:** Cloudinary (specified for upcoming receipt uploads)
 
 **key DB schema**
--   **users**: Extended with , , .
--   **sellers**: Extended with .
--   **sellerListings**: To be extended with .
--   **New Collections**: , , , , , .
+-   **invoices**: To be extended with , , , .
+-   **invoice_items**: Extended with .
+-   **sellerListings**: Extended with , .
+-   **New Collection (Planned): **: , , , , , .
 
 **changes in tech stack**
--   Added  for PDF generation.
+-   **Cloudinary** will be used for file storage in Phase 2.
 
 **All files of reference**
--    (Target for major refactor)
--    (Target for major refactor)
--   
--   
--   
--   
--   
--   
+-    (In Progress)
+-    (In Progress)
+-    (In Progress)
+-    (Will need updates in Phase 2 for branding)
 
 **Areas that need refactoring**:
 -   The main  file could be further modularized.
@@ -116,55 +110,54 @@ The agent has successfully resolved several issues during the session, including
 -    contains old, unused Pydantic models for composite products that should be removed for clarity.
 
 **key api endpoints**
--    (To be refactored)
--    (To be refactored)
--   
--   
--   
+-    (To be created)
+-    (Returns products with specs for invoice creation)
+-    (Updates inventory, including prices)
 -   
 
 **Critical Info for New Agent**
-1.  **Immediate Priority:** Your first and only task is to implement the new composite product logic defined by the user in **Message 287**. Do not proceed with any other tasks until this is complete and verified.
-2.  **Core Logic:**
-    *   When a seller creates a composite product, a new **** record must be created with .
-    *   The composite product's name and category must be selected from the **super-admin's catalog** ( and  collections).
-    *   The components of the composite product must be selected from the **seller's own inventory** ( collection).
-    *   Composite stock is always calculated dynamically based on component availability and is never stored directly.
-3.  **Codebase is Stable:** The rest of the Business Tools suite is complete and tested. You are building upon a working foundation. Focus your changes on the composite product module ( and the corresponding frontend page).
+1.  **Immediate Priority:** Your first task is to continue and complete **Phase 1** of the Advanced Invoice and Payment Tracking System. The user has provided a clear, multi-phase plan. Do not move to other phases until Phase 1 is fully implemented and tested.
+2.  **Phase 1 Core Logic:**
+    *   Finish defining the  and  Pydantic models.
+    *   Create a new API endpoint to add payment entries to an invoice.
+    *   This endpoint must trigger an update on the invoice document to recalculate , , and .
+    *   Update the frontend invoice page to display this new information and provide a UI for adding payments.
+3.  **Codebase is Stable:** The existing ERP features are complete and tested. You are building upon a working foundation. Focus your changes on the invoice module as planned.
 
 **documents and test reports created in this job**
 -    (Updated throughout the session)
--    (Latest test report, all 27 tests passed after agent fixed bugs)
+-    (Latest test report for Invoice Specifications feature, 11/11 tests passed)
 
 **Last 10 User Messages and any pending HUMAN messages**
-10. : Provides detailed rules for making composite products behave like normal products in the marketplace. *(Status: Plan created, pending implementation)*
-9. : Asks to confirm the plan to implement the new composite product logic. *(Status: Confirmed)*
-8. : continue work *(Status: Acknowledged)*
-7. : Starts the implementation process. *(Status: Interrupted)*
-6. : Provides final, detailed rules for composite products, clarifying that the name comes from the admin catalog and components from seller inventory. *(Status: Implemented and Tested)*
-5. : Finishes the implementation of the previous composite product logic. *(Status: Completed, now superseded)*
-4. : treat this as product listing type which seller create in listing dashboard, and use super admin created components from catagory and product. seller even not create product name as well. *(Status: Addressed in latest rules)*
-3. : Finishes the previous iteration of composite product implementation. *(Status: Completed, now superseded)*
-2. : Provides feedback and rules on composite product logic, stating sellers must reuse admin categories/products. *(Status: Addressed in subsequent implementation)*
-1. : States that  is not required and should be removed from . *(Status: COMPLETED)*
+10. : Provides detailed requirements for the Advanced Invoice, Payment Tracking, and Seller Notification System, breaking it down into modules like branding, payment tracking, receipt uploads, WhatsApp follow-ups, and a notification center. (Status: Plan created by agent)
+9. : Presents a 4-phase implementation plan for the advanced invoice system and asks for approval. (Status: Acknowledged, user provided corrections)
+8. : Approves the phased plan. Specifies using **Cloudinary** for receipt storage and the  link method for WhatsApp. Reinforces the priority to start with **Phase 1 immediately**. (Status: Acknowledged, agent starting implementation)
+7. : Begins implementation of Phase 1 by exploring the codebase to understand the current state of invoice-related files. (Status: In Progress)
+6. : Provides requirements for fixing two issues: an inventory price input that closes automatically and allowing sellers to manually set the  of composite products. (Status: COMPLETED)
+5. : Finishes implementing the fixes for the inventory price input and composite product pricing. (Status: COMPLETED)
+4. : Provides detailed requirements for adding product specifications to invoice items. (Status: COMPLETED)
+3. : Finishes implementing the product specification feature for invoices. (Status: COMPLETED)
+2. : Provides requirements for a Product Pricing System with  and . (Status: COMPLETED)
+1. : Finishes implementing the product pricing system and profit reports. (Status: COMPLETED)
 
 **Project Health Check:**
--   **Broken**: None.
+-   **Broken**: None
 -   **Mocked**:  for sending emails is in mock mode.
 
 **3rd Party Integrations**
 -   **Firebase Admin:** Used for user authentication.
 -   **Resend:** Used for sending emails (currently mocked).
 -   **reportlab:** Used for generating PDF invoices.
+-   **Cloudinary:** Specified by the user for upcoming receipt uploads (Phase 2).
 
 **Testing status**
--   **Testing agent used after significant changes**: YES. The testing agent was used multiple times, successfully identifying and fixing critical bugs.
+-   **Testing agent used after significant changes**: YES. The testing agent was used after every major feature completion, successfully verifying backend functionality.
 -   **Troubleshoot agent used after agent stuck in loop**: NO
--   **Test files created**: None. Testing was performed via testing agent and  commands.
+-   **Test files created**: None.
 -   **Known regressions**: None.
 
 **Credentials to test flow:**
--   Register a new user via the OTP flow to create a seller account. Use the dev login token for API testing as it represents an admin seller.
+-   Register a new user via the OTP flow to create a seller account. Use the dev login token (provided in previous agent turns) for API testing as it represents a seller admin with full permissions.
 
 **What agent forgot to execute**
--   The agent was about to begin the final, user-approved refactor of the composite products module when the session ended. All other tasks were completed or are planned for the future.</analysis>
+-   The agent was in the initial stages of implementing Phase 1 of the advanced invoicing system. No tasks were forgotten; the work is simply in progress.</analysis>

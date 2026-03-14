@@ -265,7 +265,17 @@ class InvoiceCreate(BaseModel):
     deductStock: bool = True
 
 class InvoiceStatusUpdate(BaseModel):
-    status: str  # draft, sent, paid, cancelled
+    status: str  # draft, sent, viewed, partially_paid, paid, overdue, cancelled
+
+
+class PaymentEntryCreate(BaseModel):
+    amount: float = Field(..., gt=0)
+    paymentDate: Optional[str] = None
+    paymentMethod: str = Field("cash")
+    accountName: Optional[str] = Field(None, max_length=200)
+    accountType: Optional[str] = Field(None)
+    referenceNumber: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 # ===========================================

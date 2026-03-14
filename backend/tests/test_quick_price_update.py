@@ -15,7 +15,7 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://product-assemblies.preview.emergentagent.com"
+    BASE_URL = "https://seller-invoices.preview.emergentagent.com"
 
 DEV_TOKEN = "dev-test-token"
 

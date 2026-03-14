@@ -64,7 +64,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://product-assemblies.preview.emergentagent.com"
+    "api_url": "https://seller-invoices.preview.emergentagent.com"
   },
   
   "seed_data_creation": "None needed",
