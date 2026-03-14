@@ -21,7 +21,8 @@ import {
   Clock,
   XCircle,
   Ban,
-  MessageCircle
+  MessageCircle,
+  Settings
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -366,6 +367,30 @@ export default function SellerDashboardPage() {
               <p className="text-sm text-gray-600">Manage inquiry contacts</p>
             </div>
             <ArrowRight className="h-5 w-5 text-green-600" />
+          </Link>
+        </div>
+
+        {/* Business Tools Section */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Business Tools</h2>
+          <Link
+            href="/seller/business-tools"
+            className="flex items-center gap-4 bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-lg p-6 hover:shadow-xl transition group"
+            data-testid="business-tools-action"
+          >
+            <div className="p-3 bg-white/10 rounded-lg group-hover:bg-white/20 transition">
+              <Settings className="h-6 w-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-white">Business Tools</h3>
+              <p className="text-sm text-gray-300">Inventory, Buyers, Suppliers, Invoices, Reports</p>
+            </div>
+            <div className="flex gap-2">
+              <span className="px-2 py-1 bg-blue-500 text-white text-xs rounded-full">Inventory</span>
+              <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full">CRM</span>
+              <span className="px-2 py-1 bg-purple-500 text-white text-xs rounded-full">Reports</span>
+            </div>
+            <ArrowRight className="h-5 w-5 text-white" />
           </Link>
         </div>
 

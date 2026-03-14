@@ -13011,6 +13011,15 @@ from routers.seller_catalog_router import init_seller_catalog_routes
 seller_catalog_router = init_seller_catalog_routes(db)
 app.include_router(seller_catalog_router, prefix="/api")
 
+# Business Tools Routers (RBAC, Employees, Buyers, Suppliers, Inventory)
+from routers.business_tools_router import init_business_tools_router
+business_tools_router = init_business_tools_router(db, verify_firebase_token)
+app.include_router(business_tools_router, prefix="/api/business-tools")
+
+from routers.inventory_router import init_inventory_router
+inventory_router = init_inventory_router(db, verify_firebase_token)
+app.include_router(inventory_router, prefix="/api/business-tools")
+
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health
