@@ -1,0 +1,91 @@
+{
+  "summary": "Backend testing of Composite Products with new schema (listingId, price, dynamic stock). Found CRITICAL bug in POST /composite-products - MongoDB unique index conflict prevents creating new composites. GET, PUT, DELETE, SELL endpoints all working correctly.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/business-tools/composite-products",
+        "issue": "DuplicateKeyError - MongoDB unique index `idx_listings_product_seller_unique` on {productId, sellerId} prevents creating multiple composite sellerListings with productId=null for same seller",
+        "error": "E11000 duplicate key error collection: midconnect.sellerListings",
+        "priority": "CRITICAL",
+        "root_cause": "When creating composite sellerListing, productId is null. Unique index doesn't allow multiple documents with same (null, sellerId) pair",
+        "suggested_fixes": [
+          "Option 1: Set productId = compositeProductId in composite sellerListing",
+          "Option 2: Make unique index sparse (allows multiple nulls)",
+          "Option 3: Use partial unique index excluding productType='composite'"
+        ]
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_composite_products_new_schema.py",
+    "/app/test_reports/pytest/composite_products_new_schema_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix POST /composite-products - resolve MongoDB unique index conflict for composite sellerListings",
+    "Recommend: Set productId = compositeProductId when creating composite sellerListing to ensure uniqueness"
+  ],
+  "critical_code_review_comments": [
+    "GET /available-products correctly returns listings grouped by category with listingId",
+    "GET /composite-products correctly calculates availableStock = min(component_stock / component_qty)",
+    "PUT /composite-products/{id} correctly updates name, description, price, and items",
+    "DELETE /composite-products/{id} correctly deletes composite product AND composite sellerListing",
+    "POST /composite-products/{id}/sell correctly deducts component stock and validates availability",
+    "Stock recalculation after sell is accurate",
+    "Composite listings are correctly excluded from available-products (productType != 'composite')",
+    "Firebase Auth is MOCKED - using dev-test-token"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_composite_products_new_schema.py"
+  ],
+  "success_rate": {
+    "backend": "59% (13 passed, 3 failed, 6 skipped due to setup failures)"
+  },
+  "test_credentials": "Auth: Bearer dev-test-token",
+  "seed_data_creation": "Used existing test listings: 69b57c730ed7999c085b3656 (stock ~44), 69b57c730ed7999c085b3657 (stock ~27). Existing composite: 69b57c7ff6d056d7cedb5114",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Composite products new schema tested. POST is broken due to MongoDB unique index conflict. All other CRUD + SELL operations working. The fix should set productId = compositeProductId in composite sellerListing creation.",
+  "mocked_api": {
+    "Firebase Auth": "MOCKED - dev-test-token provides seller admin access"
+  },
+  "api_endpoints_verified": {
+    "GET /api/business-tools/composite-products/available-products": "200 OK - Returns categories with listings (listingId, productName, stock, sku, price)",
+    "GET /api/business-tools/composite-products": "200 OK - Lists composites with dynamic availableStock",
+    "POST /api/business-tools/composite-products": "500 ERROR - DuplicateKeyError on sellerListings unique index",
+    "PUT /api/business-tools/composite-products/{id}": "200 OK - Updates name, description, price, items",
+    "DELETE /api/business-tools/composite-products/{id}": "200 OK - Deletes composite and its sellerListing",
+    "POST /api/business-tools/composite-products/{id}/sell": "200 OK - Deducts component stock, validates availability"
+  },
+  "verified_features": [
+    "GET /available-products returns seller listings grouped by category (excludes composite)",
+    "Items use listingId (not productId) - verified in response",
+    "Price field present on composite products - verified",
+    "availableStock = min(component_stock / component_qty) - VERIFIED with actual calculation",
+    "Selling reduces component stock correctly - VERIFIED (4 deducted from motor, 2 from bar)",
+    "availableStock recalculates after sell - VERIFIED (min(44/4, 27/2) = 11 before restore)",
+    "Insufficient stock validation - VERIFIED (400 error with clear message)",
+    "DELETE removes composite sellerListing - VERIFIED (count reduced from 2 to 1)",
+    "Composite listings excluded from available-products - VERIFIED"
+  ],
+  "unverified_features": [
+    "POST composite creation - BLOCKED by unique index bug",
+    "sellerListing with productType=composite auto-creation - BLOCKED"
+  ],
+  "rca_of_the_issue": {
+    "bug": "POST /api/business-tools/composite-products returns 500",
+    "root_cause": "sellerListings collection has unique index on {productId, sellerId}. Composite sellerListings have productId=null, but index doesn't allow multiple documents with same (null, sellerId)",
+    "reproduction_steps": [
+      "1. Ensure one composite product already exists for the seller",
+      "2. POST new composite product with valid items",
+      "3. Server attempts to insert sellerListing with productId=null",
+      "4. MongoDB rejects due to duplicate key violation"
+    ],
+    "mitigation": "Set productId = compositeProductId in composite sellerListing, or modify index to be sparse/partial"
+  }
+}

@@ -2,13 +2,20 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePermissions } from "../layout";
-import { Plus, Package, Trash2, ShoppingCart, ChevronDown, ChevronUp, Search, AlertCircle } from "lucide-react";
+import { Plus, Package, Trash2, ShoppingCart, ChevronDown, ChevronUp, Search, AlertCircle, IndianRupee } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+interface CategoryProducts {
+  categoryId: string;
+  categoryName: string;
+  products: { listingId: string; productName: string; stock: number; sku: string; price: number }[];
+}
+
 interface CompositeItem {
-  productId: string;
+  listingId: string;
   productName?: string;
+  categoryName?: string;
   quantity: number;
   currentStock?: number;
 }
@@ -17,28 +24,32 @@ interface CompositeProduct {
   id: string;
   name: string;
   description?: string;
+  price?: number;
   items: CompositeItem[];
+  availableStock: number;
   createdAt: string;
 }
 
-interface SellerListing {
-  id: string;
-  productName: string;
-  stock: number;
-  sku?: string;
+interface FormItem {
+  categoryId: string;
+  listingId: string;
+  quantity: number;
 }
 
 export default function CompositeProductsPage() {
   const { hasPermission, token } = usePermissions();
   const [products, setProducts] = useState<CompositeProduct[]>([]);
-  const [listings, setListings] = useState<SellerListing[]>([]);
+  const [categories, setCategories] = useState<CategoryProducts[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sellQty, setSellQty] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
-  const [formData, setFormData] = useState({ name: "", description: "", items: [{ productId: "", quantity: 1 }] as { productId: string; quantity: number }[] });
+  const [formData, setFormData] = useState({
+    name: "", description: "", price: 0,
+    items: [{ categoryId: "", listingId: "", quantity: 1 }] as FormItem[]
+  });
 
   const headers = useCallback(() => ({
     "Authorization": `Bearer ${token}`,
@@ -54,34 +65,48 @@ export default function CompositeProductsPage() {
     setLoading(false);
   }, [token, search]);
 
-  const fetchListings = useCallback(async () => {
+  const fetchCategories = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/business-tools/inventory`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/business-tools/composite-products/available-products`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      setListings((data.listings || []).map((l: Record<string, unknown>) => ({ id: l.id, productName: l.productName, stock: l.stock, sku: l.sku })));
+      setCategories(data.categories || []);
     } catch { /* empty */ }
   }, [token]);
 
-  useEffect(() => { if (token) { fetchProducts(); fetchListings(); } }, [token, fetchProducts, fetchListings]);
+  useEffect(() => { if (token) { fetchProducts(); fetchCategories(); } }, [token, fetchProducts, fetchCategories]);
+
+  const getProductsForCategory = (categoryId: string) => {
+    const cat = categories.find(c => c.categoryId === categoryId);
+    return cat?.products || [];
+  };
 
   const handleSubmit = async () => {
-    const validItems = formData.items.filter(i => i.productId && i.quantity > 0);
-    if (!formData.name || validItems.length === 0) return;
+    const validItems = formData.items.filter(i => i.listingId && i.quantity > 0);
+    if (!formData.name || !formData.price || validItems.length === 0) return;
 
     const url = editingId
       ? `${API_URL}/api/business-tools/composite-products/${editingId}`
       : `${API_URL}/api/business-tools/composite-products`;
 
-    await fetch(url, {
-      method: editingId ? "PUT" : "POST",
-      headers: headers(),
-      body: JSON.stringify({ ...formData, items: validItems })
-    });
+    const body = {
+      name: formData.name,
+      description: formData.description,
+      price: formData.price,
+      items: validItems.map(i => ({ listingId: i.listingId, quantity: i.quantity }))
+    };
+
+    const res = await fetch(url, { method: editingId ? "PUT" : "POST", headers: headers(), body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) { alert(data.detail || "Failed"); return; }
+
     setShowForm(false);
     setEditingId(null);
-    setFormData({ name: "", description: "", items: [{ productId: "", quantity: 1 }] });
+    resetForm();
     fetchProducts();
+    fetchCategories();
   };
+
+  const resetForm = () => setFormData({ name: "", description: "", price: 0, items: [{ categoryId: "", listingId: "", quantity: 1 }] });
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this composite product?")) return;
@@ -92,32 +117,53 @@ export default function CompositeProductsPage() {
   const handleSell = async (id: string) => {
     const qty = sellQty[id] || 1;
     const res = await fetch(`${API_URL}/api/business-tools/composite-products/${id}/sell`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ quantity: qty })
+      method: "POST", headers: headers(), body: JSON.stringify({ quantity: qty })
     });
     const data = await res.json();
-    if (!res.ok) {
-      alert(data.detail || "Failed to sell");
-      return;
-    }
+    if (!res.ok) { alert(data.detail || "Failed to sell"); return; }
     alert(`Sold! Stock deducted for ${data.deductions?.length || 0} components`);
     fetchProducts();
-    fetchListings();
   };
 
   const startEdit = (cp: CompositeProduct) => {
+    // Map existing items back to form items with category lookup
+    const formItems: FormItem[] = cp.items.map(item => {
+      // Find which category this listing belongs to
+      let foundCatId = "";
+      for (const cat of categories) {
+        if (cat.products.some(p => p.listingId === item.listingId)) {
+          foundCatId = cat.categoryId;
+          break;
+        }
+      }
+      return { categoryId: foundCatId, listingId: item.listingId || "", quantity: item.quantity };
+    });
     setFormData({
       name: cp.name,
       description: cp.description || "",
-      items: cp.items.map(i => ({ productId: i.productId || "", quantity: i.quantity }))
+      price: cp.price || 0,
+      items: formItems.length > 0 ? formItems : [{ categoryId: "", listingId: "", quantity: 1 }]
     });
     setEditingId(cp.id);
     setShowForm(true);
   };
 
-  const addItem = () => setFormData(prev => ({ ...prev, items: [...prev.items, { productId: "", quantity: 1 }] }));
+  const addItem = () => setFormData(prev => ({ ...prev, items: [...prev.items, { categoryId: "", listingId: "", quantity: 1 }] }));
   const removeItem = (idx: number) => setFormData(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
+
+  const updateItem = (idx: number, field: keyof FormItem, value: string | number) => {
+    setFormData(prev => {
+      const items = [...prev.items];
+      if (field === "categoryId") {
+        items[idx] = { ...items[idx], categoryId: value as string, listingId: "" };
+      } else if (field === "listingId") {
+        items[idx] = { ...items[idx], listingId: value as string };
+      } else {
+        items[idx] = { ...items[idx], quantity: value as number };
+      }
+      return { ...prev, items };
+    });
+  };
 
   if (!hasPermission("manage_inventory")) {
     return <div className="p-6 text-center text-gray-500" data-testid="no-permission">You do not have permission to manage composite products.</div>;
@@ -128,9 +174,9 @@ export default function CompositeProductsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="page-title">Composite Products</h1>
-          <p className="text-sm text-gray-500 mt-1">Create product bundles from existing inventory items</p>
+          <p className="text-sm text-gray-500 mt-1">Create product bundles from your inventory</p>
         </div>
-        <button onClick={() => { setShowForm(true); setEditingId(null); setFormData({ name: "", description: "", items: [{ productId: "", quantity: 1 }] }); }}
+        <button onClick={() => { setShowForm(true); setEditingId(null); resetForm(); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
           data-testid="create-composite-btn">
           <Plus className="w-4 h-4" /> Create Bundle
@@ -147,7 +193,7 @@ export default function CompositeProductsPage() {
       {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" data-testid="composite-form-modal">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6">
             <h2 className="text-lg font-semibold mb-4">{editingId ? "Edit" : "Create"} Composite Product</h2>
             <div className="space-y-4">
               <div>
@@ -163,29 +209,80 @@ export default function CompositeProductsPage() {
                   data-testid="composite-desc-input" />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bundle Price *</label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input type="number" min={0} step={0.01} value={formData.price} onChange={e => setFormData(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00"
+                    data-testid="composite-price-input" />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Set manually — can include bundle discounts or premiums</p>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Components *</label>
-                {formData.items.map((item, idx) => (
-                  <div key={idx} className="flex gap-2 mb-2 items-center">
-                    <select value={item.productId} onChange={e => {
-                      const newItems = [...formData.items];
-                      newItems[idx].productId = e.target.value;
-                      setFormData(p => ({ ...p, items: newItems }));
-                    }} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid={`item-product-${idx}`}>
-                      <option value="">Select product</option>
-                      {listings.map(l => <option key={l.id} value={l.id}>{l.productName} (Stock: {l.stock})</option>)}
-                    </select>
-                    <input type="number" min={1} value={item.quantity} onChange={e => {
-                      const newItems = [...formData.items];
-                      newItems[idx].quantity = parseInt(e.target.value) || 1;
-                      setFormData(p => ({ ...p, items: newItems }));
-                    }} className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center" data-testid={`item-qty-${idx}`} />
-                    {formData.items.length > 1 && (
-                      <button onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 p-1" data-testid={`remove-item-${idx}`}>
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                {categories.length === 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+                    <p className="text-sm text-amber-700">No inventory items found. Add products to your seller listings first.</p>
                   </div>
-                ))}
+                )}
+                {formData.items.map((item, idx) => {
+                  const catProducts = getProductsForCategory(item.categoryId);
+                  const selectedProduct = catProducts.find(p => p.listingId === item.listingId);
+                  return (
+                    <div key={idx} className="bg-gray-50 rounded-lg p-3 mb-2">
+                      <div className="grid grid-cols-12 gap-2 items-start">
+                        {/* Category dropdown */}
+                        <div className="col-span-5">
+                          <label className="text-xs text-gray-500 mb-1 block">Category</label>
+                          <select value={item.categoryId} onChange={e => updateItem(idx, "categoryId", e.target.value)}
+                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                            data-testid={`item-category-${idx}`}>
+                            <option value="">Select category</option>
+                            {categories.map(c => (
+                              <option key={c.categoryId} value={c.categoryId}>{c.categoryName}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Product dropdown */}
+                        <div className="col-span-5">
+                          <label className="text-xs text-gray-500 mb-1 block">Product</label>
+                          <select value={item.listingId} onChange={e => updateItem(idx, "listingId", e.target.value)}
+                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                            disabled={!item.categoryId}
+                            data-testid={`item-product-${idx}`}>
+                            <option value="">{item.categoryId ? "Select product" : "Select category first"}</option>
+                            {catProducts.map(p => (
+                              <option key={p.listingId} value={p.listingId}>{p.productName} (Stock: {p.stock})</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="col-span-2 flex items-end gap-1">
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500 mb-1 block">Qty</label>
+                            <input type="number" min={1} value={item.quantity} onChange={e => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
+                              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm text-center"
+                              data-testid={`item-qty-${idx}`} />
+                          </div>
+                          {formData.items.length > 1 && (
+                            <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 pb-1" data-testid={`remove-item-${idx}`}>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {selectedProduct && (
+                        <div className="mt-1.5 text-xs text-gray-400">
+                          Current stock: <span className={selectedProduct.stock < item.quantity ? "text-red-500 font-medium" : "text-green-600"}>{selectedProduct.stock}</span>
+                          {selectedProduct.price > 0 && <span className="ml-3">Unit price: {selectedProduct.price.toLocaleString("en-IN")}</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 <button onClick={addItem} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium mt-1" data-testid="add-item-btn">
                   + Add Component
                 </button>
@@ -193,7 +290,10 @@ export default function CompositeProductsPage() {
             </div>
             <div className="flex gap-3 mt-6 justify-end">
               <button onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800" data-testid="cancel-form-btn">Cancel</button>
-              <button onClick={handleSubmit} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700" data-testid="submit-form-btn">
+              <button onClick={handleSubmit}
+                disabled={!formData.name || !formData.price || formData.items.every(i => !i.listingId)}
+                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                data-testid="submit-form-btn">
                 {editingId ? "Update" : "Create"}
               </button>
             </div>
@@ -221,22 +321,34 @@ export default function CompositeProductsPage() {
                   </div>
                   <div>
                     <h3 className="font-medium text-gray-900">{cp.name}</h3>
-                    <p className="text-xs text-gray-500">{cp.items?.length || 0} components</p>
+                    <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                      <span>{cp.items?.length || 0} components</span>
+                      {cp.price != null && (
+                        <span className="flex items-center gap-0.5 font-medium text-gray-700">
+                          <IndianRupee className="w-3 h-3" />{cp.price.toLocaleString("en-IN")}
+                        </span>
+                      )}
+                      <span className={`font-medium ${cp.availableStock > 0 ? "text-green-600" : "text-red-500"}`}>
+                        {cp.availableStock > 0 ? `${cp.availableStock} available` : "Out of stock"}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1 mr-2">
-                    <input type="number" min={1} value={sellQty[cp.id] || 1}
-                      onChange={e => setSellQty(p => ({ ...p, [cp.id]: parseInt(e.target.value) || 1 }))}
-                      onClick={e => e.stopPropagation()}
-                      className="w-16 px-2 py-1 border border-gray-200 rounded-md text-sm text-center"
-                      data-testid={`sell-qty-${cp.id}`} />
-                    <button onClick={e => { e.stopPropagation(); handleSell(cp.id); }}
-                      className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700"
-                      data-testid={`sell-btn-${cp.id}`}>
-                      <ShoppingCart className="w-3.5 h-3.5" /> Sell
-                    </button>
-                  </div>
+                  {cp.availableStock > 0 && (
+                    <div className="flex items-center gap-1 mr-2">
+                      <input type="number" min={1} max={cp.availableStock} value={sellQty[cp.id] || 1}
+                        onChange={e => setSellQty(p => ({ ...p, [cp.id]: parseInt(e.target.value) || 1 }))}
+                        onClick={e => e.stopPropagation()}
+                        className="w-16 px-2 py-1 border border-gray-200 rounded-md text-sm text-center"
+                        data-testid={`sell-qty-${cp.id}`} />
+                      <button onClick={e => { e.stopPropagation(); handleSell(cp.id); }}
+                        className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700"
+                        data-testid={`sell-btn-${cp.id}`}>
+                        <ShoppingCart className="w-3.5 h-3.5" /> Sell
+                      </button>
+                    </div>
+                  )}
                   <button onClick={e => { e.stopPropagation(); startEdit(cp); }} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium" data-testid={`edit-btn-${cp.id}`}>Edit</button>
                   <button onClick={e => { e.stopPropagation(); handleDelete(cp.id); }} className="text-sm text-red-500 hover:text-red-700" data-testid={`delete-btn-${cp.id}`}>
                     <Trash2 className="w-4 h-4" />
@@ -251,8 +363,9 @@ export default function CompositeProductsPage() {
                     <thead>
                       <tr className="text-gray-500 text-xs uppercase">
                         <th className="text-left pb-2">Component</th>
+                        <th className="text-left pb-2">Category</th>
                         <th className="text-right pb-2">Qty/Unit</th>
-                        <th className="text-right pb-2">Current Stock</th>
+                        <th className="text-right pb-2">In Stock</th>
                         <th className="text-right pb-2">Status</th>
                       </tr>
                     </thead>
@@ -261,16 +374,19 @@ export default function CompositeProductsPage() {
                         const isLow = (item.currentStock || 0) < item.quantity;
                         return (
                           <tr key={idx} className="border-t border-gray-100">
-                            <td className="py-2 text-gray-700">{item.productName || "Unknown"}</td>
+                            <td className="py-2 text-gray-700 font-medium">{item.productName || "Unknown"}</td>
+                            <td className="py-2 text-gray-500 text-xs">{item.categoryName || "-"}</td>
                             <td className="py-2 text-right text-gray-700">{item.quantity}</td>
                             <td className="py-2 text-right text-gray-700">{item.currentStock ?? 0}</td>
                             <td className="py-2 text-right">
-                              {isLow ? (
-                                <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                              {(item.currentStock || 0) === 0 ? (
+                                <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium">Out</span>
+                              ) : isLow ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
                                   <AlertCircle className="w-3 h-3" /> Low
                                 </span>
                               ) : (
-                                <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">OK</span>
+                                <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-medium">OK</span>
                               )}
                             </td>
                           </tr>
