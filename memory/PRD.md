@@ -2344,15 +2344,14 @@ manage_roles       - Create and manage roles & permissions
 
 ### Session: 2026-03-14 (Phase 2-6 Implementation)
 
-**Composite Products (DONE - UPDATED 2026-03-14):**
-- Components reference admin catalog (`products` collection) via productId, NOT sellerListings
-- Category → Product cascading dropdown uses `GET /api/categories/all` and `GET /api/products/by-category/{id}` (same as listing creation)
-- Stock NOT stored independently - calculated dynamically: `min(seller_listing_stock / component_qty)`
-- Components without seller listing show `hasListing: false, stock: 0`
-- Price set manually by seller (supports bundle discounts/premiums)
-- When created, sellerListing with `productType: "composite"` auto-created
-- Sell deducts stock from seller's own sellerListings (looked up by sellerId + productId)
-- Frontend: Category→Product cascading selectors, dynamic available stock, sell with validation
+**Composite Products (DONE - FINAL 2026-03-14):**
+- **Product Identity** (name/category): From admin catalog via `GET /api/categories/all` → `GET /api/products/by-category/{id}` — seller CANNOT type product names
+- **Components**: From seller's own inventory (`sellerListings`) via `GET /api/business-tools/composite-products/seller-inventory`
+- Stock NOT stored independently - calculated dynamically: `min(component_stock / component_qty)`
+- Price set manually by seller
+- When created, sellerListing with `productType: "composite"` auto-created (uses compositeProductId as productId for index uniqueness)
+- Form: Two sections — Product Identity (blue, from catalog) + Components (amber, from inventory)
+- 27/27 tests passed
 
 **Invoice System (DONE):**
 - Auto-incrementing invoice numbers: INV-{sellerId_suffix}-{sequence}
