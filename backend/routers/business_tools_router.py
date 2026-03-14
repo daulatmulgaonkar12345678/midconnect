@@ -22,7 +22,7 @@ from models.business_tools import (
 logger = logging.getLogger(__name__)
 
 
-def init_business_tools_router(db, verify_token_func):
+def init_business_tools_router(db, verify_token_func, activity_log_service=None):
     """Initialize the business tools router with database and auth dependencies."""
     
     router = APIRouter(tags=["Business Tools"])
@@ -186,6 +186,8 @@ def init_business_tools_router(db, verify_token_func):
         role_doc["_id"] = result.inserted_id
         
         logger.info(f"Role created: {data.name} by seller {seller_id}")
+        if activity_log_service:
+            await activity_log_service.log(seller_id, str(user["_id"]), "role_created", "roles", str(result.inserted_id), data.name)
         return {"message": "Role created", "role": serialize_doc(role_doc)}
     
     @router.put("/roles/{role_id}")
@@ -385,6 +387,8 @@ def init_business_tools_router(db, verify_token_func):
         employee_doc["roleName"] = role["name"]
         
         logger.info(f"Employee created: {data.email} for seller {seller_id}")
+        if activity_log_service:
+            await activity_log_service.log(seller_id, str(user["_id"]), "employee_created", "employees", str(result.inserted_id), data.name)
         return {"message": "Employee created", "employee": serialize_doc(employee_doc)}
     
     @router.put("/employees/{employee_id}")
@@ -536,6 +540,8 @@ def init_business_tools_router(db, verify_token_func):
         result = await db.seller_buyers.insert_one(buyer_doc)
         buyer_doc["_id"] = result.inserted_id
         
+        if activity_log_service:
+            await activity_log_service.log(seller_id, str(user["_id"]), "buyer_created", "buyers", str(result.inserted_id), data.buyerName)
         return {"message": "Buyer created", "buyer": serialize_doc(buyer_doc)}
     
     @router.get("/buyers/{buyer_id}")
@@ -673,6 +679,8 @@ def init_business_tools_router(db, verify_token_func):
         result = await db.seller_suppliers.insert_one(supplier_doc)
         supplier_doc["_id"] = result.inserted_id
         
+        if activity_log_service:
+            await activity_log_service.log(seller_id, str(user["_id"]), "supplier_created", "suppliers", str(result.inserted_id), data.supplierName)
         return {"message": "Supplier created", "supplier": serialize_doc(supplier_doc)}
     
     @router.get("/suppliers/{supplier_id}")

@@ -17,7 +17,7 @@ from models.business_tools import (
 logger = logging.getLogger(__name__)
 
 
-def init_inventory_router(db, verify_token_func):
+def init_inventory_router(db, verify_token_func, activity_log_service=None):
     """Initialize the inventory router."""
     
     router = APIRouter(tags=["Inventory"])
@@ -312,6 +312,9 @@ def init_inventory_router(db, verify_token_func):
         
         logger.info(f"Inventory adjusted: {listing_id} {data.changeType.value} {data.quantity}")
         
+        if activity_log_service:
+            await activity_log_service.log(seller_id, str(user.get("_id")), "stock_adjusted", "inventory", str(listing_oid), f"{data.changeType.value}: {data.quantity}")
+
         return {
             "message": "Inventory adjusted",
             "previousStock": previous_stock,

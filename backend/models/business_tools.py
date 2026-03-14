@@ -218,3 +218,63 @@ class InventoryLogResponse(BaseModel):
     note: Optional[str] = None
     createdBy: Optional[str] = None
     createdAt: datetime
+
+
+# ===========================================
+# COMPOSITE PRODUCT MODELS
+# ===========================================
+
+class CompositeProductItemCreate(BaseModel):
+    productId: str
+    quantity: int = Field(..., ge=1)
+
+class CompositeProductCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    items: List[CompositeProductItemCreate] = Field(..., min_length=1)
+
+class CompositeProductUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    items: Optional[List[CompositeProductItemCreate]] = None
+
+class CompositeProductSell(BaseModel):
+    quantity: int = Field(1, ge=1)
+    note: Optional[str] = Field(None, max_length=500)
+
+
+# ===========================================
+# INVOICE MODELS
+# ===========================================
+
+class InvoiceItemCreate(BaseModel):
+    productId: Optional[str] = None
+    productName: Optional[str] = None
+    quantity: int = Field(..., ge=1)
+    price: float = Field(..., ge=0)
+    gstPercent: float = Field(0, ge=0, le=100)
+
+class InvoiceCreate(BaseModel):
+    buyerId: str
+    items: List[InvoiceItemCreate] = Field(..., min_length=1)
+    notes: Optional[str] = Field(None, max_length=1000)
+    deductStock: bool = True
+
+class InvoiceStatusUpdate(BaseModel):
+    status: str  # draft, sent, paid, cancelled
+
+
+# ===========================================
+# ACTIVITY LOG MODELS
+# ===========================================
+
+class ActivityLogAction(str, Enum):
+    EMPLOYEE_CREATED = "employee_created"
+    ROLE_CREATED = "role_created"
+    ROLE_UPDATED = "role_updated"
+    STOCK_ADJUSTED = "stock_adjusted"
+    BUYER_CREATED = "buyer_created"
+    SUPPLIER_CREATED = "supplier_created"
+    INVOICE_CREATED = "invoice_created"
+    COMPOSITE_PRODUCT_CREATED = "composite_product_created"
+    COMPOSITE_PRODUCT_SOLD = "composite_product_sold"

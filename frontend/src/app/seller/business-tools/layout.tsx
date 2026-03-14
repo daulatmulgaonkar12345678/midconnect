@@ -13,6 +13,7 @@ import {
   BarChart3,
   UserCog,
   Shield,
+  Activity,
   ChevronLeft,
   Loader2,
   Menu,
@@ -25,13 +26,15 @@ interface PermissionContextType {
   isAdmin: boolean;
   hasPermission: (permission: string) => boolean;
   loading: boolean;
+  token: string | null;
 }
 
 const PermissionContext = createContext<PermissionContextType>({
   permissions: [],
   isAdmin: false,
   hasPermission: () => false,
-  loading: true
+  loading: true,
+  token: null
 });
 
 export const usePermissions = () => useContext(PermissionContext);
@@ -70,7 +73,7 @@ const navItems = [
     href: '/seller/business-tools/composite-products', 
     label: 'Composite Products', 
     icon: Layers,
-    permission: 'manage_listings',
+    permission: 'manage_inventory',
     color: 'pink'
   },
   { 
@@ -93,6 +96,13 @@ const navItems = [
     icon: Shield,
     permission: 'manage_roles',
     color: 'red'
+  },
+  { 
+    href: '/seller/business-tools/activity-logs', 
+    label: 'Activity Logs', 
+    icon: Activity,
+    permission: 'manage_roles',
+    color: 'slate'
   }
 ];
 
@@ -108,19 +118,21 @@ export default function BusinessToolsLayout({
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
 
   const loadPermissions = useCallback(async () => {
     try {
-      const token = await getIdToken();
-      if (!token) {
+      const idToken = await getIdToken();
+      if (!idToken) {
         router.push('/login');
         return;
       }
+      setToken(idToken);
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/my-permissions`,
         {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${idToken}` }
         }
       );
 
@@ -174,13 +186,14 @@ export default function BusinessToolsLayout({
       pink: { active: 'bg-pink-100 text-pink-700 border-pink-500', inactive: 'text-gray-600 hover:bg-pink-50 hover:text-pink-600' },
       cyan: { active: 'bg-cyan-100 text-cyan-700 border-cyan-500', inactive: 'text-gray-600 hover:bg-cyan-50 hover:text-cyan-600' },
       amber: { active: 'bg-amber-100 text-amber-700 border-amber-500', inactive: 'text-gray-600 hover:bg-amber-50 hover:text-amber-600' },
-      red: { active: 'bg-red-100 text-red-700 border-red-500', inactive: 'text-gray-600 hover:bg-red-50 hover:text-red-600' }
+      red: { active: 'bg-red-100 text-red-700 border-red-500', inactive: 'text-gray-600 hover:bg-red-50 hover:text-red-600' },
+      slate: { active: 'bg-slate-100 text-slate-700 border-slate-500', inactive: 'text-gray-600 hover:bg-slate-50 hover:text-slate-600' }
     };
     return isActive ? colors[color]?.active : colors[color]?.inactive;
   };
 
   return (
-    <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, loading }}>
+    <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, loading, token }}>
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white border-b sticky top-0 z-40">

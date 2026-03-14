@@ -13012,13 +13012,32 @@ seller_catalog_router = init_seller_catalog_routes(db)
 app.include_router(seller_catalog_router, prefix="/api")
 
 # Business Tools Routers (RBAC, Employees, Buyers, Suppliers, Inventory)
+from services.activity_log_service import ActivityLogService
+activity_log_service = ActivityLogService(db)
+
 from routers.business_tools_router import init_business_tools_router
-business_tools_router = init_business_tools_router(db, verify_firebase_token)
+business_tools_router = init_business_tools_router(db, verify_firebase_token, activity_log_service)
 app.include_router(business_tools_router, prefix="/api/business-tools")
 
 from routers.inventory_router import init_inventory_router
-inventory_router = init_inventory_router(db, verify_firebase_token)
+inventory_router = init_inventory_router(db, verify_firebase_token, activity_log_service)
 app.include_router(inventory_router, prefix="/api/business-tools")
+
+from routers.composite_products_router import init_composite_products_router
+composite_products_router = init_composite_products_router(db, verify_firebase_token, activity_log_service)
+app.include_router(composite_products_router, prefix="/api/business-tools")
+
+from routers.invoice_router import init_invoice_router
+invoice_router_bt = init_invoice_router(db, verify_firebase_token, activity_log_service)
+app.include_router(invoice_router_bt, prefix="/api/business-tools")
+
+from routers.reports_router import init_reports_router
+reports_router = init_reports_router(db, verify_firebase_token)
+app.include_router(reports_router, prefix="/api/business-tools")
+
+from routers.activity_log_router import init_activity_log_router
+activity_log_router = init_activity_log_router(db, verify_firebase_token)
+app.include_router(activity_log_router, prefix="/api/business-tools")
 
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
