@@ -2164,4 +2164,49 @@ WhatsApp's `wa.me` links only support text content - images cannot be directly a
 
 ---
 
+### Session: 2026-03-14 (Product Images in Seller Cards)
+
+#### Added Product Images to Seller Cards - COMPLETE ✅
+
+**Problem:**
+Seller cards on product pages didn't display product images. Buyers couldn't see what they were inquiring about before clicking "Request Quote".
+
+**Solution:**
+Added a product image gallery section to the `StandardSellerCard` component:
+- Displays the first product image prominently
+- Navigation arrows for multiple images (prev/next)
+- Thumbnail strip for quick image selection
+- Image counter showing "1/3" etc.
+- Responsive aspect ratio (16:9 on mobile, 21:9 on desktop)
+
+**New Seller Card Layout:**
+```
+┌─────────────────────────────────────┐
+│  5 HP | 415V | 3 Phase | 1440       │  ← Spec Strip
+├─────────────────────────────────────┤
+│                                     │
+│      [PRODUCT IMAGE]                │  ← NEW: Product Image
+│      < [1/2] >                      │     with navigation
+├─────────────────────────────────────┤
+│  ⭐ Best Price                      │
+│  🏢 Seller Name • Manufacturer      │
+│  📍 Location                        │
+├─────────────────────────────────────┤
+│  ₹9,500  │  MOQ: 5  │  Lead: 7d    │
+├─────────────────────────────────────┤
+│     [Request Quote]                 │
+│     [View Details & Reviews]        │
+└─────────────────────────────────────┘
+```
+
+**Files Modified:**
+- `/app/frontend/src/components/product/StandardSellerCard.tsx`:
+  - Added Image import from next/image
+  - Added useState for image index tracking
+  - Added ChevronLeft/ChevronRight icons
+  - Added product image gallery section with navigation
+  - Added thumbnail strip for multiple images
+
+---
+
 

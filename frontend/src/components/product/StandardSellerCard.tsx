@@ -10,9 +10,14 @@ import {
   Shield,
   MapPin,
   Video,
-  Play
+  Play,
+  Package,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { useState } from 'react';
 import { EnterpriseProductSeller } from '@/lib/api';
 
 // UdyogConnect Seller Badge (Choice/Trusted)
@@ -100,6 +105,7 @@ export default function StandardSellerCard({
   onViewDetails
 }: StandardSellerCardProps) {
   const displayPrice = seller.lowestPrice || (seller.pricingTiers?.[0]?.pricePerUnit) || 0;
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -107,6 +113,22 @@ export default function StandardSellerCard({
       currency: 'INR',
       maximumFractionDigits: 0
     }).format(price);
+  };
+
+  // Handle image navigation
+  const hasImages = seller.images && seller.images.length > 0;
+  const totalImages = seller.images?.length || 0;
+
+  const nextImage = () => {
+    if (hasImages) {
+      setCurrentImageIndex((prev) => (prev + 1) % totalImages);
+    }
+  };
+
+  const prevImage = () => {
+    if (hasImages) {
+      setCurrentImageIndex((prev) => (prev - 1 + totalImages) % totalImages);
+    }
   };
 
   return (
@@ -121,6 +143,70 @@ export default function StandardSellerCard({
             attributes={seller.searchableAttributes} 
             labels={seller.attributeLabels || {}} 
           />
+        </div>
+      )}
+
+      {/* Product Images Section */}
+      {hasImages && (
+        <div className="relative bg-gray-100" data-testid="seller-product-images">
+          {/* Main Image */}
+          <div className="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden">
+            <Image
+              src={seller.images[currentImageIndex]}
+              alt={`Product image ${currentImageIndex + 1}`}
+              fill
+              className="object-contain"
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
+            
+            {/* Image Navigation */}
+            {totalImages > 1 && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition"
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft className="h-5 w-5 text-gray-700" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition"
+                  aria-label="Next image"
+                >
+                  <ChevronRight className="h-5 w-5 text-gray-700" />
+                </button>
+                
+                {/* Image Counter */}
+                <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
+                  {currentImageIndex + 1} / {totalImages}
+                </div>
+              </>
+            )}
+          </div>
+          
+          {/* Thumbnail Strip (for multiple images) */}
+          {totalImages > 1 && (
+            <div className="flex gap-1 p-2 bg-gray-50 overflow-x-auto">
+              {seller.images.map((img, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentImageIndex(idx)}
+                  className={`flex-shrink-0 w-12 h-12 rounded border-2 overflow-hidden transition ${
+                    idx === currentImageIndex ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
+                  }`}
+                >
+                  <Image
+                    src={img}
+                    alt={`Thumbnail ${idx + 1}`}
+                    width={48}
+                    height={48}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
