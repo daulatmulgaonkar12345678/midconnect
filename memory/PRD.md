@@ -2249,4 +2249,40 @@ Filter by Specs
 
 ---
 
+### Session: 2026-03-14 (Seller Filter Added)
+
+#### Added Seller Filter to Product Page - COMPLETE ✅
+
+**Problem:**
+Buyers couldn't filter to see products from a specific seller. If multiple sellers offer the same product, buyers had to scroll through all of them.
+
+**Solution:**
+Added a "Filter by Seller" dropdown below the "Filter by Location" section.
+
+**Features:**
+- Dropdown lists all sellers for the product
+- Real-time filtering when seller is selected
+- Works in combination with location filter
+- Shows "X sellers found by [Seller Name]" count
+- "Clear seller filter" link to reset
+
+**UI Location:**
+```
+Filter by Specs
+├── Power, Voltage, Phase, RPM, Efficiency Class
+├── Sort By: Price: Low to High
+├── Filter by Location: All Locations
+└── Filter by Seller: All Sellers  ← NEW!
+```
+
+**Files Modified:**
+- `/app/frontend/src/app/products/[slug]/page.tsx`:
+  - Added `sellerFilter` state
+  - Updated `filteredSellers` to filter by both location AND seller
+  - Added "Filter by Seller" dropdown UI
+  - Updated seller count display to show both filters
+  - Updated empty state and clear filters logic
+
+---
+
 

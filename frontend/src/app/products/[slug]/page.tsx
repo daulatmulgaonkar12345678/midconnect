@@ -430,6 +430,7 @@ export default function EnterpriseProductPage() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
   const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [sellerFilter, setSellerFilter] = useState<string>('all');
 
   // Compare state
   const [isComparing, setIsComparing] = useState(false);
@@ -925,13 +926,24 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
     return sellers.filter(s => compareItems.includes(s.listingId));
   }, [sellers, compareItems]);
 
-  // Filter sellers by location
+  // Filter sellers by location and seller name
   const filteredSellers = useMemo(() => {
-    if (locationFilter === 'all') return sellers;
-    return sellers.filter(s => 
-      s.city === locationFilter || s.state === locationFilter
-    );
-  }, [sellers, locationFilter]);
+    let result = sellers;
+    
+    // Filter by location
+    if (locationFilter !== 'all') {
+      result = result.filter(s => 
+        s.city === locationFilter || s.state === locationFilter
+      );
+    }
+    
+    // Filter by seller
+    if (sellerFilter !== 'all') {
+      result = result.filter(s => s.sellerId === sellerFilter);
+    }
+    
+    return result;
+  }, [sellers, locationFilter, sellerFilter]);
 
   // Loading state
   if (loading) {
@@ -1219,6 +1231,33 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                     </button>
                   )}
                 </div>
+
+                {/* Seller Filter */}
+                <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Filter by Seller</h3>
+                  <select
+                    value={sellerFilter}
+                    onChange={(e) => setSellerFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    data-testid="seller-filter-select"
+                  >
+                    <option value="all">All Sellers</option>
+                    {/* Get unique sellers */}
+                    {sellers.map(s => (
+                      <option key={s.sellerId} value={s.sellerId}>
+                        {s.companyName || 'Verified Seller'}
+                      </option>
+                    ))}
+                  </select>
+                  {sellerFilter !== 'all' && (
+                    <button
+                      onClick={() => setSellerFilter('all')}
+                      className="mt-2 text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Clear seller filter
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1228,9 +1267,11 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
                 <div className="text-slate-600">
                   <span className="font-semibold text-slate-900">{filteredSellers.length}</span> sellers found
-                  {locationFilter !== 'all' && (
+                  {(locationFilter !== 'all' || sellerFilter !== 'all') && (
                     <span className="text-sm text-slate-500 ml-2">
-                      in {locationFilter}
+                      {locationFilter !== 'all' && `in ${locationFilter}`}
+                      {locationFilter !== 'all' && sellerFilter !== 'all' && ' • '}
+                      {sellerFilter !== 'all' && `by ${sellers.find(s => s.sellerId === sellerFilter)?.companyName || 'Selected Seller'}`}
                     </span>
                   )}
                 </div>
@@ -1271,14 +1312,15 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
                 <Package className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-900 mb-2">No sellers found</h3>
                 <p className="text-slate-500 mb-4">
-                  {locationFilter !== 'all' 
-                    ? `No sellers in ${locationFilter}. Try a different location.`
+                  {locationFilter !== 'all' || sellerFilter !== 'all'
+                    ? `No sellers match your filters. Try different options.`
                     : 'Try adjusting your filters'}
                 </p>
                 <button
                   onClick={() => {
                     handleClearFilters();
                     setLocationFilter('all');
+                    setSellerFilter('all');
                   }}
                   className="text-blue-600 hover:text-blue-800"
                 >
