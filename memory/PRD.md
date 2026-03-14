@@ -2060,3 +2060,51 @@ Create a comprehensive seller catalog system allowing sellers to have their own 
 
 ---
 
+### Session: 2026-03-14 (Seller Catalog System - Data Migration & Fixes)
+
+#### Data Migration for Seller Slugs - COMPLETE ✅
+
+**Problem:**
+- Legacy sellers in both `users` and `sellers` collections didn't have `sellerSlug` field
+- Product pages and seller catalog pages couldn't link properly to legacy sellers
+- The `/api/products/{slug}/filter` endpoint wasn't returning `sellerSlug` for legacy sellers
+
+**Fixes Applied:**
+
+1. **Data Migration Script** (`/app/backend/migrations/migrate_add_seller_slugs.py`):
+   - Migrates all existing sellers to have `sellerSlug` field
+   - Generates slug from `businessName` using same logic as new registrations
+   - Handles duplicates by appending -2, -3, etc.
+   - Skips sellers that already have valid slugs
+   - Works for both `users` and `sellers` collections
+
+2. **Dual Collection Lookup** (Backend APIs):
+   - `GET /api/seller-catalog/{slug}` - Now checks both `users` and `sellers` collections
+   - `POST /api/products/{slug}/filter` - Returns `sellerSlug` from either collection
+   - `GET /api/products/{slug}/enterprise` - Includes `sellerSlug` in seller data
+
+3. **Filter Endpoint Fix** (`/app/backend/routers/enterprise_products.py`):
+   - Added `sellerSlug` to the result item dictionary (was missing before)
+   - Fixed location display showing "None, None" when city/state are null
+   - Now shows "India" as fallback location
+
+4. **Seller Catalog Router Fix** (`/app/backend/routers/seller_catalog_router.py`):
+   - `get_seller_by_slug()` now checks legacy `sellers` collection as fallback
+   - Response building handles both nested `profile` structure (users) and flat structure (sellers)
+
+**Testing Results:**
+- Backend tests: 12/12 PASSED (100%)
+- Seller catalog page loads correctly for legacy sellers
+- Clickable seller names navigate to correct catalog page
+- Products on catalog link to correct product detail pages
+
+**API Verification:**
+```
+GET /api/seller-catalog/seller-de460c → 200 OK ✓
+POST /api/products/.../filter → returns sellerSlug ✓
+GET /api/products/.../enterprise → returns sellerSlug ✓
+```
+
+---
+
+
