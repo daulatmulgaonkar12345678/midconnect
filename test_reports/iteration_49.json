@@ -1,0 +1,65 @@
+{
+  "summary": "Complete backend testing of rewritten Composite Products system using admin catalog (productId). All 25 tests passed (100%). The previous critical bug (DuplicateKeyError on sellerListings) has been fixed - composite products now correctly set productId = compositeProductId when creating the composite sellerListing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_composite_products_admin_catalog.py",
+    "/app/test_reports/pytest/composite_products_admin_catalog_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POST /api/business-tools/composite-products correctly creates composite with productId (admin products)",
+    "GET /api/business-tools/composite-products returns items with productId, hasListing, currentStock (dynamic from seller's sellerListings)",
+    "availableStock = min(component_stock / component_qty) calculation verified working",
+    "Components without seller listing correctly show hasListing=false and currentStock=0",
+    "PUT /api/business-tools/composite-products/{id} correctly updates name, price, description, items",
+    "DELETE /api/business-tools/composite-products/{id} correctly deletes composite + associated sellerListing",
+    "POST /api/business-tools/composite-products/{id}/sell correctly deducts from seller's sellerListings (lookup by sellerId + productId)",
+    "Sell fails correctly when seller has no listing for a component (400 error)",
+    "Sell fails correctly when insufficient stock (400 error with clear message)",
+    "GET /api/categories/all returns admin categories for dropdown",
+    "GET /api/products/by-category/{id} returns admin products for cascading dropdown",
+    "Firebase Auth is MOCKED - dev-test-token provides seller admin access"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_composite_products_admin_catalog.py"
+  ],
+  "success_rate": {
+    "backend": "100% (25 passed, 0 failed)"
+  },
+  "test_credentials": "Auth: Bearer dev-test-token",
+  "seed_data_creation": "Used existing admin products: 699be9023cbe1a8c31591668 (Motor, stock ~41), 69aaf1febc2259c4124a5db0 (Round Bar, stock ~24). Seller has sellerListings for these products.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Composite products now use admin productId (not listingId). Stock is dynamically calculated from seller's sellerListings found by sellerId + productId. The previous MongoDB unique index bug is resolved - composite sellerListings now correctly set productId = compositeProductId.",
+  "mocked_api": {
+    "Firebase Auth": "MOCKED - dev-test-token provides seller admin access"
+  },
+  "api_endpoints_verified": {
+    "GET /api/categories/all": "200 OK - Returns admin categories for dropdown",
+    "GET /api/products/by-category/{id}": "200 OK - Returns admin products in category for cascading dropdown",
+    "GET /api/business-tools/composite-products": "200 OK - Lists composites with dynamic availableStock, items use productId",
+    "POST /api/business-tools/composite-products": "200 OK - Creates composite with productId from admin catalog, price field, auto-creates sellerListing",
+    "PUT /api/business-tools/composite-products/{id}": "200 OK - Updates name, description, price, items",
+    "DELETE /api/business-tools/composite-products/{id}": "200 OK - Deletes composite and its sellerListing",
+    "POST /api/business-tools/composite-products/{id}/sell": "200 OK - Deducts from seller's sellerListings, validates stock availability"
+  },
+  "verified_features": [
+    "Items use productId (admin products) - NOT listingId (old schema)",
+    "Price field present and manually set by seller",
+    "availableStock = min(component_stock / component_qty) calculation verified",
+    "Components without seller listing: hasListing=false, currentStock=0",
+    "Selling deducts from seller's sellerListings (found by sellerId + productId)",
+    "Sell fails with 400 when seller has no listing for component",
+    "Sell fails with 400 when insufficient stock",
+    "DELETE removes composite AND composite sellerListing",
+    "Category→Product cascading dropdown endpoints working"
+  ]
+}
