@@ -2600,3 +2600,68 @@ Added optional product specification support to the invoice system. Sellers can 
 
 ---
 
+
+
+### Session: 2026-03-14
+
+#### Phase 1: Advanced Payment Tracking System - COMPLETE
+
+**What was done:**
+Implemented a full multi-payment tracking system for invoices. Sellers can record multiple partial payments against any invoice, with the system automatically tracking payment status and pending balance.
+
+**Backend (already implemented from previous agent, verified and tested):**
+1. **Payment Model (`PaymentEntryCreate`):** amount (required >0), paymentDate, paymentMethod (upi/bank_transfer/cash/cheque/other), accountName, referenceNumber, notes
+2. **`POST /api/business-tools/invoices/{id}/payments`:** Add payment entry. Validates amount <= pending. Auto-recalculates invoice totalPaid, pendingAmount, and status.
+3. **`GET /api/business-tools/invoices/{id}/payments`:** List all payments with summary (grandTotal, totalPaid, pendingAmount, paymentCount, status).
+4. **`DELETE /api/business-tools/invoices/{id}/payments/{payment_id}`:** Delete payment and recalculate.
+5. **`GET /api/business-tools/invoices/{id}`:** Returns invoice with payments array, totalPaid, pendingAmount.
+6. **Auto-status logic:** draft→partially_paid (when partial payment), →paid (when fully paid). If all payments deleted, reverts to sent.
+7. **Invoice list API** returns totalPaid and pendingAmount for each invoice.
+
+**Frontend (complete rewrite of invoice page):**
+1. **Invoice list table:** Added Paid and Pending columns showing amounts in color (green/amber).
+2. **Status filters:** Added partially_paid, overdue, viewed to filter options.
+3. **Invoice detail modal:** Shows payment summary (Grand Total, Total Paid, Pending Amount) and Payment History timeline.
+4. **Payment History section:** Each entry shows amount, method badge, date, sender account, reference number, notes, with delete button.
+5. **Add Payment modal:** Form with Amount, Date, Method (UPI/Bank/Cash/Cheque/Other), Sender Account Name, Reference Number, Notes.
+6. **Action buttons:** "Add Payment" button in detail modal and inline in table rows. "Mark Overdue" button added.
+7. Invoice detail now fetches fresh data from API (with payments) on open.
+
+**Status auto-transitions verified:**
+- Invoice Total = 12,550 → Payment 3,000 (UPI) → Status: partially_paid, Pending: 9,550
+- Payment 2,000 (Bank) → Status: partially_paid, Pending: 7,550
+- Payment 7,550 (Cash) → Status: paid, Pending: 0
+
+**Testing:** Iteration 56: 12/12 backend tests passed (100%). Frontend code review passed.
+
+**Files Changed:**
+- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` (full rewrite for payment UI)
+- `/app/backend/routers/invoice_router.py` (already implemented, verified)
+- `/app/backend/models/business_tools.py` (PaymentEntryCreate model already present)
+
+---
+
+### Upcoming Tasks
+
+**P0: Phase 2 - Receipt Upload & Communication:**
+- Integrate Cloudinary for payment receipt uploads (JPG, PNG, PDF)
+- Make receipt upload available for Paid/Partially Paid statuses
+- Add "Follow Up on WhatsApp" wa.me link to invoices
+- Enhance invoice PDF headers with seller branding (company name, address, GST)
+
+**P0: Phase 3 - Dashboards & Notifications:**
+- Central notification center on seller dashboard
+- Key metrics (Total Sales, Pending Payments) on dashboard
+
+**P0: Phase 4 - Customization:**
+- Logo upload for invoice branding
+- Reference invoice template upload
+
+**Backlog:**
+- Refactor inline inquiry modal to shared InquiryModal.tsx
+- Advanced token-based search system
+- Admin search insights dashboard
+- Redis caching
+- Modularize server.py
+- Clean unused Pydantic models
+
