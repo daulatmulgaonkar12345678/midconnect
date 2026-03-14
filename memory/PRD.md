@@ -2345,14 +2345,14 @@ manage_roles       - Create and manage roles & permissions
 ### Session: 2026-03-14 (Phase 2-6 Implementation)
 
 **Composite Products (DONE - UPDATED 2026-03-14):**
-- Components reference sellerListings (not base products) via listingId
-- Category → Product cascading dropdown (categories from admin, products filtered by seller's listings)
-- Stock NOT stored independently - calculated dynamically: `min(component_stock / component_qty)`
+- Components reference admin catalog (`products` collection) via productId, NOT sellerListings
+- Category → Product cascading dropdown uses `GET /api/categories/all` and `GET /api/products/by-category/{id}` (same as listing creation)
+- Stock NOT stored independently - calculated dynamically: `min(seller_listing_stock / component_qty)`
+- Components without seller listing show `hasListing: false, stock: 0`
 - Price set manually by seller (supports bundle discounts/premiums)
-- When created, also creates sellerListing with `productType: "composite"` and `productId = compositeProductId`
-- Appears in: Inventory, Invoices, Reports, Marketplace
-- Fixed: MongoDB unique index conflict resolved by setting productId = compositeProductId
-- Frontend: Create/edit/delete bundles, sell with quantity input, expandable component view with category info
+- When created, sellerListing with `productType: "composite"` auto-created
+- Sell deducts stock from seller's own sellerListings (looked up by sellerId + productId)
+- Frontend: Category→Product cascading selectors, dynamic available stock, sell with validation
 
 **Invoice System (DONE):**
 - Auto-incrementing invoice numbers: INV-{sellerId_suffix}-{sequence}
