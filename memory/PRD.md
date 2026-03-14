@@ -2446,16 +2446,20 @@ Fully overhauled the Composite Products system so composite products behave exac
    - Dropped old unique index `(productId, sellerId)` on `sellerListings`
    - Created new unique index `(productId, sellerId, productType)` to allow both regular AND composite listings for the same admin product
 
-5. **Frontend - `composite-products/page.tsx` updated:**
-   - Shows `purchasePrice` (auto-calculated) and `sellingPrice`
-   - Component table shows `unitPrice` column
-   - Inventory dropdown shows component unit price
-   - Updated TypeScript interfaces for new data fields
+5. **Marketplace & Listing Integration:**
+   - `productType` field added to marketplace search results (per-seller entry), listing detail response, and inventory API
+   - Marketplace search returns both `single` and `composite` product types without filtering
+   - Listing detail endpoint includes `productType` so buyers see it as a regular product
 
-6. **Frontend - `inventory/page.tsx` updated:**
-   - Shows "Composite" badge next to composite product names
-   - Disables "Adjust" and "Edit" buttons for composite products (shows "Auto" instead)
-   - Prevents accidental manual stock changes for composites
+6. **Fallback Manual Linking (NEW):**
+   - `POST /composite-products/{cp_id}/create-listing` endpoint for manually creating marketplace listing if auto-creation fails
+   - Returns existing listing info if already linked
+   - Frontend shows "Create Marketplace Listing" button on cards without a listing
+
+7. **Composite Product Cards:**
+   - Show "Listed" (green) or "Not Listed" (amber) badge indicating marketplace status
+   - `hasListing`, `listingId`, `listingStatus` fields returned from API
+   - Sell button only shown when listing exists and stock > 0
 
 **Data Model - `sellerListings` for composite products:**
 ```
@@ -2476,9 +2480,10 @@ Fully overhauled the Composite Products system so composite products behave exac
 ```
 
 **Testing:**
-- 27/27 backend tests passed (100%)
-- Test report: `/app/test_reports/iteration_51.json`
-- All features verified: CRUD, stock calculation, invoice deduction, RBAC, duplicate prevention, inventory integration
+- Iteration 51: 27/27 backend tests passed (100%)
+- Iteration 52: 15/15 backend tests passed (100%) - listing integration features
+- Test reports: `/app/test_reports/iteration_51.json`, `/app/test_reports/iteration_52.json`
+- All features verified: CRUD, stock calculation, invoice deduction, RBAC, duplicate prevention, inventory integration, marketplace visibility, fallback manual linking
 
 **Remaining/Future:**
 - Refactor inline inquiry modal to use shared `InquiryModal.tsx`
