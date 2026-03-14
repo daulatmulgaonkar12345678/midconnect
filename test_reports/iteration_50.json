@@ -1,0 +1,69 @@
+{
+  "summary": "Backend testing of Composite Products NEW model (Third Rewrite). Fixed 2 critical bugs: 1) GET endpoint 500 error due to None productId ObjectId conversion, 2) POST 500 error due to DuplicateKeyError on sellerListings unique index. All 27 tests passing (100%).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_composite_products_new_model.py",
+    "/app/test_reports/pytest/composite_products_new_model_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "NEW MODEL: create body is {categoryId, productId, description, price, components: [{listingId, quantity}]}",
+    "Components use listingId (seller's own inventory from GET /seller-inventory)",
+    "Product NAME auto-populated from admin products catalog via productId - seller CANNOT type it",
+    "categoryId and productId come from admin catalog (GET /categories/all → GET /products/by-category/{id})",
+    "availableStock = min(component_stock / component_qty) dynamically calculated - VERIFIED WORKING",
+    "POST creates sellerListing with productType=composite, productId=compositeProductId to avoid unique index conflict",
+    "PUT updates description, price, and components (replaces all components)",
+    "DELETE removes composite + associated sellerListing + composite_product_items",
+    "POST /sell deducts from seller's component listings via listingId, validates stock sufficiency"
+  ],
+  "updated_files": [
+    "/app/backend/routers/composite_products_router.py",
+    "/app/backend/tests/test_composite_products_new_model.py"
+  ],
+  "success_rate": {
+    "backend": "100% (27 passed, 0 failed)"
+  },
+  "test_credentials": "Auth: Bearer dev-test-token",
+  "seed_data_creation": "Used existing seller inventory: Motor (listingId=69b57c730ed7999c085b3656, stock=41), Round Bar (listingId=69b57c730ed7999c085b3657, stock=21). Admin catalog: categoryId=699bce748dd2e92e3fbc4336, productId=699d629108ac3c22bb591667",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Composite products use NEW model with components having listingId (seller inventory) instead of old productId. The sellerListing created for composite uses compositeProductId as its productId to avoid unique index (sellerId+productId) conflict. All CRUD + sell operations verified working.",
+  "mocked_api": {
+    "Firebase Auth": "MOCKED - dev-test-token provides seller admin access"
+  },
+  "bugs_fixed": [
+    {
+      "issue": "GET /api/business-tools/composite-products returning 500 Internal Server Error",
+      "root_cause": "enrich_composite() tried to convert None productId to ObjectId when old composite products (created with previous schema) had no productId field",
+      "fix": "Added null check and try/catch for productId/categoryId/listingId ObjectId conversions in enrich_composite()",
+      "file": "/app/backend/routers/composite_products_router.py",
+      "lines_changed": "125-175"
+    },
+    {
+      "issue": "POST /api/business-tools/composite-products returning 500 DuplicateKeyError",
+      "root_cause": "Creating composite sellerListing with admin productId conflicted with unique index idx_listings_product_seller_unique when seller already had a regular listing for that product",
+      "fix": "Changed composite sellerListing to use compositeProductId as its productId instead of admin catalog productId",
+      "file": "/app/backend/routers/composite_products_router.py", 
+      "lines_changed": "299-315"
+    }
+  ],
+  "api_endpoints_verified": {
+    "GET /api/business-tools/composite-products/seller-inventory": "200 OK - Returns seller's non-composite listings with listingId, productName, stock",
+    "GET /api/categories/all": "200 OK - Returns admin categories for dropdown",
+    "GET /api/products/by-category/{id}": "200 OK - Returns admin products in category for cascading dropdown",
+    "GET /api/business-tools/composite-products": "200 OK - Lists composites with productName (from admin), categoryName, components with currentStock",
+    "POST /api/business-tools/composite-products": "200 OK - Creates composite with {categoryId, productId, description, price, components: [{listingId, quantity}]}",
+    "PUT /api/business-tools/composite-products/{id}": "200 OK - Updates description, price, components",
+    "DELETE /api/business-tools/composite-products/{id}": "200 OK - Deletes composite + sellerListing + items",
+    "POST /api/business-tools/composite-products/{id}/sell": "200 OK - Deducts from seller's component listings, returns deductions"
+  }
+}

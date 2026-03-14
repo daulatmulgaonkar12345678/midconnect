@@ -1,9 +1,8 @@
 """
 Composite Products Router
-- Composite products are bundles of admin-created products
-- Seller selects Category → Product from admin catalog (same as listing creation)
-- Components reference products collection (admin catalog), linked to seller's sellerListings
-- Stock is calculated dynamically from seller's inventory
+- Product identity (name/category) comes from admin catalog (products collection)
+- Components come from seller's own inventory (sellerListings)
+- Stock is calculated dynamically from seller's component inventory
 - Price is set manually by seller
 - When created, also creates sellerListing with productType="composite"
 """
@@ -20,23 +19,23 @@ from models.business_tools import Permission
 logger = logging.getLogger(__name__)
 
 
-class CompositeItemInput(BaseModel):
-    productId: str  # References admin products collection
+class ComponentInput(BaseModel):
+    listingId: str  # References seller's own sellerListings
     quantity: int = Field(..., ge=1)
 
 
 class CompositeProductCreateInput(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
+    categoryId: str  # Admin category
+    productId: str   # Admin product (name comes from here)
     description: Optional[str] = Field(None, max_length=1000)
     price: float = Field(..., ge=0)
-    items: List[CompositeItemInput] = Field(..., min_length=1)
+    components: List[ComponentInput] = Field(..., min_length=1)
 
 
 class CompositeProductUpdateInput(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
     price: Optional[float] = Field(None, ge=0)
-    items: Optional[List[CompositeItemInput]] = None
+    components: Optional[List[ComponentInput]] = None
 
 
 class CompositeProductSellInput(BaseModel):
@@ -108,60 +107,110 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         if not role or permission not in role.get("permissions", []):
             raise HTTPException(status_code=403, detail=f"Permission denied: {permission} required")
 
-    async def get_seller_listing(seller_id: str, product_id):
-        """Find seller's listing for a given admin product."""
-        if isinstance(product_id, str):
-            product_id = ObjectId(product_id)
-        return await db.sellerListings.find_one({
-            "sellerId": ObjectId(seller_id),
-            "productId": product_id,
-            "productType": {"$ne": "composite"},
-            "status": {"$in": ["active", "paused"]}
-        })
-
-    async def calc_available_stock(seller_id: str, items):
-        """Calculate available stock = min(seller_listing_stock / component_qty)."""
-        if not items:
+    async def calc_available_stock(components):
+        """Calculate available stock = min(listing_stock / component_qty)."""
+        if not components:
             return 0
         avail = float('inf')
-        for item in items:
-            product_id = item.get("productId")
-            if isinstance(product_id, str):
-                product_id = ObjectId(product_id)
-            listing = await get_seller_listing(seller_id, product_id)
+        for comp in components:
+            lid = comp.get("listingId")
+            if isinstance(lid, str):
+                lid = ObjectId(lid)
+            listing = await db.sellerListings.find_one({"_id": lid})
             stock = listing.get("stock", 0) if listing else 0
-            qty_needed = item.get("quantity", 1)
-            avail = min(avail, stock // qty_needed if qty_needed > 0 else 0)
+            qty = comp.get("quantity", 1)
+            avail = min(avail, stock // qty if qty > 0 else 0)
         return int(avail) if avail != float('inf') else 0
 
-    async def enrich_items(seller_id: str, items):
-        """Add product name, category, and current stock to each item."""
-        enriched = []
-        for item in items:
-            pid = item.get("productId")
-            if isinstance(pid, str):
-                pid = ObjectId(pid)
+    async def enrich_composite(cp, seller_id):
+        """Add product name, category, and enriched components to a composite product."""
+        # Get admin product name
+        product = None
+        product_id = cp.get("productId")
+        if product_id:
+            try:
+                if isinstance(product_id, ObjectId):
+                    product = await db.products.find_one({"_id": product_id})
+                else:
+                    product = await db.products.find_one({"_id": ObjectId(str(product_id))})
+            except Exception:
+                pass
+        # If product not found via productId, fallback to composite's name field
+        cp["productName"] = product.get("name") if product else (cp.get("name") or "Unknown")
 
-            product = await db.products.find_one({"_id": pid})
-            product_name = product.get("name", "Unknown") if product else "Unknown"
-            category_name = ""
-            if product and product.get("categoryId"):
-                cat = await db.categories.find_one({"_id": product["categoryId"]})
-                category_name = cat.get("name", "") if cat else ""
+        # Get category name
+        cat_id = cp.get("categoryId") or (product.get("categoryId") if product else None)
+        if cat_id:
+            try:
+                if isinstance(cat_id, str):
+                    cat_id = ObjectId(cat_id)
+                cat = await db.categories.find_one({"_id": cat_id})
+            except Exception:
+                cat = None
+            cp["categoryName"] = cat.get("name", "") if cat else ""
+        else:
+            cp["categoryName"] = ""
 
-            listing = await get_seller_listing(seller_id, pid)
-            current_stock = listing.get("stock", 0) if listing else 0
-            has_listing = listing is not None
+        # Get components
+        components = await db.composite_product_items.find({"compositeProductId": cp["_id"]}).to_list(50)
+        enriched_components = []
+        for comp in components:
+            lid = comp.get("listingId")
+            listing = None
+            if lid:
+                try:
+                    if isinstance(lid, str):
+                        lid = ObjectId(lid)
+                    listing = await db.sellerListings.find_one({"_id": lid})
+                except Exception:
+                    pass
+            comp_product_name = "Unknown"
+            current_stock = 0
+            if listing:
+                current_stock = listing.get("stock", 0)
+                prod = await db.products.find_one({"_id": listing.get("productId")})
+                if prod:
+                    comp_product_name = prod.get("name", "Unknown")
 
-            enriched.append({
-                "productId": str(pid),
-                "quantity": item.get("quantity", 1),
-                "productName": product_name,
-                "categoryName": category_name,
-                "currentStock": current_stock,
-                "hasListing": has_listing
+            enriched_components.append({
+                "listingId": str(lid) if lid else None,
+                "quantity": comp.get("quantity", 1),
+                "productName": comp_product_name,
+                "currentStock": current_stock
             })
-        return enriched
+
+        cp["components"] = enriched_components
+        cp["availableStock"] = await calc_available_stock(components)
+        return cp
+
+    # ===== Seller's inventory for component selection =====
+
+    @router.get("/composite-products/seller-inventory")
+    async def get_seller_inventory(authorization: str = Header(...)):
+        """Get seller's own listings for component selection (excludes composites)."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_INVENTORY.value)
+        seller_id = await get_seller_id(user)
+
+        listings = await db.sellerListings.find({
+            "sellerId": ObjectId(seller_id),
+            "status": {"$in": ["active", "paused"]},
+            "productType": {"$ne": "composite"}
+        }).to_list(500)
+
+        items = []
+        for listing in listings:
+            prod = await db.products.find_one({"_id": listing.get("productId")})
+            if not prod:
+                continue
+            items.append({
+                "listingId": str(listing["_id"]),
+                "productName": prod.get("name", "Unknown"),
+                "stock": listing.get("stock", 0),
+                "sku": listing.get("sku", "")
+            })
+
+        return {"inventory": items}
 
     # ===== CRUD =====
 
@@ -173,16 +222,17 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
 
         query = {"sellerId": ObjectId(seller_id)}
         if search:
-            query["name"] = {"$regex": search, "$options": "i"}
+            query["$or"] = [
+                {"name": {"$regex": search, "$options": "i"}},
+            ]
 
         products = await db.composite_products.find(query).sort("createdAt", -1).to_list(100)
 
+        enriched = []
         for prod in products:
-            items = await db.composite_product_items.find({"compositeProductId": prod["_id"]}).to_list(50)
-            prod["items"] = await enrich_items(seller_id, items)
-            prod["availableStock"] = await calc_available_stock(seller_id, items)
+            enriched.append(await enrich_composite(prod, seller_id))
 
-        return {"compositeProducts": serialize_doc(products)}
+        return {"compositeProducts": serialize_doc(enriched)}
 
     @router.post("/composite-products")
     async def create_composite_product(data: CompositeProductCreateInput, authorization: str = Header(...)):
@@ -190,23 +240,46 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         seller_id = await get_seller_id(user)
 
-        # Validate all product IDs exist in admin catalog
-        for item in data.items:
+        # Validate admin category exists
+        try:
+            category = await db.categories.find_one({"_id": ObjectId(data.categoryId)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid category ID")
+        if not category:
+            raise HTTPException(status_code=400, detail="Category not found")
+
+        # Validate admin product exists
+        try:
+            product = await db.products.find_one({"_id": ObjectId(data.productId)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid product ID")
+        if not product:
+            raise HTTPException(status_code=400, detail="Product not found in catalog")
+
+        # Validate all component listings belong to this seller
+        for comp in data.components:
             try:
-                product = await db.products.find_one({"_id": ObjectId(item.productId)})
-                if not product:
-                    raise HTTPException(status_code=400, detail=f"Product {item.productId} not found in catalog")
+                listing = await db.sellerListings.find_one({
+                    "_id": ObjectId(comp.listingId),
+                    "sellerId": ObjectId(seller_id),
+                    "productType": {"$ne": "composite"}
+                })
+                if not listing:
+                    raise HTTPException(status_code=400, detail=f"Inventory item {comp.listingId} not found")
             except HTTPException:
                 raise
             except Exception:
-                raise HTTPException(status_code=400, detail=f"Invalid product ID: {item.productId}")
+                raise HTTPException(status_code=400, detail=f"Invalid listing ID: {comp.listingId}")
 
         now = datetime.now(timezone.utc)
+        product_name = product.get("name", "Composite Product")
 
         # Create composite product record
         cp_doc = {
             "sellerId": ObjectId(seller_id),
-            "name": data.name,
+            "categoryId": ObjectId(data.categoryId),
+            "productId": ObjectId(data.productId),
+            "name": product_name,
             "description": data.description,
             "price": data.price,
             "createdAt": now,
@@ -216,19 +289,23 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         cp_id = result.inserted_id
 
         # Create component items
-        for item in data.items:
+        for comp in data.components:
             await db.composite_product_items.insert_one({
                 "compositeProductId": cp_id,
-                "productId": ObjectId(item.productId),
-                "quantity": item.quantity
+                "listingId": ObjectId(comp.listingId),
+                "quantity": comp.quantity
             })
 
-        # Create a sellerListing with productType="composite"
+        # Create sellerListing with productType="composite"
+        # Use compositeProductId as productId to avoid unique index conflict
+        # (seller may already have a regular listing for the admin product)
         composite_listing = {
             "sellerId": ObjectId(seller_id),
-            "productId": cp_id,
+            "productId": cp_id,  # Use composite product ID to avoid unique constraint
+            "categoryId": ObjectId(data.categoryId),
             "productType": "composite",
             "compositeProductId": cp_id,
+            "description": data.description,
             "status": "active",
             "isActive": True,
             "stock": 0,
@@ -237,15 +314,11 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         }
         await db.sellerListings.insert_one(composite_listing)
 
-        await activity_log_service.log(seller_id, str(user["_id"]), "composite_product_created", "composite_products", str(cp_id), data.name)
+        await activity_log_service.log(seller_id, str(user["_id"]), "composite_product_created", "composite_products", str(cp_id), product_name)
 
-        # Return enriched response
-        items = await db.composite_product_items.find({"compositeProductId": cp_id}).to_list(50)
         cp_doc["_id"] = cp_id
-        cp_doc["items"] = await enrich_items(seller_id, items)
-        cp_doc["availableStock"] = await calc_available_stock(seller_id, items)
-
-        return {"message": "Composite product created", "compositeProduct": serialize_doc(cp_doc)}
+        enriched = await enrich_composite(cp_doc, seller_id)
+        return {"message": "Composite product created", "compositeProduct": serialize_doc(enriched)}
 
     @router.put("/composite-products/{cp_id}")
     async def update_composite_product(cp_id: str, data: CompositeProductUpdateInput, authorization: str = Header(...)):
@@ -263,8 +336,6 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
             raise HTTPException(status_code=404, detail="Composite product not found")
 
         update_fields = {"updatedAt": datetime.now(timezone.utc)}
-        if data.name is not None:
-            update_fields["name"] = data.name
         if data.description is not None:
             update_fields["description"] = data.description
         if data.price is not None:
@@ -272,25 +343,36 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
 
         await db.composite_products.update_one({"_id": cp_oid}, {"$set": update_fields})
 
-        if data.items is not None:
-            for item in data.items:
-                product = await db.products.find_one({"_id": ObjectId(item.productId)})
-                if not product:
-                    raise HTTPException(status_code=400, detail=f"Product {item.productId} not found")
+        # Also update the composite sellerListing
+        listing_update = {"updatedAt": datetime.now(timezone.utc)}
+        if data.description is not None:
+            listing_update["description"] = data.description
+        await db.sellerListings.update_one(
+            {"compositeProductId": cp_oid, "productType": "composite"},
+            {"$set": listing_update}
+        )
+
+        if data.components is not None:
+            for comp in data.components:
+                listing = await db.sellerListings.find_one({
+                    "_id": ObjectId(comp.listingId),
+                    "sellerId": ObjectId(seller_id),
+                    "productType": {"$ne": "composite"}
+                })
+                if not listing:
+                    raise HTTPException(status_code=400, detail=f"Inventory item {comp.listingId} not found")
 
             await db.composite_product_items.delete_many({"compositeProductId": cp_oid})
-            for item in data.items:
+            for comp in data.components:
                 await db.composite_product_items.insert_one({
                     "compositeProductId": cp_oid,
-                    "productId": ObjectId(item.productId),
-                    "quantity": item.quantity
+                    "listingId": ObjectId(comp.listingId),
+                    "quantity": comp.quantity
                 })
 
         updated = await db.composite_products.find_one({"_id": cp_oid})
-        items = await db.composite_product_items.find({"compositeProductId": cp_oid}).to_list(50)
-        updated["items"] = await enrich_items(seller_id, items)
-        updated["availableStock"] = await calc_available_stock(seller_id, items)
-        return {"message": "Composite product updated", "compositeProduct": serialize_doc(updated)}
+        enriched = await enrich_composite(updated, seller_id)
+        return {"message": "Composite product updated", "compositeProduct": serialize_doc(enriched)}
 
     @router.delete("/composite-products/{cp_id}")
     async def delete_composite_product(cp_id: str, authorization: str = Header(...)):
@@ -315,7 +397,7 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
 
     @router.post("/composite-products/{cp_id}/sell")
     async def sell_composite_product(cp_id: str, data: CompositeProductSellInput, authorization: str = Header(...)):
-        """Sell a composite product - deducts stock from seller's inventory for each component."""
+        """Sell a composite product - deducts stock from seller's component inventory."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         seller_id = await get_seller_id(user)
@@ -329,53 +411,51 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         if not cp:
             raise HTTPException(status_code=404, detail="Composite product not found")
 
-        items = await db.composite_product_items.find({"compositeProductId": cp_oid}).to_list(50)
-        if not items:
+        components = await db.composite_product_items.find({"compositeProductId": cp_oid}).to_list(50)
+        if not components:
             raise HTTPException(status_code=400, detail="Composite product has no components")
 
-        # Validate stock availability for all components
-        for item in items:
-            listing = await get_seller_listing(seller_id, item["productId"])
+        # Validate stock availability
+        for comp in components:
+            listing = await db.sellerListings.find_one({"_id": comp["listingId"]})
             if not listing:
-                product = await db.products.find_one({"_id": item["productId"]})
-                pname = product["name"] if product else "Unknown"
-                raise HTTPException(status_code=400, detail=f"No inventory listing for {pname}")
-            required = item["quantity"] * data.quantity
+                raise HTTPException(status_code=400, detail="Component inventory item not found")
+            required = comp["quantity"] * data.quantity
             current_stock = listing.get("stock", 0)
             if current_stock < required:
-                product = await db.products.find_one({"_id": item["productId"]})
-                pname = product["name"] if product else "Unknown"
+                prod = await db.products.find_one({"_id": listing.get("productId")})
+                pname = prod["name"] if prod else "Unknown"
                 raise HTTPException(
                     status_code=400,
                     detail=f"Insufficient stock for {pname}: need {required}, have {current_stock}"
                 )
 
-        # Deduct stock for all components
+        # Deduct stock
         now = datetime.now(timezone.utc)
         deductions = []
-        for item in items:
-            listing = await get_seller_listing(seller_id, item["productId"])
+        for comp in components:
+            listing = await db.sellerListings.find_one({"_id": comp["listingId"]})
             prev_stock = listing.get("stock", 0)
-            deduct_qty = item["quantity"] * data.quantity
+            deduct_qty = comp["quantity"] * data.quantity
             new_stock = max(0, prev_stock - deduct_qty)
 
             await db.sellerListings.update_one(
-                {"_id": listing["_id"]},
+                {"_id": comp["listingId"]},
                 {"$set": {"stock": new_stock, "updatedAt": now}}
             )
 
-            product = await db.products.find_one({"_id": item["productId"]})
-            pname = product["name"] if product else "Unknown"
+            prod = await db.products.find_one({"_id": listing.get("productId")})
+            pname = prod["name"] if prod else "Unknown"
 
             await db.inventory_logs.insert_one({
                 "sellerId": ObjectId(seller_id),
-                "listingId": listing["_id"],
+                "listingId": comp["listingId"],
                 "productName": pname,
                 "changeType": "sale",
                 "quantity": -deduct_qty,
                 "previousStock": prev_stock,
                 "newStock": new_stock,
-                "note": f"Composite product sale: {cp['name']} x{data.quantity}",
+                "note": f"Composite sale: {cp['name']} x{data.quantity}",
                 "createdBy": str(user["_id"]),
                 "createdAt": now
             })

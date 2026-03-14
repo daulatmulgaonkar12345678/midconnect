@@ -6,68 +6,57 @@ import { Plus, Package, Trash2, ShoppingCart, ChevronDown, ChevronUp, Search, Al
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-interface Category {
-  id: string;
-  name: string;
-}
+interface Category { id: string; name: string; }
+interface AdminProduct { id: string; name: string; }
+interface SellerInventoryItem { listingId: string; productName: string; stock: number; sku: string; }
 
-interface AdminProduct {
-  id: string;
-  name: string;
-  categoryId?: string;
-}
-
-interface CompositeItem {
-  productId: string;
+interface CompositeComponent {
+  listingId: string;
   productName?: string;
-  categoryName?: string;
   quantity: number;
   currentStock?: number;
-  hasListing?: boolean;
 }
 
 interface CompositeProduct {
   id: string;
+  productId: string;
+  categoryId: string;
+  productName: string;
+  categoryName: string;
   name: string;
   description?: string;
   price?: number;
-  items: CompositeItem[];
+  components: CompositeComponent[];
   availableStock: number;
   createdAt: string;
 }
 
-interface FormItem {
-  categoryId: string;
-  productId: string;
-  quantity: number;
-}
+interface FormComponent { listingId: string; quantity: number; }
 
 export default function CompositeProductsPage() {
   const { hasPermission, token } = usePermissions();
   const [products, setProducts] = useState<CompositeProduct[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryProducts, setCategoryProducts] = useState<Record<string, AdminProduct[]>>({});
+  const [catProducts, setCatProducts] = useState<Record<string, AdminProduct[]>>({});
+  const [sellerInventory, setSellerInventory] = useState<SellerInventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sellQty, setSellQty] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
-  const [formData, setFormData] = useState({
-    name: "", description: "", price: 0,
-    items: [{ categoryId: "", productId: "", quantity: 1 }] as FormItem[]
+
+  const [form, setForm] = useState({
+    categoryId: "", productId: "", description: "", price: 0,
+    components: [{ listingId: "", quantity: 1 }] as FormComponent[]
   });
 
-  const authHeaders = useCallback(() => ({
-    "Authorization": `Bearer ${token}`,
-    "Content-Type": "application/json"
-  }), [token]);
+  const authHeaders = useCallback(() => ({ "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }), [token]);
 
   const fetchProducts = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/business-tools/composite-products?search=${search}`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      setProducts(data.compositeProducts || []);
+      setProducts((await res.json()).compositeProducts || []);
     } catch { /* empty */ }
     setLoading(false);
   }, [token, search]);
@@ -75,51 +64,50 @@ export default function CompositeProductsPage() {
   const fetchCategories = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/categories/all`);
-      const data = await res.json();
-      setCategories((data || []).map((c: Record<string, string>) => ({ id: c.id || c._id, name: c.name })));
+      setCategories((await res.json() || []).map((c: Record<string, string>) => ({ id: c.id || c._id, name: c.name })));
     } catch { /* empty */ }
   }, []);
 
-  useEffect(() => { if (token) { fetchProducts(); fetchCategories(); } }, [token, fetchProducts, fetchCategories]);
+  const fetchSellerInventory = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/business-tools/composite-products/seller-inventory`, { headers: { Authorization: `Bearer ${token}` } });
+      setSellerInventory((await res.json()).inventory || []);
+    } catch { /* empty */ }
+  }, [token]);
 
-  const loadProductsForCategory = async (categoryId: string) => {
-    if (categoryProducts[categoryId]) return;
+  useEffect(() => { if (token) { fetchProducts(); fetchCategories(); fetchSellerInventory(); } }, [token, fetchProducts, fetchCategories, fetchSellerInventory]);
+
+  const loadCatProducts = async (categoryId: string) => {
+    if (catProducts[categoryId]) return;
     try {
       const res = await fetch(`${API_URL}/api/products/by-category/${categoryId}`);
-      const data = await res.json();
-      setCategoryProducts(prev => ({
+      setCatProducts(prev => ({
         ...prev,
-        [categoryId]: (data || []).map((p: Record<string, string>) => ({ id: p.id || p._id, name: p.name, categoryId: p.categoryId }))
+        [categoryId]: (await res.json() || []).map((p: Record<string, string>) => ({ id: p.id || p._id, name: p.name }))
       }));
     } catch { /* empty */ }
   };
 
   const handleSubmit = async () => {
-    const validItems = formData.items.filter(i => i.productId && i.quantity > 0);
-    if (!formData.name || !formData.price || validItems.length === 0) return;
+    const validComps = form.components.filter(c => c.listingId && c.quantity > 0);
+    if (!form.categoryId || !form.productId || !form.price || validComps.length === 0) return;
 
     const url = editingId
       ? `${API_URL}/api/business-tools/composite-products/${editingId}`
       : `${API_URL}/api/business-tools/composite-products`;
 
-    const body = {
-      name: formData.name,
-      description: formData.description,
-      price: formData.price,
-      items: validItems.map(i => ({ productId: i.productId, quantity: i.quantity }))
-    };
+    const body = editingId
+      ? { description: form.description, price: form.price, components: validComps }
+      : { categoryId: form.categoryId, productId: form.productId, description: form.description, price: form.price, components: validComps };
 
     const res = await fetch(url, { method: editingId ? "PUT" : "POST", headers: authHeaders(), body: JSON.stringify(body) });
     const data = await res.json();
     if (!res.ok) { alert(data.detail || "Failed"); return; }
-
-    setShowForm(false);
-    setEditingId(null);
-    resetForm();
-    fetchProducts();
+    setShowForm(false); setEditingId(null); resetForm();
+    fetchProducts(); fetchSellerInventory();
   };
 
-  const resetForm = () => setFormData({ name: "", description: "", price: 0, items: [{ categoryId: "", productId: "", quantity: 1 }] });
+  const resetForm = () => setForm({ categoryId: "", productId: "", description: "", price: 0, components: [{ listingId: "", quantity: 1 }] });
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this composite product?")) return;
@@ -135,56 +123,39 @@ export default function CompositeProductsPage() {
     const data = await res.json();
     if (!res.ok) { alert(data.detail || "Failed to sell"); return; }
     alert(`Sold! Stock deducted for ${data.deductions?.length || 0} components`);
-    fetchProducts();
+    fetchProducts(); fetchSellerInventory();
   };
 
   const startEdit = (cp: CompositeProduct) => {
-    const formItems: FormItem[] = cp.items.map(item => {
-      // Find category for this product
-      let foundCatId = "";
-      for (const [catId, prods] of Object.entries(categoryProducts)) {
-        if (prods.some(p => p.id === item.productId)) { foundCatId = catId; break; }
-      }
-      return { categoryId: foundCatId, productId: item.productId || "", quantity: item.quantity };
-    });
-    setFormData({
-      name: cp.name,
+    setForm({
+      categoryId: cp.categoryId || "",
+      productId: cp.productId || "",
       description: cp.description || "",
       price: cp.price || 0,
-      items: formItems.length > 0 ? formItems : [{ categoryId: "", productId: "", quantity: 1 }]
+      components: cp.components?.length > 0
+        ? cp.components.map(c => ({ listingId: c.listingId || "", quantity: c.quantity }))
+        : [{ listingId: "", quantity: 1 }]
     });
+    if (cp.categoryId) loadCatProducts(cp.categoryId);
     setEditingId(cp.id);
     setShowForm(true);
   };
 
-  const addItem = () => setFormData(prev => ({ ...prev, items: [...prev.items, { categoryId: "", productId: "", quantity: 1 }] }));
-  const removeItem = (idx: number) => setFormData(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
-
-  const updateItem = (idx: number, field: keyof FormItem, value: string | number) => {
-    setFormData(prev => {
-      const items = [...prev.items];
-      if (field === "categoryId") {
-        items[idx] = { ...items[idx], categoryId: value as string, productId: "" };
-        if (value) loadProductsForCategory(value as string);
-      } else if (field === "productId") {
-        items[idx] = { ...items[idx], productId: value as string };
-      } else {
-        items[idx] = { ...items[idx], quantity: value as number };
-      }
-      return { ...prev, items };
-    });
-  };
+  const addComponent = () => setForm(prev => ({ ...prev, components: [...prev.components, { listingId: "", quantity: 1 }] }));
+  const removeComponent = (idx: number) => setForm(prev => ({ ...prev, components: prev.components.filter((_, i) => i !== idx) }));
 
   if (!hasPermission("manage_inventory")) {
     return <div className="p-6 text-center text-gray-500" data-testid="no-permission">You do not have permission to manage composite products.</div>;
   }
+
+  const currentCatProducts = catProducts[form.categoryId] || [];
 
   return (
     <div className="space-y-6" data-testid="composite-products-page">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="page-title">Composite Products</h1>
-          <p className="text-sm text-gray-500 mt-1">Create product bundles from catalog items</p>
+          <p className="text-sm text-gray-500 mt-1">Create product bundles from your inventory</p>
         </div>
         <button onClick={() => { setShowForm(true); setEditingId(null); resetForm(); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
@@ -205,100 +176,117 @@ export default function CompositeProductsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" data-testid="composite-form-modal">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6">
             <h2 className="text-lg font-semibold mb-4">{editingId ? "Edit" : "Create"} Composite Product</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bundle Name *</label>
-                <input type="text" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="e.g. Electrical Panel Kit"
-                  data-testid="composite-name-input" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2}
-                  data-testid="composite-desc-input" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bundle Price *</label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input type="number" min={0} step={0.01} value={formData.price} onChange={e => setFormData(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00"
-                    data-testid="composite-price-input" />
+            <div className="space-y-5">
+
+              {/* Section 1: Product Identity from Admin Catalog */}
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 space-y-3">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Product Identity (from catalog)</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                    <select value={form.categoryId}
+                      onChange={e => { setForm(p => ({ ...p, categoryId: e.target.value, productId: "" })); if (e.target.value) loadCatProducts(e.target.value); }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                      disabled={!!editingId}
+                      data-testid="category-select">
+                      <option value="">Select category</option>
+                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+                    <select value={form.productId}
+                      onChange={e => setForm(p => ({ ...p, productId: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                      disabled={!form.categoryId || !!editingId}
+                      data-testid="product-select">
+                      <option value="">{form.categoryId ? "Select product" : "Select category first"}</option>
+                      {currentCatProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Set manually — can include bundle discounts or premiums</p>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} placeholder="Optional description"
+                    data-testid="description-input" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bundle Price *</label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type="number" min={0} step={0.01} value={form.price} onChange={e => setForm(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))}
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00"
+                      data-testid="price-input" />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Components *</label>
-                <p className="text-xs text-gray-400 mb-3">Select products from admin catalog to include in this bundle</p>
-                {formData.items.map((item, idx) => {
-                  const prods = categoryProducts[item.categoryId] || [];
-                  const selectedProd = prods.find(p => p.id === item.productId);
+              {/* Section 2: Components from Seller Inventory */}
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 space-y-3">
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Components (from your inventory)</p>
+
+                {sellerInventory.length === 0 && (
+                  <div className="bg-white border border-amber-200 rounded-lg p-3">
+                    <p className="text-sm text-amber-700">No inventory items found. Add products to your seller listings first.</p>
+                  </div>
+                )}
+
+                {form.components.map((comp, idx) => {
+                  const selected = sellerInventory.find(i => i.listingId === comp.listingId);
                   return (
-                    <div key={idx} className="bg-gray-50 rounded-lg p-3 mb-2">
-                      <div className="grid grid-cols-12 gap-2 items-start">
-                        {/* Category dropdown - admin categories */}
-                        <div className="col-span-5">
-                          <label className="text-xs text-gray-500 mb-1 block">Category</label>
-                          <select value={item.categoryId} onChange={e => updateItem(idx, "categoryId", e.target.value)}
-                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                            data-testid={`item-category-${idx}`}>
-                            <option value="">Select category</option>
-                            {categories.map(c => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Product dropdown - admin products filtered by category */}
-                        <div className="col-span-5">
-                          <label className="text-xs text-gray-500 mb-1 block">Product</label>
-                          <select value={item.productId} onChange={e => updateItem(idx, "productId", e.target.value)}
-                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                            disabled={!item.categoryId}
-                            data-testid={`item-product-${idx}`}>
-                            <option value="">{item.categoryId ? "Select product" : "Select category first"}</option>
-                            {prods.map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Quantity */}
-                        <div className="col-span-2 flex items-end gap-1">
-                          <div className="flex-1">
-                            <label className="text-xs text-gray-500 mb-1 block">Qty</label>
-                            <input type="number" min={1} value={item.quantity} onChange={e => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
-                              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm text-center"
-                              data-testid={`item-qty-${idx}`} />
-                          </div>
-                          {formData.items.length > 1 && (
-                            <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 pb-1" data-testid={`remove-item-${idx}`}>
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
+                    <div key={idx} className="flex gap-2 items-center bg-white rounded-lg p-2 border border-amber-100">
+                      <div className="flex-1">
+                        <select value={comp.listingId}
+                          onChange={e => {
+                            const comps = [...form.components];
+                            comps[idx] = { ...comps[idx], listingId: e.target.value };
+                            setForm(p => ({ ...p, components: comps }));
+                          }}
+                          className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                          data-testid={`component-select-${idx}`}>
+                          <option value="">Select inventory item</option>
+                          {sellerInventory.map(item => (
+                            <option key={item.listingId} value={item.listingId}>
+                              {item.productName} (Stock: {item.stock})
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      {selectedProd && (
-                        <div className="mt-1.5 text-xs text-gray-500">
-                          Selected: <span className="font-medium text-gray-700">{selectedProd.name}</span>
-                        </div>
+                      <div className="w-20">
+                        <input type="number" min={1} value={comp.quantity}
+                          onChange={e => {
+                            const comps = [...form.components];
+                            comps[idx] = { ...comps[idx], quantity: parseInt(e.target.value) || 1 };
+                            setForm(p => ({ ...p, components: comps }));
+                          }}
+                          className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm text-center"
+                          placeholder="Qty"
+                          data-testid={`component-qty-${idx}`} />
+                      </div>
+                      {form.components.length > 1 && (
+                        <button onClick={() => removeComponent(idx)} className="text-red-400 hover:text-red-600 p-1" data-testid={`remove-component-${idx}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
                   );
                 })}
-                <button onClick={addItem} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium mt-1" data-testid="add-item-btn">
+                <button onClick={addComponent} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium" data-testid="add-component-btn">
                   + Add Component
                 </button>
               </div>
             </div>
+
             <div className="flex gap-3 mt-6 justify-end">
-              <button onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800" data-testid="cancel-form-btn">Cancel</button>
+              <button onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800" data-testid="cancel-btn">Cancel</button>
               <button onClick={handleSubmit}
-                disabled={!formData.name || !formData.price || formData.items.every(i => !i.productId)}
+                disabled={editingId ? (!form.price || form.components.every(c => !c.listingId)) : (!form.categoryId || !form.productId || !form.price || form.components.every(c => !c.listingId))}
                 className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
-                data-testid="submit-form-btn">
+                data-testid="submit-btn">
                 {editingId ? "Update" : "Create"}
               </button>
             </div>
@@ -325,9 +313,10 @@ export default function CompositeProductsPage() {
                     <Package className="w-5 h-5 text-indigo-600" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-gray-900">{cp.name}</h3>
+                    <h3 className="font-medium text-gray-900">{cp.productName || cp.name}</h3>
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
-                      <span>{cp.items?.length || 0} components</span>
+                      {cp.categoryName && <span className="text-indigo-500">{cp.categoryName}</span>}
+                      <span>{cp.components?.length || 0} components</span>
                       {cp.price != null && (
                         <span className="flex items-center gap-0.5 font-medium text-gray-700">
                           <IndianRupee className="w-3 h-3" />{cp.price.toLocaleString("en-IN")}
@@ -368,29 +357,21 @@ export default function CompositeProductsPage() {
                     <thead>
                       <tr className="text-gray-500 text-xs uppercase">
                         <th className="text-left pb-2">Component</th>
-                        <th className="text-left pb-2">Category</th>
                         <th className="text-right pb-2">Qty/Unit</th>
                         <th className="text-right pb-2">In Stock</th>
                         <th className="text-right pb-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {cp.items?.map((item, idx) => {
-                        const isLow = (item.currentStock || 0) < item.quantity;
+                      {cp.components?.map((comp, idx) => {
+                        const isLow = (comp.currentStock || 0) < comp.quantity;
                         return (
                           <tr key={idx} className="border-t border-gray-100">
-                            <td className="py-2 text-gray-700 font-medium">{item.productName || "Unknown"}</td>
-                            <td className="py-2 text-gray-500 text-xs">{item.categoryName || "-"}</td>
-                            <td className="py-2 text-right text-gray-700">{item.quantity}</td>
-                            <td className="py-2 text-right text-gray-700">
-                              {item.hasListing ? item.currentStock ?? 0 : <span className="text-red-500 text-xs">No listing</span>}
-                            </td>
+                            <td className="py-2 text-gray-700 font-medium">{comp.productName || "Unknown"}</td>
+                            <td className="py-2 text-right text-gray-700">{comp.quantity}</td>
+                            <td className="py-2 text-right text-gray-700">{comp.currentStock ?? 0}</td>
                             <td className="py-2 text-right">
-                              {!item.hasListing ? (
-                                <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium">
-                                  <AlertCircle className="w-3 h-3" /> No listing
-                                </span>
-                              ) : (item.currentStock || 0) === 0 ? (
+                              {(comp.currentStock || 0) === 0 ? (
                                 <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium">Out</span>
                               ) : isLow ? (
                                 <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-medium">
