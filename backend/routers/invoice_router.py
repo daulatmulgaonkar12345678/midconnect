@@ -87,14 +87,90 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             raise HTTPException(status_code=403, detail=f"Permission denied: {permission}")
 
     async def get_next_invoice_number(seller_id: str) -> str:
-        result = await db.sellers.find_one_and_update(
-            {"userId": ObjectId(seller_id)},
-            {"$inc": {"invoiceCounter": 1}},
+        """Generate next invoice number atomically using seller_invoice_counters."""
+        seller_oid = ObjectId(seller_id)
+
+        # Ensure counter doc exists
+        counter = await db.seller_invoice_counters.find_one({"sellerId": seller_oid})
+        if not counter:
+            # Bootstrap: get business name from user profile or sellers collection
+            business_name = None
+            user_doc = await db.users.find_one({"_id": seller_oid})
+            if user_doc:
+                profile = user_doc.get("profile")
+                if isinstance(profile, dict):
+                    business_name = profile.get("businessName")
+                if not business_name:
+                    seller_doc = await db.sellers.find_one({"email": user_doc.get("email")})
+                    if seller_doc:
+                        business_name = seller_doc.get("businessName")
+            if not business_name:
+                business_name = f"Seller-{seller_id[-6:]}"
+
+            words = business_name.split()
+            abbreviation = ''.join(w[0].upper() for w in words if w and w[0].isalpha()) or 'XX'
+            seller_code = seller_id[-6:].upper()
+
+            await db.seller_invoice_counters.update_one(
+                {"sellerId": seller_oid},
+                {"$setOnInsert": {
+                    "sellerId": seller_oid,
+                    "sellerAbbreviation": abbreviation,
+                    "sellerCode": seller_code,
+                    "businessName": business_name,
+                    "lastSequence": 0,
+                    "createdAt": datetime.now(timezone.utc)
+                }},
+                upsert=True
+            )
+
+        # Atomic increment
+        result = await db.seller_invoice_counters.find_one_and_update(
+            {"sellerId": seller_oid},
+            {"$inc": {"lastSequence": 1}},
             return_document=True
         )
-        counter = result.get("invoiceCounter", 1) if result else 1
-        short_id = seller_id[-6:].upper()
-        return f"INV-{short_id}-{counter:04d}"
+
+        seq = result["lastSequence"]
+        abbr = result["sellerAbbreviation"]
+        code = result["sellerCode"]
+        return f"INV{abbr}-{code}-{seq:04d}"
+
+    async def ensure_status_consistency(inv: dict) -> dict:
+        """Derive status from payment state. Never allow manual status override."""
+        total = inv.get("total", 0)
+        paid = inv.get("totalPaid", 0)
+        pending = inv.get("pendingAmount")
+        status = inv.get("status", "draft")
+
+        # Fix pendingAmount if wrong
+        correct_pending = round(max(0, total - paid), 2)
+        needs_update = {}
+
+        if pending is None or abs((pending or 0) - correct_pending) > 0.01:
+            needs_update["pendingAmount"] = correct_pending
+            inv["pendingAmount"] = correct_pending
+
+        # Derive correct status (don't touch cancelled/draft with no payments)
+        if status != "cancelled":
+            if paid >= total and total > 0:
+                correct_status = "paid"
+            elif paid > 0:
+                correct_status = "partially_paid"
+            elif status in ("paid", "partially_paid"):
+                correct_status = "sent"
+            else:
+                correct_status = status
+
+            if correct_status != status:
+                needs_update["status"] = correct_status
+                inv["status"] = correct_status
+
+        if needs_update:
+            needs_update["updatedAt"] = datetime.now(timezone.utc)
+            await db.invoices.update_one({"_id": inv["_id"]}, {"$set": needs_update})
+
+        return inv
 
     async def check_overdue_invoices(seller_id: str):
         """Auto-detect and mark overdue invoices."""
@@ -220,6 +296,8 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         invoices = await db.invoices.find(query).sort("createdAt", -1).skip(skip).limit(limit).to_list(limit)
         result = []
         for inv in invoices:
+            # Ensure status is derived from payment state
+            inv = await ensure_status_consistency(inv)
             buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
             inv["buyerName"] = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
             inv["buyerPhone"] = buyer.get("phone", "") if buyer else ""
@@ -768,6 +846,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         inv = await db.invoices.find_one({"_id": inv_oid, "sellerId": ObjectId(seller_id)})
         if not inv:
             raise HTTPException(status_code=404, detail="Invoice not found")
+
+        # Ensure status consistency
+        inv = await ensure_status_consistency(inv)
 
         buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
         buyer_name = buyer.get("buyerName", "Customer") if buyer else "Customer"

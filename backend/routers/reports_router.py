@@ -85,6 +85,9 @@ def init_reports_router(db, verify_token_func):
         except Exception:
             return None
 
+    # Active invoice statuses for reports (all except cancelled)
+    REPORT_STATUSES = ["draft", "sent", "viewed", "partially_paid", "paid", "overdue"]
+
     @router.get("/reports/sales-summary")
     async def sales_summary(
         authorization: str = Header(...),
@@ -104,12 +107,14 @@ def init_reports_router(db, verify_token_func):
         if not start:
             start = now - timedelta(days=365)
         if not end:
-            end = now
+            end = now + timedelta(days=1)
+        else:
+            end = end + timedelta(days=1)
 
         match_stage = {
             "sellerId": ObjectId(seller_id),
-            "createdAt": {"$gte": start, "$lte": end},
-            "status": {"$in": ["draft", "sent", "paid"]}
+            "createdAt": {"$gte": start, "$lt": end},
+            "status": {"$in": REPORT_STATUSES}
         }
 
         # Group by period
@@ -194,10 +199,11 @@ def init_reports_router(db, verify_token_func):
 
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
-        end = parse_date(endDate) or now
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lte": end}, "status": {"$in": ["draft", "sent", "paid"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lt": end}, "status": {"$in": REPORT_STATUSES}}},
             {"$unwind": "$items"},
             {"$group": {
                 "_id": "$items.productName",
@@ -260,10 +266,11 @@ def init_reports_router(db, verify_token_func):
 
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
-        end = parse_date(endDate) or now
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lte": end}, "status": {"$in": ["draft", "sent", "paid"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lt": end}, "status": {"$in": REPORT_STATUSES}}},
             {"$group": {
                 "_id": "$buyerId",
                 "totalSpent": {"$sum": "$total"},
@@ -304,12 +311,13 @@ def init_reports_router(db, verify_token_func):
 
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
-        end = parse_date(endDate) or now
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
 
         match_stage = {
             "sellerId": ObjectId(seller_id),
-            "createdAt": {"$gte": start, "$lte": end},
-            "status": {"$in": ["draft", "sent", "paid"]}
+            "createdAt": {"$gte": start, "$lt": end},
+            "status": {"$in": REPORT_STATUSES}
         }
 
         if period == "quarterly":
@@ -408,10 +416,11 @@ def init_reports_router(db, verify_token_func):
 
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
-        end = parse_date(endDate) or now
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lte": end}, "status": {"$in": ["draft", "sent", "paid"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lt": end}, "status": {"$in": REPORT_STATUSES}}},
             {"$unwind": "$items"},
             {"$group": {
                 "_id": "$items.productName",
