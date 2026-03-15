@@ -88,6 +88,13 @@ const navItems = [
     color: 'green'
   },
   { 
+    href: '/seller/business-tools/analytics', 
+    label: 'Product Analytics', 
+    icon: BarChart3,
+    permission: 'manage_inventory',
+    color: 'blue'
+  },
+  { 
     href: '/seller/business-tools/composite-products', 
     label: 'Composite Products', 
     icon: Layers,
