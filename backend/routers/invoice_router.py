@@ -661,15 +661,27 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         seller = await db.users.find_one({"_id": ObjectId(seller_id)})
         if not seller:
             seller = {}
-        seller_extra = await db.sellers.find_one({"userId": ObjectId(seller_id)})
-        if seller_extra:
-            seller.update({k: v for k, v in seller_extra.items() if k not in ("_id",) and v})
+
+        # Build seller dict for PDF from user profile
+        profile = seller.get("profile") or {}
+        gst = seller.get("gst") or {}
+        seller_data = {
+            "businessName": profile.get("businessName", ""),
+            "name": profile.get("businessName", seller.get("email", "")),
+            "address": profile.get("address", ""),
+            "city": profile.get("city", ""),
+            "state": profile.get("state", ""),
+            "phone": profile.get("phone", ""),
+            "email": seller.get("email", ""),
+            "gstNumber": gst.get("number", ""),
+            "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
+        }
 
         buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
         if not buyer:
             buyer = {}
 
-        pdf_bytes = generate_invoice_pdf(inv, seller, buyer)
+        pdf_bytes = generate_invoice_pdf(inv, seller_data, buyer)
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
@@ -873,5 +885,146 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
 
         wa_link = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(msg)}"
         return {"whatsappLink": wa_link, "message": msg, "buyerPhone": buyer_phone}
+
+    # ==========================================
+    # SELLER BUSINESS PROFILE
+    # ==========================================
+
+    @router.get("/seller-profile")
+    async def get_seller_profile(authorization: str = Header(...)):
+        """Get seller's business profile for settings/onboarding."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        profile = user.get("profile") or {}
+        gst = user.get("gst") or {}
+
+        # Get counter info for abbreviation/code
+        counter = await db.seller_invoice_counters.find_one(
+            {"sellerId": ObjectId(seller_id)}, {"_id": 0, "sellerId": 0}
+        )
+
+        return {
+            "profile": {
+                "businessName": profile.get("businessName", ""),
+                "phone": profile.get("phone", ""),
+                "email": user.get("email", ""),
+                "address": profile.get("address", ""),
+                "city": profile.get("city", ""),
+                "state": profile.get("state", ""),
+                "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
+                "gstNumber": gst.get("number", ""),
+            },
+            "invoiceIdentity": {
+                "sellerAbbreviation": counter.get("sellerAbbreviation", "") if counter else "",
+                "sellerCode": counter.get("sellerCode", "") if counter else "",
+                "lastSequence": counter.get("lastSequence", 0) if counter else 0,
+            },
+            "profileComplete": bool(profile.get("businessName")),
+        }
+
+    @router.put("/seller-profile")
+    async def update_seller_profile(authorization: str = Header(...), data: dict = {}):
+        """Update seller's business profile."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+
+        business_name = data.get("businessName", "").strip()
+        if not business_name:
+            raise HTTPException(status_code=400, detail="Business name is required")
+
+        # Ensure profile object exists first
+        user_doc = await db.users.find_one({"_id": user["_id"]})
+        if user_doc.get("profile") is None:
+            await db.users.update_one({"_id": user["_id"]}, {"$set": {"profile": {}}})
+
+        # Build profile update
+        profile_update = {
+            "profile.businessName": business_name,
+            "profile.phone": data.get("phone", "").strip(),
+            "profile.address": data.get("address", "").strip(),
+            "profile.city": data.get("city", "").strip(),
+            "profile.state": data.get("state", "").strip(),
+            "updatedAt": now,
+        }
+
+        # Logo URL (only update if provided)
+        logo_url = data.get("sellerLogoUrl")
+        if logo_url is not None:
+            profile_update["profile.sellerLogoUrl"] = logo_url
+
+        # GST (only update if provided)
+        gst_number = data.get("gstNumber")
+        if gst_number is not None:
+            if user_doc.get("gst") is None:
+                await db.users.update_one({"_id": user["_id"]}, {"$set": {"gst": {}}})
+            profile_update["gst.number"] = gst_number.strip()
+
+        await db.users.update_one({"_id": user["_id"]}, {"$set": profile_update})
+
+        # Sync businessName to seller_invoice_counters
+        seller_oid = ObjectId(seller_id)
+        counter = await db.seller_invoice_counters.find_one({"sellerId": seller_oid})
+
+        if counter:
+            # Regenerate abbreviation only if it was auto-generated from a default name
+            # (indicated by: old name starts with "Seller-", or abbreviation is single letter from default)
+            update_fields = {"businessName": business_name, "updatedAt": now}
+            old_name = counter.get("businessName", "")
+            old_abbr = counter.get("sellerAbbreviation", "")
+            is_default = old_name.startswith("Seller-") or not old_name or (len(old_abbr) <= 1 and old_name != business_name)
+            if is_default:
+                words = business_name.split()
+                abbreviation = ''.join(w[0].upper() for w in words if w and w[0].isalpha()) or 'XX'
+                update_fields["sellerAbbreviation"] = abbreviation
+
+            await db.seller_invoice_counters.update_one(
+                {"sellerId": seller_oid},
+                {"$set": update_fields}
+            )
+        else:
+            # First time: generate abbreviation and code
+            words = business_name.split()
+            abbreviation = ''.join(w[0].upper() for w in words if w and w[0].isalpha()) or 'XX'
+            seller_code = seller_id[-6:].upper()
+
+            await db.seller_invoice_counters.update_one(
+                {"sellerId": seller_oid},
+                {"$setOnInsert": {
+                    "sellerId": seller_oid,
+                    "sellerAbbreviation": abbreviation,
+                    "sellerCode": seller_code,
+                    "businessName": business_name,
+                    "lastSequence": 0,
+                    "createdAt": now
+                }},
+                upsert=True
+            )
+
+        # Get updated data
+        updated_user = await db.users.find_one({"_id": user["_id"]})
+        updated_counter = await db.seller_invoice_counters.find_one(
+            {"sellerId": seller_oid}, {"_id": 0, "sellerId": 0}
+        )
+
+        up = updated_user.get("profile") or {}
+        ug = updated_user.get("gst") or {}
+        return {
+            "message": "Profile updated",
+            "profile": {
+                "businessName": up.get("businessName", ""),
+                "phone": up.get("phone", ""),
+                "email": updated_user.get("email", ""),
+                "address": up.get("address", ""),
+                "city": up.get("city", ""),
+                "state": up.get("state", ""),
+                "sellerLogoUrl": up.get("sellerLogoUrl", ""),
+                "gstNumber": ug.get("number", ""),
+            },
+            "invoiceIdentity": {
+                "sellerAbbreviation": updated_counter.get("sellerAbbreviation", "") if updated_counter else "",
+                "sellerCode": updated_counter.get("sellerCode", "") if updated_counter else "",
+            },
+        }
 
     return router

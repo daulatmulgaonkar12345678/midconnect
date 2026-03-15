@@ -17,7 +17,10 @@ import {
   ChevronLeft,
   Loader2,
   Menu,
-  X
+  X,
+  Settings,
+  Building2,
+  Save
 } from 'lucide-react';
 
 // Permission context for access control
@@ -103,6 +106,13 @@ const navItems = [
     icon: Activity,
     permission: 'manage_roles',
     color: 'slate'
+  },
+  { 
+    href: '/seller/business-tools/settings', 
+    label: 'Business Settings', 
+    icon: Settings,
+    permission: 'create_invoice',
+    color: 'indigo'
   }
 ];
 
@@ -119,6 +129,11 @@ export default function BusinessToolsLayout({
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingForm, setOnboardingForm] = useState({
+    businessName: '', phone: '', address: '', city: '', state: '', gstNumber: '',
+  });
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
 
   const loadPermissions = useCallback(async () => {
     try {
@@ -162,6 +177,48 @@ export default function BusinessToolsLayout({
     }
   }, [authLoading, user, loadPermissions, router]);
 
+  // Check if seller needs onboarding
+  useEffect(() => {
+    if (!loading && token) {
+      (async () => {
+        try {
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/seller-profile`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (!data.profileComplete) {
+              setShowOnboarding(true);
+            }
+          }
+        } catch { /* empty */ }
+      })();
+    }
+  }, [loading, token]);
+
+  const submitOnboarding = async () => {
+    if (!onboardingForm.businessName.trim()) { alert('Business name is required'); return; }
+    setOnboardingSaving(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/seller-profile`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(onboardingForm),
+        }
+      );
+      if (res.ok) {
+        setShowOnboarding(false);
+      } else {
+        const data = await res.json();
+        alert(data.detail || 'Failed to save');
+      }
+    } catch { alert('Error saving profile'); }
+    setOnboardingSaving(false);
+  };
+
   const hasPermission = useCallback((permission: string) => {
     return isAdmin || permissions.includes(permission);
   }, [isAdmin, permissions]);
@@ -187,7 +244,8 @@ export default function BusinessToolsLayout({
       cyan: { active: 'bg-cyan-100 text-cyan-700 border-cyan-500', inactive: 'text-gray-600 hover:bg-cyan-50 hover:text-cyan-600' },
       amber: { active: 'bg-amber-100 text-amber-700 border-amber-500', inactive: 'text-gray-600 hover:bg-amber-50 hover:text-amber-600' },
       red: { active: 'bg-red-100 text-red-700 border-red-500', inactive: 'text-gray-600 hover:bg-red-50 hover:text-red-600' },
-      slate: { active: 'bg-slate-100 text-slate-700 border-slate-500', inactive: 'text-gray-600 hover:bg-slate-50 hover:text-slate-600' }
+      slate: { active: 'bg-slate-100 text-slate-700 border-slate-500', inactive: 'text-gray-600 hover:bg-slate-50 hover:text-slate-600' },
+      indigo: { active: 'bg-indigo-100 text-indigo-700 border-indigo-500', inactive: 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600' }
     };
     return isActive ? colors[color]?.active : colors[color]?.inactive;
   };
@@ -287,6 +345,74 @@ export default function BusinessToolsLayout({
             </main>
           </div>
         </div>
+
+        {/* Onboarding Modal */}
+        {showOnboarding && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4" data-testid="onboarding-modal">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+              <div className="text-center mb-6">
+                <Building2 className="w-10 h-10 text-indigo-600 mx-auto mb-2" />
+                <h2 className="text-xl font-bold text-gray-900">Set Up Your Business Profile</h2>
+                <p className="text-sm text-gray-500 mt-1">Complete your profile to generate professional invoices</p>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Business Name *</label>
+                  <input type="text" value={onboardingForm.businessName}
+                    onChange={e => setOnboardingForm(p => ({ ...p, businessName: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="e.g. Akash Enterprises"
+                    data-testid="onboard-business-name" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input type="text" value={onboardingForm.phone}
+                      onChange={e => setOnboardingForm(p => ({ ...p, phone: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="9876543210"
+                      data-testid="onboard-phone" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">GST <span className="text-gray-400">(optional)</span></label>
+                    <input type="text" value={onboardingForm.gstNumber}
+                      onChange={e => setOnboardingForm(p => ({ ...p, gstNumber: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="22AAAAA0000A1Z5"
+                      data-testid="onboard-gst" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <input type="text" value={onboardingForm.address}
+                    onChange={e => setOnboardingForm(p => ({ ...p, address: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Street address"
+                    data-testid="onboard-address" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                    <input type="text" value={onboardingForm.city}
+                      onChange={e => setOnboardingForm(p => ({ ...p, city: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      data-testid="onboard-city" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                    <input type="text" value={onboardingForm.state}
+                      onChange={e => setOnboardingForm(p => ({ ...p, state: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      data-testid="onboard-state" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6 justify-end">
+                <button onClick={() => setShowOnboarding(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800" data-testid="onboard-skip-btn">Skip for now</button>
+                <button onClick={submitOnboarding} disabled={onboardingSaving}
+                  className="flex items-center gap-2 px-5 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium disabled:opacity-50" data-testid="onboard-save-btn">
+                  <Save className="w-4 h-4" /> {onboardingSaving ? 'Saving...' : 'Complete Setup'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </PermissionContext.Provider>
   );

@@ -1,14 +1,15 @@
 """
 Invoice PDF Generation Service using ReportLab
-Enhanced with seller branding (email) and payment summary.
+Enhanced with seller branding (logo, email) and payment summary.
 """
 
 import io
+import urllib.request
 from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 
@@ -27,8 +28,30 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict) -> bytes:
 
     elements = []
 
-    # Header
-    elements.append(Paragraph("INVOICE", title_style))
+    # Try to load seller logo
+    seller_logo_url = seller.get("sellerLogoUrl", "")
+    logo_element = None
+    if seller_logo_url:
+        try:
+            req = urllib.request.Request(seller_logo_url, headers={'User-Agent': 'Mozilla/5.0'})
+            logo_data = urllib.request.urlopen(req, timeout=5).read()
+            logo_buf = io.BytesIO(logo_data)
+            logo_element = Image(logo_buf, width=30*mm, height=30*mm)
+            logo_element.hAlign = 'LEFT'
+        except Exception:
+            logo_element = None
+
+    # Header with optional logo
+    if logo_element:
+        header_data = [[logo_element, Paragraph("INVOICE", title_style)]]
+        header_table = Table(header_data, colWidths=[35*mm, 140*mm])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(header_table)
+    else:
+        elements.append(Paragraph("INVOICE", title_style))
     elements.append(Spacer(1, 4*mm))
 
     # Invoice Info Row
