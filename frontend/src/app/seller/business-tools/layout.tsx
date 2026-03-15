@@ -21,7 +21,9 @@ import {
   Settings,
   Building2,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  Home,
+  LineChart
 } from 'lucide-react';
 
 // Permission context for access control
@@ -45,6 +47,14 @@ export const usePermissions = () => useContext(PermissionContext);
 
 // Business Tools navigation items
 const navItems = [
+  {
+    href: '/seller/business-tools',
+    label: 'Home',
+    icon: Home,
+    permission: 'create_invoice',
+    color: 'indigo',
+    exact: true
+  },
   { 
     href: '/seller/business-tools/inventory', 
     label: 'Inventory', 
@@ -86,6 +96,13 @@ const navItems = [
     icon: FileText,
     permission: 'manage_inventory',
     color: 'green'
+  },
+  {
+    href: '/seller/business-tools/charts',
+    label: 'Charts & Graphs',
+    icon: LineChart,
+    permission: 'manage_inventory',
+    color: 'cyan'
   },
   { 
     href: '/seller/business-tools/analytics', 
@@ -312,7 +329,9 @@ export default function BusinessToolsLayout({
                 </h2>
                 <div className="space-y-1">
                   {visibleNavItems.map((item) => {
-                    const isActive = pathname.startsWith(item.href);
+                    const isActive = (item as { exact?: boolean }).exact
+                      ? pathname === item.href
+                      : pathname.startsWith(item.href);
                     const Icon = item.icon;
                     return (
                       <Link
@@ -340,7 +359,9 @@ export default function BusinessToolsLayout({
                   </div>
                   <nav className="p-4 space-y-1">
                     {visibleNavItems.map((item) => {
-                      const isActive = pathname.startsWith(item.href);
+                      const isActive = (item as { exact?: boolean }).exact
+                        ? pathname === item.href
+                        : pathname.startsWith(item.href);
                       const Icon = item.icon;
                       return (
                         <Link

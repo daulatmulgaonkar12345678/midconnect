@@ -13058,6 +13058,11 @@ from routers.analytics_router import init_analytics_router
 analytics_router = init_analytics_router(db, verify_firebase_token)
 app.include_router(analytics_router, prefix="/api/business-tools")
 
+from routers.home_router import init_home_router
+home_router = init_home_router(db, verify_firebase_token)
+app.include_router(home_router, prefix="/api/business-tools")
+
+
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health

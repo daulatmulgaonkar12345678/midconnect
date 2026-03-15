@@ -352,4 +352,155 @@ def init_analytics_router(db, verify_token_func):
             "minStock": min_stock,
         }
 
+    # ==========================================
+    # CATEGORIES LIST (for filter dropdown)
+    # ==========================================
+
+    @router.get("/analytics/categories")
+    async def get_analytics_categories(authorization: str = Header(...)):
+        """Get categories that the seller has products in."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "product"}},
+            {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
+            {"$lookup": {"from": "categories", "localField": "product.categoryId", "foreignField": "_id", "as": "cat"}},
+            {"$unwind": {"path": "$cat", "preserveNullAndEmptyArrays": True}},
+            {"$group": {"_id": "$cat._id", "name": {"$first": "$cat.name"}}},
+            {"$match": {"_id": {"$ne": None}}},
+            {"$sort": {"name": 1}},
+        ]
+        items = await db.sellerListings.aggregate(pipeline).to_list(100)
+        return {"categories": [{"categoryId": str(i["_id"]), "name": i.get("name", "Unknown")} for i in items]}
+
+    # ==========================================
+    # CATEGORY SALES DISTRIBUTION (Pie Chart)
+    # ==========================================
+
+    @router.get("/analytics/category-sales")
+    async def get_category_sales(
+        authorization: str = Header(...),
+        period: Optional[str] = "3m",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        category_id: Optional[str] = None,
+        seller_id_filter: Optional[str] = None
+    ):
+        """Sales distribution by category from invoices."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        sd, ed = parse_date_range(period, start_date, end_date)
+
+        match_stage: dict = {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": sd, "$lte": ed}}
+        if user.get("accountType") == "admin" and seller_id_filter:
+            match_stage["sellerId"] = ObjectId(seller_id_filter)
+
+        pipeline = [
+            {"$match": match_stage},
+            {"$unwind": "$items"},
+            {"$lookup": {
+                "from": "products",
+                "let": {"pid": "$items.productId"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$pid"]}}},
+                ],
+                "as": "product"
+            }},
+            {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
+            {"$lookup": {"from": "categories", "localField": "product.categoryId", "foreignField": "_id", "as": "cat"}},
+            {"$unwind": {"path": "$cat", "preserveNullAndEmptyArrays": True}},
+        ]
+
+        if category_id:
+            pipeline.append({"$match": {"cat._id": ObjectId(category_id)}})
+
+        pipeline.extend([
+            {"$group": {
+                "_id": {"$ifNull": ["$cat.name", "Uncategorized"]},
+                "categoryId": {"$first": {"$ifNull": [{"$toString": "$cat._id"}, ""]}},
+                "totalRevenue": {"$sum": "$items.total"},
+                "totalQuantity": {"$sum": "$items.quantity"},
+                "orderCount": {"$sum": 1},
+            }},
+            {"$sort": {"totalRevenue": -1}},
+        ])
+
+        results = await db.invoices.aggregate(pipeline).to_list(50)
+        total_rev = sum(r["totalRevenue"] for r in results) or 1
+
+        return {"categories": [{
+            "category": r["_id"],
+            "categoryId": r["categoryId"],
+            "revenue": round(r["totalRevenue"], 2),
+            "quantity": r["totalQuantity"],
+            "orders": r["orderCount"],
+            "percentage": round((r["totalRevenue"] / total_rev) * 100, 1),
+        } for r in results]}
+
+    # ==========================================
+    # TOP SELLING PRODUCTS (Horizontal Bar)
+    # ==========================================
+
+    @router.get("/analytics/top-products")
+    async def get_top_products(
+        authorization: str = Header(...),
+        period: Optional[str] = "3m",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        category_id: Optional[str] = None,
+        supplier_id: Optional[str] = None,
+        seller_id_filter: Optional[str] = None
+    ):
+        """Top selling products by quantity from invoices."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        sd, ed = parse_date_range(period, start_date, end_date)
+
+        match_stage: dict = {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": sd, "$lte": ed}}
+        if user.get("accountType") == "admin" and seller_id_filter:
+            match_stage["sellerId"] = ObjectId(seller_id_filter)
+
+        pipeline = [
+            {"$match": match_stage},
+            {"$unwind": "$items"},
+            {"$lookup": {
+                "from": "products",
+                "let": {"pid": "$items.productId"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$pid"]}}},
+                ],
+                "as": "product"
+            }},
+            {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
+        ]
+
+        if category_id:
+            pipeline.append({"$match": {"product.categoryId": ObjectId(category_id)}})
+
+        pipeline.extend([
+            {"$group": {
+                "_id": {"$ifNull": ["$items.productName", "Unknown"]},
+                "productId": {"$first": "$items.productId"},
+                "totalQuantity": {"$sum": "$items.quantity"},
+                "totalRevenue": {"$sum": "$items.total"},
+                "orderCount": {"$sum": 1},
+                "categoryName": {"$first": {"$ifNull": ["$product.categoryName", ""]}}
+            }},
+            {"$sort": {"totalQuantity": -1}},
+            {"$limit": 10},
+        ])
+
+        results = await db.invoices.aggregate(pipeline).to_list(10)
+
+        return {"products": [{
+            "name": r["_id"],
+            "productId": r.get("productId", ""),
+            "quantity": r["totalQuantity"],
+            "revenue": round(r["totalRevenue"], 2),
+            "orders": r["orderCount"],
+            "category": r.get("categoryName", ""),
+        } for r in results]}
+
     return router
