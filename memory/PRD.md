@@ -4,7 +4,7 @@
 Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce platform.
 
 ## Core Architecture
-- **Frontend:** Next.js + React + TypeScript + Tailwind CSS
+- **Frontend:** Next.js + React + TypeScript + Tailwind CSS + Recharts
 - **Backend:** FastAPI + MongoDB (motor async driver)
 - **Auth:** Firebase Authentication
 - **PDF:** ReportLab
@@ -13,80 +13,58 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 
 ## What's Been Implemented
 
-### Phase 1: Advanced Payment Tracking (DONE)
-### Phase 2: Receipts, WhatsApp & Overdue System (DONE)
-### Phase 3: Seller Onboarding & Branding (DONE)
+### Phase 1-3: Payment Tracking, Receipts, Onboarding (ALL DONE)
 ### Phase 4: Dashboard & Notifications (PARTIALLY DONE)
 
-### Inventory Module Improvements (DONE)
-- minStock, reorderQuantity, lowStockAlertEnabled fields per product
-- Min Stock column, alert toggle, sticky header, scroll fix
+### Inventory Module (DONE)
+- minStock, reorderQuantity, lowStockAlertEnabled, sticky header, scroll fix
 
 ### Supplier-Product Mapping (DONE)
-- Many-to-many via supplier_products collection with rates
+- Many-to-many with rates
 
-### Low Stock Alert System (DONE)
-- low_stock_alerts with dedup, pending/ordered/ignored/resolved status
+### Low Stock Alerts (DONE)
+- Deduped alerts, pending/ordered/ignored/resolved
 
 ### Purchase Order System (DONE)
-- Auto PO number: PO-{YEAR}-{SEQ}
-- Professional PDF generation (green theme, ReportLab)
-- Status: draft → sent → confirmed → partially_received → received / cancelled
-- WhatsApp sending to suppliers
+- Auto PO number, PDF generation, WhatsApp, status tracking
 
-### Goods Received (GRN) Flow (DONE - Feb 2026)
-**Full Procurement Cycle:**
-- Low Stock Alert → PO Created → PO Sent → Supplier Delivers → Receive Goods → Stock Updated
+### Goods Received (GRN) Flow (DONE)
+- Receive goods → auto stock update → alert resolution → partial delivery support
 
-**GRN Features:**
-- "Receive Goods" button on confirmed and partially_received POs
-- Modal shows each PO item with ordered qty, already received, remaining
-- Received quantity input capped at remaining
-- Auto stock update: current_stock + received_quantity
-- Inventory log: changeType = 'purchase_receipt', reference to PO number
-- Low stock alert resolution: pending/ordered → resolved when stock > minStock
-- Partial delivery support: partially_received status when not all items fully received
-- GRN history stored in goods_receipts collection
-- Stock update summary shown on success
+### Product Analytics Charts (DONE - Feb 2026)
+- **Supplier Price Trend** (multi-supplier line chart)
+- **Purchase Quantity Over Time** (bar chart)
+- **Inventory Stock Trend** (line chart from logs)
+- **Supplier Rate Comparison** (horizontal bar, best price highlight)
+- Product dropdown filter, Period selector (7d/30d/3m/6m/1y)
+- Summary KPI cards (Total POs, Qty, Spend, Suppliers)
+- Smart grouping: daily for <=31 days, monthly otherwise
 
-**Invoice WhatsApp for Buyers:**
-- "Send Invoice WhatsApp" button in invoice detail and list rows
+### Invoice WhatsApp for Buyers (DONE)
 
 ## Key DB Collections
 - users, sellerListings, seller_invoice_counters, invoices, invoice_payments
 - seller_notifications, inventory_logs, seller_suppliers, supplier_products
-- low_stock_alerts, purchase_orders, po_counters
-- goods_receipts (sellerId, poId, poNumber, items, notes, receivedBy, receivedAt)
+- low_stock_alerts, purchase_orders, po_counters, goods_receipts
 
-## Key API Endpoints
-- CRUD /api/business-tools/inventory
-- POST /api/business-tools/inventory/{id}/adjust
-- CRUD /api/business-tools/suppliers (with products mapping)
-- GET /api/business-tools/suppliers-for-listing/{id}
-- GET/PUT /api/business-tools/low-stock-alerts
-- POST /api/business-tools/purchase-orders
-- GET /api/business-tools/purchase-orders/{id}/pdf
-- GET /api/business-tools/purchase-orders/{id}/whatsapp-link
-- PUT /api/business-tools/purchase-orders/{id}/status
-- POST /api/business-tools/purchase-orders/{id}/receive (GRN)
-- GET /api/business-tools/purchase-orders/{id}/receipts (GRN history)
-- CRUD /api/business-tools/invoices
-- GET /api/business-tools/invoices/{id}/whatsapp-link?reminder_type=send_invoice
+## Key API Endpoints (Analytics)
+- GET /api/business-tools/analytics/products
+- GET /api/business-tools/analytics/summary?listing_id=
+- GET /api/business-tools/analytics/price-trend?listing_id=&period=
+- GET /api/business-tools/analytics/purchase-trend?listing_id=&period=
+- GET /api/business-tools/analytics/stock-trend?listing_id=&period=
+- GET /api/business-tools/analytics/supplier-comparison?listing_id=
 
 ## Prioritized Backlog
 
-### P0 (High)
-- Wire up dashboard metrics frontend to backend
+### P0
+- Wire up dashboard metrics frontend
 
-### P1 (Medium)
+### P1
 - Admin View for Reports
 - Seller Reminder Controls
 
-### P2 (Low)
-- Advanced token-based search
-- Redis caching
-- Refactor server.py
-- Email reminders
+### P2
+- Token-based search, Redis caching, server.py refactor, email reminders
 
-## Mocked Integrations
-- Resend email service (MOCKED)
+## Mocked: Resend email service
