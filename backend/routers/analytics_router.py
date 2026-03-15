@@ -28,11 +28,13 @@ def init_analytics_router(db, verify_token_func):
         return user
 
     async def get_seller_id(user):
-        if user.get("accountType") == "seller":
-            return str(user["_id"])
-        elif user.get("accountType") == "employee":
-            return str(user.get("employerId", user["_id"]))
-        raise HTTPException(status_code=403, detail="Not authorized")
+        account_type = user.get("accountType", "seller")
+        if account_type == "employee":
+            seller_id = user.get("sellerId")
+            if not seller_id:
+                raise HTTPException(status_code=403, detail="Employee not linked to seller")
+            return str(seller_id)
+        return str(user.get("_id"))
 
     def parse_date_range(period: Optional[str], start_date: Optional[str], end_date: Optional[str]):
         """Parse date range from period shorthand or explicit dates."""
