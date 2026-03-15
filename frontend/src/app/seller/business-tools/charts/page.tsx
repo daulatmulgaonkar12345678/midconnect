@@ -172,11 +172,11 @@ export default function ChartsGraphsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border p-4 space-y-3" data-testid="charts-filters">
-        <div className="flex flex-col sm:flex-row gap-3">
+      <div className="bg-white rounded-xl border p-4 space-y-3 overflow-hidden" data-testid="charts-filters">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Category Filter */}
           {categories.length > 0 && (
-            <div className="sm:w-44">
+            <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
               <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -190,7 +190,7 @@ export default function ChartsGraphsPage() {
           )}
 
           {/* Product Filter */}
-          <div className="flex-1">
+          <div className={categories.length > 0 ? '' : 'sm:col-span-2'}>
             <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
             <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -205,7 +205,7 @@ export default function ChartsGraphsPage() {
 
           {/* Supplier Filter */}
           {suppliers.length > 0 && (
-            <div className="sm:w-44">
+            <div>
               <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
                 <Filter className="h-3 w-3" /> Supplier
               </label>
@@ -222,7 +222,7 @@ export default function ChartsGraphsPage() {
 
           {/* Seller Filter (admin only) */}
           {isAdmin && (
-            <div className="sm:w-44">
+            <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Seller</label>
               <input type="text" value={selectedSeller} onChange={(e) => setSelectedSeller(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
