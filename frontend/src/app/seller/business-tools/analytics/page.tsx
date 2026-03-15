@@ -278,10 +278,11 @@ export default function AnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="supplierName" tick={{ fontSize: 11 }} width={120} />
-                  <Tooltip formatter={(value: number) => [`₹${value.toLocaleString('en-IN')}`, 'Rate']} />
+                  <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString('en-IN')}`, 'Rate']} />
                   <Bar dataKey="rate" radius={[0, 4, 4, 0]} name="Rate (₹)"
                     fill="#7c3aed"
-                    label={({ x, y, width, value, index }: { x: number; y: number; width: number; value: number; index: number }) => (
+                    label={({ x, y, width, value, index }: // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      any) => (
                       <text x={x + width + 4} y={y + 14} fill="#666" fontSize={10}>
                         ₹{value}{supplierComparison[index]?.isBestPrice ? ' ★' : ''}
                       </text>
