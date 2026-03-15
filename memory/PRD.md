@@ -2736,6 +2736,42 @@ Implemented a full multi-payment tracking system for invoices. Sellers can recor
 - `/app/backend/scripts/migrate_invoices.py` (migration script - already executed)
 
 
+### Session: 2026-03-15 (Seller Onboarding + Branding)
+
+#### Phase 3: Seller Onboarding + Business Branding - COMPLETE
+
+**What was done:**
+
+1. **Seller Profile API:**
+   - `GET /api/business-tools/seller-profile` — Returns profile (businessName, phone, email, address, city, state, gstNumber, sellerLogoUrl), invoiceIdentity (abbreviation, code, sequence), profileComplete flag
+   - `PUT /api/business-tools/seller-profile` — Saves to user.profile + user.gst, syncs businessName to seller_invoice_counters
+   - Handles null profile/gst objects gracefully
+
+2. **Seller Abbreviation:**
+   - Generated from first letter of each word in business name (e.g., "Akash Enterprises" → "AE")
+   - Stored in seller_invoice_counters.sellerAbbreviation
+   - Generated once during onboarding, stable on subsequent edits (unless was auto-generated default)
+
+3. **Invoice Number Format:** `INV{ABBR}-{CODE}-{SEQ}` (e.g., INVAE-7C5A6E-0035)
+
+4. **Logo Upload:** Stored in user.profile.sellerLogoUrl via Cloudinary
+
+5. **Invoice PDF Branding:** Logo (left side) + business name, address, city/state, GST, phone, email in header
+
+6. **Onboarding Modal:** Shows in business-tools layout when profile.businessName is empty. Fields: Business Name, Phone, GST, Address, City, State.
+
+7. **Business Settings Page:** `/seller/business-tools/settings` with form for all profile fields + logo upload + invoice identity display (read-only).
+
+**Testing:** Iteration 59: 15/15 tests passed (100%). Abbreviation stability verified. Sequential invoice creation verified.
+
+**Files Changed:**
+- `/app/backend/routers/invoice_router.py` (seller-profile GET/PUT endpoints)
+- `/app/backend/services/invoice_pdf_service.py` (logo + full branding in PDF)
+- `/app/frontend/src/app/seller/business-tools/settings/page.tsx` (new settings page)
+- `/app/frontend/src/app/seller/business-tools/layout.tsx` (onboarding modal + settings nav)
+
+
+
 ---
 
 ### Upcoming Tasks
