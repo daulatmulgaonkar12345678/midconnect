@@ -4,34 +4,51 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
 import {
-  FileText, Loader2, X, Download, ExternalLink, Send,
-  CheckCircle2, Clock, Package2, Truck, AlertTriangle
+  FileText, Loader2, X, Download, Send,
+  CheckCircle2, Package2, Truck, AlertTriangle, ClipboardList
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+interface POItem {
+  listingId: string;
+  productName: string;
+  sku: string;
+  description: string;
+  specification: string;
+  quantity: number;
+  rate: number;
+  total: number;
+  receivedQuantity?: number;
+}
+
 interface PurchaseOrder {
   id: string;
   poNumber: string;
+  supplierId: string;
   supplierName: string;
   supplierPhone: string;
+  items: POItem[];
   itemCount: number;
   totalAmount: number;
   status: string;
+  deliveryNotes?: string;
   createdAt: string;
+  receivedAt?: string;
 }
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
   sent: 'bg-blue-100 text-blue-700',
   confirmed: 'bg-emerald-100 text-emerald-700',
+  partially_received: 'bg-amber-100 text-amber-700',
   received: 'bg-green-100 text-green-800',
   cancelled: 'bg-red-100 text-red-600',
 };
 
 const statusLabels: Record<string, string> = {
   draft: 'Draft', sent: 'Sent', confirmed: 'Confirmed',
-  received: 'Received', cancelled: 'Cancelled',
+  partially_received: 'Partially Received', received: 'Received', cancelled: 'Cancelled',
 };
 
 export default function PurchaseOrdersPage() {
@@ -42,6 +59,14 @@ export default function PurchaseOrdersPage() {
   const [filter, setFilter] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
+
+  // GRN modal state
+  const [grnModal, setGrnModal] = useState<PurchaseOrder | null>(null);
+  const [grnLoading, setGrnLoading] = useState(false);
+  const [grnQuantities, setGrnQuantities] = useState<Record<string, number>>({});
+  const [grnNotes, setGrnNotes] = useState('');
+  const [grnSubmitting, setGrnSubmitting] = useState(false);
+  const [grnResult, setGrnResult] = useState<{ status: string; stockUpdates: Array<{ productName: string; previousStock: number; newStock: number; received: number }> } | null>(null);
 
   const authHeaders = useCallback(async () => {
     const t = await getIdToken();
@@ -71,10 +96,7 @@ export default function PurchaseOrdersPage() {
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${poNumber}.pdf`;
-        a.click();
+        const a = document.createElement('a'); a.href = url; a.download = `${poNumber}.pdf`; a.click();
         window.URL.revokeObjectURL(url);
       }
     } catch { setError('Failed to download PDF'); }
@@ -86,10 +108,7 @@ export default function PurchaseOrdersPage() {
       const res = await fetch(`${API_URL}/api/business-tools/purchase-orders/${poId}/whatsapp-link`, { headers: h });
       if (res.ok) {
         const data = await res.json();
-        if (data.whatsappLink) {
-          window.open(data.whatsappLink, '_blank');
-          fetchPOs(); // Refresh to show updated status
-        }
+        if (data.whatsappLink) { window.open(data.whatsappLink, '_blank'); fetchPOs(); }
       } else {
         const data = await res.json();
         setError(data.detail || 'Failed to generate WhatsApp link');
@@ -107,6 +126,56 @@ export default function PurchaseOrdersPage() {
       fetchPOs();
     } catch { /* empty */ }
     setStatusUpdating(null);
+  };
+
+  const openGrnModal = async (po: PurchaseOrder) => {
+    setGrnLoading(true);
+    setGrnResult(null);
+    setGrnNotes('');
+    try {
+      const h = await authHeaders();
+      const res = await fetch(`${API_URL}/api/business-tools/purchase-orders/${po.id}`, { headers: h });
+      if (res.ok) {
+        const data = await res.json();
+        const fullPO = data.purchaseOrder as PurchaseOrder;
+        setGrnModal(fullPO);
+        const initQty: Record<string, number> = {};
+        for (const item of fullPO.items) {
+          const remaining = item.quantity - (item.receivedQuantity || 0);
+          initQty[item.listingId] = Math.max(0, remaining);
+        }
+        setGrnQuantities(initQty);
+      }
+    } catch { setError('Failed to load PO details'); }
+    setGrnLoading(false);
+  };
+
+  const submitGrn = async () => {
+    if (!grnModal) return;
+    setGrnSubmitting(true);
+    try {
+      const h = await authHeaders();
+      const items = Object.entries(grnQuantities)
+        .filter(([, qty]) => qty > 0)
+        .map(([listingId, qty]) => ({ listingId, receivedQuantity: qty }));
+
+      if (items.length === 0) { setError('Enter at least one received quantity'); setGrnSubmitting(false); return; }
+
+      const res = await fetch(`${API_URL}/api/business-tools/purchase-orders/${grnModal.id}/receive`, {
+        method: 'POST', headers: h,
+        body: JSON.stringify({ items, notes: grnNotes || null })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setGrnResult({ status: data.status, stockUpdates: data.stockUpdates || [] });
+        fetchPOs();
+      } else {
+        const data = await res.json();
+        setError(data.detail || 'Failed to receive goods');
+      }
+    } catch { setError('Failed to submit GRN'); }
+    setGrnSubmitting(false);
   };
 
   if (!hasPermission('manage_inventory')) {
@@ -135,6 +204,7 @@ export default function PurchaseOrdersPage() {
           { val: 'draft', label: 'Draft' },
           { val: 'sent', label: 'Sent' },
           { val: 'confirmed', label: 'Confirmed' },
+          { val: 'partially_received', label: 'Partial' },
           { val: 'received', label: 'Received' },
         ].map(f => (
           <button key={f.val} onClick={() => setFilter(f.val)} data-testid={`po-filter-${f.val || 'all'}`}
@@ -188,16 +258,14 @@ export default function PurchaseOrdersPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Download PDF */}
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                   <button onClick={() => downloadPDF(po.id, po.poNumber)}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
                     data-testid={`po-download-${po.id}`}>
                     <Download className="h-3.5 w-3.5" /> PDF
                   </button>
 
-                  {/* Send WhatsApp */}
-                  {po.supplierPhone && (
+                  {po.supplierPhone && !['received', 'cancelled'].includes(po.status) && (
                     <button onClick={() => sendWhatsApp(po.id)}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 transition"
                       data-testid={`po-whatsapp-${po.id}`}>
@@ -205,7 +273,6 @@ export default function PurchaseOrdersPage() {
                     </button>
                   )}
 
-                  {/* Status Actions */}
                   {po.status === 'sent' && (
                     <button onClick={() => updateStatus(po.id, 'confirmed')} disabled={statusUpdating === po.id}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition disabled:opacity-50"
@@ -213,13 +280,15 @@ export default function PurchaseOrdersPage() {
                       <CheckCircle2 className="h-3.5 w-3.5" /> Confirm
                     </button>
                   )}
-                  {po.status === 'confirmed' && (
-                    <button onClick={() => updateStatus(po.id, 'received')} disabled={statusUpdating === po.id}
-                      className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition disabled:opacity-50"
-                      data-testid={`po-received-${po.id}`}>
-                      <Package2 className="h-3.5 w-3.5" /> Received
+
+                  {(po.status === 'confirmed' || po.status === 'partially_received') && (
+                    <button onClick={() => openGrnModal(po)} disabled={grnLoading}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+                      data-testid={`po-receive-${po.id}`}>
+                      <ClipboardList className="h-3.5 w-3.5" /> Receive Goods
                     </button>
                   )}
+
                   {(po.status === 'draft' || po.status === 'sent') && (
                     <button onClick={() => updateStatus(po.id, 'cancelled')} disabled={statusUpdating === po.id}
                       className="px-3 py-1.5 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition disabled:opacity-50"
@@ -231,6 +300,117 @@ export default function PurchaseOrdersPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* GRN Modal */}
+      {grnModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="grn-modal">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Receive Goods</h2>
+                <p className="text-sm text-gray-500">{grnModal.poNumber}</p>
+              </div>
+              <button onClick={() => { setGrnModal(null); setGrnResult(null); }} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {grnResult ? (
+              /* GRN Success */
+              <div className="p-6 space-y-4">
+                <div className="text-center py-3">
+                  <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold text-gray-900">Goods Received!</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    PO Status: <span className="font-medium capitalize">{grnResult.status.replace('_', ' ')}</span>
+                  </p>
+                </div>
+
+                {grnResult.stockUpdates.length > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4" data-testid="grn-stock-updates">
+                    <h4 className="text-sm font-medium text-green-800 mb-2">Stock Updated</h4>
+                    {grnResult.stockUpdates.map((u, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm py-1">
+                        <span className="text-gray-700">{u.productName}</span>
+                        <span className="text-green-700 font-medium">
+                          {u.previousStock} + {u.received} = {u.newStock}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button onClick={() => { setGrnModal(null); setGrnResult(null); }}
+                  className="w-full px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800">
+                  Done
+                </button>
+              </div>
+            ) : (
+              /* GRN Form */
+              <div className="p-6 space-y-4">
+                <div className="space-y-3">
+                  {grnModal.items.map((item) => {
+                    const alreadyReceived = item.receivedQuantity || 0;
+                    const remaining = item.quantity - alreadyReceived;
+                    return (
+                      <div key={item.listingId} className="bg-gray-50 rounded-lg p-4" data-testid={`grn-item-${item.listingId}`}>
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="font-medium text-gray-900">{item.productName}</p>
+                            {item.sku && <p className="text-xs text-gray-500 font-mono">{item.sku}</p>}
+                          </div>
+                          <span className="text-sm text-gray-500">₹{item.rate.toLocaleString('en-IN')}/unit</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm mb-3">
+                          <span>Ordered: <span className="font-semibold">{item.quantity}</span></span>
+                          {alreadyReceived > 0 && (
+                            <span className="text-green-600">Already Received: <span className="font-semibold">{alreadyReceived}</span></span>
+                          )}
+                          <span className="text-amber-600">Remaining: <span className="font-semibold">{remaining}</span></span>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Received Quantity</label>
+                          <input
+                            type="number"
+                            value={grnQuantities[item.listingId] ?? 0}
+                            min={0}
+                            max={remaining}
+                            onChange={(e) => {
+                              const val = Math.min(Math.max(0, parseInt(e.target.value) || 0), remaining);
+                              setGrnQuantities(prev => ({ ...prev, [item.listingId]: val }));
+                            }}
+                            className="w-32 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                            data-testid={`grn-qty-${item.listingId}`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                  <textarea value={grnNotes} onChange={(e) => setGrnNotes(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" rows={2}
+                    placeholder="Any notes about the delivery..." data-testid="grn-notes" />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button onClick={() => setGrnModal(null)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    Cancel
+                  </button>
+                  <button onClick={submitGrn} disabled={grnSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
+                    data-testid="grn-submit-btn">
+                    {grnSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
+                    Confirm Receipt
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

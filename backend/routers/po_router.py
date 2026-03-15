@@ -36,7 +36,17 @@ class POCreate(BaseModel):
 
 
 class POStatusUpdate(BaseModel):
-    status: str = Field(..., pattern="^(sent|confirmed|received|cancelled)$")
+    status: str = Field(..., pattern="^(sent|confirmed|received|partially_received|cancelled)$")
+
+
+class GRNItemReceive(BaseModel):
+    listingId: str
+    receivedQuantity: int = Field(..., ge=0)
+
+
+class GRNCreate(BaseModel):
+    items: List[GRNItemReceive]
+    notes: Optional[str] = None
 
 
 def init_po_router(db, verify_token_func, activity_log_service=None):
@@ -235,6 +245,20 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         doc = serialize_doc(po)
         doc["supplierName"] = supplier.get("supplierName", "Unknown") if supplier else "Unknown"
         doc["supplierPhone"] = supplier.get("phone", "") if supplier else ""
+
+        # Calculate total received per item from GRNs
+        all_grns = await db.goods_receipts.find({"poId": po["_id"]}).to_list(100)
+        received_map: dict = {}
+        for grn in all_grns:
+            for gi in grn.get("items", []):
+                lid = str(gi.get("listingId"))
+                received_map[lid] = received_map.get(lid, 0) + gi.get("receivedQuantity", 0)
+
+        # Enrich items with received quantities
+        for item in doc.get("items", []):
+            lid = item.get("listingId", "")
+            item["receivedQuantity"] = received_map.get(lid, 0)
+
         return {"purchaseOrder": doc}
 
     # ==========================================
@@ -364,5 +388,168 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
             )
 
         return {"whatsappLink": wa_link, "message": msg, "supplierPhone": supplier["phone"]}
+
+    # ==========================================
+    # RECEIVE GOODS (GRN)
+    # ==========================================
+
+    @router.post("/purchase-orders/{po_id}/receive")
+    async def receive_goods(po_id: str, data: GRNCreate, authorization: str = Header(...)):
+        """Record goods receipt for a PO. Updates inventory and resolves alerts."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_INVENTORY.value)
+        seller_id = await get_seller_id(user)
+
+        try:
+            po_oid = ObjectId(po_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid PO ID")
+
+        po = await db.purchase_orders.find_one({"_id": po_oid, "sellerId": ObjectId(seller_id)})
+        if not po:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+
+        if po.get("status") in ("cancelled", "received"):
+            raise HTTPException(status_code=400, detail=f"Cannot receive goods for a {po['status']} PO")
+
+        now = datetime.now(timezone.utc)
+        po_items = po.get("items", [])
+        grn_items = []
+        stock_updates = []
+
+        for recv_item in data.items:
+            if recv_item.receivedQuantity <= 0:
+                continue
+
+            listing_oid = ObjectId(recv_item.listingId)
+
+            # Find matching PO item
+            po_item = next((i for i in po_items if str(i.get("listingId")) == recv_item.listingId), None)
+            if not po_item:
+                continue
+
+            # Update inventory stock
+            listing = await db.sellerListings.find_one({"_id": listing_oid})
+            if not listing:
+                continue
+
+            current_stock = listing.get("stock", 0)
+            new_stock = current_stock + recv_item.receivedQuantity
+
+            await db.sellerListings.update_one(
+                {"_id": listing_oid},
+                {"$set": {"stock": new_stock, "updatedAt": now}}
+            )
+
+            # Get product name
+            product = await db.products.find_one({"_id": listing.get("productId")})
+            product_name = product["name"] if product else po_item.get("productName", "Unknown")
+
+            # Create inventory log
+            await db.inventory_logs.insert_one({
+                "sellerId": ObjectId(seller_id),
+                "listingId": listing_oid,
+                "productName": product_name,
+                "changeType": "purchase_receipt",
+                "quantity": recv_item.receivedQuantity,
+                "previousStock": current_stock,
+                "newStock": new_stock,
+                "note": f"GRN from {po.get('poNumber', 'PO')}",
+                "createdBy": str(user["_id"]),
+                "createdAt": now,
+            })
+
+            # Resolve low stock alert if stock is now above minStock
+            min_stock = listing.get("minStock", 0)
+            if min_stock > 0 and new_stock > min_stock:
+                await db.low_stock_alerts.update_many(
+                    {"sellerId": ObjectId(seller_id), "listingId": listing_oid, "status": "pending"},
+                    {"$set": {"status": "resolved", "updatedAt": now}}
+                )
+                # Also update ordered alerts for this listing
+                await db.low_stock_alerts.update_many(
+                    {"sellerId": ObjectId(seller_id), "listingId": listing_oid, "status": "ordered"},
+                    {"$set": {"status": "resolved", "updatedAt": now}}
+                )
+
+            grn_items.append({
+                "listingId": listing_oid,
+                "productName": product_name,
+                "orderedQuantity": po_item.get("quantity", 0),
+                "receivedQuantity": recv_item.receivedQuantity,
+            })
+
+            stock_updates.append({
+                "listingId": str(listing_oid),
+                "productName": product_name,
+                "previousStock": current_stock,
+                "newStock": new_stock,
+                "received": recv_item.receivedQuantity,
+            })
+
+        if not grn_items:
+            raise HTTPException(status_code=400, detail="No valid items to receive")
+
+        # Create GRN record
+        grn_doc = {
+            "sellerId": ObjectId(seller_id),
+            "poId": po_oid,
+            "poNumber": po.get("poNumber", ""),
+            "items": grn_items,
+            "notes": data.notes,
+            "receivedBy": str(user["_id"]),
+            "receivedAt": now,
+            "createdAt": now,
+        }
+        await db.goods_receipts.insert_one(grn_doc)
+
+        # Calculate total received across all GRNs for this PO
+        all_grns = await db.goods_receipts.find({"poId": po_oid}).to_list(100)
+        total_received_map: dict = {}
+        for grn in all_grns:
+            for gi in grn.get("items", []):
+                lid = str(gi.get("listingId"))
+                total_received_map[lid] = total_received_map.get(lid, 0) + gi.get("receivedQuantity", 0)
+
+        # Determine PO status
+        all_fully_received = True
+        for pi in po_items:
+            lid = str(pi.get("listingId"))
+            ordered = pi.get("quantity", 0)
+            received = total_received_map.get(lid, 0)
+            if received < ordered:
+                all_fully_received = False
+                break
+
+        new_status = "received" if all_fully_received else "partially_received"
+        await db.purchase_orders.update_one(
+            {"_id": po_oid},
+            {"$set": {"status": new_status, "receivedAt": now, "updatedAt": now}}
+        )
+
+        return {
+            "message": f"Goods received. PO status: {new_status}",
+            "status": new_status,
+            "stockUpdates": stock_updates,
+        }
+
+    # ==========================================
+    # GET GRN HISTORY FOR A PO
+    # ==========================================
+
+    @router.get("/purchase-orders/{po_id}/receipts")
+    async def get_po_receipts(po_id: str, authorization: str = Header(...)):
+        """Get all goods receipt records for a PO."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_INVENTORY.value)
+        seller_id = await get_seller_id(user)
+
+        try:
+            po_oid = ObjectId(po_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid PO ID")
+
+        grns = await db.goods_receipts.find({"poId": po_oid, "sellerId": ObjectId(seller_id)}).sort("createdAt", -1).to_list(100)
+        return {"receipts": serialize_doc(grns)}
 
     return router
