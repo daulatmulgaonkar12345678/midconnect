@@ -23,23 +23,38 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - Seller profile completion, dynamic invoice numbering (INV-{ABBR}-{CODE}-{SEQ}), branded PDFs
 
 ### Phase 4: Dashboard & Notifications (PARTIALLY DONE)
-- Backend notification endpoints created and working
-- Notification center page exists with support for: payment_received, partial_payment, invoice_overdue, invoice_created, low_stock, system_alert
+- Backend notification endpoints created
+- Notification center page supports: payment_received, partial_payment, invoice_overdue, invoice_created, low_stock, system_alert
 - Dashboard metrics page exists but frontend not fully wired
 
 ### Inventory Module Improvements (DONE - Feb 2026)
-- Added `minStock`, `reorderQuantity`, `lowStockAlertEnabled` fields per product
-- Min Stock column in inventory table
-- Edit mode: Minimum Stock input + Alert toggle (Bell on/off)
-- Adjust Stock modal shows Minimum Stock info + low stock warning
-- Low stock notification (`low_stock` type) auto-created when `current_stock <= minStock` (on adjust, update, and invoice deduction)
-- Notifications page updated with orange theme for low_stock alerts
-- **Table scroll fix:** max-height 70vh, vertical scroll, horizontal only on overflow
-- **Sticky table header** for large inventories
+- `minStock`, `reorderQuantity`, `lowStockAlertEnabled` fields per product
+- Min Stock column in table, alert toggle, sticky header, scroll fix
 
-### Critical Architectural Fixes (DONE)
-- Multi-seller invoice numbering with atomic counters
-- Data migration for historical data
+### Low Stock Alert → Order Material → WhatsApp Workflow (DONE - Feb 2026)
+**Supplier-Product Mapping:**
+- Many-to-many relationship via `supplier_products` collection
+- Supplier create/edit modal includes "Supplied Products" section
+- Product dropdown from seller inventory, rate per product
+- Delete supplier also cleans up mappings
+
+**Low Stock Alert System:**
+- `low_stock_alerts` collection tracks alert status (pending/ordered/ignored)
+- Deduplication: only 1 pending alert per listing
+- Alerts created on stock adjust, inventory update, and invoice stock deduction
+- Dashboard page with pending/ordered/ignored filter tabs
+- "Order Material" and "Ignore" action buttons
+
+**Order Material Modal:**
+- Auto-populated: Product Name, SKU, Specification, Description, Current Stock
+- Supplier dropdown filtered by product (from supplier_products)
+- Supplier rates visible, Best Price label on lowest rate
+- Editable order quantity with estimated cost
+- "Send WhatsApp" generates wa.me URL with full product details + seller business name footer
+
+**Alert Status Flow:**
+- pending → ordered (after WhatsApp sent)
+- pending → ignored (seller dismisses)
 
 ## Key DB Collections
 - **users:** Extended with seller profile
@@ -49,11 +64,20 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - **invoice_payments:** Payment records with Cloudinary receipt URLs
 - **seller_notifications:** Notifications (low_stock, invoice_overdue, payment_received, etc.)
 - **inventory_logs:** Stock adjustment history
+- **seller_suppliers:** Supplier records per seller
+- **supplier_products:** Many-to-many supplier-product mapping with rates
+- **low_stock_alerts:** Alert tracking (sellerId, listingId, productName, currentStock, minStock, status)
 
 ## Key API Endpoints
 - GET/PUT /api/business-tools/inventory
 - POST /api/business-tools/inventory/{id}/adjust
 - GET /api/business-tools/inventory/low-stock-alerts
+- CRUD /api/business-tools/suppliers
+- GET /api/business-tools/suppliers/{id} (includes products array)
+- GET /api/business-tools/suppliers-for-listing/{listing_id}
+- GET /api/business-tools/low-stock-alerts
+- GET /api/business-tools/low-stock-alerts/{id}/order-details
+- PUT /api/business-tools/low-stock-alerts/{id}/status
 - GET /api/business-tools/notifications
 - PUT /api/business-tools/notifications/{id}/read
 - POST/GET /api/business-tools/invoices
