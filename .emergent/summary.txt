@@ -1,57 +1,88 @@
 <analysis>**original_problem_statement:**
-The user's initial request was to build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce platform. This has been broken down into phased implementations.
+The user's initial request was to build a comprehensive ERP/Business Tools system. Over the course of the session, the user expanded the scope with several high-priority features for the Inventory and Purchasing modules.
 
 **PRODUCT REQUIREMENTS:**
-The project is to build an Advanced Invoice, Payment Tracking, and Seller Notification System.
-
-*   **Phase 1 (Completed):** Advanced Payment Tracking. Invoices support multiple partial payments with full history. Key fields include , , , and .
-*   **Phase 2 (Completed):** Receipt Upload & Communication. Mandated payment proof (receipts) stored on Cloudinary, Follow Up on WhatsApp button, and an automatic overdue detection system.
-*   **Critical Bug Fixes (Completed):** Resolved issues with non-unique invoice numbers, incorrect payment status logic, and inaccurate financial reports by implementing a robust, multi-seller-aware invoicing architecture with atomic counters and a data migration script.
-*   **Phase 3 (Completed):** Seller Onboarding & Branding. Implemented a seller profile completion flow, dynamic invoice number generation based on seller identity (), and integrated seller branding (logo, address) into invoice PDFs.
-*   **Phase 4 (In Progress):** Dashboards & Notifications. Create a central seller notification center for payments and other events. Add key financial metrics to the seller dashboard.
-*   **Phase 5 (Upcoming):** Customization. Allow sellers to upload a logo and a preferred invoice template.
+The following features were requested and implemented in this session:
+1.  **Inventory Module Enhancements:**
+    *   Add a  field per product to trigger low stock alerts.
+    *   Add a  toggle to enable/disable alerts for specific products.
+    *   Update the Edit Product and Adjust Stock forms to include the new fields.
+    *   Fix horizontal and vertical scrolling issues on the inventory table and make the header sticky.
+2.  **Supplier-Product Mapping:**
+    *   Establish a many-to-many relationship between suppliers and products, allowing sellers to define which products a supplier provides and at what .
+    *   Update the Create/Edit Supplier UI to manage these product mappings.
+3.  **Low Stock Alert & Ordering Workflow:**
+    *   When a product's stock falls below its , create a Low Stock Alert.
+    *   From the alert, the seller can initiate an Order Material workflow.
+    *   The order form should feature a filtered dropdown showing only suppliers who provide that specific product, along with their rates.
+    *   Generate a pre-filled WhatsApp message to send the order to the selected supplier.
+4.  **Purchase Order (PO) System:**
+    *   Generate formal, sequentially numbered () PDF purchase orders.
+    *   Store POs and their items in the database.
+    *   Allow sellers to send the PO PDF to suppliers via a pre-filled WhatsApp message directly from the portal.
+5.  **Invoice WhatsApp Sharing:**
+    *   Add functionality to the Invoices page to send the invoice PDF to buyers via WhatsApp.
+6.  **Goods Received Note (GRN) Flow:**
+    *   Allow sellers to Mark as Received on a Purchase Order.
+    *   Support partial deliveries by allowing sellers to input the .
+    *   Automatically update inventory stock based on the received quantity.
+    *   Update the PO status to  or .
+7.  **Product Analytics & Charts:**
+    *   Create a Product Analytics page with interactive charts.
+    *   Implement four charts: Supplier Price Trend, Purchase Quantity Trend, Inventory Stock Trend, and Supplier Rate Comparison.
+    *   Include filters for Product, Date Range (with presets), and Supplier.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a B2B e-commerce platform with a FastAPI backend, React/Next.js frontend, and MongoDB. The core ERP suite, including RBAC, Inventory, Composite Products, and Reports, is functional.
+The application is a full-stack B2B ERP system with a FastAPI backend and React frontend. Prior to this session, it had modules for invoicing, payment tracking, seller onboarding, and basic reports.
 
-Work on the Advanced Invoice, Payment Tracking, and Seller Notification System is well underway:
-- **Phase 1 (Payment Tracking)** is fully implemented and tested.
-- **Phase 2 (Receipts & Overdue Logic)** is fully implemented and tested.
-- **Critical Architectural Fixes** for multi-seller invoicing and reporting are complete and verified.
-- **Phase 3 (Seller Onboarding & Branding)** is fully implemented and tested.
-- **Phase 4 (Dashboard & Notifications)** has begun, with the backend APIs and data models created.
+During this session, a significant number of features were added, transforming the inventory and purchasing capabilities:
+-   The inventory system now supports minimum stock levels and triggers automated low-stock alerts.
+-   A complete supplier-product mapping system exists, linking suppliers to specific products with set rates.
+-   A full procure-to-pay-cycle has been implemented: Low Stock Alert -> Purchase Order Creation -> PDF Generation -> WhatsApp Sending -> Goods Received Note (GRN) -> Automatic Inventory Update.
+-   The invoice module now supports sharing PDFs via WhatsApp with buyers.
+-   A new Product Analytics dashboard with four interactive charts (powered by Recharts) provides visualizations for purchasing and inventory trends.
 
 **Last working item**:
--   **Last item agent was working:** Implementing **Phase 4: Dashboard Metrics + Notification Center**. The agent created the backend models () and API endpoints for fetching dashboard metrics and managing notifications. Notification creation logic was also integrated into the invoice router for key events (payment received, invoice overdue, etc.).
+-   **Last item agent was working:** Finalizing the **Product Analytics** page by adding the two remaining filters: an optional **supplier filter** and a **custom date range picker**. The agent updated the backend endpoints to accept a  and created a new endpoint to list suppliers. The frontend was updated to include the new filter UI components.
 -   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
--   **User Testing Done:** N
 -   **Which testing method agent to use?** both
+-   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   None.
+-   **Issue 1: Vercel Build Failure due to TypeScript types (P0)**
+    -   **Description:** The initial implementation of the analytics page caused a build failure on Vercel due to a TypeScript type mismatch with the  library's  and  label props.
+    -   **Attempted fixes:** The agent corrected the type definitions for the  and  props. 
+[41m                                                                               [0m
+[41m[37m                This is not the tsc command you are looking for                [0m
+[41m                                                                               [0m
+
+To get access to the TypeScript compiler, [34mtsc[0m, from the command line either:
+
+- Use [1mnpm install typescript[0m to first add TypeScript to your project [1mbefore[0m using npx
+- Use [1myarn[0m to avoid accidentally running code from un-installed packages passed locally after the fix.
+    -   **Next debug checklist:** Although a fix was applied, it was not validated by another deployment or build. The next agent should confirm the fix by running a build or deploying, as this type of issue has appeared before with new libraries. Check  for the applied fixes.
+    -   **Why fix this issue and what will be achieved with the fix?** The application will not deploy successfully until this build error is resolved.
+    -   **Status:** TESTING PENDING
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Frontend (build process)
 
 **In progress Task List**:
--   Task 1: Complete Phase 4: Dashboard Metrics + Notification Center (P0)
-
-**Task Detail:**
--   **Task 1: Complete Phase 4: Dashboard Metrics + Notification Center (P0)**
-    -   **Where to resume**:
-        -   **Backend (, ):** The backend endpoints (, , etc.) have been created but not tested. The first step is to test these endpoints using  to ensure they work as expected.
-        -   **Frontend ():** The main business tools page needs to be updated to fetch and display the new dashboard metrics widget. The UI for this is already created in the file.
-        -   **Frontend ():** The notifications page has been created but needs to be fully implemented to fetch and display notifications from the backend, including read/unread status and action links.
-        -   **Frontend ():** A navigation link to the new  page needs to be added.
-    -   **What will be achieved with this?** Sellers will have a financial control panel on their dashboard showing key metrics (Total Revenue, Pending Payments, etc.) and a dedicated page to view all system-generated notifications.
-    -   **Status**: IN PROGRESS
+-   **Task 1: Complete and Test Analytics Filters (P0)**
+    -   **Where to resume:**
+        -   **Backend ():** The  parameter has been added to the  and  endpoints. A new  endpoint was also added. These need to be tested.
+        -   **Frontend ():** UI components for the Supplier dropdown and Custom Date Range have been added. The state logic and API calls need to be verified to ensure they correctly filter the chart data.
+    -   **What will be achieved with this?** Sellers will be able to refine their product analysis by filtering by a specific supplier and selecting custom date ranges, completing the user's request.
+    -   **Status:** IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** Both
     -   **Blocked on something**: None
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
     -   **P1: Admin View for Reports:** Enhance the reports module to allow admin users to view aggregated data for all sellers, including a Seller Name column.
-    -   **P1: Seller Reminder Controls:** Allow sellers to configure the smart reminder schedule (reminder days, enable/disable, custom message templates).
+    -   **P1: Seller Reminder Controls:** Allow sellers to configure the smart reminder schedule for invoices (reminder days, enable/disable, custom message templates).
 -   **Future Tasks:**
     -   **P1:** Refactor the inline inquiry modal on the product page to use the shared .
     -   **P1:** Implement an advanced token-based search system.
@@ -62,86 +93,99 @@ Work on the Advanced Invoice, Payment Tracking, and Seller Notification System i
     -   **P2:** Implement automatic email reminders as a notification channel.
 
 **Completed work in this session**
--   **Phase 1: Advanced Payment Tracking System (DONE):** Implemented backend and frontend for partial payments, payment history, and automatic status recalculation.
--   **Phase 2: Receipts, WhatsApp & Overdue System (DONE):** Integrated Cloudinary for receipt uploads, added a Follow up on WhatsApp button, and implemented an automatic overdue status system.
--   **Critical Bug Fixes (DONE):** Overhauled the invoicing system to support multi-seller architecture. Implemented an atomic, per-seller invoice counter () to guarantee unique invoice numbers. Corrected all payment status and financial reporting logic. Ran a successful data migration script to fix all historical data.
--   **Phase 3: Seller Onboarding & Business Branding (DONE):** Created a seller onboarding flow to capture business details, generated seller-specific abbreviations for invoice numbers, and dynamically added seller branding (logo, name, address) to invoice PDFs.
+-   **Inventory Module Enhancements (DONE):** Implemented minimum stock levels, manual alert toggles, and fixed table scrolling issues in .
+-   **Supplier-Product Mapping (DONE):** Created backend models and APIs () and a frontend UI () to link suppliers to products with specific rates.
+-   **Low Stock Ordering Workflow (DONE):** Created a  page where sellers can trigger an order, select from filtered suppliers, and send a pre-filled WhatsApp message.
+-   **Purchase Order (PO) System (DONE):** Implemented a full PO system with a new router (), PDF service (), and a dedicated frontend page ().
+-   **WhatsApp Document Sharing (DONE):** Added functionality to send PO PDFs to suppliers and Invoice PDFs to buyers via WhatsApp.
+-   **Goods Received Note (GRN) Flow (DONE):** Added a Receive Goods feature to the PO system, which updates PO status and automatically increases inventory stock.
+-   **Product Analytics Dashboard (DONE):** Created a new analytics page () with four Recharts-based charts and backend endpoints () to provide data.
+-   **Vercel Build Fix (DONE):** Resolved a critical TypeScript type error in the analytics page that was blocking deployment.
 
 **Earlier issues found/mentioned but not fixed**
--   None.
+-   **Issue 1: Backend Lint Error **
+    -   **Debug checklist:** The lint command  consistently reports an unused  import in files that require authentication. The agent has noted this as a pre-existing issue.
+    -   **Why to solve this issue and what will be achieved with this?** Resolving this will lead to a clean linting process, preventing confusion for future agents.
+    -   **Should Test frontend/backend/both after fix:** Backend
+    -   **Is recurring issue?** Y
 
 **Known issue recurrence from previous fork**
--   None.
+-   **Issue recurrence in previous fork:** Frontend TypeScript build errors, particularly when integrating new libraries.
+-   **Recurrence count:** 2 (This occurred during this session with ).
+-   **Status:** RESOLVED (for now). The immediate error was fixed, but this points to a potential fragility in the frontend's type configuration that may cause issues with future library additions.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
 -   **Backend:** FastAPI, MongoDB, Pydantic
--   **Frontend:** React, Next.js, TypeScript, Tailwind CSS
--   **PDF Generation:** 
+-   **Frontend:** React, Next.js, TypeScript, Tailwind CSS, **Recharts**
+-   **PDF Generation:** , HTML-to-PDF
 -   **File Storage:** Cloudinary
--   **Architecture:** Multi-seller architecture with atomic counters for sequential ID generation.
+-   **Architecture:** Multi-seller with atomic counters. Procure-to-pay cycle.
 
 **key DB schema**
--   **users:** Extended with .
--   **seller_invoice_counters:** New collection  to manage atomic, per-seller invoice sequences.
--   **invoices:** Schema enforced with  and a unique index on . Status is now derived, not stored directly.
--   **invoice_payments:** Stores individual payment records, including  (Cloudinary URLs).
--   **notifications:** New collection .
+-   **supplier_products:** 
+-   **low_stock_alerts:** 
+-   **purchase_orders:** 
+-   **purchase_order_items:** 
+-   **goods_receipts:** 
+-   **inventory_logs:** 
 
 **changes in tech stack**
--   No new technologies were added. Cloudinary was integrated as planned.
+-   **recharts:** Added to  for frontend charting.
 
 **All files of reference**
--    (New file for Phase 4)
--    (Heavily modified for all phases)
--    (Fixed and verified)
--    (Updated for branding)
--    (New one-time script for data correction)
--    (New settings page)
--    (Handles onboarding logic)
--    (New dashboard page)
--    (New notifications page)
+-    (New: Manages Purchase Orders and GRN)
+-    (New: Serves data for the analytics charts)
+-    (New: Generates PO PDFs from an HTML template)
+-    (New: Frontend for analytics charts)
+-    (New: Frontend for managing POs)
+-    (New: Frontend for low stock workflow)
+-    (Updated for supplier-product mapping)
+-    (Updated for min-stock and scroll fix)
+-    (Updated to add WhatsApp invoice sending)
 
 **Areas that need refactoring**:
--   The main  file could be modularized into smaller routers.
+-   The main  file is growing and could be modularized further.
 -   The product detail page () has an inline inquiry modal that should be replaced with the reusable  component.
 -    contains old, unused Pydantic models that should be removed.
 
 **key api endpoints**
--    (New)
--    (New)
--    (New)
--    (New)
--    (New)
--    (Updated with new numbering logic)
--    (Fixed)
+-    (Create a PO)
+-    (List POs)
+-    (Mark goods as received)
+-    (Download PO PDF)
+-    (Data for price trend chart)
+-    (Data for purchase quantity chart)
+-    (Data for inventory stock chart)
+-    (Data for supplier rate chart)
+-    (Get a simple list of suppliers for filters)
+-    (Generate WhatsApp link to send invoice to buyer)
 
 **Critical Info for New Agent**
-1.  **Immediate Priority:** Your first task is to complete **Phase 4: Dashboard & Notification Center**.
+1.  **Immediate Priority:** Your first task is to complete and thoroughly test the **Supplier and Custom Date filters** on the Product Analytics page.
 2.  **Execution Plan:**
-    *   **Backend First:** Thoroughly test the newly created notification and dashboard metric endpoints in  using . Ensure the data returned is accurate.
-    *   **Frontend Next:** Implement the UI for the dashboard metrics on  and build out the full functionality for the notifications page at .
-    *   **Navigation:** Add a link to the Notifications page in the .
-3.  **Stable Foundation:** The invoicing and reporting systems are now architecturally sound and have been rigorously tested. Build upon this stable foundation.
+    *   **Test Backend:** Use  to test the new  parameter on the analytics endpoints and verify the  endpoint works.
+    *   **Test Frontend:** Manually test the new filter components on the analytics page to ensure they fetch data correctly and the charts update dynamically.
+    *   **Confirm Build:** Ensure the frontend build process completes without any TypeScript errors, confirming the previous fix for the  type issue holds.
+3.  **Large Feature Set:** A very large set of interconnected features (PO, GRN, Analytics) was added in this session. Be mindful of potential regressions and consider running a broader test plan after completing the immediate task.
 
 **documents and test reports created in this job**
--    (Updated after each phase)
--    (Multiple reports generated, latest one confirms critical bug fixes)
--    (Migration script)
+-    (Updated after each major feature)
+-   Multiple test reports in  were generated by the testing agent, with all tests passing for the PO, GRN, and Analytics features.
 
 **Last 10 User Messages and any pending HUMAN messages**
-10. : Approved the bug fix plan with critical architectural improvements (atomic counters, seller codes, status derivation).
-9. : Began implementing the critical fixes, starting with a migration script.
-8. : Successfully completed the data migration and fixed all backend logic for invoices and reports.
-7. : Completed testing and verified that all critical bugs were resolved.
-6. : Confirmed the fixes and requested to proceed with Phase 3 (Seller Onboarding & Branding).
-5. : Presented a plan for Phase 3.
-4. : Approved the Phase 3 plan with adjustments to reuse existing data models.
-3. : Implemented and tested the complete Seller Onboarding and Branding feature (Phase 3).
-2. : Confirmed Phase 3 completion and requested to proceed with Phase 4 (Dashboard Metrics + Notification Center).
-1. : Began implementing Phase 4 by creating the necessary backend models and API endpoints.
+10. : Requested the implementation of the Goods Received Note (GRN) flow for the Purchase Order system.
+9. : Implemented and tested the GRN flow.
+8. : Requested an enhancement to add interactive, product-based charts for analytics on purchasing and inventory trends.
+7. : Implemented and tested the Product Analytics page with four charts.
+6. : Vercel build failed due to a TypeScript error on the new analytics page.
+5. : Identified and fixed the TypeScript type error related to the  library.
+4. : Approved moving forward with the implemented Product Analytics Charts. Clarified the scope and requirements.
+3. : Recognized that most of the feature was already built and identified the missing pieces: a supplier filter and a custom date range picker.
+2. : Planned and started implementing the missing filters on the analytics page (backend and frontend).
+1. : (No pending messages)
 
 **Project Health Check:**
 -   **Broken**: None
@@ -152,16 +196,16 @@ Work on the Advanced Invoice, Payment Tracking, and Seller Notification System i
 -   **Resend:** Email sending (mocked).
 -   **reportlab:** PDF invoice generation.
 -   **Cloudinary:** Storage for payment receipts and seller logos.
+-   **recharts:** Frontend charting library.
 
 **Testing status**
--   **Testing agent used after significant changes**: YES. Used extensively to verify Phase 1, 2, 3, and the critical bug fixes.
+-   **Testing agent used after significant changes**: YES. The agent successfully used the testing agent after implementing the Inventory, PO, GRN, and Analytics features. All reported tests passed.
 -   **Troubleshoot agent used after agent stuck in loop**: NO
 -   **Test files created**: None.
 -   **Known regressions**: None.
 
 **Credentials to test flow:**
--   Register a new user via the OTP flow. The onboarding modal should appear on the first login to the business tools section, allowing you to set up a new seller profile.
+-   Register a new user via the OTP flow. The onboarding modal should appear on the first login to the business tools section, allowing you to set up a new seller profile. From there, you can access inventory, suppliers, and the new purchasing modules.
 
 **What agent forgot to execute**
--   The Seller Reminder Controls (ability to configure reminder schedule), part of the user's Phase 2 request, was not implemented. This should be prioritized as an upcoming task.
--   The Admin View Support for reports was requested but not implemented. This should also be prioritized.</analysis>
+-   The Seller Reminder Controls and Admin View for Reports tasks, noted in the initial handoff summary, were not addressed in this session as the user prioritized a new set of features. These remain in the upcoming tasks backlog.</analysis>

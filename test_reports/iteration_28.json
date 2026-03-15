@@ -72,7 +72,7 @@
   },
 
   "test_credentials": {
-    "api_url": "https://seller-dashboard-64.preview.emergentagent.com",
+    "api_url": "https://supplier-orders-3.preview.emergentagent.com",
     "test_product_slug": "industrial-electric-motor-5hp-test-category-supplier-india",
     "test_product_name": "Industrial Electric Motor 5HP",
     "partial_slugs_tested": ["motor", "motor-electric", "industrial-motor", "motor-mumbai", "buy-motor-online"]
