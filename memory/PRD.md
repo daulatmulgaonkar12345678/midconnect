@@ -29,16 +29,19 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - Auto PO number, PDF generation, WhatsApp, status tracking
 
 ### Goods Received (GRN) Flow (DONE)
-- Receive goods → auto stock update → alert resolution → partial delivery support
+- Receive goods -> auto stock update -> alert resolution -> partial delivery support
 
-### Product Analytics Charts (DONE - Feb 2026)
+### Product Analytics Charts (DONE - VERIFIED Mar 2026)
 - **Supplier Price Trend** (multi-supplier line chart)
 - **Purchase Quantity Over Time** (bar chart)
 - **Inventory Stock Trend** (line chart from logs)
 - **Supplier Rate Comparison** (horizontal bar, best price highlight)
-- Product dropdown filter, Period selector (7d/30d/3m/6m/1y)
-- Summary KPI cards (Total POs, Qty, Spend, Suppliers)
+- Filters: Product dropdown, Supplier dropdown (optional), Period selector (7D/30D/3M/6M/1Y/Custom)
+- Custom date range with start/end date inputs
+- Summary KPI cards (Total POs, Qty, Spend, Stock)
 - Smart grouping: daily for <=31 days, monthly otherwise
+- Backend: 7 endpoints under /api/business-tools/analytics/
+- Testing: 30/30 backend tests passed, frontend code review verified
 
 ### Invoice WhatsApp for Buyers (DONE)
 
@@ -49,10 +52,11 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 
 ## Key API Endpoints (Analytics)
 - GET /api/business-tools/analytics/products
+- GET /api/business-tools/analytics/suppliers?listing_id=
 - GET /api/business-tools/analytics/summary?listing_id=
-- GET /api/business-tools/analytics/price-trend?listing_id=&period=
-- GET /api/business-tools/analytics/purchase-trend?listing_id=&period=
-- GET /api/business-tools/analytics/stock-trend?listing_id=&period=
+- GET /api/business-tools/analytics/price-trend?listing_id=&period=&supplier_id=&start_date=&end_date=
+- GET /api/business-tools/analytics/purchase-trend?listing_id=&period=&supplier_id=&start_date=&end_date=
+- GET /api/business-tools/analytics/stock-trend?listing_id=&period=&start_date=&end_date=
 - GET /api/business-tools/analytics/supplier-comparison?listing_id=
 
 ## Prioritized Backlog
