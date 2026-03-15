@@ -2639,15 +2639,71 @@ Implemented a full multi-payment tracking system for invoices. Sellers can recor
 - `/app/backend/routers/invoice_router.py` (already implemented, verified)
 - `/app/backend/models/business_tools.py` (PaymentEntryCreate model already present)
 
+
+### Session: 2026-03-15
+
+#### Phase 2: Receipt Upload, WhatsApp Follow-Up, Overdue Detection, Smart Reminders, PDF Enhancement - COMPLETE
+
+**What was done (7 features):**
+
+1. **Receipt Upload System (Cloudinary):**
+   - `PaymentEntryCreate` model extended with `receiptUrls: Optional[List[str]]`
+   - Frontend `uploadPaymentReceipt()` function in `cloudinary.ts` (supports JPG, PNG, WEBP, PDF up to 5MB)
+   - Add Payment modal: multi-file upload with staged file preview
+   - Payment history: receipt thumbnails (click to preview) and PDF download links
+
+2. **Receipt Validation Rules:**
+   - Backend: UPI/Bank Transfer/Cheque → receipt mandatory (returns 400 without)
+   - Cash/Other → receipt optional
+   - Frontend: dynamic validation warning based on selected payment method
+   - `RECEIPT_REQUIRED_METHODS = {"upi", "bank_transfer", "cheque"}`
+
+3. **WhatsApp Follow-Up Button:**
+   - "Follow Up on WhatsApp" button in invoice detail (visible when pending > 0)
+   - "Overdue Reminder" variant for overdue invoices
+   - `wa.me` link with prefilled message including invoice#, amounts
+   - Indian phone formatting (auto-prepend 91 for 10-digit numbers)
+   - Backend: `GET /api/business-tools/invoices/{id}/whatsapp-link` endpoint
+   - WhatsApp icon in invoice list for quick access
+
+4. **Overdue Detection System:**
+   - `dueDays` field on invoices (default 7, configurable 1-365)
+   - Auto-detection: `check_overdue_invoices()` runs on every invoice list fetch
+   - Marks invoices as "overdue" when `now > invoiceDate + dueDays` and pending > 0
+   - Red row highlighting for overdue invoices in list
+   - Manual "Mark Overdue" button also available
+
+5. **Smart Reminder System:**
+   - `seller_reminder_settings` collection: enabled, reminderDays, customMessages
+   - Default schedule: Day 3 (friendly), Day 7 (due), Day 15 (overdue)
+   - `GET /api/business-tools/invoice-reminders`: returns reminders with WhatsApp links
+   - Reminder panel in header with count badge
+   - Each reminder shows invoice#, buyer, type, days since, WhatsApp action
+   - Endpoints: `GET/PUT /api/business-tools/reminder-settings`
+
+6. **Seller Reminder Controls:**
+   - Reminder Settings modal: enable/disable, custom days (comma-separated)
+   - Schedule preview showing friendly/due/overdue levels
+   - Custom messages support (keyed by day number)
+
+7. **Seller Branding in Invoice PDF:**
+   - Added seller email to PDF header
+   - Payment summary section: Total Paid (green), Pending Amount (amber)
+   - Only shows payment info when payments exist
+
+**Testing:** Iteration 57: 20/20 backend tests passed (100%). Frontend code review passed.
+
+**Files Changed:**
+- `/app/backend/models/business_tools.py` (PaymentEntryCreate.receiptUrls, ReminderSettingsUpdate, InvoiceCreate.dueDays)
+- `/app/backend/routers/invoice_router.py` (receipt validation, overdue detection, reminder/WhatsApp endpoints)
+- `/app/backend/services/invoice_pdf_service.py` (payment summary, seller email)
+- `/app/frontend/src/lib/cloudinary.ts` (uploadPaymentReceipt function)
+- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` (full rewrite with all Phase 2 UI)
+
+
 ---
 
 ### Upcoming Tasks
-
-**P0: Phase 2 - Receipt Upload & Communication:**
-- Integrate Cloudinary for payment receipt uploads (JPG, PNG, PDF)
-- Make receipt upload available for Paid/Partially Paid statuses
-- Add "Follow Up on WhatsApp" wa.me link to invoices
-- Enhance invoice PDF headers with seller branding (company name, address, GST)
 
 **P0: Phase 3 - Dashboards & Notifications:**
 - Central notification center on seller dashboard
