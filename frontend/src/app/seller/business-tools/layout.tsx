@@ -20,7 +20,8 @@ import {
   X,
   Settings,
   Building2,
-  Save
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 
 // Permission context for access control
@@ -50,6 +51,13 @@ const navItems = [
     icon: Package2,
     permission: 'manage_inventory',
     color: 'blue'
+  },
+  { 
+    href: '/seller/business-tools/low-stock-alerts', 
+    label: 'Low Stock Alerts', 
+    icon: AlertTriangle,
+    permission: 'manage_inventory',
+    color: 'orange'
   },
   { 
     href: '/seller/business-tools/buyers', 

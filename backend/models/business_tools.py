@@ -148,6 +148,11 @@ class BuyerResponse(BaseModel):
 # SUPPLIER MODELS
 # ===========================================
 
+class SupplierProductItem(BaseModel):
+    listingId: str
+    rate: float = Field(..., ge=0)
+
+
 class SupplierCreate(BaseModel):
     supplierName: str = Field(..., min_length=1, max_length=100)
     contact: Optional[str] = Field(None, max_length=100)
@@ -156,6 +161,7 @@ class SupplierCreate(BaseModel):
     gstNumber: Optional[str] = Field(None, max_length=20)
     address: Optional[str] = Field(None, max_length=500)
     notes: Optional[str] = Field(None, max_length=1000)
+    products: Optional[List[SupplierProductItem]] = None
 
 
 class SupplierUpdate(BaseModel):
@@ -166,6 +172,11 @@ class SupplierUpdate(BaseModel):
     gstNumber: Optional[str] = Field(None, max_length=20)
     address: Optional[str] = Field(None, max_length=500)
     notes: Optional[str] = Field(None, max_length=1000)
+    products: Optional[List[SupplierProductItem]] = None
+
+
+class LowStockAlertStatusUpdate(BaseModel):
+    status: str = Field(..., pattern="^(ordered|ignored)$")
 
 
 class SupplierResponse(BaseModel):

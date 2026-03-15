@@ -16,7 +16,8 @@ from models.business_tools import (
     BuyerCreate, BuyerUpdate, BuyerResponse,
     SupplierCreate, SupplierUpdate, SupplierResponse,
     InventoryUpdate, InventoryLogCreate, InventoryLogResponse,
-    Permission, ALL_PERMISSIONS, AccountType
+    Permission, ALL_PERMISSIONS, AccountType,
+    LowStockAlertStatusUpdate
 )
 
 logger = logging.getLogger(__name__)
@@ -679,13 +680,28 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         result = await db.seller_suppliers.insert_one(supplier_doc)
         supplier_doc["_id"] = result.inserted_id
         
+        # Save supplier-product mappings
+        if data.products:
+            sp_docs = []
+            for p in data.products:
+                sp_docs.append({
+                    "sellerId": ObjectId(seller_id),
+                    "supplierId": result.inserted_id,
+                    "listingId": ObjectId(p.listingId),
+                    "rate": p.rate,
+                    "createdAt": now,
+                    "updatedAt": now
+                })
+            if sp_docs:
+                await db.supplier_products.insert_many(sp_docs)
+        
         if activity_log_service:
             await activity_log_service.log(seller_id, str(user["_id"]), "supplier_created", "suppliers", str(result.inserted_id), data.supplierName)
         return {"message": "Supplier created", "supplier": serialize_doc(supplier_doc)}
     
     @router.get("/suppliers/{supplier_id}")
     async def get_supplier(supplier_id: str, authorization: str = Header(...)):
-        """Get a specific supplier."""
+        """Get a specific supplier with its product mappings."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_SUPPLIERS.value)
         seller_id = await get_seller_id(user)
@@ -702,11 +718,29 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         if not supplier:
             raise HTTPException(status_code=404, detail="Supplier not found")
         
-        return {"supplier": serialize_doc(supplier)}
+        # Get product mappings
+        sp_items = await db.supplier_products.find({"supplierId": supplier_oid}).to_list(200)
+        products = []
+        for sp in sp_items:
+            listing = await db.sellerListings.find_one({"_id": sp["listingId"]})
+            if listing:
+                product = await db.products.find_one({"_id": listing["productId"]})
+                products.append({
+                    "id": str(sp["_id"]),
+                    "listingId": str(sp["listingId"]),
+                    "productName": product["name"] if product else "Unknown",
+                    "description": product.get("description", "") if product else "",
+                    "sku": listing.get("sku", ""),
+                    "rate": sp["rate"],
+                })
+        
+        result = serialize_doc(supplier)
+        result["products"] = products
+        return {"supplier": result}
     
     @router.put("/suppliers/{supplier_id}")
     async def update_supplier(supplier_id: str, data: SupplierUpdate, authorization: str = Header(...)):
-        """Update a supplier record."""
+        """Update a supplier record and its product mappings."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_SUPPLIERS.value)
         seller_id = await get_seller_id(user)
@@ -723,7 +757,8 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         if not supplier:
             raise HTTPException(status_code=404, detail="Supplier not found")
         
-        update_fields = {"updatedAt": datetime.now(timezone.utc)}
+        now = datetime.now(timezone.utc)
+        update_fields = {"updatedAt": now}
         for field in ["supplierName", "contact", "phone", "email", "gstNumber", "address", "notes"]:
             value = getattr(data, field, None)
             if value is not None:
@@ -734,12 +769,28 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         
         await db.seller_suppliers.update_one({"_id": supplier_oid}, {"$set": update_fields})
         
+        # Update product mappings if provided
+        if data.products is not None:
+            await db.supplier_products.delete_many({"supplierId": supplier_oid})
+            if data.products:
+                sp_docs = []
+                for p in data.products:
+                    sp_docs.append({
+                        "sellerId": ObjectId(seller_id),
+                        "supplierId": supplier_oid,
+                        "listingId": ObjectId(p.listingId),
+                        "rate": p.rate,
+                        "createdAt": now,
+                        "updatedAt": now
+                    })
+                await db.supplier_products.insert_many(sp_docs)
+        
         updated = await db.seller_suppliers.find_one({"_id": supplier_oid})
         return {"message": "Supplier updated", "supplier": serialize_doc(updated)}
     
     @router.delete("/suppliers/{supplier_id}")
     async def delete_supplier(supplier_id: str, authorization: str = Header(...)):
-        """Delete a supplier record."""
+        """Delete a supplier record and its product mappings."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_SUPPLIERS.value)
         seller_id = await get_seller_id(user)
@@ -756,6 +807,9 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Supplier not found")
+        
+        # Clean up product mappings
+        await db.supplier_products.delete_many({"supplierId": supplier_oid})
         
         return {"message": "Supplier deleted"}
     
@@ -794,5 +848,191 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
             "permissions": permissions,
             "role": serialize_doc(role) if role else None
         }
+    
+    # ===========================================
+    # SUPPLIER PRODUCTS LOOKUP
+    # ===========================================
+    
+    @router.get("/suppliers-for-listing/{listing_id}")
+    async def get_suppliers_for_listing(listing_id: str, authorization: str = Header(...)):
+        """Get all suppliers who supply a specific product/listing."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        
+        try:
+            listing_oid = ObjectId(listing_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid listing ID")
+        
+        sp_items = await db.supplier_products.find({
+            "sellerId": ObjectId(seller_id),
+            "listingId": listing_oid
+        }).to_list(100)
+        
+        suppliers = []
+        for sp in sp_items:
+            supplier = await db.seller_suppliers.find_one({"_id": sp["supplierId"]})
+            if supplier:
+                suppliers.append({
+                    "supplierId": str(supplier["_id"]),
+                    "supplierName": supplier.get("supplierName", ""),
+                    "phone": supplier.get("phone", ""),
+                    "rate": sp["rate"],
+                })
+        
+        # Sort by rate ascending (best price first)
+        suppliers.sort(key=lambda x: x["rate"])
+        return {"suppliers": suppliers}
+    
+    # ===========================================
+    # LOW STOCK ALERTS
+    # ===========================================
+    
+    @router.get("/low-stock-alerts")
+    async def get_low_stock_alerts(
+        authorization: str = Header(...),
+        status: Optional[str] = None,
+        limit: int = 50,
+        skip: int = 0
+    ):
+        """Get low stock alerts for the seller."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_INVENTORY.value)
+        seller_id = await get_seller_id(user)
+        
+        query = {"sellerId": ObjectId(seller_id)}
+        if status:
+            query["status"] = status
+        
+        total = await db.low_stock_alerts.count_documents(query)
+        alerts = await db.low_stock_alerts.find(query).sort("createdAt", -1).skip(skip).limit(limit).to_list(limit)
+        
+        # Enrich with product data
+        enriched = []
+        for alert in alerts:
+            listing = await db.sellerListings.find_one({"_id": alert.get("listingId")})
+            product = None
+            if listing:
+                product = await db.products.find_one({"_id": listing.get("productId")})
+            
+            item = serialize_doc(alert)
+            item["productName"] = product["name"] if product else alert.get("productName", "Unknown")
+            item["sku"] = listing.get("sku", "") if listing else ""
+            item["description"] = product.get("description", "") if product else ""
+            item["currentStock"] = listing.get("stock", 0) if listing else alert.get("currentStock", 0)
+            # Get specifications from listing attributes
+            if listing:
+                attrs = listing.get("searchableAttributes", {})
+                labels = listing.get("attributeLabels", {})
+                specs = []
+                for k, v in attrs.items():
+                    label = labels.get(k, k)
+                    specs.append(f"{label}: {v}")
+                item["specification"] = "\n".join(specs) if specs else ""
+            else:
+                item["specification"] = ""
+            enriched.append(item)
+        
+        pending_count = await db.low_stock_alerts.count_documents({"sellerId": ObjectId(seller_id), "status": "pending"})
+        
+        return {
+            "alerts": enriched,
+            "total": total,
+            "pendingCount": pending_count,
+            "limit": limit,
+            "skip": skip
+        }
+    
+    @router.get("/low-stock-alerts/{alert_id}/order-details")
+    async def get_order_details(alert_id: str, authorization: str = Header(...)):
+        """Get full product details and suppliers for the order form."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        
+        try:
+            alert_oid = ObjectId(alert_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid alert ID")
+        
+        alert = await db.low_stock_alerts.find_one({"_id": alert_oid, "sellerId": ObjectId(seller_id)})
+        if not alert:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        
+        listing_id = alert.get("listingId")
+        listing = await db.sellerListings.find_one({"_id": listing_id})
+        product = None
+        if listing:
+            product = await db.products.find_one({"_id": listing.get("productId")})
+        
+        # Get specifications
+        specs = ""
+        if listing:
+            attrs = listing.get("searchableAttributes", {})
+            labels = listing.get("attributeLabels", {})
+            parts = []
+            for k, v in attrs.items():
+                label = labels.get(k, k)
+                parts.append(f"{label}: {v}")
+            specs = "\n".join(parts)
+        
+        # Get suppliers for this listing
+        sp_items = await db.supplier_products.find({
+            "sellerId": ObjectId(seller_id),
+            "listingId": listing_id
+        }).to_list(100)
+        
+        suppliers = []
+        for sp in sp_items:
+            supplier = await db.seller_suppliers.find_one({"_id": sp["supplierId"]})
+            if supplier:
+                suppliers.append({
+                    "supplierId": str(supplier["_id"]),
+                    "supplierName": supplier.get("supplierName", ""),
+                    "phone": supplier.get("phone", ""),
+                    "rate": sp["rate"],
+                })
+        suppliers.sort(key=lambda x: x["rate"])
+        
+        # Get seller profile for message footer
+        profile = user.get("profile") or {}
+        
+        return {
+            "alert": serialize_doc(alert),
+            "product": {
+                "productName": product["name"] if product else "Unknown",
+                "sku": listing.get("sku", "") if listing else "",
+                "description": product.get("description", "") if product else "",
+                "specification": specs,
+                "currentStock": listing.get("stock", 0) if listing else 0,
+                "minStock": alert.get("minStock", 0),
+            },
+            "suppliers": suppliers,
+            "sellerProfile": {
+                "businessName": profile.get("businessName", ""),
+                "phone": profile.get("phone", ""),
+            }
+        }
+    
+    @router.put("/low-stock-alerts/{alert_id}/status")
+    async def update_alert_status(alert_id: str, data: LowStockAlertStatusUpdate, authorization: str = Header(...)):
+        """Update a low stock alert status to ordered or ignored."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        
+        try:
+            alert_oid = ObjectId(alert_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid alert ID")
+        
+        alert = await db.low_stock_alerts.find_one({"_id": alert_oid, "sellerId": ObjectId(seller_id)})
+        if not alert:
+            raise HTTPException(status_code=404, detail="Alert not found")
+        
+        await db.low_stock_alerts.update_one(
+            {"_id": alert_oid},
+            {"$set": {"status": data.status, "updatedAt": datetime.now(timezone.utc)}}
+        )
+        
+        return {"message": f"Alert marked as {data.status}"}
     
     return router

@@ -320,16 +320,38 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         alert_enabled = updated.get("lowStockAlertEnabled", True)
         if alert_enabled and min_stock > 0 and current_stock <= min_stock:
             product_name = product["name"] if product else "Unknown"
-            await db.seller_notifications.insert_one({
+            now_ts = datetime.now(timezone.utc)
+            existing_alert = await db.low_stock_alerts.find_one({
                 "sellerId": ObjectId(seller_id),
-                "type": "low_stock",
-                "title": f"Low Stock Alert: {product_name}",
-                "message": f"Remaining Stock: {current_stock}, Minimum Required: {min_stock}",
-                "referenceId": str(listing_oid),
-                "referenceType": "inventory",
-                "read": False,
-                "createdAt": datetime.now(timezone.utc),
+                "listingId": listing_oid,
+                "status": "pending"
             })
+            if not existing_alert:
+                await db.low_stock_alerts.insert_one({
+                    "sellerId": ObjectId(seller_id),
+                    "listingId": listing_oid,
+                    "productName": product_name,
+                    "currentStock": current_stock,
+                    "minStock": min_stock,
+                    "status": "pending",
+                    "createdAt": now_ts,
+                    "updatedAt": now_ts,
+                })
+                await db.seller_notifications.insert_one({
+                    "sellerId": ObjectId(seller_id),
+                    "type": "low_stock",
+                    "title": f"Low Stock Alert: {product_name}",
+                    "message": f"Remaining Stock: {current_stock}, Minimum Required: {min_stock}",
+                    "referenceId": str(listing_oid),
+                    "referenceType": "inventory",
+                    "read": False,
+                    "createdAt": now_ts,
+                })
+            else:
+                await db.low_stock_alerts.update_one(
+                    {"_id": existing_alert["_id"]},
+                    {"$set": {"currentStock": current_stock, "updatedAt": now_ts}}
+                )
         
         return {"message": "Inventory updated", "listing": serialize_doc(updated)}
     
@@ -403,16 +425,39 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         alert_enabled = listing.get("lowStockAlertEnabled", True)
         if alert_enabled and min_stock > 0 and new_stock <= min_stock:
             product_name = product["name"] if product else "Unknown"
-            await db.seller_notifications.insert_one({
+            # Dedup: only create alert if no pending alert exists for this listing
+            existing_alert = await db.low_stock_alerts.find_one({
                 "sellerId": ObjectId(seller_id),
-                "type": "low_stock",
-                "title": f"Low Stock Alert: {product_name}",
-                "message": f"Remaining Stock: {new_stock}, Minimum Required: {min_stock}",
-                "referenceId": str(listing_oid),
-                "referenceType": "inventory",
-                "read": False,
-                "createdAt": now,
+                "listingId": listing_oid,
+                "status": "pending"
             })
+            if not existing_alert:
+                await db.low_stock_alerts.insert_one({
+                    "sellerId": ObjectId(seller_id),
+                    "listingId": listing_oid,
+                    "productName": product_name,
+                    "currentStock": new_stock,
+                    "minStock": min_stock,
+                    "status": "pending",
+                    "createdAt": now,
+                    "updatedAt": now,
+                })
+                await db.seller_notifications.insert_one({
+                    "sellerId": ObjectId(seller_id),
+                    "type": "low_stock",
+                    "title": f"Low Stock Alert: {product_name}",
+                    "message": f"Remaining Stock: {new_stock}, Minimum Required: {min_stock}",
+                    "referenceId": str(listing_oid),
+                    "referenceType": "inventory",
+                    "read": False,
+                    "createdAt": now,
+                })
+            else:
+                # Update existing alert with current stock
+                await db.low_stock_alerts.update_one(
+                    {"_id": existing_alert["_id"]},
+                    {"$set": {"currentStock": new_stock, "updatedAt": now}}
+                )
         
         logger.info(f"Inventory adjusted: {listing_id} {data.changeType.value} {data.quantity}")
         
