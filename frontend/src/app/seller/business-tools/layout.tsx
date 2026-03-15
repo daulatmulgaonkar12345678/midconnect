@@ -23,7 +23,8 @@ import {
   Save,
   AlertTriangle,
   Home,
-  LineChart
+  LineChart,
+  Bell
 } from 'lucide-react';
 
 // Permission context for access control
@@ -54,6 +55,14 @@ const navItems = [
     permission: 'create_invoice',
     color: 'indigo',
     exact: true
+  },
+  {
+    href: '/seller/business-tools/notifications',
+    label: 'Notifications',
+    icon: Bell,
+    permission: 'create_invoice',
+    color: 'red',
+    showBadge: true
   },
   { 
     href: '/seller/business-tools/inventory', 
@@ -89,13 +98,6 @@ const navItems = [
     icon: FileText,
     permission: 'create_invoice',
     color: 'orange'
-  },
-  { 
-    href: '/seller/business-tools/purchase-orders', 
-    label: 'Purchase Orders', 
-    icon: FileText,
-    permission: 'manage_inventory',
-    color: 'green'
   },
   {
     href: '/seller/business-tools/charts',
@@ -168,6 +170,7 @@ export default function BusinessToolsLayout({
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingForm, setOnboardingForm] = useState({
     businessName: '', phone: '', address: '', city: '', state: '', gstNumber: '',
@@ -235,6 +238,26 @@ export default function BusinessToolsLayout({
       })();
     }
   }, [loading, token]);
+
+  // Fetch unread notification count for sidebar badge
+  useEffect(() => {
+    if (!token) return;
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/notifications/unread-count`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data.unread || 0);
+        }
+      } catch { /* empty */ }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
 
   const submitOnboarding = async () => {
     if (!onboardingForm.businessName.trim()) { alert('Business name is required'); return; }
@@ -333,6 +356,7 @@ export default function BusinessToolsLayout({
                       ? pathname === item.href
                       : pathname.startsWith(item.href);
                     const Icon = item.icon;
+                    const hasBadge = (item as { showBadge?: boolean }).showBadge && unreadCount > 0;
                     return (
                       <Link
                         key={item.href}
@@ -342,7 +366,12 @@ export default function BusinessToolsLayout({
                         } ${isActive ? 'border-l-4' : ''}`}
                       >
                         <Icon className="h-5 w-5" />
-                        {item.label}
+                        <span className="flex-1">{item.label}</span>
+                        {hasBadge && (
+                          <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1" data-testid="notification-badge">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
@@ -363,6 +392,7 @@ export default function BusinessToolsLayout({
                         ? pathname === item.href
                         : pathname.startsWith(item.href);
                       const Icon = item.icon;
+                      const hasBadge = (item as { showBadge?: boolean }).showBadge && unreadCount > 0;
                       return (
                         <Link
                           key={item.href}
@@ -373,7 +403,12 @@ export default function BusinessToolsLayout({
                           } ${isActive ? 'border-l-4' : ''}`}
                         >
                           <Icon className="h-5 w-5" />
-                          {item.label}
+                          <span className="flex-1">{item.label}</span>
+                          {hasBadge && (
+                            <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                              {unreadCount > 99 ? '99+' : unreadCount}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}

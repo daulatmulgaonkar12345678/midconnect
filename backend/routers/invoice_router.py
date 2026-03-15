@@ -1082,21 +1082,32 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
     # NOTIFICATIONS
     # ==========================================
 
+    @router.get("/notifications/unread-count")
+    async def get_unread_notification_count(authorization: str = Header(...)):
+        """Lightweight endpoint for sidebar badge."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        count = await db.seller_notifications.count_documents({"sellerId": ObjectId(seller_id), "read": False})
+        return {"unread": count}
+
     @router.get("/notifications")
     async def get_notifications(
         authorization: str = Header(...),
         limit: int = 50,
         skip: int = 0,
-        unread_only: bool = False
+        unread_only: bool = False,
+        notification_type: str = ""
     ):
-        """Get seller notifications."""
+        """Get seller notifications with optional type filter."""
         user = await get_current_user(authorization)
         seller_id = await get_seller_id(user)
-        query = {"sellerId": ObjectId(seller_id)}
+        query: dict = {"sellerId": ObjectId(seller_id)}
         if unread_only:
             query["read"] = False
+        if notification_type:
+            query["type"] = notification_type
         notifications = await db.seller_notifications.find(query).sort("createdAt", -1).skip(skip).limit(limit).to_list(limit)
-        total = await db.seller_notifications.count_documents({"sellerId": ObjectId(seller_id)})
+        total = await db.seller_notifications.count_documents({"sellerId": ObjectId(seller_id)} | ({"type": notification_type} if notification_type else {}))
         unread = await db.seller_notifications.count_documents({"sellerId": ObjectId(seller_id), "read": False})
         return {"notifications": serialize_doc(notifications), "total": total, "unread": unread}
 
