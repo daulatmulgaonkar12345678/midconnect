@@ -194,6 +194,21 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             due_date = invoice_date + timedelta(days=due_days)
             pending = inv.get("pendingAmount", inv.get("total", 0))
             if now > due_date and pending > 0:
+                # Only notify if status is changing to overdue
+                if inv.get("status") != "overdue":
+                    inv_num = inv.get("invoiceNumber", "")
+                    buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
+                    buyer_name = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
+                    await db.seller_notifications.insert_one({
+                        "sellerId": ObjectId(seller_id),
+                        "type": "invoice_overdue",
+                        "title": f"Invoice {inv_num} is overdue",
+                        "message": f"Payment from {buyer_name} for Rs.{pending:,.2f} is past due ({due_days} days).",
+                        "referenceId": str(inv["_id"]),
+                        "referenceType": "invoice",
+                        "read": False,
+                        "createdAt": now,
+                    })
                 await db.invoices.update_one(
                     {"_id": inv["_id"]},
                     {"$set": {"status": "overdue", "updatedAt": now}}
@@ -464,6 +479,18 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         await db.seller_buyers.update_one({"_id": ObjectId(data.buyerId)}, {"$inc": {"totalOrders": 1, "totalSpent": grand_total}})
         await activity_log_service.log(seller_id, str(user["_id"]), "invoice_created", "invoices", str(result.inserted_id), invoice_number)
 
+        # Create notification for invoice created
+        await db.seller_notifications.insert_one({
+            "sellerId": ObjectId(seller_id),
+            "type": "invoice_created",
+            "title": f"Invoice {invoice_number} created",
+            "message": f"Invoice for {buyer.get('buyerName', 'Unknown')} - Rs.{grand_total:,.2f}",
+            "referenceId": str(result.inserted_id),
+            "referenceType": "invoice",
+            "read": False,
+            "createdAt": now,
+        })
+
         invoice_doc["buyerName"] = buyer.get("buyerName", "Unknown")
         return {"message": "Invoice created", "invoice": serialize_doc(invoice_doc)}
 
@@ -583,6 +610,30 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
 
         # Recalculate invoice payment status
         await recalc_payment_status(inv_oid)
+
+        # Create notification for payment received
+        updated_inv = await db.invoices.find_one({"_id": inv_oid})
+        buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
+        buyer_name = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
+        inv_num = inv.get("invoiceNumber", "")
+        is_fully_paid = updated_inv and updated_inv.get("pendingAmount", 1) <= 0
+
+        notif_type = "payment_received" if is_fully_paid else "partial_payment"
+        notif_title = f"Payment of Rs.{data.amount:,.2f} received" if not is_fully_paid else f"Invoice {inv_num} fully paid"
+        notif_msg = f"{buyer_name} paid Rs.{data.amount:,.2f} for {inv_num} via {data.paymentMethod.replace('_', ' ')}."
+        if not is_fully_paid and updated_inv:
+            notif_msg += f" Pending: Rs.{updated_inv.get('pendingAmount', 0):,.2f}"
+
+        await db.seller_notifications.insert_one({
+            "sellerId": ObjectId(seller_id),
+            "type": notif_type,
+            "title": notif_title,
+            "message": notif_msg,
+            "referenceId": str(inv_oid),
+            "referenceType": "invoice",
+            "read": False,
+            "createdAt": now,
+        })
 
         return {"message": "Payment recorded", "payment": serialize_doc(payment_doc)}
 
@@ -889,6 +940,132 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
     # ==========================================
     # SELLER BUSINESS PROFILE
     # ==========================================
+
+    @router.get("/dashboard-metrics")
+    async def get_dashboard_metrics(authorization: str = Header(...)):
+        """Get seller dashboard overview metrics using aggregated queries."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        seller_oid = ObjectId(seller_id)
+        now = datetime.now(timezone.utc)
+
+        # Run overdue check first
+        await check_overdue_invoices(seller_id)
+
+        # All metrics in parallel aggregations
+        active_statuses = ["draft", "sent", "viewed", "partially_paid", "paid", "overdue"]
+
+        # 1. Total Revenue (sum of total for paid + partially_paid)
+        revenue_pipeline = [
+            {"$match": {"sellerId": seller_oid, "status": {"$in": ["paid", "partially_paid"]}}},
+            {"$group": {"_id": None, "total": {"$sum": "$total"}}}
+        ]
+        revenue_result = await db.invoices.aggregate(revenue_pipeline).to_list(1)
+        total_revenue = revenue_result[0]["total"] if revenue_result else 0
+
+        # 2. Pending Payments (sum of pendingAmount for unpaid)
+        pending_pipeline = [
+            {"$match": {"sellerId": seller_oid, "status": {"$in": ["sent", "viewed", "partially_paid", "overdue"]}}},
+            {"$group": {"_id": None, "total": {"$sum": "$pendingAmount"}}}
+        ]
+        pending_result = await db.invoices.aggregate(pending_pipeline).to_list(1)
+        pending_payments = pending_result[0]["total"] if pending_result else 0
+
+        # 3. Overdue count
+        overdue_count = await db.invoices.count_documents({"sellerId": seller_oid, "status": "overdue"})
+
+        # 4. This month's collections (sum of payment amounts this month)
+        first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_pipeline = [
+            {"$match": {"sellerId": seller_oid, "paymentDate": {"$gte": first_of_month}}},
+            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+        ]
+        month_result = await db.invoice_payments.aggregate(month_pipeline).to_list(1)
+        this_month = month_result[0]["total"] if month_result else 0
+
+        # 5. Total invoices (exclude cancelled)
+        total_invoices = await db.invoices.count_documents(
+            {"sellerId": seller_oid, "status": {"$in": active_statuses}}
+        )
+
+        # 6. Quick alerts
+        alerts = []
+        if overdue_count > 0:
+            alerts.append({"type": "overdue", "message": f"You have {overdue_count} overdue invoice{'s' if overdue_count > 1 else ''}", "severity": "high"})
+        if pending_payments > 0:
+            alerts.append({"type": "pending", "message": f"Rs.{pending_payments:,.2f} in pending payments", "severity": "medium"})
+
+        # Today's payments
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_payments = await db.invoice_payments.count_documents(
+            {"sellerId": seller_oid, "paymentDate": {"$gte": today_start}}
+        )
+        if today_payments > 0:
+            alerts.append({"type": "payments_today", "message": f"{today_payments} payment{'s' if today_payments > 1 else ''} received today", "severity": "low"})
+
+        # 7. Unread notification count
+        unread_count = await db.seller_notifications.count_documents(
+            {"sellerId": seller_oid, "read": False}
+        )
+
+        return {
+            "totalRevenue": round(total_revenue, 2),
+            "pendingPayments": round(pending_payments, 2),
+            "overdueInvoices": overdue_count,
+            "thisMonthCollections": round(this_month, 2),
+            "totalInvoices": total_invoices,
+            "alerts": alerts,
+            "unreadNotifications": unread_count,
+        }
+
+    # ==========================================
+    # NOTIFICATIONS
+    # ==========================================
+
+    @router.get("/notifications")
+    async def get_notifications(
+        authorization: str = Header(...),
+        limit: int = 50,
+        skip: int = 0,
+        unread_only: bool = False
+    ):
+        """Get seller notifications."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        query = {"sellerId": ObjectId(seller_id)}
+        if unread_only:
+            query["read"] = False
+        notifications = await db.seller_notifications.find(query).sort("createdAt", -1).skip(skip).limit(limit).to_list(limit)
+        total = await db.seller_notifications.count_documents({"sellerId": ObjectId(seller_id)})
+        unread = await db.seller_notifications.count_documents({"sellerId": ObjectId(seller_id), "read": False})
+        return {"notifications": serialize_doc(notifications), "total": total, "unread": unread}
+
+    @router.put("/notifications/{notification_id}/read")
+    async def mark_notification_read(notification_id: str, authorization: str = Header(...)):
+        """Mark a notification as read."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        try:
+            nid = ObjectId(notification_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid notification ID")
+        await db.seller_notifications.update_one(
+            {"_id": nid, "sellerId": ObjectId(seller_id)},
+            {"$set": {"read": True, "readAt": datetime.now(timezone.utc)}}
+        )
+        return {"message": "Notification marked as read"}
+
+    @router.put("/notifications/mark-all-read")
+    async def mark_all_notifications_read(authorization: str = Header(...)):
+        """Mark all notifications as read."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        await db.seller_notifications.update_many(
+            {"sellerId": ObjectId(seller_id), "read": False},
+            {"$set": {"read": True, "readAt": now}}
+        )
+        return {"message": "All notifications marked as read"}
 
     @router.get("/seller-profile")
     async def get_seller_profile(authorization: str = Header(...)):
