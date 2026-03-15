@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
 import {
-  BarChart3, Loader2, Package2, TrendingUp, ShoppingCart, Layers, IndianRupee
+  BarChart3, Loader2, Package2, TrendingUp, ShoppingCart, Layers, IndianRupee, Filter
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -16,6 +16,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const CHART_COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2'];
 
 interface Product { listingId: string; productName: string; sku: string; stock: number; minStock: number; }
+interface SupplierFilter { supplierId: string; supplierName: string; }
 interface Summary { totalOrders: number; totalQuantity: number; totalSpend: number; avgRate: number; supplierCount: number; currentStock: number; minStock: number; }
 interface PriceTrendSupplier { supplierName: string; data: Array<{ period: string; avgRate: number }>; }
 interface PurchaseTrend { period: string; quantity: number; amount: number; orders: number; }
@@ -23,11 +24,12 @@ interface StockPoint { date: string; stock: number; change: number; type: string
 interface SupplierRate { supplierId: string; supplierName: string; rate: number; isBestPrice: boolean; }
 
 const PERIODS = [
-  { val: '7d', label: '7 Days' },
-  { val: '30d', label: '30 Days' },
-  { val: '3m', label: '3 Months' },
-  { val: '6m', label: '6 Months' },
-  { val: '1y', label: '1 Year' },
+  { val: '7d', label: '7D' },
+  { val: '30d', label: '30D' },
+  { val: '3m', label: '3M' },
+  { val: '6m', label: '6M' },
+  { val: '1y', label: '1Y' },
+  { val: 'custom', label: 'Custom' },
 ];
 
 export default function AnalyticsPage() {
@@ -36,8 +38,14 @@ export default function AnalyticsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [period, setPeriod] = useState('3m');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
+
+  // Supplier filter
+  const [suppliers, setSuppliers] = useState<SupplierFilter[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('');
 
   // Chart data
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -51,7 +59,7 @@ export default function AnalyticsPage() {
     return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
   }, [getIdToken]);
 
-  // Load products for dropdown
+  // Load products
   useEffect(() => {
     (async () => {
       try {
@@ -67,20 +75,45 @@ export default function AnalyticsPage() {
     })();
   }, [authHeaders]);
 
-  // Load chart data when product or period changes
+  // Load suppliers when product changes
   useEffect(() => {
     if (!selectedProduct) return;
+    (async () => {
+      try {
+        const h = await authHeaders();
+        const res = await fetch(`${API_URL}/api/business-tools/analytics/suppliers?listing_id=${selectedProduct}`, { headers: h });
+        if (res.ok) {
+          const data = await res.json();
+          setSuppliers(data.suppliers || []);
+        }
+      } catch { /* empty */ }
+    })();
+    setSelectedSupplier(''); // Reset supplier filter on product change
+  }, [selectedProduct, authHeaders]);
+
+  // Load chart data
+  useEffect(() => {
+    if (!selectedProduct) return;
+    if (period === 'custom' && (!customStart || !customEnd)) return;
+
     const loadCharts = async () => {
       setChartLoading(true);
       const h = await authHeaders();
       const base = `${API_URL}/api/business-tools/analytics`;
-      const q = `listing_id=${selectedProduct}&period=${period}`;
+
+      let dateParams = `period=${period}`;
+      if (period === 'custom' && customStart && customEnd) {
+        dateParams = `start_date=${customStart}T00:00:00Z&end_date=${customEnd}T23:59:59Z`;
+      }
+
+      const supParam = selectedSupplier ? `&supplier_id=${selectedSupplier}` : '';
+      const q = `listing_id=${selectedProduct}&${dateParams}${supParam}`;
 
       const [summaryRes, priceRes, purchaseRes, stockRes, compRes] = await Promise.all([
         fetch(`${base}/summary?listing_id=${selectedProduct}`, { headers: h }),
         fetch(`${base}/price-trend?${q}`, { headers: h }),
         fetch(`${base}/purchase-trend?${q}`, { headers: h }),
-        fetch(`${base}/stock-trend?${q}`, { headers: h }),
+        fetch(`${base}/stock-trend?listing_id=${selectedProduct}&${dateParams}`, { headers: h }),
         fetch(`${base}/supplier-comparison?listing_id=${selectedProduct}`, { headers: h }),
       ]);
 
@@ -93,7 +126,7 @@ export default function AnalyticsPage() {
       setChartLoading(false);
     };
     loadCharts();
-  }, [selectedProduct, period, authHeaders]);
+  }, [selectedProduct, period, customStart, customEnd, selectedSupplier, authHeaders]);
 
   if (!hasPermission('manage_inventory')) {
     return (
@@ -105,8 +138,6 @@ export default function AnalyticsPage() {
   }
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
-
-  const selectedProductData = products.find(p => p.listingId === selectedProduct);
 
   // Build unified price trend data for multi-line chart
   const pricePeriods = [...new Set(priceTrend.flatMap(s => s.data.map(d => d.period)))].sort();
@@ -128,29 +159,53 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border p-4 flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
-          <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-            data-testid="product-select">
-            {products.map(p => (
-              <option key={p.listingId} value={p.listingId}>
-                {p.productName}{p.sku ? ` (${p.sku})` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Period</label>
-          <div className="flex gap-1">
-            {PERIODS.map(pr => (
-              <button key={pr.val} onClick={() => setPeriod(pr.val)} data-testid={`period-${pr.val}`}
-                className={`px-3 py-2 text-sm rounded-lg transition ${period === pr.val ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                {pr.label}
-              </button>
-            ))}
+      <div className="bg-white rounded-xl border p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
+            <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              data-testid="product-select">
+              {products.map(p => (
+                <option key={p.listingId} value={p.listingId}>
+                  {p.productName}{p.sku ? ` (${p.sku})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
+          {suppliers.length > 0 && (
+            <div className="sm:w-48">
+              <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
+                <Filter className="h-3 w-3" /> Supplier
+              </label>
+              <select value={selectedSupplier} onChange={(e) => setSelectedSupplier(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                data-testid="supplier-filter">
+                <option value="">All Suppliers</option>
+                {suppliers.map(s => (
+                  <option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-500">Period:</span>
+          {PERIODS.map(pr => (
+            <button key={pr.val} onClick={() => setPeriod(pr.val)} data-testid={`period-${pr.val}`}
+              className={`px-3 py-1.5 text-sm rounded-lg transition ${period === pr.val ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {pr.label}
+            </button>
+          ))}
+          {period === 'custom' && (
+            <div className="flex items-center gap-2 ml-2">
+              <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded text-sm" data-testid="custom-start" />
+              <span className="text-gray-400">to</span>
+              <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded text-sm" data-testid="custom-end" />
+            </div>
+          )}
         </div>
       </div>
 
@@ -164,7 +219,7 @@ export default function AnalyticsPage() {
             <p className="text-2xl font-bold text-gray-900">{summary.totalOrders}</p>
           </div>
           <div className="bg-white rounded-xl border p-4">
-            <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Package2 className="h-3.5 w-3.5" /> Total Qty Ordered</div>
+            <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Package2 className="h-3.5 w-3.5" /> Qty Ordered</div>
             <p className="text-2xl font-bold text-gray-900">{summary.totalQuantity.toLocaleString('en-IN')}</p>
           </div>
           <div className="bg-white rounded-xl border p-4">
@@ -172,11 +227,9 @@ export default function AnalyticsPage() {
             <p className="text-2xl font-bold text-gray-900">₹{summary.totalSpend.toLocaleString('en-IN')}</p>
           </div>
           <div className="bg-white rounded-xl border p-4">
-            <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Layers className="h-3.5 w-3.5" /> Suppliers</div>
-            <p className="text-2xl font-bold text-gray-900">{summary.supplierCount}</p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Stock: {summary.currentStock}{summary.minStock > 0 ? ` / Min: ${summary.minStock}` : ''}
-            </p>
+            <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Layers className="h-3.5 w-3.5" /> Stock</div>
+            <p className="text-2xl font-bold text-gray-900">{summary.currentStock}</p>
+            {summary.minStock > 0 && <p className="text-xs text-orange-500 mt-0.5">Min: {summary.minStock}</p>}
           </div>
         </div>
       )}
@@ -204,7 +257,7 @@ export default function AnalyticsPage() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[260px] text-gray-400 text-sm">No purchase data available</div>
+              <div className="flex items-center justify-center h-[260px] text-gray-400 text-sm">No purchase data for this period</div>
             )}
           </div>
 
@@ -225,7 +278,7 @@ export default function AnalyticsPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[260px] text-gray-400 text-sm">No purchase data available</div>
+              <div className="flex items-center justify-center h-[260px] text-gray-400 text-sm">No purchase data for this period</div>
             )}
           </div>
 
@@ -253,16 +306,14 @@ export default function AnalyticsPage() {
                       </div>
                     );
                   }} />
+                  {stockTrend.minStock > 0 && (
+                    <ReferenceLine y={stockTrend.minStock} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: `Min: ${stockTrend.minStock}`, fill: '#f59e0b', fontSize: 10 }} />
+                  )}
                   <Line type="stepAfter" dataKey="stock" stroke="#d97706" strokeWidth={2} dot={{ r: 3, fill: '#d97706' }} name="Stock Level" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[260px] text-gray-400 text-sm">No stock history available</div>
-            )}
-            {stockTrend.minStock > 0 && (
-              <p className="text-xs text-gray-500 mt-2">
-                Current: <span className="font-medium">{stockTrend.currentStock}</span> | Min Stock: <span className="font-medium text-orange-600">{stockTrend.minStock}</span>
-              </p>
+              <div className="flex items-center justify-center h-[260px] text-gray-400 text-sm">No stock history for this period</div>
             )}
           </div>
 
@@ -279,19 +330,20 @@ export default function AnalyticsPage() {
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="supplierName" tick={{ fontSize: 11 }} width={120} />
                   <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString('en-IN')}`, 'Rate']} />
-                  <Bar dataKey="rate" radius={[0, 4, 4, 0]} name="Rate (₹)"
-                    fill="#7c3aed"
-                    label={({ x, y, width, value, index }: // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      any) => (
-                      <text x={x + width + 4} y={y + 14} fill="#666" fontSize={10}>
-                        ₹{value}{supplierComparison[index]?.isBestPrice ? ' ★' : ''}
-                      </text>
-                    )}
-                  />
+                  <Bar dataKey="rate" radius={[0, 4, 4, 0]} name="Rate (₹)" fill="#7c3aed" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-[260px] text-gray-400 text-sm">No suppliers mapped to this product</div>
+            )}
+            {supplierComparison.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {supplierComparison.map(s => (
+                  <span key={s.supplierId} className={`text-xs px-2 py-1 rounded-full ${s.isBestPrice ? 'bg-green-100 text-green-700 font-medium' : 'bg-gray-100 text-gray-600'}`}>
+                    {s.supplierName}: ₹{s.rate.toLocaleString('en-IN')}{s.isBestPrice ? ' ★ Best' : ''}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </div>

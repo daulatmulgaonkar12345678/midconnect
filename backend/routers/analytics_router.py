@@ -89,6 +89,32 @@ def init_analytics_router(db, verify_token_func):
         items = await db.sellerListings.aggregate(pipeline).to_list(500)
         return {"products": [{"listingId": str(i["listingId"]), "productName": i.get("productName", ""), "sku": i.get("sku", ""), "stock": i.get("stock", 0), "minStock": i.get("minStock", 0)} for i in items]}
 
+    @router.get("/analytics/suppliers")
+    async def get_analytics_suppliers(
+        authorization: str = Header(...),
+        listing_id: Optional[str] = None
+    ):
+        """Get seller's suppliers, optionally filtered by product."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        if listing_id:
+            # Only suppliers linked to this product
+            sp_items = await db.supplier_products.find({
+                "sellerId": ObjectId(seller_id),
+                "listingId": ObjectId(listing_id)
+            }).to_list(100)
+            supplier_ids = [sp["supplierId"] for sp in sp_items]
+            suppliers = await db.seller_suppliers.find({
+                "_id": {"$in": supplier_ids},
+                "sellerId": ObjectId(seller_id)
+            }).to_list(100)
+        else:
+            suppliers = await db.seller_suppliers.find({"sellerId": ObjectId(seller_id)}).to_list(200)
+
+        return {"suppliers": [{"supplierId": str(s["_id"]), "supplierName": s.get("supplierName", "")} for s in suppliers]}
+
+
     # ==========================================
     # 1. SUPPLIER PRICE TREND (Line Chart)
     # ==========================================
@@ -99,7 +125,8 @@ def init_analytics_router(db, verify_token_func):
         listing_id: str = Query(...),
         period: Optional[str] = "3m",
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        supplier_id: Optional[str] = None
     ):
         """Price trend per supplier over time for a product."""
         user = await get_current_user(authorization)
@@ -109,8 +136,12 @@ def init_analytics_router(db, verify_token_func):
 
         listing_oid = ObjectId(listing_id)
 
+        match_stage: dict = {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": sd, "$lte": ed}}
+        if supplier_id:
+            match_stage["supplierId"] = ObjectId(supplier_id)
+
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": sd, "$lte": ed}}},
+            {"$match": match_stage},
             {"$unwind": "$items"},
             {"$match": {"items.listingId": listing_oid}},
             {"$lookup": {"from": "seller_suppliers", "localField": "supplierId", "foreignField": "_id", "as": "sup"}},
@@ -155,7 +186,8 @@ def init_analytics_router(db, verify_token_func):
         listing_id: str = Query(...),
         period: Optional[str] = "3m",
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        supplier_id: Optional[str] = None
     ):
         """Purchase quantity over time for a product."""
         user = await get_current_user(authorization)
@@ -165,8 +197,12 @@ def init_analytics_router(db, verify_token_func):
 
         listing_oid = ObjectId(listing_id)
 
+        match_stage: dict = {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": sd, "$lte": ed}, "status": {"$ne": "cancelled"}}
+        if supplier_id:
+            match_stage["supplierId"] = ObjectId(supplier_id)
+
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": sd, "$lte": ed}, "status": {"$ne": "cancelled"}}},
+            {"$match": match_stage},
             {"$unwind": "$items"},
             {"$match": {"items.listingId": listing_oid}},
             {"$group": {
