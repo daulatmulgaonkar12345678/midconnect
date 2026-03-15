@@ -75,7 +75,7 @@
   
   "test_credentials": {
     "dev_token": "dev-test-token",
-    "api_url": "https://seller-invoices.preview.emergentagent.com",
+    "api_url": "https://seller-dashboard-64.preview.emergentagent.com",
     "seller_id": "699ca5c7fe015041f7de460c"
   },
   

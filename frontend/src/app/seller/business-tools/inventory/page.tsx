@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
 import Image from 'next/image';
 import { 
-  Package2, Loader2, X, AlertTriangle, Search, AlertCircle, Plus, Minus, RefreshCw, Save, Pencil
+  Package2, Loader2, X, AlertTriangle, Search, AlertCircle, Plus, Minus, RefreshCw, Save, Pencil, Bell, BellOff
 } from 'lucide-react';
 
 interface InventoryItem {
@@ -18,6 +18,9 @@ interface InventoryItem {
   sku: string;
   stock: number;
   lowStockAlert: number;
+  minStock: number;
+  reorderQuantity: number;
+  lowStockAlertEnabled: boolean;
   warehouseLocation: string;
   purchase_price?: number | null;
   selling_price?: number | null;
@@ -32,6 +35,9 @@ interface EditState {
   warehouseLocation?: string;
   selling_price?: number | null;
   purchase_price?: number | null;
+  minStock?: number;
+  reorderQuantity?: number;
+  lowStockAlertEnabled?: boolean;
 }
 
 export default function InventoryPage() {
@@ -52,7 +58,6 @@ export default function InventoryPage() {
   const isEditing = useRef(false);
 
   const loadInventory = useCallback(async () => {
-    // Don't refresh while user is editing
     if (isEditing.current) return;
     try {
       const token = await getIdToken();
@@ -85,6 +90,9 @@ export default function InventoryPage() {
       warehouseLocation: item.warehouseLocation,
       selling_price: item.selling_price,
       purchase_price: item.purchase_price,
+      minStock: item.minStock || 0,
+      reorderQuantity: item.reorderQuantity || 0,
+      lowStockAlertEnabled: item.lowStockAlertEnabled !== false,
     });
   };
 
@@ -100,14 +108,15 @@ export default function InventoryPage() {
       const token = await getIdToken();
       const payload: Record<string, unknown> = {};
       
-      // Only include fields that changed
       if (editState.sku !== undefined && editState.sku !== item.sku) payload.sku = editState.sku;
       if (editState.warehouseLocation !== undefined && editState.warehouseLocation !== item.warehouseLocation) payload.warehouseLocation = editState.warehouseLocation;
       if (editState.selling_price !== undefined && editState.selling_price !== item.selling_price) payload.selling_price = editState.selling_price;
-      // purchase_price only for non-composite
       if (item.productType !== 'composite' && editState.purchase_price !== undefined && editState.purchase_price !== item.purchase_price) {
         payload.purchase_price = editState.purchase_price;
       }
+      if (editState.minStock !== undefined && editState.minStock !== item.minStock) payload.minStock = editState.minStock;
+      if (editState.reorderQuantity !== undefined && editState.reorderQuantity !== item.reorderQuantity) payload.reorderQuantity = editState.reorderQuantity;
+      if (editState.lowStockAlertEnabled !== undefined && editState.lowStockAlertEnabled !== item.lowStockAlertEnabled) payload.lowStockAlertEnabled = editState.lowStockAlertEnabled;
 
       if (Object.keys(payload).length > 0) {
         const response = await fetch(
@@ -174,11 +183,11 @@ export default function InventoryPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
+          <h1 className="text-2xl font-bold text-gray-900" data-testid="inventory-heading">Inventory</h1>
           <p className="text-gray-600 mt-1">Track stock levels and manage pricing</p>
         </div>
         {lowStockCount > 0 && (
-          <button onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+          <button onClick={() => setShowLowStockOnly(!showLowStockOnly)} data-testid="low-stock-filter-btn"
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${showLowStockOnly ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
             <AlertCircle className="h-5 w-5" />{lowStockCount} Low Stock Items
           </button>
@@ -189,17 +198,17 @@ export default function InventoryPage() {
       <div className="flex gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} data-testid="inventory-search"
             placeholder="Search by product name or SKU..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
         </div>
-        <button onClick={() => { if (!isEditing.current) loadInventory(); }} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+        <button onClick={() => { if (!isEditing.current) loadInventory(); }} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition" data-testid="inventory-refresh-btn">
           <RefreshCw className="h-5 w-5 text-gray-600" />
         </button>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3" data-testid="inventory-error">
           <AlertTriangle className="h-5 w-5 text-red-600" />
           <p className="text-red-700">{error}</p>
           <button onClick={() => setError(null)} className="ml-auto"><X className="h-5 w-5 text-red-600" /></button>
@@ -209,30 +218,32 @@ export default function InventoryPage() {
       {/* Inventory Table */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         {inventory.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-12" data-testid="inventory-empty">
             <Package2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900">No Inventory Items</h3>
             <p className="text-gray-500 mt-1">{showLowStockOnly ? 'No low stock items found.' : 'Create product listings to track inventory.'}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200" data-testid="inventory-table">
-              <thead className="bg-gray-50">
+          <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: '70vh' }}>
+            <table className="w-full" style={{ tableLayout: 'auto' }} data-testid="inventory-table">
+              <thead className="bg-gray-50 sticky top-0 z-[2]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Selling Price</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Product</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">SKU</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Stock</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Min Stock</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Selling Price</th>
                   {canViewPurchasePrice && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Purchase Price</th>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Location</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {inventory.map((item) => (
-                  <tr key={item.listingId} className={`hover:bg-gray-50 ${item.isLowStock ? 'bg-red-50' : ''} ${isEditingThis(item) ? 'bg-blue-50/50 ring-1 ring-blue-200' : ''}`}>
+                  <tr key={item.listingId} data-testid={`inventory-row-${item.listingId}`}
+                    className={`hover:bg-gray-50 ${item.isLowStock ? 'bg-red-50' : ''} ${isEditingThis(item) ? 'bg-blue-50/50 ring-1 ring-blue-200' : ''}`}>
                     {/* Product */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -242,7 +253,7 @@ export default function InventoryPage() {
                           <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center"><Package2 className="h-5 w-5 text-gray-400" /></div>
                         )}
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-gray-900 whitespace-nowrap">
                             {item.productName}
                             {isComposite(item) && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-medium">Composite</span>}
                           </p>
@@ -252,7 +263,7 @@ export default function InventoryPage() {
                     </td>
 
                     {/* SKU */}
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       {isEditingThis(item) && !isComposite(item) ? (
                         <input type="text" value={editState.sku ?? ''} onChange={(e) => setEditState(s => ({ ...s, sku: e.target.value }))}
                           className="w-24 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" data-testid={`sku-input-${item.listingId}`} />
@@ -262,15 +273,44 @@ export default function InventoryPage() {
                     </td>
 
                     {/* Stock */}
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${item.isLowStock ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                         {item.stock}
                       </span>
                       {isComposite(item) && <p className="text-[10px] text-gray-400 mt-0.5">auto</p>}
                     </td>
 
-                    {/* Selling Price - editable for ALL items including composite */}
-                    <td className="px-6 py-4 text-right">
+                    {/* Min Stock */}
+                    <td className="px-6 py-4 text-center whitespace-nowrap" data-testid={`min-stock-cell-${item.listingId}`}>
+                      {isEditingThis(item) ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <input type="number" value={editState.minStock ?? 0} min={0}
+                            onChange={(e) => setEditState(s => ({ ...s, minStock: parseInt(e.target.value) || 0 }))}
+                            className="w-20 px-2 py-1 border border-blue-300 rounded text-sm text-center focus:ring-1 focus:ring-blue-500"
+                            data-testid={`min-stock-input-${item.listingId}`} />
+                          <button
+                            onClick={() => setEditState(s => ({ ...s, lowStockAlertEnabled: !s.lowStockAlertEnabled }))}
+                            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full ${editState.lowStockAlertEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                            data-testid={`alert-toggle-${item.listingId}`}>
+                            {editState.lowStockAlertEnabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+                            {editState.lowStockAlertEnabled ? 'Alert On' : 'Alert Off'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <span className="text-sm text-gray-700">{item.minStock || '-'}</span>
+                          {item.minStock > 0 && (
+                            <span className={`text-[10px] flex items-center gap-0.5 ${item.lowStockAlertEnabled !== false ? 'text-green-600' : 'text-gray-400'}`}>
+                              {item.lowStockAlertEnabled !== false ? <Bell className="h-2.5 w-2.5" /> : <BellOff className="h-2.5 w-2.5" />}
+                              {item.lowStockAlertEnabled !== false ? 'on' : 'off'}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Selling Price */}
+                    <td className="px-6 py-4 text-right whitespace-nowrap">
                       {isEditingThis(item) ? (
                         <input type="number" value={editState.selling_price ?? ''} onChange={(e) => setEditState(s => ({ ...s, selling_price: e.target.value ? parseFloat(e.target.value) : null }))}
                           className="w-28 px-2 py-1 border border-blue-300 rounded text-sm text-right focus:ring-1 focus:ring-blue-500" placeholder="0"
@@ -280,9 +320,9 @@ export default function InventoryPage() {
                       )}
                     </td>
 
-                    {/* Purchase Price - editable only for non-composite, auto-calc for composite */}
+                    {/* Purchase Price */}
                     {canViewPurchasePrice && (
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
                         {isEditingThis(item) && !isComposite(item) ? (
                           <input type="number" value={editState.purchase_price ?? ''} onChange={(e) => setEditState(s => ({ ...s, purchase_price: e.target.value ? parseFloat(e.target.value) : null }))}
                             className="w-28 px-2 py-1 border border-blue-300 rounded text-sm text-right focus:ring-1 focus:ring-blue-500" placeholder="0"
@@ -297,7 +337,7 @@ export default function InventoryPage() {
                     )}
 
                     {/* Location */}
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       {isEditingThis(item) && !isComposite(item) ? (
                         <input type="text" value={editState.warehouseLocation ?? ''} onChange={(e) => setEditState(s => ({ ...s, warehouseLocation: e.target.value }))}
                           className="w-32 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" />
@@ -307,7 +347,7 @@ export default function InventoryPage() {
                     </td>
 
                     {/* Actions */}
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         {isEditingThis(item) ? (
                           <>
@@ -343,7 +383,7 @@ export default function InventoryPage() {
 
       {/* Adjust Stock Modal */}
       {adjustModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="adjust-stock-modal">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
             <div className="border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
@@ -354,12 +394,23 @@ export default function InventoryPage() {
                 {adjustModal.images?.[0] && <Image src={adjustModal.images[0]} alt="" width={48} height={48} className="rounded-lg" />}
                 <div>
                   <p className="font-medium text-gray-900">{adjustModal.productName}</p>
-                  <p className="text-sm text-gray-500">Current Stock: {adjustModal.stock}</p>
+                  <div className="flex gap-4 mt-1">
+                    <p className="text-sm text-gray-500" data-testid="adjust-current-stock">Current Stock: <span className="font-medium text-gray-700">{adjustModal.stock}</span></p>
+                    {adjustModal.minStock > 0 && (
+                      <p className="text-sm text-gray-500" data-testid="adjust-min-stock">Min Stock: <span className="font-medium text-orange-600">{adjustModal.minStock}</span></p>
+                    )}
+                  </div>
                 </div>
               </div>
+              {adjustModal.minStock > 0 && adjustModal.stock <= adjustModal.minStock && (
+                <div className="flex items-center gap-2 p-2.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700" data-testid="low-stock-warning">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  Stock is at or below minimum level ({adjustModal.minStock})
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Adjustment Type</label>
-                <select value={adjustData.changeType} onChange={(e) => setAdjustData(prev => ({ ...prev, changeType: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <select value={adjustData.changeType} onChange={(e) => setAdjustData(prev => ({ ...prev, changeType: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" data-testid="adjust-type-select">
                   <option value="purchase">Purchase (Add Stock)</option>
                   <option value="sale">Sale (Reduce Stock)</option>
                   <option value="adjustment">Manual Adjustment</option>
@@ -369,19 +420,19 @@ export default function InventoryPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setAdjustData(prev => ({ ...prev, quantity: Math.max(0, prev.quantity - 1) }))} className="p-2 border rounded-lg hover:bg-gray-50"><Minus className="h-4 w-4" /></button>
-                  <input type="number" value={adjustData.quantity} onChange={(e) => setAdjustData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))} className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center" min="0" />
-                  <button onClick={() => setAdjustData(prev => ({ ...prev, quantity: prev.quantity + 1 }))} className="p-2 border rounded-lg hover:bg-gray-50"><Plus className="h-4 w-4" /></button>
+                  <button onClick={() => setAdjustData(prev => ({ ...prev, quantity: Math.max(0, prev.quantity - 1) }))} className="p-2 border rounded-lg hover:bg-gray-50" data-testid="adjust-qty-minus"><Minus className="h-4 w-4" /></button>
+                  <input type="number" value={adjustData.quantity} onChange={(e) => setAdjustData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))} className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center" min="0" data-testid="adjust-qty-input" />
+                  <button onClick={() => setAdjustData(prev => ({ ...prev, quantity: prev.quantity + 1 }))} className="p-2 border rounded-lg hover:bg-gray-50" data-testid="adjust-qty-plus"><Plus className="h-4 w-4" /></button>
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Note (optional)</label>
-                <textarea value={adjustData.note} onChange={(e) => setAdjustData(prev => ({ ...prev, note: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" rows={2} placeholder="Reason for adjustment" />
+                <textarea value={adjustData.note} onChange={(e) => setAdjustData(prev => ({ ...prev, note: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" rows={2} placeholder="Reason for adjustment" data-testid="adjust-note" />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <button onClick={() => setAdjustModal(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+                <button onClick={() => setAdjustModal(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200" data-testid="adjust-cancel-btn">Cancel</button>
                 <button onClick={handleAdjustStock} disabled={saving || adjustData.quantity === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50" data-testid="adjust-submit-btn">
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />} Apply Adjustment
                 </button>
               </div>

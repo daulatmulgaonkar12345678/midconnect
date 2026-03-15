@@ -172,13 +172,23 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
                 "sku": {"$ifNull": ["$sku", ""]},
                 "stock": {"$ifNull": ["$stock", 0]},
                 "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]},
+                "minStock": {"$ifNull": ["$minStock", 0]},
+                "reorderQuantity": {"$ifNull": ["$reorderQuantity", 0]},
+                "lowStockAlertEnabled": {"$ifNull": ["$lowStockAlertEnabled", True]},
                 "warehouseLocation": {"$ifNull": ["$warehouseLocation", ""]},
                 "purchase_price": {"$ifNull": ["$purchase_price", None]},
                 "selling_price": {"$ifNull": ["$selling_price", None]},
                 "minPrice": 1,
                 "status": 1,
                 "images": {"$slice": ["$images", 1]},
-                "isLowStock": {"$lte": ["$stock", {"$ifNull": ["$lowStockAlert", 10]}]}
+                "isLowStock": {"$cond": {
+                    "if": {"$and": [
+                        {"$gt": [{"$ifNull": ["$minStock", 0]}, 0]},
+                        {"$ifNull": ["$lowStockAlertEnabled", True]}
+                    ]},
+                    "then": {"$lte": ["$stock", {"$ifNull": ["$minStock", 0]}]},
+                    "else": {"$lte": ["$stock", {"$ifNull": ["$lowStockAlert", 10]}]}
+                }}
             }}
         ]
         
@@ -222,7 +232,11 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
             "lowStockCount": await db.sellerListings.count_documents({
                 "sellerId": ObjectId(seller_id),
                 "status": {"$in": ["active", "paused"]},
-                "$expr": {"$lte": ["$stock", {"$ifNull": ["$lowStockAlert", 10]}]}
+                "$expr": {"$lte": ["$stock", {"$cond": {
+                    "if": {"$gt": [{"$ifNull": ["$minStock", 0]}, 0]},
+                    "then": {"$ifNull": ["$minStock", 0]},
+                    "else": {"$ifNull": ["$lowStockAlert", 10]}
+                }}]}
             }),
             "limit": limit,
             "skip": skip
@@ -268,6 +282,12 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
             update_fields["stock"] = data.stockQuantity
         if data.lowStockAlert is not None:
             update_fields["lowStockAlert"] = data.lowStockAlert
+        if data.minStock is not None:
+            update_fields["minStock"] = data.minStock
+        if data.reorderQuantity is not None:
+            update_fields["reorderQuantity"] = data.reorderQuantity
+        if data.lowStockAlertEnabled is not None:
+            update_fields["lowStockAlertEnabled"] = data.lowStockAlertEnabled
         if data.warehouseLocation is not None:
             update_fields["warehouseLocation"] = data.warehouseLocation
         if data.purchase_price is not None:
@@ -293,6 +313,23 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         # Get product name
         product = await db.products.find_one({"_id": updated["productId"]})
         updated["productName"] = product["name"] if product else "Unknown"
+        
+        # Check low stock alert after update
+        current_stock = updated.get("stock", 0)
+        min_stock = updated.get("minStock", 0)
+        alert_enabled = updated.get("lowStockAlertEnabled", True)
+        if alert_enabled and min_stock > 0 and current_stock <= min_stock:
+            product_name = product["name"] if product else "Unknown"
+            await db.seller_notifications.insert_one({
+                "sellerId": ObjectId(seller_id),
+                "type": "low_stock",
+                "title": f"Low Stock Alert: {product_name}",
+                "message": f"Remaining Stock: {current_stock}, Minimum Required: {min_stock}",
+                "referenceId": str(listing_oid),
+                "referenceType": "inventory",
+                "read": False,
+                "createdAt": datetime.now(timezone.utc),
+            })
         
         return {"message": "Inventory updated", "listing": serialize_doc(updated)}
     
@@ -361,6 +398,22 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         
         await db.inventory_logs.insert_one(log_doc)
         
+        # Check low stock alert
+        min_stock = listing.get("minStock", 0)
+        alert_enabled = listing.get("lowStockAlertEnabled", True)
+        if alert_enabled and min_stock > 0 and new_stock <= min_stock:
+            product_name = product["name"] if product else "Unknown"
+            await db.seller_notifications.insert_one({
+                "sellerId": ObjectId(seller_id),
+                "type": "low_stock",
+                "title": f"Low Stock Alert: {product_name}",
+                "message": f"Remaining Stock: {new_stock}, Minimum Required: {min_stock}",
+                "referenceId": str(listing_oid),
+                "referenceType": "inventory",
+                "read": False,
+                "createdAt": now,
+            })
+        
         logger.info(f"Inventory adjusted: {listing_id} {data.changeType.value} {data.quantity}")
         
         if activity_log_service:
@@ -413,12 +466,16 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         seller_id = await get_seller_id(user)
         
-        # Find items where stock <= lowStockAlert
+        # Find items where stock <= minStock (or legacy lowStockAlert)
         pipeline = [
             {"$match": {
                 "sellerId": ObjectId(seller_id),
                 "status": {"$in": ["active", "paused"]},
-                "$expr": {"$lte": ["$stock", {"$ifNull": ["$lowStockAlert", 10]}]}
+                "$expr": {"$lte": ["$stock", {"$cond": {
+                    "if": {"$gt": [{"$ifNull": ["$minStock", 0]}, 0]},
+                    "then": {"$ifNull": ["$minStock", 0]},
+                    "else": {"$ifNull": ["$lowStockAlert", 10]}
+                }}]}
             }},
             {"$lookup": {
                 "from": "products",
@@ -433,6 +490,7 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
                 "sku": 1,
                 "stock": 1,
                 "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]},
+                "minStock": {"$ifNull": ["$minStock", 0]},
                 "images": {"$slice": ["$images", 1]}
             }},
             {"$sort": {"stock": 1}}

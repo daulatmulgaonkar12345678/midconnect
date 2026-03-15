@@ -190,6 +190,9 @@ class InventoryUpdate(BaseModel):
     sku: Optional[str] = Field(None, max_length=50)
     stockQuantity: Optional[int] = Field(None, ge=0)
     lowStockAlert: Optional[int] = Field(None, ge=0)
+    minStock: Optional[int] = Field(None, ge=0)
+    reorderQuantity: Optional[int] = Field(None, ge=0)
+    lowStockAlertEnabled: Optional[bool] = None
     warehouseLocation: Optional[str] = Field(None, max_length=100)
     purchase_price: Optional[float] = Field(None, ge=0)
     selling_price: Optional[float] = Field(None, ge=0)

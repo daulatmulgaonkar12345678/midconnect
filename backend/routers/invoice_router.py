@@ -459,6 +459,18 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                                                 "note": f"Invoice {invoice_number} (composite: {item['productName']})",
                                                 "createdBy": str(user["_id"]), "createdAt": now
                                             })
+                                            # Low stock alert for component
+                                            comp_min = comp_listing.get("minStock", 0)
+                                            comp_alert = comp_listing.get("lowStockAlertEnabled", True)
+                                            if comp_alert and comp_min > 0 and new_stock <= comp_min:
+                                                comp_name = comp_prod.get("name", "Unknown") if comp_prod else "Unknown"
+                                                await db.seller_notifications.insert_one({
+                                                    "sellerId": ObjectId(seller_id), "type": "low_stock",
+                                                    "title": f"Low Stock Alert: {comp_name}",
+                                                    "message": f"Remaining Stock: {new_stock}, Minimum Required: {comp_min}",
+                                                    "referenceId": str(comp["listingId"]),
+                                                    "referenceType": "inventory", "read": False, "createdAt": now,
+                                                })
                                     if composite_router and hasattr(composite_router, 'sync_composite_stock'):
                                         await composite_router.sync_composite_stock(cp_id)
                             else:
@@ -471,6 +483,17 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                                     "quantity": -item["quantity"], "previousStock": prev_stock, "newStock": new_stock,
                                     "note": f"Invoice {invoice_number}", "createdBy": str(user["_id"]), "createdAt": now
                                 })
+                                # Low stock alert for regular product
+                                prod_min = listing.get("minStock", 0)
+                                prod_alert = listing.get("lowStockAlertEnabled", True)
+                                if prod_alert and prod_min > 0 and new_stock <= prod_min:
+                                    await db.seller_notifications.insert_one({
+                                        "sellerId": ObjectId(seller_id), "type": "low_stock",
+                                        "title": f"Low Stock Alert: {item['productName']}",
+                                        "message": f"Remaining Stock: {new_stock}, Minimum Required: {prod_min}",
+                                        "referenceId": str(item["productId"]),
+                                        "referenceType": "inventory", "read": False, "createdAt": now,
+                                    })
                                 if composite_router and hasattr(composite_router, 'sync_all_composites_for_component'):
                                     await composite_router.sync_all_composites_for_component(str(item["productId"]))
                     except Exception as e:
