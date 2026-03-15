@@ -949,7 +949,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
 
     @router.get("/invoices/{invoice_id}/whatsapp-link")
     async def get_whatsapp_link(invoice_id: str, authorization: str = Header(...), reminder_type: str = "followup"):
-        """Generate a WhatsApp follow-up link for an invoice."""
+        """Generate a WhatsApp link for an invoice (follow-up, overdue, or send invoice)."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
@@ -978,7 +978,14 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         paid = inv.get("totalPaid", 0)
         inv_num = inv.get("invoiceNumber", "")
 
-        if reminder_type == "overdue":
+        # Get seller business name
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        profile = (seller_user.get("profile") or {}) if seller_user else {}
+        business_name = profile.get("businessName", "Seller")
+
+        if reminder_type == "send_invoice":
+            msg = f"Hello {buyer_name},\n\nThank you for your purchase.\n\nInvoice Number: {inv_num}\nTotal Amount: Rs.{total:,.2f}\n\nPlease find the invoice attached.\n\nRegards\n{business_name}"
+        elif reminder_type == "overdue":
             msg = f"Hello {buyer_name},\n\nYour payment for Invoice {inv_num} is overdue.\n\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the payment at the earliest.\n\nThank you."
         else:
             msg = f"Hello {buyer_name},\n\nThis is regarding Invoice {inv_num}.\n\nTotal Amount: Rs.{total:,.2f}\nAmount Paid: Rs.{paid:,.2f}\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the pending payment.\n\nThank you."

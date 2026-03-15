@@ -81,6 +81,13 @@ const navItems = [
     color: 'orange'
   },
   { 
+    href: '/seller/business-tools/purchase-orders', 
+    label: 'Purchase Orders', 
+    icon: FileText,
+    permission: 'manage_inventory',
+    color: 'green'
+  },
+  { 
     href: '/seller/business-tools/composite-products', 
     label: 'Composite Products', 
     icon: Layers,

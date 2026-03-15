@@ -202,13 +202,15 @@ export default function InvoicesPage() {
   };
 
   // ── WhatsApp ──
-  const openWhatsApp = (inv: Invoice, type: 'followup' | 'overdue' = 'followup') => {
+  const openWhatsApp = (inv: Invoice, type: 'followup' | 'overdue' | 'send_invoice' = 'followup') => {
     const phone = inv.buyerPhone || '';
     if (!phone) { alert('Buyer phone number not available'); return; }
     const cleanPhone = phone.replace(/[\s\-\+]/g, '').replace(/^(?!91)(\d{10})$/, '91$1');
     const pending = inv.pendingAmount ?? inv.total;
     let msg = '';
-    if (type === 'overdue') {
+    if (type === 'send_invoice') {
+      msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nPlease find the invoice attached.\n\nRegards`;
+    } else if (type === 'overdue') {
       msg = `Hello ${inv.buyerName},\n\nYour payment for Invoice ${inv.invoiceNumber} is overdue.\n\nPending Amount: Rs.${fmt(pending)}\n\nKindly clear the payment at the earliest.\n\nThank you.`;
     } else {
       msg = `Hello ${inv.buyerName},\n\nThis is regarding Invoice ${inv.invoiceNumber}.\n\nTotal Amount: Rs.${fmt(inv.total)}\nAmount Paid: Rs.${fmt(inv.totalPaid || 0)}\nPending Amount: Rs.${fmt(pending)}\n\nKindly clear the pending payment.\n\nThank you.`;
@@ -542,6 +544,12 @@ export default function InvoicesPage() {
             {/* Actions */}
             <div className="flex gap-2 flex-wrap border-t border-gray-100 pt-4">
               <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber)} className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700" data-testid="download-pdf-btn"><Download className="w-4 h-4" /> PDF</button>
+              {viewInvoice.buyerPhone && (
+                <button onClick={() => openWhatsApp(viewInvoice, 'send_invoice')}
+                  className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700" data-testid="send-invoice-whatsapp-btn">
+                  <Send className="w-4 h-4" /> Send Invoice WhatsApp
+                </button>
+              )}
               {viewInvoice.status === 'draft' && <button onClick={() => updateStatus(viewInvoice.id, 'sent')} className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700" data-testid="mark-sent-btn"><Send className="w-4 h-4" /> Mark Sent</button>}
               {viewInvoice.status !== 'cancelled' && viewInvoice.status !== 'paid' && (
                 <button onClick={() => openPaymentModal(viewInvoice.id)} className="flex items-center gap-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700" data-testid="add-payment-action-btn"><CreditCard className="w-4 h-4" /> Add Payment</button>
@@ -710,6 +718,7 @@ export default function InvoicesPage() {
                     <div className="flex items-center justify-end gap-1.5">
                       <button onClick={() => openInvoiceDetail(inv)} className="text-gray-400 hover:text-indigo-600" data-testid={`view-invoice-${inv.id}`} title="View"><Eye className="w-4 h-4" /></button>
                       <button onClick={() => downloadPdf(inv.id, inv.invoiceNumber)} className="text-gray-400 hover:text-indigo-600" data-testid={`download-invoice-${inv.id}`} title="PDF"><Download className="w-4 h-4" /></button>
+                      {inv.buyerPhone && <button onClick={() => openWhatsApp(inv, 'send_invoice')} className="text-gray-400 hover:text-green-600" data-testid={`send-invoice-wa-${inv.id}`} title="Send Invoice WhatsApp"><Send className="w-4 h-4" /></button>}
                       {inv.status !== 'cancelled' && inv.status !== 'paid' && <button onClick={() => openPaymentModal(inv.id)} className="text-gray-400 hover:text-emerald-600" data-testid={`add-payment-row-${inv.id}`} title="Add Payment"><CreditCard className="w-4 h-4" /></button>}
                       {(inv.pendingAmount ?? inv.total) > 0 && inv.buyerPhone && inv.status !== 'cancelled' && <button onClick={() => openWhatsApp(inv, inv.status === 'overdue' ? 'overdue' : 'followup')} className="text-gray-400 hover:text-green-600" data-testid={`wa-invoice-${inv.id}`} title="WhatsApp"><MessageCircle className="w-4 h-4" /></button>}
                       {(inv.status === 'draft' || inv.status === 'cancelled') && <button onClick={() => deleteInvoice(inv.id)} className="text-gray-400 hover:text-red-600" data-testid={`delete-invoice-${inv.id}`} title="Delete"><Trash2 className="w-4 h-4" /></button>}

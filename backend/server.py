@@ -13050,6 +13050,10 @@ from routers.activity_log_router import init_activity_log_router
 activity_log_router = init_activity_log_router(db, verify_firebase_token)
 app.include_router(activity_log_router, prefix="/api/business-tools")
 
+from routers.po_router import init_po_router
+po_router = init_po_router(db, verify_firebase_token, activity_log_service)
+app.include_router(po_router, prefix="/api/business-tools")
+
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
 # This responds at "/" for platforms that check root path for health

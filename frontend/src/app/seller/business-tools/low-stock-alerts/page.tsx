@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
 import {
-  AlertTriangle, Loader2, X, Package2, Phone, ExternalLink,
+  AlertTriangle, Loader2, X, Package2, Phone, Download,
   CheckCircle2, XCircle, ShoppingCart, Send
 } from 'lucide-react';
 
@@ -40,10 +40,7 @@ interface OrderDetails {
     minStock: number;
   };
   suppliers: SupplierOption[];
-  sellerProfile: {
-    businessName: string;
-    phone: string;
-  };
+  sellerProfile: { businessName: string; phone: string; };
 }
 
 function timeAgo(dateStr: string) {
@@ -53,8 +50,7 @@ function timeAgo(dateStr: string) {
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 export default function LowStockAlertsPage() {
@@ -72,7 +68,9 @@ export default function LowStockAlertsPage() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
   const [orderQuantity, setOrderQuantity] = useState<number>(0);
+  const [deliveryNotes, setDeliveryNotes] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [createdPO, setCreatedPO] = useState<{ id: string; poNumber: string } | null>(null);
 
   const authHeaders = useCallback(async () => {
     const t = await getIdToken();
@@ -102,21 +100,21 @@ export default function LowStockAlertsPage() {
     setOrderDetails(null);
     setSelectedSupplier('');
     setOrderQuantity(0);
+    setDeliveryNotes('');
+    setCreatedPO(null);
     try {
       const h = await authHeaders();
       const res = await fetch(`${API_URL}/api/business-tools/low-stock-alerts/${alert.id}/order-details`, { headers: h });
       if (res.ok) {
         const data = await res.json();
         setOrderDetails(data);
-        // Default quantity: minStock - currentStock (at least 1)
-        const suggested = Math.max(1, data.product.minStock - data.product.currentStock);
-        setOrderQuantity(suggested);
+        setOrderQuantity(Math.max(1, data.product.minStock - data.product.currentStock));
       }
     } catch { /* empty */ }
     setOrderLoading(false);
   };
 
-  const updateStatus = async (alertId: string, status: 'ordered' | 'ignored') => {
+  const updateAlertStatus = async (alertId: string, status: 'ordered' | 'ignored') => {
     setActionLoading(alertId);
     try {
       const h = await authHeaders();
@@ -129,36 +127,74 @@ export default function LowStockAlertsPage() {
     setActionLoading(null);
   };
 
-  const sendWhatsApp = () => {
-    if (!orderDetails || !selectedSupplier || !orderQuantity) return;
-    const supplier = orderDetails.suppliers.find(s => s.supplierId === selectedSupplier);
-    if (!supplier || !supplier.phone) return;
+  const createPurchaseOrder = async () => {
+    if (!orderDetails || !selectedSupplier || !orderQuantity || !orderModal) return;
+    setActionLoading('creating-po');
+    try {
+      const h = await authHeaders();
+      const supplier = orderDetails.suppliers.find(s => s.supplierId === selectedSupplier);
+      const { product } = orderDetails;
 
-    const { product, sellerProfile } = orderDetails;
-    const phone = supplier.phone.replace(/[^0-9]/g, '');
-    const phoneWithCode = phone.startsWith('91') ? phone : `91${phone}`;
+      const body = {
+        supplierId: selectedSupplier,
+        alertId: orderModal.id,
+        deliveryNotes: deliveryNotes || null,
+        items: [{
+          listingId: orderModal.listingId,
+          productName: product.productName,
+          sku: product.sku,
+          description: product.description,
+          specification: product.specification,
+          quantity: orderQuantity,
+          rate: supplier?.rate || 0,
+        }]
+      };
 
-    let msg = `Hello,\n\nWe would like to order the following material.\n\n`;
-    msg += `Product Name: ${product.productName}\n`;
-    msg += `SKU: ${product.sku}\n`;
-    if (product.specification) {
-      msg += `\nSpecification:\n${product.specification}\n`;
-    }
-    if (product.description) {
-      msg += `\nDescription:\n${product.description}\n`;
-    }
-    msg += `\nRequired Quantity: ${orderQuantity} Nos\n`;
-    msg += `\nPlease confirm availability and delivery timeline.\n`;
-    msg += `\nRegards\n${sellerProfile.businessName || 'Seller'}`;
-    if (sellerProfile.phone) msg += `\n${sellerProfile.phone}`;
+      const res = await fetch(`${API_URL}/api/business-tools/purchase-orders`, {
+        method: 'POST', headers: h, body: JSON.stringify(body)
+      });
 
-    const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank');
+      if (res.ok) {
+        const data = await res.json();
+        const po = data.purchaseOrder;
+        setCreatedPO({ id: po.id, poNumber: po.poNumber });
+      } else {
+        const data = await res.json();
+        setError(data.detail || 'Failed to create PO');
+      }
+    } catch { setError('Failed to create purchase order'); }
+    setActionLoading(null);
+  };
 
-    // Mark alert as ordered
-    if (orderModal) {
-      updateStatus(orderModal.id, 'ordered');
-    }
+  const downloadPOPdf = async () => {
+    if (!createdPO) return;
+    try {
+      const h = await authHeaders();
+      const res = await fetch(`${API_URL}/api/business-tools/purchase-orders/${createdPO.id}/pdf`, { headers: h });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `${createdPO.poNumber}.pdf`;
+        a.click(); window.URL.revokeObjectURL(url);
+      }
+    } catch { setError('Failed to download PDF'); }
+  };
+
+  const sendPOWhatsApp = async () => {
+    if (!createdPO) return;
+    try {
+      const h = await authHeaders();
+      const res = await fetch(`${API_URL}/api/business-tools/purchase-orders/${createdPO.id}/whatsapp-link`, { headers: h });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.whatsappLink) window.open(data.whatsappLink, '_blank');
+        setOrderModal(null);
+        fetchAlerts();
+      } else {
+        const data = await res.json();
+        setError(data.detail || 'Failed to generate WhatsApp link');
+      }
+    } catch { setError('Failed to send WhatsApp'); }
   };
 
   if (!hasPermission('manage_inventory')) {
@@ -166,7 +202,6 @@ export default function LowStockAlertsPage() {
       <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
         <Package2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-900">Access Denied</h3>
-        <p className="text-gray-500 mt-1">You don&apos;t have permission to view low stock alerts.</p>
       </div>
     );
   }
@@ -229,12 +264,8 @@ export default function LowStockAlertsPage() {
                     <h3 className="font-semibold text-gray-900">{alert.productName}</h3>
                     {alert.sku && <p className="text-xs text-gray-500 font-mono mt-0.5">{alert.sku}</p>}
                     <div className="flex items-center gap-4 mt-2">
-                      <span className="text-sm">
-                        Current Stock: <span className="font-semibold text-red-600">{alert.currentStock}</span>
-                      </span>
-                      <span className="text-sm">
-                        Min Stock: <span className="font-semibold text-gray-700">{alert.minStock}</span>
-                      </span>
+                      <span className="text-sm">Current Stock: <span className="font-semibold text-red-600">{alert.currentStock}</span></span>
+                      <span className="text-sm">Min Stock: <span className="font-semibold text-gray-700">{alert.minStock}</span></span>
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{timeAgo(alert.createdAt)}</p>
                   </div>
@@ -247,7 +278,7 @@ export default function LowStockAlertsPage() {
                       data-testid={`order-btn-${alert.id}`}>
                       <ShoppingCart className="h-4 w-4" /> Order Material
                     </button>
-                    <button onClick={() => updateStatus(alert.id, 'ignored')} disabled={actionLoading === alert.id}
+                    <button onClick={() => updateAlertStatus(alert.id, 'ignored')} disabled={actionLoading === alert.id}
                       className="px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition"
                       data-testid={`ignore-btn-${alert.id}`}>
                       Ignore
@@ -271,43 +302,54 @@ export default function LowStockAlertsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="order-material-modal">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-              <h2 className="text-lg font-semibold text-gray-900">Order Material</h2>
-              <button onClick={() => setOrderModal(null)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {createdPO ? `PO Created: ${createdPO.poNumber}` : 'Order Material'}
+              </h2>
+              <button onClick={() => { setOrderModal(null); if (createdPO) fetchAlerts(); }} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {orderLoading ? (
               <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-orange-500" /></div>
+            ) : createdPO ? (
+              /* PO Created Success State */
+              <div className="p-6 space-y-5">
+                <div className="text-center py-4">
+                  <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold text-gray-900">Purchase Order Created!</h3>
+                  <p className="text-sm text-gray-500 mt-1">{createdPO.poNumber}</p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <button onClick={downloadPOPdf}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                    data-testid="download-po-pdf-btn">
+                    <Download className="h-4 w-4" /> Download PO PDF
+                  </button>
+                  <button onClick={sendPOWhatsApp}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                    data-testid="send-po-whatsapp-btn">
+                    <Send className="h-4 w-4" /> Send via WhatsApp
+                  </button>
+                </div>
+              </div>
             ) : orderDetails ? (
+              /* Order Form */
               <div className="p-6 space-y-5">
                 {/* Product Info */}
                 <div className="bg-gray-50 rounded-lg p-4 space-y-2" data-testid="order-product-info">
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-gray-500">Product Name</span>
-                      <p className="font-medium text-gray-900">{orderDetails.product.productName}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">SKU</span>
-                      <p className="font-medium text-gray-900 font-mono">{orderDetails.product.sku || '-'}</p>
-                    </div>
+                    <div><span className="text-gray-500">Product Name</span><p className="font-medium text-gray-900">{orderDetails.product.productName}</p></div>
+                    <div><span className="text-gray-500">SKU</span><p className="font-medium text-gray-900 font-mono">{orderDetails.product.sku || '-'}</p></div>
                   </div>
                   {orderDetails.product.specification && (
-                    <div className="text-sm">
-                      <span className="text-gray-500">Specification</span>
-                      <p className="text-gray-800 whitespace-pre-line mt-0.5">{orderDetails.product.specification}</p>
-                    </div>
+                    <div className="text-sm"><span className="text-gray-500">Specification</span><p className="text-gray-800 whitespace-pre-line mt-0.5">{orderDetails.product.specification}</p></div>
                   )}
                   {orderDetails.product.description && (
-                    <div className="text-sm">
-                      <span className="text-gray-500">Description</span>
-                      <p className="text-gray-700 mt-0.5">{orderDetails.product.description}</p>
-                    </div>
+                    <div className="text-sm"><span className="text-gray-500">Description</span><p className="text-gray-700 mt-0.5">{orderDetails.product.description}</p></div>
                   )}
                   <div className="flex gap-4 text-sm pt-1">
                     <span>Current Stock: <span className="font-semibold text-red-600">{orderDetails.product.currentStock}</span></span>
-                    <span>Min Stock: <span className="font-semibold text-gray-700">{orderDetails.product.minStock}</span></span>
                   </div>
                 </div>
 
@@ -327,17 +369,14 @@ export default function LowStockAlertsPage() {
                           data-testid={`supplier-option-${s.supplierId}`}>
                           <div className="flex items-center gap-3">
                             <input type="radio" name="supplier" value={s.supplierId} checked={selectedSupplier === s.supplierId}
-                              onChange={() => setSelectedSupplier(s.supplierId)}
-                              className="h-4 w-4 text-orange-600 focus:ring-orange-500" />
+                              onChange={() => setSelectedSupplier(s.supplierId)} className="h-4 w-4 text-orange-600 focus:ring-orange-500" />
                             <div>
                               <p className="text-sm font-medium text-gray-900">{s.supplierName}</p>
                               {s.phone && <p className="text-xs text-gray-500 flex items-center gap-1"><Phone className="h-3 w-3" />{s.phone}</p>}
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-semibold text-gray-800">
-                              ₹{s.rate.toLocaleString('en-IN')}
-                            </p>
+                            <p className="text-sm font-semibold text-gray-800">₹{s.rate.toLocaleString('en-IN')}</p>
                             {s.rate === bestPrice && orderDetails.suppliers.length > 1 && (
                               <span className="text-[10px] font-medium text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">Best Price</span>
                             )}
@@ -362,16 +401,25 @@ export default function LowStockAlertsPage() {
                   )}
                 </div>
 
+                {/* Delivery Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Notes (optional)</label>
+                  <textarea value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500" rows={2}
+                    placeholder="Delivery instructions..." data-testid="delivery-notes-input" />
+                </div>
+
                 {/* Actions */}
                 <div className="flex justify-end gap-3 pt-2">
                   <button onClick={() => setOrderModal(null)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
                     Cancel
                   </button>
-                  <button onClick={sendWhatsApp}
-                    disabled={!selectedSupplier || !orderQuantity || !selectedSupplierData?.phone}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                    data-testid="send-whatsapp-btn">
-                    <Send className="h-4 w-4" /> Send WhatsApp
+                  <button onClick={createPurchaseOrder}
+                    disabled={!selectedSupplier || !orderQuantity || actionLoading === 'creating-po'}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    data-testid="create-po-btn">
+                    {actionLoading === 'creating-po' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
+                    Create Purchase Order
                   </button>
                 </div>
               </div>
