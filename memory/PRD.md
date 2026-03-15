@@ -2701,6 +2701,41 @@ Implemented a full multi-payment tracking system for invoices. Sellers can recor
 - `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` (full rewrite with all Phase 2 UI)
 
 
+
+### Session: 2026-03-15 (Critical Bug Fixes)
+
+#### Invoice Architecture Fixes - COMPLETE
+
+**Bugs Fixed:**
+
+1. **Duplicate Invoice Numbers (CRITICAL):**
+   - Root cause: `sellers.invoiceCounter` used `userId: ObjectId(seller_id)` but `userId` was `None` in sellers collection. Counter always returned 1.
+   - Fix: Created dedicated `seller_invoice_counters` collection keyed by `sellerId`. Uses `find_one_and_update` with `$inc` for atomic increment. Unique index on `invoices.invoiceNumber`.
+   - New format: `INV{ABBR}-{CODE}-{SEQUENCE}` (e.g., `INVS-7C5A6E-0016`)
+
+2. **Wrong Payment Status (CRITICAL):**
+   - Root cause: Old "Mark Paid" button set status manually without updating `totalPaid`/`pendingAmount`. Status was not derived from payment state.
+   - Fix: `ensure_status_consistency()` runs on every list/get. Status always derived: `paid` if totalPaid >= total, `partially_paid` if 0 < totalPaid < total, never `paid` with totalPaid=0.
+
+3. **Reports Not Showing Invoices:**
+   - Root cause: Status filter was `["draft", "sent", "paid"]` — missing `partially_paid`, `overdue`, `viewed`.
+   - Fix: `REPORT_STATUSES = ["draft", "sent", "viewed", "partially_paid", "paid", "overdue"]`. Date range uses `$lt end+1day` for inclusive filtering.
+
+4. **Migration Script:** Ran `scripts/migrate_invoices.py` which:
+   - Generated `sellerAbbreviation` and `sellerCode` for all sellers
+   - Renumbered all invoices with new format (0001-0015)
+   - Recalculated `totalPaid`, `pendingAmount` from actual payments
+   - Fixed all status inconsistencies
+   - Created unique index on `invoices.invoiceNumber`
+
+**Testing:** Iteration 58: 15/15 tests passed (100%). Rapid creation (5 invoices) got unique sequential numbers. Status transitions verified. Reports confirmed working.
+
+**Files Changed:**
+- `/app/backend/routers/invoice_router.py` (get_next_invoice_number rewrite, ensure_status_consistency)
+- `/app/backend/routers/reports_router.py` (REPORT_STATUSES fix, date range fix)
+- `/app/backend/scripts/migrate_invoices.py` (migration script - already executed)
+
+
 ---
 
 ### Upcoming Tasks
