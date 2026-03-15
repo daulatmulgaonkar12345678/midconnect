@@ -388,3 +388,29 @@ export const uploadSellerProductVideo = (
   file: File, 
   onProgress?: (progress: UploadProgress) => void
 ) => uploadToCloudinary(file, 'sellerProductVideo', onProgress);
+
+/**
+ * Upload payment receipt (image or PDF) to Cloudinary.
+ * Uses sellerProductImage preset for images, sellerDatasheet for PDFs.
+ */
+export async function uploadPaymentReceipt(
+  file: File,
+  onProgress?: (progress: UploadProgress) => void
+): Promise<UploadResult> {
+  const isPdf = file.type === 'application/pdf';
+  const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+
+  if (!isPdf && !isImage) {
+    throw new CloudinaryError(
+      'Invalid file type. Allowed: JPG, PNG, WEBP, PDF',
+      'INVALID_TYPE'
+    );
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new CloudinaryError('File too large. Maximum size: 5MB', 'FILE_TOO_LARGE');
+  }
+
+  const type: UploadType = isPdf ? 'sellerDatasheet' : 'sellerProductImage';
+  return uploadToCloudinary(file, type, onProgress);
+}

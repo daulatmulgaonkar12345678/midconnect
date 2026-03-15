@@ -1,22 +1,25 @@
 """
 Invoice Router - Complete billing, payment tracking, and invoice lifecycle management.
-Supports: multiple partial payments, payment history, auto-calculated pending amounts.
+Supports: multiple partial payments, payment history, auto-calculated pending amounts,
+receipt uploads, overdue detection, smart reminders, WhatsApp follow-ups.
 """
 
 from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import Response
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import logging
+import urllib.parse
 
-from models.business_tools import InvoiceCreate, InvoiceStatusUpdate, PaymentEntryCreate, Permission
+from models.business_tools import InvoiceCreate, InvoiceStatusUpdate, PaymentEntryCreate, ReminderSettingsUpdate, Permission
 from services.invoice_pdf_service import generate_invoice_pdf
 
 logger = logging.getLogger(__name__)
 
 VALID_STATUSES = {"draft", "sent", "viewed", "partially_paid", "paid", "overdue", "cancelled"}
 PAYMENT_METHODS = {"upi", "bank_transfer", "cash", "cheque", "other"}
+RECEIPT_REQUIRED_METHODS = {"upi", "bank_transfer", "cheque"}
 
 
 def init_invoice_router(db, verify_token_func, activity_log_service, composite_router=None):
@@ -92,6 +95,33 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         counter = result.get("invoiceCounter", 1) if result else 1
         short_id = seller_id[-6:].upper()
         return f"INV-{short_id}-{counter:04d}"
+
+    async def check_overdue_invoices(seller_id: str):
+        """Auto-detect and mark overdue invoices."""
+        now = datetime.now(timezone.utc)
+        invoices = await db.invoices.find({
+            "sellerId": ObjectId(seller_id),
+            "status": {"$in": ["draft", "sent", "viewed", "partially_paid"]},
+        }).to_list(500)
+        for inv in invoices:
+            due_days = inv.get("dueDays", 7)
+            invoice_date = inv.get("date", inv.get("createdAt"))
+            if not invoice_date:
+                continue
+            if isinstance(invoice_date, str):
+                try:
+                    invoice_date = datetime.fromisoformat(invoice_date.replace("Z", "+00:00"))
+                except Exception:
+                    continue
+            if invoice_date.tzinfo is None:
+                invoice_date = invoice_date.replace(tzinfo=timezone.utc)
+            due_date = invoice_date + timedelta(days=due_days)
+            pending = inv.get("pendingAmount", inv.get("total", 0))
+            if now > due_date and pending > 0:
+                await db.invoices.update_one(
+                    {"_id": inv["_id"]},
+                    {"$set": {"status": "overdue", "updatedAt": now}}
+                )
 
     async def recalc_payment_status(invoice_id):
         """Recalculate totalPaid, pendingAmount, and auto-update status."""
@@ -180,6 +210,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
 
+        # Auto-detect overdue invoices
+        await check_overdue_invoices(seller_id)
+
         query = {"sellerId": ObjectId(seller_id)}
         if status and status != "all":
             query["status"] = status
@@ -192,6 +225,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             inv["buyerPhone"] = buyer.get("phone", "") if buyer else ""
             inv["totalPaid"] = inv.get("totalPaid", 0)
             inv["pendingAmount"] = inv.get("pendingAmount", inv.get("total", 0))
+            inv["dueDays"] = inv.get("dueDays", 7)
             result.append(inv)
         return {"invoices": serialize_doc(result)}
 
@@ -288,6 +322,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "sellerId": ObjectId(seller_id),
             "buyerId": ObjectId(data.buyerId),
             "date": now,
+            "dueDays": data.dueDays,
             "items": invoice_items,
             "subtotal": subtotal,
             "gst": total_gst,
@@ -369,7 +404,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
 
         buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
         inv["buyerName"] = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
+        inv["buyerPhone"] = buyer.get("phone", "") if buyer else ""
         inv["buyerDetails"] = serialize_doc(buyer) if buyer else None
+        inv["dueDays"] = inv.get("dueDays", 7)
 
         # Include payment history
         payments = await db.invoice_payments.find({"invoiceId": inv["_id"]}).sort("paymentDate", -1).to_list(100)
@@ -427,6 +464,15 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         if data.amount > pending + 0.01:
             raise HTTPException(status_code=400, detail=f"Payment amount ({data.amount}) exceeds pending amount ({pending})")
 
+        # Receipt validation: required for digital payment methods
+        receipt_urls = data.receiptUrls or []
+        method = data.paymentMethod.lower()
+        if method in RECEIPT_REQUIRED_METHODS and len(receipt_urls) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Receipt upload is mandatory for {method.replace('_', ' ')} payments. Please attach at least one receipt."
+            )
+
         # Parse payment date
         payment_date = datetime.now(timezone.utc)
         if data.paymentDate:
@@ -449,7 +495,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "accountType": data.accountType,
             "referenceNumber": data.referenceNumber,
             "notes": data.notes,
-            "receiptUrls": [],
+            "receiptUrls": receipt_urls,
             "createdBy": str(user["_id"]),
             "createdAt": now
         }
@@ -574,5 +620,177 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         await db.invoice_payments.delete_many({"invoiceId": inv_oid})
         await db.invoices.delete_one({"_id": inv_oid})
         return {"message": "Invoice deleted"}
+
+    # ==========================================
+    # REMINDER SETTINGS
+    # ==========================================
+
+    @router.get("/reminder-settings")
+    async def get_reminder_settings(authorization: str = Header(...)):
+        """Get seller's reminder configuration."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        settings = await db.seller_reminder_settings.find_one({"sellerId": ObjectId(seller_id)}, {"_id": 0, "sellerId": 0})
+        if not settings:
+            settings = {"enabled": True, "reminderDays": [3, 7, 15], "customMessages": {}}
+        return {"settings": settings}
+
+    @router.put("/reminder-settings")
+    async def update_reminder_settings(data: ReminderSettingsUpdate, authorization: str = Header(...)):
+        """Update seller's reminder configuration."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        await db.seller_reminder_settings.update_one(
+            {"sellerId": ObjectId(seller_id)},
+            {"$set": {
+                "sellerId": ObjectId(seller_id),
+                "enabled": data.enabled,
+                "reminderDays": sorted(set(data.reminderDays)),
+                "customMessages": data.customMessages or {},
+                "updatedAt": now
+            }},
+            upsert=True
+        )
+        return {"message": "Reminder settings updated"}
+
+    # ==========================================
+    # INVOICE REMINDERS (Smart Follow-Up)
+    # ==========================================
+
+    @router.get("/invoice-reminders")
+    async def get_invoice_reminders(authorization: str = Header(...)):
+        """Get invoices that need reminders based on seller's schedule."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        settings = await db.seller_reminder_settings.find_one({"sellerId": ObjectId(seller_id)})
+        if not settings:
+            settings = {"enabled": True, "reminderDays": [3, 7, 15], "customMessages": {}}
+
+        if not settings.get("enabled", True):
+            return {"reminders": [], "enabled": False}
+
+        reminder_days = sorted(settings.get("reminderDays", [3, 7, 15]))
+        now = datetime.now(timezone.utc)
+
+        invoices = await db.invoices.find({
+            "sellerId": ObjectId(seller_id),
+            "status": {"$in": ["sent", "partially_paid", "overdue"]},
+            "pendingAmount": {"$gt": 0}
+        }).to_list(500)
+
+        reminders = []
+        for inv in invoices:
+            invoice_date = inv.get("date", inv.get("createdAt"))
+            if not invoice_date:
+                continue
+            if isinstance(invoice_date, str):
+                try:
+                    invoice_date = datetime.fromisoformat(invoice_date.replace("Z", "+00:00"))
+                except Exception:
+                    continue
+            if invoice_date.tzinfo is None:
+                invoice_date = invoice_date.replace(tzinfo=timezone.utc)
+
+            days_since = (now - invoice_date).days
+
+            applicable_reminder = None
+            for day in sorted(reminder_days, reverse=True):
+                if days_since >= day:
+                    applicable_reminder = day
+                    break
+
+            if applicable_reminder is None:
+                continue
+
+            buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
+            buyer_name = buyer.get("buyerName", "Customer") if buyer else "Customer"
+            buyer_phone = buyer.get("phone", "") if buyer else ""
+
+            pending = inv.get("pendingAmount", 0)
+            total = inv.get("total", 0)
+            paid = inv.get("totalPaid", 0)
+            inv_num = inv.get("invoiceNumber", "")
+
+            custom_msgs = settings.get("customMessages", {})
+            msg = custom_msgs.get(str(applicable_reminder))
+            if not msg:
+                if applicable_reminder <= 3:
+                    msg = f"Hello {buyer_name},\n\nThis is a friendly reminder regarding Invoice {inv_num}.\n\nPending Amount: Rs.{pending:,.2f}\n\nKindly process the payment at your convenience.\n\nThank you."
+                elif applicable_reminder <= 7:
+                    msg = f"Hello {buyer_name},\n\nThis is regarding Invoice {inv_num}.\n\nTotal Amount: Rs.{total:,.2f}\nAmount Paid: Rs.{paid:,.2f}\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the pending payment.\n\nThank you."
+                else:
+                    msg = f"Hello {buyer_name},\n\nYour payment for Invoice {inv_num} is overdue.\n\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the payment at the earliest.\n\nThank you."
+
+            wa_link = None
+            if buyer_phone:
+                clean_phone = buyer_phone.replace(" ", "").replace("-", "").replace("+", "")
+                if not clean_phone.startswith("91") and len(clean_phone) == 10:
+                    clean_phone = "91" + clean_phone
+                wa_link = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(msg)}"
+
+            reminders.append({
+                "invoiceId": str(inv["_id"]),
+                "invoiceNumber": inv_num,
+                "buyerName": buyer_name,
+                "buyerPhone": buyer_phone,
+                "daysSince": days_since,
+                "reminderLevel": applicable_reminder,
+                "reminderType": "friendly" if applicable_reminder <= 3 else ("due" if applicable_reminder <= 7 else "overdue"),
+                "pendingAmount": pending,
+                "total": total,
+                "totalPaid": paid,
+                "message": msg,
+                "whatsappLink": wa_link,
+                "status": inv.get("status")
+            })
+
+        reminders.sort(key=lambda r: r["daysSince"], reverse=True)
+        return {"reminders": reminders, "enabled": True}
+
+    # ==========================================
+    # WHATSAPP MESSAGE HELPER
+    # ==========================================
+
+    @router.get("/invoices/{invoice_id}/whatsapp-link")
+    async def get_whatsapp_link(invoice_id: str, authorization: str = Header(...), reminder_type: str = "followup"):
+        """Generate a WhatsApp follow-up link for an invoice."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.CREATE_INVOICE.value)
+        seller_id = await get_seller_id(user)
+
+        try:
+            inv_oid = ObjectId(invoice_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid invoice ID")
+
+        inv = await db.invoices.find_one({"_id": inv_oid, "sellerId": ObjectId(seller_id)})
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
+        buyer_name = buyer.get("buyerName", "Customer") if buyer else "Customer"
+        buyer_phone = buyer.get("phone", "") if buyer else ""
+
+        if not buyer_phone:
+            raise HTTPException(status_code=400, detail="Buyer phone number not available")
+
+        pending = inv.get("pendingAmount", 0)
+        total = inv.get("total", 0)
+        paid = inv.get("totalPaid", 0)
+        inv_num = inv.get("invoiceNumber", "")
+
+        if reminder_type == "overdue":
+            msg = f"Hello {buyer_name},\n\nYour payment for Invoice {inv_num} is overdue.\n\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the payment at the earliest.\n\nThank you."
+        else:
+            msg = f"Hello {buyer_name},\n\nThis is regarding Invoice {inv_num}.\n\nTotal Amount: Rs.{total:,.2f}\nAmount Paid: Rs.{paid:,.2f}\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the pending payment.\n\nThank you."
+
+        clean_phone = buyer_phone.replace(" ", "").replace("-", "").replace("+", "")
+        if not clean_phone.startswith("91") and len(clean_phone) == 10:
+            clean_phone = "91" + clean_phone
+
+        wa_link = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(msg)}"
+        return {"whatsappLink": wa_link, "message": msg, "buyerPhone": buyer_phone}
 
     return router

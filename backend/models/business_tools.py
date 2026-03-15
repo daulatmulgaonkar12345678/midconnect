@@ -263,6 +263,7 @@ class InvoiceCreate(BaseModel):
     items: List[InvoiceItemCreate] = Field(..., min_length=1)
     notes: Optional[str] = Field(None, max_length=1000)
     deductStock: bool = True
+    dueDays: int = Field(7, ge=1, le=365, description="Payment due in N days")
 
 class InvoiceStatusUpdate(BaseModel):
     status: str  # draft, sent, viewed, partially_paid, paid, overdue, cancelled
@@ -276,6 +277,13 @@ class PaymentEntryCreate(BaseModel):
     accountType: Optional[str] = Field(None)
     referenceNumber: Optional[str] = Field(None, max_length=100)
     notes: Optional[str] = Field(None, max_length=500)
+    receiptUrls: Optional[List[str]] = Field(None, description="Cloudinary URLs for payment receipts")
+
+
+class ReminderSettingsUpdate(BaseModel):
+    enabled: bool = True
+    reminderDays: List[int] = Field(default=[3, 7, 15])
+    customMessages: Optional[dict] = Field(None, description="Custom messages keyed by day number")
 
 
 # ===========================================

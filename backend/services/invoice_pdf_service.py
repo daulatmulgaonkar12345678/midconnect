@@ -1,5 +1,6 @@
 """
 Invoice PDF Generation Service using ReportLab
+Enhanced with seller branding (email) and payment summary.
 """
 
 import io
@@ -41,7 +42,7 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict) -> bytes:
         except Exception:
             pass
 
-    status = invoice.get("status", "draft").upper()
+    status = invoice.get("status", "draft").upper().replace("_", " ")
 
     info_data = [
         [Paragraph(f"<b>Invoice #:</b> {invoice_number}", normal_style),
@@ -67,6 +68,7 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict) -> bytes:
     seller_state = seller.get("state", "")
     seller_gst = seller.get("gstNumber", "")
     seller_phone = seller.get("phone", "")
+    seller_email = seller.get("email", "")
 
     buyer_name = buyer.get("buyerName", buyer.get("name", "Buyer"))
     buyer_company = buyer.get("company", "")
@@ -83,6 +85,8 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict) -> bytes:
         from_text += f"<br/>GST: {seller_gst}"
     if seller_phone:
         from_text += f"<br/>Phone: {seller_phone}"
+    if seller_email:
+        from_text += f"<br/>Email: {seller_email}"
 
     to_text = f"<b>To:</b><br/>{buyer_name}"
     if buyer_company:
@@ -156,18 +160,27 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict) -> bytes:
     elements.append(items_table)
     elements.append(Spacer(1, 4*mm))
 
-    # Totals
+    # Totals with Payment Summary
     subtotal = invoice.get("subtotal", 0)
     gst_total = invoice.get("gst", 0)
     grand_total = invoice.get("total", 0)
+    total_paid = invoice.get("totalPaid", 0)
+    pending_amount = invoice.get("pendingAmount", grand_total)
 
     totals_data = [
         ['', '', 'Subtotal:', f"{subtotal:,.2f}"],
         ['', '', 'GST:', f"{gst_total:,.2f}"],
         ['', '', 'Grand Total:', f"{grand_total:,.2f}"],
     ]
+
+    # Add payment summary if any payments made
+    if total_paid > 0:
+        totals_data.append(['', '', 'Amount Paid:', f"{total_paid:,.2f}"])
+        totals_data.append(['', '', 'Pending Amount:', f"{pending_amount:,.2f}"])
+
     totals_table = Table(totals_data, colWidths=[60*mm, 50*mm, 35*mm, 30*mm])
-    totals_table.setStyle(TableStyle([
+
+    totals_style = [
         ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
         ('FONTNAME', (2, 2), (-1, 2), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
@@ -175,7 +188,20 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict) -> bytes:
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ('LINEABOVE', (2, 2), (-1, 2), 1, colors.HexColor('#1a1a2e')),
-    ]))
+    ]
+
+    if total_paid > 0:
+        # Style for paid row (green)
+        paid_row = 3
+        pending_row = 4
+        totals_style.append(('TEXTCOLOR', (2, paid_row), (-1, paid_row), colors.HexColor('#059669')))
+        totals_style.append(('FONTNAME', (2, paid_row), (-1, paid_row), 'Helvetica-Bold'))
+        totals_style.append(('TEXTCOLOR', (2, pending_row), (-1, pending_row), colors.HexColor('#d97706')))
+        totals_style.append(('FONTNAME', (2, pending_row), (-1, pending_row), 'Helvetica-Bold'))
+        totals_style.append(('FONTSIZE', (2, pending_row), (-1, pending_row), 10))
+        totals_style.append(('LINEABOVE', (2, paid_row), (-1, paid_row), 0.5, colors.HexColor('#ddd')))
+
+    totals_table.setStyle(TableStyle(totals_style))
     elements.append(totals_table)
 
     # Notes
