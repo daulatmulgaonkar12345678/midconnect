@@ -35,7 +35,7 @@ const PERIODS = [
 
 export default function ChartsGraphsPage() {
   const { getIdToken } = useAuth();
-  const { hasPermission, isAdmin } = usePermissions();
+  const { hasPermission, isAdmin, token, loading: permLoading } = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -57,16 +57,19 @@ export default function ChartsGraphsPage() {
   const [categorySales, setCategorySales] = useState<CategorySale[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
 
-  const authHeaders = useCallback(async () => {
-    const t = await getIdToken();
+  const getAuthHeaders = useCallback(async () => {
+    const t = token || await getIdToken();
+    if (!t) return null;
     return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
-  }, [getIdToken]);
+  }, [token, getIdToken]);
 
-  // Load products and categories on mount
+  // Load products and categories once token is ready
   useEffect(() => {
+    if (permLoading || !token) return;
     (async () => {
       try {
-        const h = await authHeaders();
+        const h = await getAuthHeaders();
+        if (!h) { setLoading(false); return; }
         const [prodRes, catRes] = await Promise.all([
           fetch(`${API_URL}/api/business-tools/analytics/products`, { headers: h }),
           fetch(`${API_URL}/api/business-tools/analytics/categories`, { headers: h }),
@@ -83,14 +86,15 @@ export default function ChartsGraphsPage() {
       } catch { /* empty */ }
       setLoading(false);
     })();
-  }, [authHeaders]);
+  }, [token, permLoading, getAuthHeaders]);
 
   // Load suppliers when product changes
   useEffect(() => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !token) return;
     (async () => {
       try {
-        const h = await authHeaders();
+        const h = await getAuthHeaders();
+        if (!h) return;
         const res = await fetch(`${API_URL}/api/business-tools/analytics/suppliers?listing_id=${selectedProduct}`, { headers: h });
         if (res.ok) {
           const data = await res.json();
@@ -99,16 +103,17 @@ export default function ChartsGraphsPage() {
       } catch { /* empty */ }
     })();
     setSelectedSupplier('');
-  }, [selectedProduct, authHeaders]);
+  }, [selectedProduct, getAuthHeaders, token]);
 
   // Load all chart data when filters change
   useEffect(() => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !token) return;
     if (period === 'custom' && (!customStart || !customEnd)) return;
 
     const loadCharts = async () => {
       setChartLoading(true);
-      const h = await authHeaders();
+      const h = await getAuthHeaders();
+      if (!h) { setChartLoading(false); return; }
       const base = `${API_URL}/api/business-tools/analytics`;
 
       let dateParams = `period=${period}`;
@@ -140,7 +145,7 @@ export default function ChartsGraphsPage() {
       setChartLoading(false);
     };
     loadCharts();
-  }, [selectedProduct, period, customStart, customEnd, selectedSupplier, selectedCategory, selectedSeller, isAdmin, authHeaders]);
+  }, [selectedProduct, period, customStart, customEnd, selectedSupplier, selectedCategory, selectedSeller, isAdmin, getAuthHeaders, token]);
 
   if (!hasPermission('manage_inventory')) {
     return (

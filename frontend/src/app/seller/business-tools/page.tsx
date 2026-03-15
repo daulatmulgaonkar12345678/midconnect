@@ -5,9 +5,9 @@ import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from './layout';
 import Link from 'next/link';
 import {
-  Package2, Users, Truck, FileText, Layers, BarChart3,
-  Settings, IndianRupee, AlertTriangle, TrendingUp, Clock,
-  Bell, ArrowRight, CheckCircle2, ShoppingCart, LineChart as LineChartIcon, Loader2
+  Package2, Truck, FileText, Layers, BarChart3,
+  IndianRupee, AlertTriangle, TrendingUp, Clock,
+  ArrowRight, ShoppingCart, LineChart as LineChartIcon, Loader2
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -40,20 +40,16 @@ function fmtCurrency(n: number) { return n.toLocaleString('en-IN', { minimumFrac
 
 export default function BusinessToolsHomePage() {
   const { getIdToken } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, token, loading: permLoading } = usePermissions();
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [charts, setCharts] = useState<HomeCharts | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const authHeaders = useCallback(async () => {
-    const t = await getIdToken();
-    return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
-  }, [getIdToken]);
-
   useEffect(() => {
+    if (permLoading || !token) return;
     (async () => {
       try {
-        const h = await authHeaders();
+        const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
         const [sumRes, chartRes] = await Promise.all([
           fetch(`${API_URL}/api/business-tools/home/summary`, { headers: h }),
           fetch(`${API_URL}/api/business-tools/home/charts`, { headers: h }),
@@ -63,7 +59,7 @@ export default function BusinessToolsHomePage() {
       } catch { /* empty */ }
       setLoading(false);
     })();
-  }, [authHeaders]);
+  }, [token, permLoading]);
 
   const quickLinks = [
     { href: '/seller/business-tools/inventory', label: 'Inventory', desc: 'Manage stock and products', icon: Package2, color: 'bg-blue-50 text-blue-600' },

@@ -34,7 +34,7 @@ const PERIODS = [
 
 export default function AnalyticsPage() {
   const { getIdToken } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, token, loading: permLoading } = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [period, setPeriod] = useState('3m');
@@ -54,16 +54,19 @@ export default function AnalyticsPage() {
   const [stockTrend, setStockTrend] = useState<{ data: StockPoint[]; currentStock: number; minStock: number }>({ data: [], currentStock: 0, minStock: 0 });
   const [supplierComparison, setSupplierComparison] = useState<SupplierRate[]>([]);
 
-  const authHeaders = useCallback(async () => {
-    const t = await getIdToken();
+  const getAuthHeaders = useCallback(async () => {
+    const t = token || await getIdToken();
+    if (!t) return null;
     return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
-  }, [getIdToken]);
+  }, [token, getIdToken]);
 
   // Load products
   useEffect(() => {
+    if (permLoading || !token) return;
     (async () => {
       try {
-        const h = await authHeaders();
+        const h = await getAuthHeaders();
+        if (!h) { setLoading(false); return; }
         const res = await fetch(`${API_URL}/api/business-tools/analytics/products`, { headers: h });
         if (res.ok) {
           const data = await res.json();
@@ -73,14 +76,15 @@ export default function AnalyticsPage() {
       } catch { /* empty */ }
       setLoading(false);
     })();
-  }, [authHeaders]);
+  }, [token, permLoading, getAuthHeaders]);
 
   // Load suppliers when product changes
   useEffect(() => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !token) return;
     (async () => {
       try {
-        const h = await authHeaders();
+        const h = await getAuthHeaders();
+        if (!h) return;
         const res = await fetch(`${API_URL}/api/business-tools/analytics/suppliers?listing_id=${selectedProduct}`, { headers: h });
         if (res.ok) {
           const data = await res.json();
@@ -88,17 +92,18 @@ export default function AnalyticsPage() {
         }
       } catch { /* empty */ }
     })();
-    setSelectedSupplier(''); // Reset supplier filter on product change
-  }, [selectedProduct, authHeaders]);
+    setSelectedSupplier('');
+  }, [selectedProduct, getAuthHeaders, token]);
 
   // Load chart data
   useEffect(() => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !token) return;
     if (period === 'custom' && (!customStart || !customEnd)) return;
 
     const loadCharts = async () => {
       setChartLoading(true);
-      const h = await authHeaders();
+      const h = await getAuthHeaders();
+      if (!h) { setChartLoading(false); return; }
       const base = `${API_URL}/api/business-tools/analytics`;
 
       let dateParams = `period=${period}`;
@@ -126,7 +131,7 @@ export default function AnalyticsPage() {
       setChartLoading(false);
     };
     loadCharts();
-  }, [selectedProduct, period, customStart, customEnd, selectedSupplier, authHeaders]);
+  }, [selectedProduct, period, customStart, customEnd, selectedSupplier, getAuthHeaders, token]);
 
   if (!hasPermission('manage_inventory')) {
     return (
