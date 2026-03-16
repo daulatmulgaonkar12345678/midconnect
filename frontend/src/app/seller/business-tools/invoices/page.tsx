@@ -20,11 +20,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 interface Spec { key: string; value: string; }
 interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; gstRate: number; hsnCode: string; specifications: Spec[]; }
 interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
-<<<<<<< HEAD
-interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; }
-=======
 interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; address?: string; }
->>>>>>> 535a1657 (auto-commit for f32c963e-da03-4cd4-a083-1200862db0b9)
 interface InvoiceItem { productName: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
 interface PaymentEntry { id: string; amount: number; paymentDate: string; paymentMethod: string; accountName?: string; referenceNumber?: string; notes?: string; receiptUrls?: string[]; createdAt: string; }
 interface Invoice {
@@ -61,13 +57,6 @@ const RECEIPT_REQUIRED_METHODS = ['upi', 'bank_transfer', 'cheque'];
 
 function emptyItem(): InvoiceFormItem {
   return { productId: '', productName: '', hsnCode: '', quantity: 1, price: 0, gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
-<<<<<<< HEAD
-}
-function calcLine(qty: number, price: number, gst: number) {
-  const sub = qty * price; const gstAmt = Math.round(sub * gst / 100 * 100) / 100;
-  return { subtotal: sub, gstAmount: gstAmt, total: Math.round((sub + gstAmt) * 100) / 100 };
-=======
->>>>>>> 535a1657 (auto-commit for f32c963e-da03-4cd4-a083-1200862db0b9)
 }
 function fmt(n: number) { return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } }
@@ -608,12 +597,6 @@ export default function InvoicesPage() {
                           </div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">HSN</label><input type="text" value={item.hsnCode} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], hsnCode: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="HSN" className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-hsn-${idx}`} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Qty</label><input type="number" min={1} value={item.quantity} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], quantity: parseInt(e.target.value) || 1 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center" data-testid={`invoice-item-qty-${idx}`} /></div>
-<<<<<<< HEAD
-                          <div className="col-span-2"><label className="text-xs text-gray-500 mb-1 block">Rate</label><input type="number" min={0} step={0.01} value={item.price} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-price-${idx}`} /></div>
-                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">GST %</label><select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: parseFloat(e.target.value) }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-gst-${idx}`}>{[0, 5, 12, 18, 28].map(g => <option key={g} value={g}>{g}%</option>)}</select></div>
-                          <div className="col-span-3"><label className="text-xs text-gray-500 mb-1 block">Total</label><div className="px-2 py-1.5 bg-white border border-gray-200 rounded text-sm font-medium text-right">{fmt(lineTotal.total)}</div><div className="text-[10px] text-gray-400 text-right mt-0.5">GST: {fmt(lineTotal.gstAmount)}</div></div>
-                          <div className="col-span-1 pt-5 flex gap-1">
-=======
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Rate</label><input type="number" min={0} step={0.01} value={item.price} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-price-${idx}`} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">GST%</label><select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: parseFloat(e.target.value) }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-gst-${idx}`}>{[0, 5, 12, 18, 28].map(g => <option key={g} value={g}>{g}%</option>)}</select></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Taxable</label><div className="px-1 py-1.5 bg-white border border-gray-200 rounded text-xs text-right">{fmt(gstLine.taxable)}</div></div>
@@ -627,7 +610,6 @@ export default function InvoicesPage() {
                           )}
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Total</label><div className="px-1 py-1.5 bg-white border border-gray-200 rounded text-xs font-semibold text-right">{fmt(gstLine.total)}</div></div>
                           <div className="pt-5 flex gap-1">
->>>>>>> 535a1657 (auto-commit for f32c963e-da03-4cd4-a083-1200862db0b9)
                             {(item.allSpecs.length > 0 || item.customSpecs.length > 0) && <button onClick={() => { const items = [...formData.items]; items[idx] = { ...items[idx], showSpecs: !items[idx].showSpecs }; setFormData(p => ({ ...p, items })); }} className="text-indigo-400 hover:text-indigo-600">{item.showSpecs ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</button>}
                             {formData.items.length > 1 && <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600" data-testid={`remove-invoice-item-${idx}`}><Trash2 className="w-4 h-4" /></button>}
                           </div>
