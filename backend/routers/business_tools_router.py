@@ -471,6 +471,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
             "phone": data.phone,
             "email": data.email.lower() if data.email else None,
             "gstNumber": data.gstNumber,
+            "state": data.state,
             "address": data.address,
             "notes": data.notes,
             "totalOrders": 0,
@@ -527,7 +528,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
             raise HTTPException(status_code=404, detail="Buyer not found")
         
         update_fields = {"updatedAt": datetime.now(timezone.utc)}
-        for field in ["buyerName", "company", "phone", "email", "gstNumber", "address", "notes"]:
+        for field in ["buyerName", "company", "phone", "email", "gstNumber", "state", "address", "notes"]:
             value = getattr(data, field, None)
             if value is not None:
                 if field == "email":

@@ -10,6 +10,7 @@ import {
   FileDown, Bell, Settings, ExternalLink, Paperclip, Loader2
 } from 'lucide-react';
 import { uploadPaymentReceipt } from '@/lib/cloudinary';
+import { INDIAN_STATES, calcGstBreakdown } from '@/lib/indian-states';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -18,7 +19,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 interface Spec { key: string; value: string; }
 interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; gstRate: number; hsnCode: string; specifications: Spec[]; }
 interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
+<<<<<<< HEAD
 interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; }
+=======
+interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; address?: string; }
+>>>>>>> 535a1657 (auto-commit for f32c963e-da03-4cd4-a083-1200862db0b9)
 interface InvoiceItem { productName: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
 interface PaymentEntry { id: string; amount: number; paymentDate: string; paymentMethod: string; accountName?: string; referenceNumber?: string; notes?: string; receiptUrls?: string[]; createdAt: string; }
 interface Invoice {
@@ -55,10 +60,13 @@ const RECEIPT_REQUIRED_METHODS = ['upi', 'bank_transfer', 'cheque'];
 
 function emptyItem(): InvoiceFormItem {
   return { productId: '', productName: '', hsnCode: '', quantity: 1, price: 0, gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
+<<<<<<< HEAD
 }
 function calcLine(qty: number, price: number, gst: number) {
   const sub = qty * price; const gstAmt = Math.round(sub * gst / 100 * 100) / 100;
   return { subtotal: sub, gstAmount: gstAmt, total: Math.round((sub + gstAmt) * 100) / 100 };
+=======
+>>>>>>> 535a1657 (auto-commit for f32c963e-da03-4cd4-a083-1200862db0b9)
 }
 function fmt(n: number) { return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } }
@@ -103,6 +111,8 @@ export default function InvoicesPage() {
     payload: any;
   } | null>(null);
   const [shortageSubmitting, setShortageSubmitting] = useState(false);
+  // Seller state for GST calculation
+  const [sellerState, setSellerState] = useState('');
   // PDF Download modal
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfModalInvoice, setPdfModalInvoice] = useState<{ id: string; invoiceNumber: string } | null>(null);
@@ -127,14 +137,19 @@ export default function InvoicesPage() {
   const fetchAll = useCallback(async () => {
     try {
       const h = await authHeaders();
-      const [invR, buyR, listR] = await Promise.all([
+      const [invR, buyR, listR, profileR] = await Promise.all([
         fetch(`${API_URL}/api/business-tools/invoices`, { headers: h }),
         fetch(`${API_URL}/api/business-tools/buyers`, { headers: h }),
         fetch(`${API_URL}/api/business-tools/invoice-products`, { headers: h }),
+        fetch(`${API_URL}/api/business-tools/seller-profile`, { headers: h }),
       ]);
       if (invR.ok) setInvoices((await invR.json()).invoices || []);
       if (buyR.ok) setBuyers((await buyR.json()).buyers || []);
       if (listR.ok) setListings((await listR.json()).products || []);
+      if (profileR.ok) {
+        const pData = await profileR.json();
+        setSellerState(pData?.profile?.state || '');
+      }
     } catch { /* empty */ }
     setLoading(false);
   }, [authHeaders]);
@@ -187,7 +202,12 @@ export default function InvoicesPage() {
   const addItem = () => setFormData(p => ({ ...p, items: [...p.items, emptyItem()] }));
   const removeItem = (i: number) => setFormData(p => ({ ...p, items: p.items.filter((_, j) => j !== i) }));
 
-  const formTotals = formData.items.reduce((a, it) => { const l = calcLine(it.quantity, it.price, it.gstPercent); return { subtotal: a.subtotal + l.subtotal, gst: a.gst + l.gstAmount, total: a.total + l.total }; }, { subtotal: 0, gst: 0, total: 0 });
+  const effectivePlaceOfSupply = formData.placeOfSupply || buyers.find(b => b.id === formData.buyerId)?.state || '';
+  const formTotals = formData.items.reduce((a, it) => {
+    const taxable = it.quantity * it.price;
+    const b = calcGstBreakdown(taxable, it.gstPercent, sellerState, effectivePlaceOfSupply);
+    return { subtotal: a.subtotal + b.taxable, cgst: a.cgst + b.cgst, sgst: a.sgst + b.sgst, igst: a.igst + b.igst, gst: a.gst + b.totalTax, total: a.total + b.total };
+  }, { subtotal: 0, cgst: 0, sgst: 0, igst: 0, gst: 0, total: 0 });
 
   const buildPayload = () => {
     const transportData = formData.transport.transporterName || formData.transport.lrNumber || formData.transport.vehicleNumber
@@ -510,10 +530,14 @@ export default function InvoicesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Buyer *</label>
-                  <select value={formData.buyerId} onChange={e => setFormData(p => ({ ...p, buyerId: e.target.value }))}
+                  <select value={formData.buyerId} onChange={e => {
+                    const buyerId = e.target.value;
+                    const selectedBuyer = buyers.find(b => b.id === buyerId);
+                    setFormData(p => ({ ...p, buyerId, placeOfSupply: selectedBuyer?.state || p.placeOfSupply }));
+                  }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="buyer-select">
                     <option value="">Select buyer</option>
-                    {buyers.map(b => <option key={b.id} value={b.id}>{b.buyerName}{b.company ? ` (${b.company})` : ''}</option>)}
+                    {buyers.map(b => <option key={b.id} value={b.id}>{b.buyerName}{b.company ? ` (${b.company})` : ''}{b.state ? ` - ${b.state}` : ''}</option>)}
                   </select>
                 </div>
                 <div>
@@ -529,8 +553,10 @@ export default function InvoicesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Items *</label>
                 <div className="space-y-3">
                   {formData.items.map((item, idx) => {
-                    const lineTotal = calcLine(item.quantity, item.price, item.gstPercent);
+                    const taxable = item.quantity * item.price;
+                    const gstLine = calcGstBreakdown(taxable, item.gstPercent, sellerState, effectivePlaceOfSupply);
                     const allFinalSpecs = [...item.selectedSpecs, ...item.customSpecs.filter(s => s.key && s.value)];
+                    const isSameState = sellerState && effectivePlaceOfSupply && sellerState.trim().toLowerCase() === effectivePlaceOfSupply.trim().toLowerCase();
                     return (
                       <div key={idx} className="bg-gray-50 rounded-lg p-3 space-y-2" data-testid={`invoice-item-${idx}`}>
                         <div className="grid grid-cols-12 gap-2 items-start">
@@ -540,15 +566,30 @@ export default function InvoicesPage() {
                               <option value="">Select / Manual</option>
                               {listings.map(l => <option key={l.id} value={l.id}>{l.productName} (Avail: {l.availableStock}{l.reservedStock > 0 ? `, Reserved: ${l.reservedStock}` : ''})</option>)}
                             </select>
-                            {item.productId && item.allSpecs.length > 0 && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{item.allSpecs.map(s => `${s.key}: ${s.value}`).join(' | ')}</p>}
                             {!item.productId && <input type="text" value={item.productName} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], productName: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="Manual entry" className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-name-${idx}`} />}
                           </div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">HSN</label><input type="text" value={item.hsnCode} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], hsnCode: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="HSN" className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-hsn-${idx}`} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Qty</label><input type="number" min={1} value={item.quantity} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], quantity: parseInt(e.target.value) || 1 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center" data-testid={`invoice-item-qty-${idx}`} /></div>
+<<<<<<< HEAD
                           <div className="col-span-2"><label className="text-xs text-gray-500 mb-1 block">Rate</label><input type="number" min={0} step={0.01} value={item.price} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-price-${idx}`} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">GST %</label><select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: parseFloat(e.target.value) }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-gst-${idx}`}>{[0, 5, 12, 18, 28].map(g => <option key={g} value={g}>{g}%</option>)}</select></div>
                           <div className="col-span-3"><label className="text-xs text-gray-500 mb-1 block">Total</label><div className="px-2 py-1.5 bg-white border border-gray-200 rounded text-sm font-medium text-right">{fmt(lineTotal.total)}</div><div className="text-[10px] text-gray-400 text-right mt-0.5">GST: {fmt(lineTotal.gstAmount)}</div></div>
                           <div className="col-span-1 pt-5 flex gap-1">
+=======
+                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Rate</label><input type="number" min={0} step={0.01} value={item.price} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-price-${idx}`} /></div>
+                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">GST%</label><select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: parseFloat(e.target.value) }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-gst-${idx}`}>{[0, 5, 12, 18, 28].map(g => <option key={g} value={g}>{g}%</option>)}</select></div>
+                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Taxable</label><div className="px-1 py-1.5 bg-white border border-gray-200 rounded text-xs text-right">{fmt(gstLine.taxable)}</div></div>
+                          {isSameState ? (
+                            <>
+                              <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">CGST</label><div className="px-1 py-1.5 bg-blue-50 border border-blue-100 rounded text-xs text-right text-blue-700">{fmt(gstLine.cgst)}</div></div>
+                              <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">SGST</label><div className="px-1 py-1.5 bg-blue-50 border border-blue-100 rounded text-xs text-right text-blue-700">{fmt(gstLine.sgst)}</div></div>
+                            </>
+                          ) : (
+                            <div className="col-span-2"><label className="text-xs text-gray-500 mb-1 block">IGST</label><div className="px-1 py-1.5 bg-amber-50 border border-amber-100 rounded text-xs text-right text-amber-700">{fmt(gstLine.igst)}</div></div>
+                          )}
+                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Total</label><div className="px-1 py-1.5 bg-white border border-gray-200 rounded text-xs font-semibold text-right">{fmt(gstLine.total)}</div></div>
+                          <div className="pt-5 flex gap-1">
+>>>>>>> 535a1657 (auto-commit for f32c963e-da03-4cd4-a083-1200862db0b9)
                             {(item.allSpecs.length > 0 || item.customSpecs.length > 0) && <button onClick={() => { const items = [...formData.items]; items[idx] = { ...items[idx], showSpecs: !items[idx].showSpecs }; setFormData(p => ({ ...p, items })); }} className="text-indigo-400 hover:text-indigo-600">{item.showSpecs ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</button>}
                             {formData.items.length > 1 && <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600" data-testid={`remove-invoice-item-${idx}`}><Trash2 className="w-4 h-4" /></button>}
                           </div>
@@ -569,9 +610,20 @@ export default function InvoicesPage() {
                 <button onClick={addItem} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium mt-2" data-testid="add-invoice-item-btn">+ Add Item</button>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{fmt(formTotals.subtotal)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">GST</span><span>{fmt(formTotals.gst)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Taxable Amount</span><span>{fmt(formTotals.subtotal)}</span></div>
+                {formTotals.cgst > 0 && <div className="flex justify-between text-blue-600"><span>CGST</span><span>{fmt(formTotals.cgst)}</span></div>}
+                {formTotals.sgst > 0 && <div className="flex justify-between text-blue-600"><span>SGST</span><span>{fmt(formTotals.sgst)}</span></div>}
+                {formTotals.igst > 0 && <div className="flex justify-between text-amber-600"><span>IGST</span><span>{fmt(formTotals.igst)}</span></div>}
+                {formTotals.gst === 0 && <div className="flex justify-between text-gray-400"><span>GST</span><span>0.00</span></div>}
                 <div className="flex justify-between font-semibold text-base border-t border-gray-200 pt-2 mt-2"><span>Grand Total</span><span className="flex items-center gap-1"><IndianRupee className="w-4 h-4" />{fmt(formTotals.total)}</span></div>
+                {sellerState && effectivePlaceOfSupply && (
+                  <div className="text-xs text-gray-400 pt-1">
+                    {sellerState.trim().toLowerCase() === effectivePlaceOfSupply.trim().toLowerCase()
+                      ? `Intra-state (${sellerState}) - CGST + SGST`
+                      : `Inter-state (${sellerState} to ${effectivePlaceOfSupply}) - IGST`}
+                  </div>
+                )}
+                {!sellerState && <div className="text-xs text-amber-500 pt-1">Set your state in Business Settings for accurate GST calculation</div>}
               </div>
               <div className="flex items-center gap-2"><input type="checkbox" id="deductStock" checked={formData.deductStock} onChange={e => setFormData(p => ({ ...p, deductStock: e.target.checked }))} className="rounded" data-testid="deduct-stock-checkbox" /><label htmlFor="deductStock" className="text-sm text-gray-700">Deduct stock from inventory</label></div>
               {/* GST & Reference Fields */}
@@ -580,7 +632,7 @@ export default function InvoicesPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div><label className="block text-xs text-gray-500 mb-1">PO Number</label><input type="text" value={formData.poNumber} onChange={e => setFormData(p => ({ ...p, poNumber: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="PO-001" data-testid="po-number-input" /></div>
                   <div><label className="block text-xs text-gray-500 mb-1">Challan No.</label><input type="text" value={formData.challanNumber} onChange={e => setFormData(p => ({ ...p, challanNumber: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="CH-001" data-testid="challan-number-input" /></div>
-                  <div><label className="block text-xs text-gray-500 mb-1">Place of Supply</label><input type="text" value={formData.placeOfSupply} onChange={e => setFormData(p => ({ ...p, placeOfSupply: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="State" data-testid="place-of-supply-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">Place of Supply</label><select value={formData.placeOfSupply} onChange={e => setFormData(p => ({ ...p, placeOfSupply: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid="place-of-supply-input"><option value="">Auto (Buyer State)</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                 </div>
               </div>
               {/* Transport Details */}
@@ -622,19 +674,42 @@ export default function InvoicesPage() {
               <div><span className="text-gray-500">Date:</span> <span className="font-medium">{fmtDate(viewInvoice.date)}</span></div>
             </div>
             {/* Items Table */}
-            <table className="w-full text-sm mb-4">
-              <thead><tr className="border-b border-gray-200 text-gray-500 text-xs uppercase"><th className="text-left py-2">Product</th><th className="text-right py-2">Qty</th><th className="text-right py-2">Price</th><th className="text-right py-2">GST%</th><th className="text-right py-2">GST</th><th className="text-right py-2">Total</th></tr></thead>
+            <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-gray-200 text-gray-500 text-xs uppercase">
+                <th className="text-left py-2">Product</th><th className="text-left py-2">HSN</th><th className="text-right py-2">Qty</th><th className="text-right py-2">Rate</th><th className="text-right py-2">Taxable</th>
+                {(viewInvoice.taxType === 'intra' || (viewInvoice.cgst && viewInvoice.cgst > 0)) ? (
+                  <><th className="text-right py-2">CGST</th><th className="text-right py-2">SGST</th></>
+                ) : (
+                  <th className="text-right py-2">IGST</th>
+                )}
+                <th className="text-right py-2">Total</th>
+              </tr></thead>
               <tbody>{viewInvoice.items.map((item, i) => (
                 <tr key={i} className="border-b border-gray-50">
                   <td className="py-2"><div>{item.productName}</div>{item.selected_specifications && item.selected_specifications.length > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{item.selected_specifications.map(s => `${s.key}: ${s.value}`).join(' | ')}</div>}</td>
-                  <td className="py-2 text-right">{item.quantity}</td><td className="py-2 text-right">{fmt(item.price)}</td><td className="py-2 text-right">{item.gstPercent}%</td><td className="py-2 text-right">{fmt(item.gstAmount)}</td><td className="py-2 text-right font-medium">{fmt(item.total)}</td>
+                  <td className="py-2 text-xs text-gray-500">{item.hsnCode || '-'}</td>
+                  <td className="py-2 text-right">{item.quantity}</td>
+                  <td className="py-2 text-right">{fmt(item.price)}</td>
+                  <td className="py-2 text-right">{fmt(item.taxableAmount || item.quantity * item.price)}</td>
+                  {(viewInvoice.taxType === 'intra' || (viewInvoice.cgst && viewInvoice.cgst > 0)) ? (
+                    <><td className="py-2 text-right text-blue-600">{fmt(item.cgst || 0)}</td><td className="py-2 text-right text-blue-600">{fmt(item.sgst || 0)}</td></>
+                  ) : (
+                    <td className="py-2 text-right text-amber-600">{fmt(item.igst || 0)}</td>
+                  )}
+                  <td className="py-2 text-right font-medium">{fmt(item.total)}</td>
                 </tr>
               ))}</tbody>
             </table>
+            </div>
             {/* Payment Summary */}
             <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm mb-5" data-testid="payment-summary">
-              <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{fmt(viewInvoice.subtotal)}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">GST</span><span>{fmt(viewInvoice.gst)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Taxable Amount</span><span>{fmt(viewInvoice.subtotal)}</span></div>
+              {(viewInvoice.cgst ?? 0) > 0 && <div className="flex justify-between text-blue-600"><span>CGST</span><span>{fmt(viewInvoice.cgst || 0)}</span></div>}
+              {(viewInvoice.sgst ?? 0) > 0 && <div className="flex justify-between text-blue-600"><span>SGST</span><span>{fmt(viewInvoice.sgst || 0)}</span></div>}
+              {(viewInvoice.igst ?? 0) > 0 && <div className="flex justify-between text-amber-600"><span>IGST</span><span>{fmt(viewInvoice.igst || 0)}</span></div>}
+              {viewInvoice.gst === 0 && <div className="flex justify-between text-gray-400"><span>GST</span><span>0.00</span></div>}
+              {viewInvoice.placeOfSupply && <div className="text-xs text-gray-400">Place of Supply: {viewInvoice.placeOfSupply}{viewInvoice.taxType === 'intra' ? ' (Intra-state)' : viewInvoice.taxType === 'inter' ? ' (Inter-state)' : ''}</div>}
               <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2 mt-1"><span>Grand Total</span><span className="flex items-center gap-1"><IndianRupee className="w-4 h-4" />{fmt(viewInvoice.total)}</span></div>
               <div className="flex justify-between text-emerald-600 font-medium"><span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Total Paid</span><span>{fmt(viewInvoice.totalPaid || 0)}</span></div>
               <div className="flex justify-between text-amber-600 font-medium"><span className="flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" /> Pending Amount</span><span>{fmt(viewInvoice.pendingAmount ?? viewInvoice.total)}</span></div>

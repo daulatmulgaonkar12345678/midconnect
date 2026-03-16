@@ -17,6 +17,7 @@ import {
   Mail,
   MapPin
 } from 'lucide-react';
+import { INDIAN_STATES } from '@/lib/indian-states';
 
 interface Buyer {
   id: string;
@@ -25,6 +26,7 @@ interface Buyer {
   phone?: string;
   email?: string;
   gstNumber?: string;
+  state?: string;
   address?: string;
   notes?: string;
   totalOrders: number;
@@ -51,6 +53,7 @@ export default function BuyersPage() {
     phone: '',
     email: '',
     gstNumber: '',
+    state: '',
     address: '',
     notes: ''
   });
@@ -83,7 +86,7 @@ export default function BuyersPage() {
 
   const openCreateModal = () => {
     setEditingBuyer(null);
-    setFormData({ buyerName: '', company: '', phone: '', email: '', gstNumber: '', address: '', notes: '' });
+    setFormData({ buyerName: '', company: '', phone: '', email: '', gstNumber: '', state: '', address: '', notes: '' });
     setShowModal(true);
   };
 
@@ -95,6 +98,7 @@ export default function BuyersPage() {
       phone: buyer.phone || '',
       email: buyer.email || '',
       gstNumber: buyer.gstNumber || '',
+      state: buyer.state || '',
       address: buyer.address || '',
       notes: buyer.notes || ''
     });
@@ -295,6 +299,12 @@ export default function BuyersPage() {
             {buyer.gstNumber && (
               <div className="mt-3 pt-3 border-t">
                 <span className="text-xs font-medium text-gray-500">GST: {buyer.gstNumber}</span>
+                {buyer.state && <span className="text-xs text-gray-400 ml-2">| {buyer.state}</span>}
+              </div>
+            )}
+            {!buyer.gstNumber && buyer.state && (
+              <div className="mt-3 pt-3 border-t">
+                <span className="text-xs font-medium text-gray-500">{buyer.state}</span>
               </div>
             )}
           </div>
@@ -381,6 +391,19 @@ export default function BuyersPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   placeholder="22AAAAA0000A1Z5"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                <select
+                  value={formData.state}
+                  onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  data-testid="buyer-state-select"
+                >
+                  <option value="">Select State</option>
+                  {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
 
               <div>

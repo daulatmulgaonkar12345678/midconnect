@@ -1431,6 +1431,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "state": profile.get("state", ""),
                 "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
                 "gstNumber": gst.get("number", ""),
+                "gstStatus": gst.get("status", "enabled"),
             },
             "billingSettings": {
                 "bankName": billing.get("bankName", ""),
@@ -1488,6 +1489,12 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             if user_doc.get("gst") is None:
                 await db.users.update_one({"_id": user["_id"]}, {"$set": {"gst": {}}})
             profile_update["gst.number"] = gst_number.strip()
+
+        gst_status = data.get("gstStatus")
+        if gst_status is not None:
+            if user_doc.get("gst") is None:
+                await db.users.update_one({"_id": user["_id"]}, {"$set": {"gst": {}}})
+            profile_update["gst.status"] = gst_status.strip()
 
         # Billing Settings (only update if provided)
         billing_data = data.get("billingSettings")

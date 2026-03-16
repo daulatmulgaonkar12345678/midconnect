@@ -8,13 +8,14 @@ import {
   CreditCard, FileText, Upload, Palette, Trash2
 } from 'lucide-react';
 import { uploadSellerProductImage } from '@/lib/cloudinary';
+import { INDIAN_STATES } from '@/lib/indian-states';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface SellerProfile {
   businessName: string; phone: string; email: string;
   address: string; city: string; state: string;
-  sellerLogoUrl: string; gstNumber: string;
+  sellerLogoUrl: string; gstNumber: string; gstStatus: string;
 }
 
 interface BillingSettings {
@@ -48,7 +49,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('profile');
-  const [profile, setProfile] = useState<SellerProfile>({ businessName: '', phone: '', email: '', address: '', city: '', state: '', sellerLogoUrl: '', gstNumber: '' });
+  const [profile, setProfile] = useState<SellerProfile>({ businessName: '', phone: '', email: '', address: '', city: '', state: '', sellerLogoUrl: '', gstNumber: '', gstStatus: 'enabled' });
   const [billing, setBilling] = useState<BillingSettings>({ bankName: '', accountNumber: '', accountName: '', ifscCode: '', branch: '', upiId: '', invoiceTerms: '', invoiceBackgroundImage: '', companyLogoUrl: '' });
   const [catalogSettings, setCatalogSettings] = useState<CatalogSettings>({ showImage: true, showName: true, showCategory: true, showSpecification: true, showDescription: true, showPrice: true, showUnit: true, showMoq: true });
   const [showPreview, setShowPreview] = useState<'logo' | 'bg' | null>(null);
@@ -163,11 +164,12 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div><label className="block text-xs font-medium text-gray-500 mb-1">Business Name</label><input type="text" value={profile.businessName} onChange={e => setProfile(p => ({ ...p, businessName: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="business-name-input" /></div>
             <div><label className="block text-xs font-medium text-gray-500 mb-1">GSTIN</label><input type="text" value={profile.gstNumber} onChange={e => setProfile(p => ({ ...p, gstNumber: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="22AAAAA0000A1Z5" data-testid="gstin-input" /></div>
+            <div className="flex items-center gap-3"><label className="text-xs font-medium text-gray-500">GST Enabled</label><button type="button" data-testid="gst-toggle" onClick={() => setProfile(p => ({ ...p, gstStatus: p.gstStatus === 'enabled' ? 'disabled' : 'enabled' }))} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${profile.gstStatus === 'enabled' ? 'bg-green-500' : 'bg-gray-300'}`}><span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${profile.gstStatus === 'enabled' ? 'translate-x-6' : 'translate-x-1'}`} /></button><span className="text-xs text-gray-400">{profile.gstStatus === 'enabled' ? 'Tax calculations active' : 'No GST on invoices'}</span></div>
             <div><label className="block text-xs font-medium text-gray-500 mb-1">Phone</label><input type="text" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="phone-input" /></div>
             <div><label className="block text-xs font-medium text-gray-500 mb-1">Email</label><input type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="email-input" /></div>
             <div className="sm:col-span-2"><label className="block text-xs font-medium text-gray-500 mb-1">Address</label><textarea value={profile.address} onChange={e => setProfile(p => ({ ...p, address: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} data-testid="address-input" /></div>
             <div><label className="block text-xs font-medium text-gray-500 mb-1">City</label><input type="text" value={profile.city} onChange={e => setProfile(p => ({ ...p, city: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="city-input" /></div>
-            <div><label className="block text-xs font-medium text-gray-500 mb-1">State</label><input type="text" value={profile.state} onChange={e => setProfile(p => ({ ...p, state: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="state-input" /></div>
+            <div><label className="block text-xs font-medium text-gray-500 mb-1">State</label><select value={profile.state} onChange={e => setProfile(p => ({ ...p, state: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="state-input"><option value="">Select State</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
           </div>
         </div>
       )}

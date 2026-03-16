@@ -229,7 +229,7 @@ def init_product_share_router(db, verify_token_func):
         # Build WhatsApp link if requested
         whatsapp_link = None
         if data.sendWhatsApp and data.recipientPhone:
-            app_url = os.environ.get("FRONTEND_URL", "https://low-stock-admin.preview.emergentagent.com")
+            app_url = os.environ.get("FRONTEND_URL", "https://invoice-gst-calc.preview.emergentagent.com")
             doc_url = f"{app_url}/api/doc/{token}"
             msg = f"Hello,\n\nPlease find our product catalog below.\n\nDownload here:\n{doc_url}\n\nRegards,\n{seller_info['businessName']}"
             phone = data.recipientPhone.replace("+", "").replace(" ", "").replace("-", "")
@@ -285,7 +285,7 @@ def init_product_share_router(db, verify_token_func):
             "createdAt": now,
         })
 
-        app_url = os.environ.get("FRONTEND_URL", "https://low-stock-admin.preview.emergentagent.com")
+        app_url = os.environ.get("FRONTEND_URL", "https://invoice-gst-calc.preview.emergentagent.com")
         doc_url = f"{app_url}/api/doc/{token}"
 
         templates = {

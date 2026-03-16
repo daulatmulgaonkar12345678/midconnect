@@ -1,148 +1,179 @@
 <analysis>**original_problem_statement:**
-The user is building a comprehensive ERP/Business Tools system. The initial phase focused on core modules like Invoicing, Inventory, and Purchasing. Recent development has centered on adding advanced features and fixing bugs that emerged from these additions.
+The user wants to upgrade the ERP system to support Indian GST-compliant billing and generate professional, standardized reports similar to platforms like Zoho Inventory, Tally, and Vyapar.
 
 **PRODUCT REQUIREMENTS:**
-1.  **Fix Admin Permissions:** Admins are currently blocked from viewing the Low Stock Alerts page due to a 403 Permission Denied error. This needs to be fixed so admins can view alerts from all sellers.
-2.  **Export/Import in Reports:** The user requested the ability to export all reports (Sales, Purchase, Inventory, etc.) to CSV, Excel, and PDF, and to import bulk data (Products, Inventory, etc.) via CSV/Excel templates.
-3.  **Share Product Catalog Feature:** A new feature was requested to allow sellers to select products from their inventory, generate a catalog (PDF/Excel), and share it with specific buyers and suppliers, including an option to send it via WhatsApp using a secure, expiring link.
-4.  **Fix Catalog Generation:** Bugs were reported where the generated product catalogs had missing data fields () and no images.
-5.  **Fix WhatsApp Link Errors:** Secure document links () sent via WhatsApp were returning a 500 Internal Server Error.
+1.  **GST Billing Engine:**
+    *   Sellers must be able to configure their business GST details (GSTIN, State).
+    *   Products must have configurable GST rates (0%, 5%, 12%, 18%, 28%) and HSN codes.
+    *   Customer records must include their state and GSTIN.
+    *   The system must automatically calculate taxes (CGST/SGST vs. IGST) based on a comparison between the seller's state and the buyer's state (Place of Supply). The seller should not manually select the tax type.
+2.  **GST-Compliant Invoices:**
+    *   The invoice creation UI must show columns for HSN, Taxable Amount, CGST, SGST, IGST, and Total.
+    *   The generated PDF invoice must be GST-compliant, including all necessary business/customer details and a full tax breakdown.
+3.  **Standardized & GST Reports:**
+    *   Create a GST Summary Report (similar to GSTR-1) showing taxable amounts and tax totals grouped by GST rate.
+    *   Standardize existing reports (Sales, Inventory) and add new ones (Profit, Low Stock, Stock Movement) with professional layouts and relevant data columns.
+4.  **Pending Orders (Backorder) System:**
+    *   During invoice creation, if the requested quantity exceeds available stock, the system should allow for partial fulfillment.
+    *   The remaining quantity should be automatically placed into a Pending Order.
+    *   A new Pending Orders dashboard should be created for sellers to manage and fulfill these backorders when stock is replenished.
+    *   Inventory display should be updated to show Total Stock, Reserved Stock (for pending orders), and Available Stock.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack B2B ERP application with a FastAPI backend and React frontend. The application includes modules for seller onboarding, GST-compliant invoicing, payment tracking, reports, analytics, notifications, and a comprehensive inventory/purchasing system.
-
-In this session, the following major features were implemented and tested:
--   **GST Invoice Checkbox Modal:** A UI enhancement to select and download multiple invoice copies as a single merged PDF.
--   **Company Branding Settings:** A new section in Business Settings allowing sellers to upload a company logo and a background watermark image for their invoices.
--   **Reports Export/Import:** A complete data exchange module was built, adding export buttons (CSV, Excel, PDF) to all reports and an import modal for bulk data upload with template downloads.
--   **Share Product Catalog:** A new feature in the inventory module for sellers to select products, generate a catalog (PDF/Excel), and share it with buyers/suppliers via a secure link, including a Send via WhatsApp function.
-
-Several critical bugs related to these new features were also fixed, including a Cloudinary upload issue, a 500 error on secure document links, and incorrect data population in generated catalogs.
+A full-stack B2B ERP application with a FastAPI backend and React frontend. In this session, the agent completed several major tasks:
+-   **Admin Permission Fix:** Resolved a 403 error for admins on the Low Stock Alerts page.
+-   **Permissions Refactor:** Centralized duplicated permission and authentication logic from 12 different routers into a single shared utility (), significantly improving code consistency and maintainability.
+-   **Bug Fixes:** Fixed a critical bug in the document sharing feature () that was causing a Document reference missing error for shared invoices.
+-   **PO WhatsApp Sharing:** Implemented a Send via WhatsApp feature for Purchase Orders, which generates a secure, expiring PDF link, consistent with existing invoice/catalog sharing.
+-   **Pending Orders System:** Implemented a complete backorder system. When creating an invoice with insufficient stock, the system now partially fulfills the order, creates a Pending Order for the remainder, and reserves the stock. This included backend logic, new API endpoints, and frontend UI for a Pending Orders dashboard and updates to the inventory page.
+-   **GST Engine (In Progress):** Began implementing the GST-compliant billing engine. Backend models were updated, new constants and API endpoints for GST configuration were created, and the core invoice creation logic was heavily modified to support automatic tax calculation. Frontend work on the invoice form was started.
 
 **Last working item**:
--   **Last item agent was working:** Fixing a 403 Permission Denied error for admin users on the Low Stock Alerts page. The agent had successfully identified the backend endpoint and the specific permission check causing the issue but had not yet implemented the fix.
+-   **Last item agent was working:** Implementing **Batch 1 (Core GST Engine)** of the GST-compliant billing and reporting system. The agent had just performed a large number of parallel file modifications to both the backend (invoice router) and the frontend (invoice creation page) to support the new automatic tax calculation logic.
 -   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
--   **User Testing Done:** N
 -   **Which testing method agent to use?** both
+-   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Fix Permission Denied for Admin in Low Stock Alerts (P0)**
-    -   **Description:** The API endpoint  currently only allows users with the  role, causing a 403 Forbidden error for admins.
-    -   **Attempted fixes:** None yet. The agent was investigating the code.
+-   **Issue 1: Complete and Test GST Billing Engine (P0)**
+    -   **Description:** The implementation of the core GST engine (Batch 1) is incomplete and untested. The backend has been modified to auto-calculate CGST/SGST/IGST, but the frontend UI is only partially updated and the end-to-end flow is not verified.
+    -   **Attempted fixes:** The agent has laid the foundation by creating a  constant file, adding a  endpoint, and overhauling the  function in . Frontend work was started on .
     -   **Next debug checklist:**
-        1.  In , modify the permission check to .
-        2.  Update the MongoDB query within that route: if the user is an admin, the query should be  (empty) to fetch alerts for all sellers; otherwise, it should remain .
-        3.  Update the frontend at  to conditionally render the UI based on user role (e.g., hide the Order Material button and show the seller's name for each alert if the user is an admin).
-    -   **Why fix this issue and what will be achieved with the fix?** To enable administrators to monitor low stock levels across the entire platform, which is a key requirement for their role.
+        1.  **Finalize Frontend UI:**
+            -   In , complete the invoice item table to correctly display columns for , , , , , and .
+            -   Ensure the invoice totals section correctly sums up all tax components and the grand total.
+        2.  **Update Data Entry Forms:**
+            -   Modify the buyer creation/editing modal to include a dropdown for  (using the new states API).
+            -   Modify the business settings page to ensure the seller's  is captured and stored.
+        3.  **End-to-End Testing:**
+            -   **Test Case 1 (Same State):** Create an invoice where the seller's state and buyer's state are the same (e.g., Maharashtra). Verify that  and  are calculated and  is zero.
+            -   **Test Case 2 (Interstate):** Create an invoice where the states are different (e.g., Seller: Maharashtra, Buyer: Gujarat). Verify that  is calculated and / are zero.
+            -   Confirm the correct  (buyer's state) is saved with the invoice.
+    -   **Why fix this issue and what will be achieved with the fix?** Completing this is the core requirement of the user's latest request and will enable GST-compliant billing.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** Both
     -   **Blocked on other issue:** None
 
+-   **Issue 2: Backend Lint Error  (P2)**
+    -   **Description:** The lint command reports an unused  import in files requiring authentication. This is a pre-existing low-priority issue.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** Y
+
 **In progress Task List**:
--   None.
+-   **Task 1: Complete GST Billing Engine Implementation (P0)**
+    -   **Where to resume:** Finalize the frontend UI changes in  and conduct end-to-end testing of the new GST calculation logic.
+    -   **What will be achieved with this?** A functional, automatic GST calculation system for invoices.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Both
+    -   **Blocked on something:** None
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
+    -   **P1: GST System (Batch 2):**
+        -   Implement the GST-compliant PDF invoice layout.
+        -   Create the GST Summary Report (GSTR-1 format).
+        -   Add the Place of Supply field to the invoice PDF.
+    -   **P1: Standardize All Reports:**
+        -   Implement professional Sales, Inventory, Profit, Low Stock, and Stock Movement reports as per the user's specification.
+    -   **P1: Seller Reminder Controls:** Allow sellers to configure smart reminder schedules for invoices.
     -   **P1: Admin View for Reports:** Enhance the reports module to allow admin users to view aggregated data for all sellers.
-    -   **P1: Seller Reminder Controls:** Allow sellers to configure the smart reminder schedule for invoices (e.g., reminder days, custom message templates).
 -   **Future Tasks:**
-    -   **P1:** Refactor the inquiry modal on the product page to use the shared .
-    -   **P1:** Implement an advanced token-based search system.
+    -   **P2:** Refactor the inquiry modal on the product page to use the shared .
+    -   **P2:** Implement an advanced token-based search system.
     -   **P2:** Create an admin search insights dashboard.
     -   **P2:** Add Redis caching for global performance improvement.
-    -   **P2:** Refactor the monolithic  into smaller, modular routers.
-    -   **P2:** Clean up unused Pydantic models in .
-    -   **P2:** Implement automatic email reminders.
     -   **P2:** Upgrade WhatsApp sharing from  links to a full WhatsApp Business API integration.
 
 **Completed work in this session**
--   **Reports Export/Import (DONE):** Implemented a full data exchange feature, allowing users to export reports (CSV, Excel, PDF) and import bulk data for products, inventory, etc.
--   **Share Product Catalog Feature (DONE):** Built a system for sellers to select inventory products and share a customized catalog (PDF/Excel) with buyers/suppliers via a secure, expiring link, including a Send via WhatsApp option.
--   **Company Branding Settings (DONE):** Added a new Branding tab in Business Settings for sellers to upload their company logo and a background image for invoices.
--   **Bug Fix - Catalog Data Population (DONE):** Corrected the backend aggregation pipeline to ensure all product fields (specifications, description, MOQ, images) are correctly populated in generated catalogs.
--   **Bug Fix - 500 Error on Secure Links (DONE):** Resolved a  in the  endpoint caused by comparing naive and aware datetime objects, making shared document links functional.
--   **Bug Fix - Cloudinary Upload (DONE):** Fixed a 400 Bad Request error on the settings page by ensuring the correct Cloudinary upload preset was used.
--   **GST Invoice Checkbox Modal (DONE):** Replaced four separate download buttons on the invoice page with a single button and a modal to select and merge different invoice copies into one PDF.
+-   **Pending Orders (Backorder) System (DONE):** Implemented a full backorder system for invoices with insufficient stock, including partial fulfillment, a new  collection, a management dashboard, and inventory reservation display.
+-   **Permissions Logic Refactor (DONE):** Centralized duplicated authentication/permission logic from 12 backend routers into a single, reusable utility (), fixing multiple role-based access bugs.
+-   **Purchase Order WhatsApp Sharing (DONE):** Added a Send via WhatsApp feature to Purchase Orders, generating a secure, expiring PDF link.
+-   **Bug Fix - Invoice Sharing Link (DONE):** Resolved a critical bug where shared invoice links failed with a Document reference missing error by fixing how the backend endpoint receives the .
+-   **Bug Fix - Admin Low Stock Alerts (DONE):** Fixed a 403 Permission Denied error, allowing admins to view the Low Stock Alerts page for all sellers.
 
 **Earlier issues found/mentioned but not fixed**
 -   **Issue 1: Backend Lint Error **
-    -   **Debug checklist:** The lint command reports an unused  import in files requiring authentication. This is a pre-existing low-priority issue.
-    -   **Why to solve this issue and what will be achieved with this?** Improves code cleanliness and reduces potential confusion for future development.
+    -   **Debug checklist:** The lint command reports an unused  import.
+    -   **Why to solve this issue and what will be achieved with this?** Improves code cleanliness.
     -   **Should Test frontend/backend/both after fix:** Backend
     -   **Is recurring issue?** Y
 
 **Known issue recurrence from previous fork**
--   **Issue recurrence in previous fork:**  package being added to , which caused deployment failures.
+-   **Issue recurrence in previous fork:**  package being added to .
 -   **Recurrence count:** 1
--   **Status:** RESOLVED. This issue was monitored and actively prevented during this session. The agent correctly checked  before finishing tasks.
+-   **Status:** RESOLVED. The agent correctly checked  before finishing tasks and the issue did not recur.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, MongoDB, Pydantic,  (for PDF),  (for PDF merging), **** & **** (for CSV/Excel).
--   **Frontend:** React, Next.js, TypeScript, Tailwind CSS, Recharts, **** & **** (for client-side file generation).
--   **File Storage:** Cloudinary for logos, backgrounds, and temporary catalog files.
--   **Data Sharing:** A secure token-based system ( collection) for generating temporary, expiring links to shared documents.
+-   **Backend:** FastAPI, MongoDB, Pydantic.
+-   **Frontend:** React, Next.js, TypeScript, Tailwind CSS.
+-   **Permissions Refactor:** Abstracting repeated permission checks into a centralized, reusable utility () to enforce role-based access control consistently across all API routers.
+-   **Backorder System:** A state management system involving partial object creation (invoice) and deferred object creation (pending order) based on inventory checks, with stock reservation to prevent overselling.
+-   **Automatic Tax Engine:** Conditional logic that determines tax types (CGST/SGST vs. IGST) based on geographical data (seller vs. buyer state) rather than user input.
 
 **key DB schema**
--   **document_shares:** (New Collection) 
--   **seller_profiles:** (in  collection) - Extended  object with . Added a new  sub-document.
+-   **pending_orders:** (New Collection) 
+-   **users:** (in  collection) -  field added to buyer profiles.
+-   **invoices:** (in  collection) - Item list now includes , ,  breakdown. Top-level document includes .
+-   **inventory_listings:** (in  collection) - Enriched with a calculated  field.
 
 **changes in tech stack**
--   **Backend:** Added  and  to .
--   **Frontend:** Added , , and  to .
+-   None.
 
 **All files of reference**
--    (File to be modified for the current issue)
--    (New file for export/import)
--    (New file for catalog sharing)
--    (Modified to register new routers and fix doc link)
--    (Modified for catalog feature)
--    (Modified for export/import)
--    (Modified for new settings tabs)
--    (Modified for new PDF modal)
+-    (Heavily modified for GST and backorders)
+-    (Heavily modified for GST and backorders)
+-    (New, critical file for authentication)
+-    (New file for backorder feature)
+-    (New page for backorder feature)
+-    (New file for GST feature)
+-    (Modified for permissions refactor and WhatsApp sharing)
+-   All other router files in  were modified to use the new  utility.
 
 **Areas that need refactoring**:
--    is becoming a monolith. The new routers helped, but it still contains multiple direct endpoint definitions that could be moved to dedicated router files.
--   The product detail page still has an inline inquiry modal that should be replaced with a reusable component.
+-   The GST and backorder logic within  is becoming very complex. It could be beneficial to extract this business logic into dedicated service files (e.g., , ) to keep the router lean.
 
 **key api endpoints**
--    (To be fixed for admin role)
--    (New endpoint for exporting report data)
--    (New endpoint for importing bulk data)
--    (New endpoint for creating and sharing product catalogs)
--    (Fixed to correctly redirect to shared documents)
+-    (Modified to handle partial fulfillment, backorders, and auto-GST calculation)
+-    (New endpoint to provide frontend with GST config like the list of states)
+-    (New endpoint for the pending orders dashboard)
+-    (New endpoint to fulfill backorders)
+-    (Modified to generate secure PDF links)
+-    (Fixed to correctly handle  from JSON body)
 
 **Critical Info for New Agent**
-1.  **Immediate Priority:** Your first and only pending task is to fix the **403 Permission Denied error for admins** on the Low Stock Alerts page. The investigation is complete; you need to implement the fix.
-2.  **Execution Plan:**
-    *   Modify the backend route in  to allow the admin role and adjust the query to fetch data for all sellers if the user is an admin.
-    *   Update the frontend UI in  to conditionally render content for the admin view (e.g., show seller name, hide action buttons).
-3.  **Deployment Precaution:** After fixing, and before finishing, remember to run . If it appears, remove it to prevent deployment failure. This is a known recurring issue.
+1.  **Top Priority:** Your immediate task is to complete and test the **Core GST Engine (Batch 1)**.
+2.  **State of Play:** The backend logic in  has been significantly altered to automatically calculate CGST/SGST/IGST. The frontend invoice page at  has been partially updated.
+3.  **Execution Plan:**
+    *   Focus on finishing the frontend UI to display the new tax columns and totals correctly.
+    *   Ensure the buyer/seller state information is being captured in the UI and passed to the backend.
+    *   Perform thorough end-to-end testing with both same-state and inter-state transactions to validate the automatic tax calculation.
+    *   Once Batch 1 is stable and tested, you can proceed to Batch 2 (PDF generation and reports).
 
 **documents and test reports created in this job**
--    (Updated with progress on all implemented features)
--   Multiple test reports in  were generated by the testing agent, with all tests passing for the completed features.
+-    (Continuously updated with feature progress)
+-   Multiple test reports in , with all tests passing for completed features. The last report was .
 
 **Last 10 User Messages and any pending HUMAN messages**
-10. : Requested a feature to send products to buyers from inventory, which evolved into the Share Product Catalog feature.
-9.  : Requested a WhatsApp document sharing system for catalogs, invoices, and POs.
-8.  : Proposed a detailed plan to implement catalog sharing and WhatsApp integration.
-7.  : Approved the plan with refinements, prioritizing  link sharing and specifying UI/UX details for recipient selection and settings.
-6.  : Implemented the full Share Product Catalog and WhatsApp sharing feature.
-5.  : Reported a 500 Internal Server Error when opening the shared catalog links.
-4.  : Reproduced and fixed the 500 error by correcting a timezone-related comparison in the backend.
-3.  : Reported that the generated product catalogs were missing data fields and images.
-2.  : Investigated and fixed the catalog data population by correcting the backend aggregation pipeline and updating the PDF/Excel generators.
-1.  : Reported that admin users are getting a Permission Denied error on the Low Stock Alerts page. This is the current task.
+10. : Requested Send via WhatsApp feature for Purchase Orders.
+9.  : Implemented the PO WhatsApp feature with secure PDF links.
+8.  : Requested a comprehensive Pending Orders (Backorder) system for when invoice stock is insufficient.
+7.  : Proposed a phased plan for the backorder system.
+6.  : Approved the backorder plan with clarifications on UI and notifications.
+5.  : Implemented the full Pending Orders system (Phases 1-3).
+4.  : Provided a detailed implementation plan for a full GST-compliant billing and reporting system.
+3.  : Broke down the user's plan into two main batches and asked for clarification.
+2.  : Approved Batch 1 (Core GST Engine) and provided specific rules for implementation, including reusing existing GST fields and the exact tax calculation logic.
+1.  : Acknowledged the plan and started the implementation of Batch 1.
 
 **Project Health Check:**
--   **Broken**: Low Stock Alerts page for admin users.
+-   **Broken**: The invoice creation feature is currently in a broken state due to the mid-flight implementation of the GST engine.
 -   **Mocked**:  for email sending.
 
 **3rd Party Integrations**
@@ -157,14 +188,14 @@ Several critical bugs related to these new features were also fixed, including a
 -   **file-saver & xlsx:** Frontend file downloading.
 
 **Testing status**
--   **Testing agent used after significant changes**: YES. The agent used the testing agent successfully after each major feature implementation (Invoice Modal, Branding, Export/Import, Catalog Sharing). All tests passed.
+-   **Testing agent used after significant changes**: YES. The testing agent was used successfully after each major completed feature/refactor (Permissions Refactor, PO Sharing, Pending Orders).
 -   **Troubleshoot agent used after agent stuck in loop**: NO
 -   **Test files created**: None.
 -   **Known regressions**: None.
 
 **Credentials to test flow:**
--   **Seller:** Register a new user via the OTP flow and complete the seller onboarding.
--   **Admin:** To test the fix, you will need to log in as an admin. You may need to investigate the user authentication or database seeding logic to determine how to create or identify an admin user.
+-   **Seller:** Register a new user via the OTP flow and complete the seller onboarding. This is the primary user type for testing the new features.
+-   **Admin:** Log in as an admin user to test platform-wide views. The previous agent successfully logged in as an admin for testing.
 
 **What agent forgot to execute**
--   The agent has been thorough and has not forgotten any explicitly requested tasks. It methodically worked through a long list of feature requests and the subsequent bugs they introduced, keeping the project on track.</analysis>
+-   The agent did not forget to execute any tasks. The current task (GST Engine) is large and was correctly identified as being in progress at the end of the session.</analysis>
