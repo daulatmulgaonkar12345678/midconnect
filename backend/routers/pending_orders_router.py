@@ -39,6 +39,13 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
     async def require_permission(user, permission):
         return await require_user_permission(db, user, permission)
 
+    def normalize_doc(doc):
+        """Ensure _id is mapped to id for frontend compatibility."""
+        d = serialize_doc(doc)
+        if d and "_id" in d:
+            d["id"] = d.pop("_id")
+        return d
+
     # ─── Helpers ───
 
     async def get_reserved_stock(seller_id: str, listing_id: str) -> int:
@@ -77,11 +84,12 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
 
         enriched = []
         for order in orders:
-            doc = serialize_doc(order)
+            doc = normalize_doc(order)
             # Enrich with buyer name
             buyer = await db.seller_buyers.find_one({"_id": order.get("buyerId")})
             doc["buyerName"] = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
             doc["buyerPhone"] = buyer.get("phone", "") if buyer else ""
+            doc["buyerId"] = str(order.get("buyerId")) if order.get("buyerId") else ""
             # Get product name from listing
             listing = await db.sellerListings.find_one({"_id": order.get("listingId")})
             if listing:
@@ -90,9 +98,14 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
                 doc["currentStock"] = listing.get("stock", 0)
                 reserved = await get_reserved_stock(str(order.get("sellerId")), str(order.get("listingId")))
                 doc["availableStock"] = max(0, listing.get("stock", 0) - reserved)
+                doc["listingId"] = str(order.get("listingId"))
             else:
                 doc["currentStock"] = 0
                 doc["availableStock"] = 0
+                doc["listingId"] = ""
+            # Include price/gst for invoice prefill
+            doc["price"] = order.get("price", 0)
+            doc["gstPercent"] = order.get("gstPercent", 0)
             # Invoice reference
             if order.get("invoiceId"):
                 inv = await db.invoices.find_one({"_id": order.get("invoiceId")})
@@ -130,10 +143,11 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
         if not order:
             raise HTTPException(status_code=404, detail="Pending order not found")
 
-        doc = serialize_doc(order)
+        doc = normalize_doc(order)
         buyer = await db.seller_buyers.find_one({"_id": order.get("buyerId")})
         doc["buyerName"] = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
         doc["buyerPhone"] = buyer.get("phone", "") if buyer else ""
+        doc["buyerId"] = str(order.get("buyerId")) if order.get("buyerId") else ""
 
         listing = await db.sellerListings.find_one({"_id": order.get("listingId")})
         if listing:
@@ -142,6 +156,7 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
             doc["currentStock"] = listing.get("stock", 0)
             reserved = await get_reserved_stock(str(order.get("sellerId")), str(order.get("listingId")))
             doc["availableStock"] = max(0, listing.get("stock", 0) - reserved)
+            doc["listingId"] = str(order.get("listingId"))
 
         if order.get("invoiceId"):
             inv = await db.invoices.find_one({"_id": order.get("invoiceId")})
@@ -149,7 +164,7 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
 
         # Fulfillment history
         history = await db.pending_order_fulfillments.find({"pendingOrderId": order["_id"]}).sort("createdAt", -1).to_list(50)
-        doc["fulfillmentHistory"] = [serialize_doc(h) for h in history]
+        doc["fulfillmentHistory"] = [normalize_doc(h) for h in history]
 
         return {"pendingOrder": doc}
 

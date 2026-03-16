@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
 import {
@@ -77,6 +78,8 @@ function isReceiptRequired(method: string) { return RECEIPT_REQUIRED_METHODS.inc
 export default function InvoicesPage() {
   const { getIdToken } = useAuth();
   const { hasPermission } = usePermissions();
+  const searchParams = useSearchParams();
+  const prefillApplied = useRef(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [buyers, setBuyers] = useState<Buyer[]>([]);
   const [listings, setListings] = useState<InvoiceListing[]>([]);
@@ -172,6 +175,41 @@ export default function InvoicesPage() {
   }, [authHeaders]);
 
   useEffect(() => { fetchAll(); fetchReminders(); }, [fetchAll, fetchReminders]);
+
+  // Prefill from query params (e.g. from Pending Orders → Create Invoice)
+  useEffect(() => {
+    if (prefillApplied.current || loading || buyers.length === 0) return;
+    const buyerId = searchParams.get('buyerId');
+    const productId = searchParams.get('productId');
+    const qty = searchParams.get('qty');
+    const price = searchParams.get('price');
+    const gstPercent = searchParams.get('gstPercent');
+    if (buyerId) {
+      prefillApplied.current = true;
+      const buyer = buyers.find(b => b.id === buyerId);
+      const item = { ...emptyItem() };
+      if (productId) item.productId = productId;
+      if (qty) item.quantity = parseInt(qty) || 1;
+      if (price) item.price = parseFloat(price) || 0;
+      if (gstPercent) item.gstPercent = parseFloat(gstPercent) || 18;
+      // Fill product name from listings if available
+      if (productId) {
+        const listing = listings.find(l => l.id === productId);
+        if (listing) {
+          item.productName = listing.productName;
+          item.hsnCode = listing.hsnCode || '';
+          if (listing.gstRate !== undefined && !gstPercent) item.gstPercent = listing.gstRate;
+        }
+      }
+      setFormData(p => ({
+        ...p,
+        buyerId,
+        items: [item],
+        placeOfSupply: buyer?.state || '',
+      }));
+      setShowForm(true);
+    }
+  }, [searchParams, loading, buyers, listings]);
 
   const fetchInvoiceDetail = useCallback(async (invoiceId: string) => {
     try {

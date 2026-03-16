@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
 import {
-  Package2, Loader2, AlertTriangle, CheckCircle2, X, Send, ShoppingCart,
-  Clock, XCircle, FileText, ChevronDown, ChevronUp, Bell, RefreshCw
+  Package2, Loader2, AlertTriangle, CheckCircle2, X,
+  Clock, XCircle, Bell, RefreshCw, FileText
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -15,10 +16,13 @@ interface PendingOrder {
   productName: string;
   buyerName: string;
   buyerPhone: string;
+  buyerId: string;
+  listingId: string;
   orderedQty: number;
   fulfilledQty: number;
   pendingQty: number;
   price: number;
+  gstPercent: number;
   invoiceNumber?: string;
   currentStock: number;
   availableStock: number;
@@ -39,6 +43,7 @@ function fmtDate(d: string) {
 }
 
 export default function PendingOrdersPage() {
+  const router = useRouter();
   const { getIdToken } = useAuth();
   const { hasPermission } = usePermissions();
   const [orders, setOrders] = useState<PendingOrder[]>([]);
@@ -116,22 +121,16 @@ export default function PendingOrdersPage() {
     setActionLoading(null);
   };
 
-  const handleCreatePO = async (orderId: string) => {
-    setActionLoading(orderId);
-    try {
-      const h = await authHeaders();
-      const res = await fetch(`${API_URL}/api/business-tools/pending-orders/${orderId}/create-po`, {
-        method: 'POST', headers: h
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSuccess(`${data.message} for ${data.supplierName}`);
-        setTimeout(() => setSuccess(null), 4000);
-      } else {
-        setError(data.detail || 'Failed to create PO');
-      }
-    } catch { setError('Failed to create PO'); }
-    setActionLoading(null);
+  const handleCreateInvoice = (order: PendingOrder) => {
+    const params = new URLSearchParams({
+      buyerId: order.buyerId,
+      productId: order.listingId,
+      qty: String(order.pendingQty),
+      price: String(order.price),
+      gstPercent: String(order.gstPercent),
+      pendingOrderRef: order.invoiceNumber || '',
+    });
+    router.push(`/seller/business-tools/invoices?${params.toString()}`);
   };
 
   const handleNotify = async (orderId: string) => {
@@ -216,76 +215,64 @@ export default function PendingOrdersPage() {
 
             return (
               <div key={order.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" data-testid={`order-${order.id}`}>
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-gray-900">{order.productName}</h3>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${cfg.color}`}>
-                          <StatusIcon className="h-3 w-3" /> {cfg.label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1">Buyer: <span className="font-medium">{order.buyerName}</span></p>
-                      {order.invoiceNumber && (
-                        <p className="text-xs text-gray-500 mt-0.5">Ref Invoice: <span className="font-mono">{order.invoiceNumber}</span></p>
-                      )}
-                      <div className="flex flex-wrap gap-4 mt-2 text-sm">
-                        <span>Ordered: <strong>{order.orderedQty}</strong></span>
-                        <span className="text-emerald-600">Fulfilled: <strong>{order.fulfilledQty}</strong></span>
-                        <span className="text-amber-600">Pending: <strong>{order.pendingQty}</strong></span>
-                      </div>
-                      <div className="flex gap-4 mt-1 text-xs text-gray-500">
-                        <span>Stock: {order.currentStock}</span>
-                        <span>Available: <span className={order.availableStock > 0 ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}>{order.availableStock}</span></span>
-                        <span>{fmtDate(order.createdAt)}</span>
-                      </div>
+                <div className="p-4 cursor-pointer" onClick={() => isActive && setExpandedId(expanded ? null : order.id)}>
+                  {/* Top row: product + status */}
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate" data-testid={`order-product-${order.id}`}>{order.productName}</h3>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${cfg.color}`}>
+                        <StatusIcon className="h-3 w-3" /> {cfg.label}
+                      </span>
                     </div>
-
-                    {/* Actions */}
-                    {isActive && (
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => setExpandedId(expanded ? null : order.id)}
-                          className="p-2 text-gray-400 hover:text-gray-600 transition">
-                          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    )}
+                    <span className="text-xs text-gray-400 flex-shrink-0">{fmtDate(order.createdAt)}</span>
                   </div>
 
-                  {/* Expanded actions */}
-                  {expanded && isActive && (
-                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
-                      {canFulfil && (
-                        <button onClick={() => { setFulfilModal(order); setFulfilQty(String(Math.min(order.pendingQty, order.availableStock))); }}
-                          disabled={actionLoading === order.id}
-                          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition"
-                          data-testid={`fulfil-btn-${order.id}`}>
-                          <CheckCircle2 className="h-4 w-4" /> Fulfil Now
-                        </button>
-                      )}
-                      <button onClick={() => handleCreatePO(order.id)}
-                        disabled={actionLoading === order.id}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition"
-                        data-testid={`create-po-btn-${order.id}`}>
-                        <ShoppingCart className="h-4 w-4" /> Create PO
-                      </button>
-                      {order.buyerPhone && (
-                        <button onClick={() => handleNotify(order.id)}
-                          disabled={actionLoading === order.id}
-                          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
-                          data-testid={`notify-btn-${order.id}`}>
-                          <Bell className="h-4 w-4" /> Notify Buyer
-                        </button>
-                      )}
-                      <button onClick={() => handleCancel(order.id)}
-                        disabled={actionLoading === order.id}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition"
-                        data-testid={`cancel-btn-${order.id}`}>
-                        <XCircle className="h-4 w-4" /> Cancel
-                      </button>
-                    </div>
-                  )}
+                  {/* Info grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1.5 text-sm">
+                    <div><span className="text-gray-500">Buyer:</span> <span className="font-medium" data-testid={`order-buyer-${order.id}`}>{order.buyerName}</span></div>
+                    {order.invoiceNumber && (
+                      <div><span className="text-gray-500">Ref Invoice:</span> <span className="font-mono text-xs" data-testid={`order-ref-${order.id}`}>{order.invoiceNumber}</span></div>
+                    )}
+                    <div><span className="text-gray-500">Ordered:</span> <strong data-testid={`order-ordered-${order.id}`}>{order.orderedQty}</strong></div>
+                    <div><span className="text-emerald-600">Fulfilled:</span> <strong data-testid={`order-fulfilled-${order.id}`}>{order.fulfilledQty}</strong></div>
+                    <div><span className="text-amber-600">Pending:</span> <strong data-testid={`order-pending-${order.id}`}>{order.pendingQty}</strong></div>
+                    <div><span className="text-gray-500">Stock:</span> <span data-testid={`order-stock-${order.id}`}>{order.currentStock}</span></div>
+                    <div><span className="text-gray-500">Available:</span> <span className={order.availableStock > 0 ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'} data-testid={`order-available-${order.id}`}>{order.availableStock}</span></div>
+                  </div>
                 </div>
+
+                {/* Expanded actions */}
+                {expanded && isActive && (
+                  <div className="flex flex-wrap gap-2 px-4 pb-4 pt-2 border-t">
+                    {canFulfil && (
+                      <button onClick={(e) => { e.stopPropagation(); setFulfilModal(order); setFulfilQty(String(Math.min(order.pendingQty, order.availableStock))); }}
+                        disabled={actionLoading === order.id}
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition"
+                        data-testid={`fulfil-btn-${order.id}`}>
+                        <CheckCircle2 className="h-4 w-4" /> Fulfil Now
+                      </button>
+                    )}
+                    <button onClick={(e) => { e.stopPropagation(); handleCreateInvoice(order); }}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                      data-testid={`create-invoice-btn-${order.id}`}>
+                      <FileText className="h-4 w-4" /> Create Invoice
+                    </button>
+                    {order.buyerPhone && (
+                      <button onClick={(e) => { e.stopPropagation(); handleNotify(order.id); }}
+                        disabled={actionLoading === order.id}
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+                        data-testid={`notify-btn-${order.id}`}>
+                        <Bell className="h-4 w-4" /> Notify Buyer
+                      </button>
+                    )}
+                    <button onClick={(e) => { e.stopPropagation(); handleCancel(order.id); }}
+                      disabled={actionLoading === order.id}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition"
+                      data-testid={`cancel-btn-${order.id}`}>
+                      <XCircle className="h-4 w-4" /> Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
