@@ -41,6 +41,11 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - **Backend:** `check_permission` now allows admin users (isAdmin:true or 'admin' in roles). Low stock alerts endpoint returns all sellers' alerts for admin with `isAdminView:true` and `sellerName` per alert
 - **Frontend:** Admin view shows "Admin View" badge, seller name under each alert, hides "Order Material"/"Ignore" buttons, shows status badge instead
 
+### Shared Permissions Utility Refactor (DONE - Mar 2026)
+- **Bug Fix:** POST /api/business-tools/purchase-orders returned 403 for sellers because `accountType` was missing from user records
+- **Root Cause:** 12 routers had duplicated, inconsistent permission logic. Some checked `user.get("accountType")` without a default value
+- **Fix:** Created `/app/backend/utils/permissions.py` with centralized `authenticate_user`, `resolve_seller_id`, `check_user_permission`, `require_user_permission`, `is_platform_admin`. All 12 routers now import from this shared utility
+
 ## Key API Endpoints
 ### Product Sharing & Documents
 - GET /api/business-tools/recipients (buyers + suppliers)
