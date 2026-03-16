@@ -26,43 +26,60 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 ### Charts & Graphs Page (DONE)
 ### Notifications System (DONE)
 
-### GST Invoice System (DONE - Mar 2026)
+### GST Invoice System (DONE)
 - GST-Compliant PDF with seller/buyer GSTIN, HSN codes, CGST/SGST vs IGST
 - 4 Invoice Copies: Original, Transporter, Supplier/CA, Office
 - QR Code, Amount in Words, Transport Details, E-Way Bill placeholder
 
-### Invoice Checkbox Modal for Merged PDF (DONE - Mar 2026)
+### Invoice Checkbox Modal for Merged PDF (DONE)
 - Single "Download PDF" button opens modal with copy selection checkboxes
 - Select All, Download Selected with dynamic count
 - Merged PDF via GET /api/business-tools/invoices/{id}/pdf-merged?copies=...
 
-### Centralized Billing Settings (DONE - Mar 2026)
+### Centralized Billing Settings (DONE)
 - Billing tab: Bank Details (6 fields), Terms & Conditions
 - Auto-rendered on invoice PDF footer
 
-### Company Branding (DONE - Mar 2026)
-- New "Company Branding" tab in Business Settings (3 tabs: Profile, Billing, Branding)
+### Company Branding (DONE)
+- "Company Branding" tab in Business Settings (3 tabs: Profile, Billing, Branding)
 - Company Logo upload (PNG/JPG/SVG, max 2MB) stored as billingSettings.companyLogoUrl
 - Invoice Background Template upload (PNG/JPG, max 5MB) stored as billingSettings.invoiceBackgroundImage
-- Preview modal shows sample invoice layout with logo at top-left + background at 8% opacity
-- Remove buttons for both with fallback to default layout
+- Preview modal showing sample invoice layout with logo at top-left + background at 8% opacity
 - Multi-company support: each seller stores separate branding
-- PDF rendering: Layer 1=Background, Layer 2=Content, Layer 3=Logo (top-left)
-- Backend prioritizes companyLogoUrl from billingSettings, falls back to profile.sellerLogoUrl
+
+### Export & Import System (DONE - Mar 2026)
+- **Export:** CSV and Excel (.xlsx) buttons on every report tab
+  - Sales, Profit, Inventory, Buyers, Invoices export endpoints
+  - Exports respect date range filters
+  - Styled Excel files with colored headers and auto-width columns
+- **Import:** 3-step modal workflow
+  - Step 1: Select data type (Products/Inventory/Suppliers/Buyers), download templates
+  - Step 2: Upload CSV/XLSX, validate, preview parsed data table
+  - Step 3: Confirm import, shows imported/skipped/total counts with error notes
+  - Validation: required fields, duplicate checks, GSTIN length, numeric fields
+  - Templates available in both CSV and Excel formats
 
 ## Key API Endpoints
 ### Invoice
 - POST /api/business-tools/invoices
-- GET /api/business-tools/invoices/{id}/pdf?copy_type=original|transporter|supplier|office
-- GET /api/business-tools/invoices/{id}/pdf-merged?copies=original,transporter,...
-- POST /api/business-tools/invoices/{id}/eway-bill
+- GET /api/business-tools/invoices/{id}/pdf?copy_type=...
+- GET /api/business-tools/invoices/{id}/pdf-merged?copies=...
 
 ### Settings
 - GET /api/business-tools/seller-profile (returns billingSettings with companyLogoUrl)
-- PUT /api/business-tools/seller-profile (accepts billingSettings with companyLogoUrl)
+- PUT /api/business-tools/seller-profile
 
-## Sidebar Order
-Home > Notifications > Inventory > Low Stock Alerts > Buyers > Suppliers > Invoices > Charts & Graphs > Product Analytics > Composite Products > Reports > Employees > Roles & Permissions > Activity Logs > Business Settings
+### Export
+- GET /api/business-tools/export/sales?format=csv|xlsx&startDate=&endDate=
+- GET /api/business-tools/export/profit?format=csv|xlsx&startDate=&endDate=
+- GET /api/business-tools/export/inventory?format=csv|xlsx
+- GET /api/business-tools/export/buyers?format=csv|xlsx&startDate=&endDate=
+- GET /api/business-tools/export/invoices?format=csv|xlsx&startDate=&endDate=
+
+### Import
+- GET /api/business-tools/import/template/{type}?format=csv|xlsx
+- POST /api/business-tools/import/validate (file + data_type)
+- POST /api/business-tools/import/process (file + data_type)
 
 ## Prioritized Backlog
 ### P1
