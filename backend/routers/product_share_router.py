@@ -310,64 +310,84 @@ def init_public_doc_router(db):
 
     @router.get("/doc/{token}")
     async def get_shared_document(token: str):
-        share = await db.document_shares.find_one({"token": token})
+        try:
+            share = await db.document_shares.find_one({"token": token})
+        except Exception as e:
+            logger.error(f"Document lookup error: {e}")
+            raise HTTPException(status_code=500, detail="Internal error")
+
         if not share:
             raise HTTPException(status_code=404, detail="Document not found or link has expired")
 
-        if share.get("expiresAt") and share["expiresAt"] < datetime.now(timezone.utc):
-            raise HTTPException(status_code=410, detail="This document link has expired")
+        # Compare expiry safely (handle both naive and aware datetimes)
+        expires_at = share.get("expiresAt")
+        if expires_at:
+            now_utc = datetime.now(timezone.utc)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at < now_utc:
+                raise HTTPException(status_code=403, detail="Document link expired")
 
         doc_type = share.get("documentType", "catalog")
         doc_id = share.get("documentId", "")
         seller_id = share.get("sellerId")
 
-        if doc_type == "catalog":
-            catalog = await db.product_shares.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
-            if not catalog:
-                raise HTTPException(status_code=404, detail="Catalog not found")
-            filename = f"product-catalog.{catalog.get('ext', 'pdf')}"
-            return StreamingResponse(
-                io.BytesIO(catalog["catalogData"]),
-                media_type=catalog.get("contentType", "application/pdf"),
-                headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-            )
+        if not doc_id:
+            raise HTTPException(status_code=404, detail="Document reference missing")
 
-        elif doc_type == "invoice":
-            from services.invoice_pdf_service import generate_invoice_pdf
-            inv = await db.invoices.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
-            if not inv:
-                raise HTTPException(status_code=404, detail="Invoice not found")
-            seller = await db.users.find_one({"_id": seller_id})
-            profile = (seller or {}).get("profile", {})
-            billing = (seller or {}).get("billingSettings", {})
-            gst = (seller or {}).get("gst", {})
-            bank_details = {k: billing.get(k, "") for k in ["bankName", "accountNumber", "accountName", "ifscCode", "branch", "upiId"]}
-            seller_data = {
-                "businessName": profile.get("businessName", ""), "name": profile.get("businessName", ""),
-                "address": profile.get("address", ""), "city": profile.get("city", ""),
-                "state": profile.get("state", ""), "phone": profile.get("phone", ""),
-                "email": (seller or {}).get("email", ""), "gstNumber": gst.get("number", ""),
-                "sellerLogoUrl": billing.get("companyLogoUrl", "") or profile.get("sellerLogoUrl", ""),
-                "bankDetails": bank_details, "invoiceTerms": billing.get("invoiceTerms", ""),
-                "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
-            }
-            buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")}) or {}
-            inv_ser = serialize_doc(inv)
-            pdf_bytes = generate_invoice_pdf(inv_ser, seller_data, buyer, copy_type="original")
-            filename = f"invoice-{inv.get('invoiceNumber', 'doc')}.pdf"
-            return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        try:
+            if doc_type == "catalog":
+                catalog = await db.product_shares.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
+                if not catalog or "catalogData" not in catalog:
+                    raise HTTPException(status_code=404, detail="Catalog not found")
+                filename = f"product-catalog.{catalog.get('ext', 'pdf')}"
+                return StreamingResponse(
+                    io.BytesIO(catalog["catalogData"]),
+                    media_type=catalog.get("contentType", "application/pdf"),
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                )
 
-        elif doc_type == "po":
-            po = await db.purchase_orders.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
-            if not po:
-                raise HTTPException(status_code=404, detail="Purchase order not found")
-            # Simple PO data response as JSON for now (PDF can be added later)
-            po_data = serialize_doc(po)
-            for k in ["_id", "sellerId"]:
-                po_data.pop(k, None)
-            return po_data
+            elif doc_type == "invoice":
+                from services.invoice_pdf_service import generate_invoice_pdf
+                inv = await db.invoices.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
+                if not inv:
+                    raise HTTPException(status_code=404, detail="Invoice not found")
+                seller = await db.users.find_one({"_id": seller_id})
+                profile = (seller or {}).get("profile", {})
+                billing = (seller or {}).get("billingSettings", {})
+                gst = (seller or {}).get("gst", {})
+                bank_details = {k: billing.get(k, "") for k in ["bankName", "accountNumber", "accountName", "ifscCode", "branch", "upiId"]}
+                seller_data = {
+                    "businessName": profile.get("businessName", ""), "name": profile.get("businessName", ""),
+                    "address": profile.get("address", ""), "city": profile.get("city", ""),
+                    "state": profile.get("state", ""), "phone": profile.get("phone", ""),
+                    "email": (seller or {}).get("email", ""), "gstNumber": gst.get("number", ""),
+                    "sellerLogoUrl": billing.get("companyLogoUrl", "") or profile.get("sellerLogoUrl", ""),
+                    "bankDetails": bank_details, "invoiceTerms": billing.get("invoiceTerms", ""),
+                    "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
+                }
+                buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")}) or {}
+                inv_ser = serialize_doc(inv)
+                pdf_bytes = generate_invoice_pdf(inv_ser, seller_data, buyer, copy_type="original")
+                filename = f"invoice-{inv.get('invoiceNumber', 'doc')}.pdf"
+                return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
-        raise HTTPException(status_code=400, detail="Unsupported document type")
+            elif doc_type == "po":
+                po = await db.purchase_orders.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
+                if not po:
+                    raise HTTPException(status_code=404, detail="Purchase order not found")
+                po_data = serialize_doc(po)
+                for k in ["_id", "sellerId"]:
+                    po_data.pop(k, None)
+                return po_data
+
+            raise HTTPException(status_code=400, detail="Unsupported document type")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Document retrieval error for token={token}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to retrieve document")
 
     return router
 
