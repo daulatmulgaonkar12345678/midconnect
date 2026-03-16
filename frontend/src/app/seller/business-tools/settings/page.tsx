@@ -29,7 +29,18 @@ const DEFAULT_TERMS = `1. Goods once sold will not be taken back.
 3. Our risk and responsibility ceases as soon as the goods leave our premises.
 4. Subject to local jurisdiction only. E.&O.E.`;
 
-type TabKey = 'profile' | 'billing' | 'branding';
+type TabKey = 'profile' | 'billing' | 'branding' | 'catalog';
+
+interface CatalogSettings {
+  showImage: boolean;
+  showName: boolean;
+  showCategory: boolean;
+  showSpecification: boolean;
+  showDescription: boolean;
+  showPrice: boolean;
+  showUnit: boolean;
+  showMoq: boolean;
+}
 
 export default function SettingsPage() {
   const { getIdToken } = useAuth();
@@ -39,6 +50,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('profile');
   const [profile, setProfile] = useState<SellerProfile>({ businessName: '', phone: '', email: '', address: '', city: '', state: '', sellerLogoUrl: '', gstNumber: '' });
   const [billing, setBilling] = useState<BillingSettings>({ bankName: '', accountNumber: '', accountName: '', ifscCode: '', branch: '', upiId: '', invoiceTerms: '', invoiceBackgroundImage: '', companyLogoUrl: '' });
+  const [catalogSettings, setCatalogSettings] = useState<CatalogSettings>({ showImage: true, showName: true, showCategory: true, showSpecification: true, showDescription: true, showPrice: true, showUnit: true, showMoq: true });
   const [showPreview, setShowPreview] = useState<'logo' | 'bg' | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
@@ -49,11 +61,18 @@ export default function SettingsPage() {
     if (permLoading || !token) return;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/api/business-tools/seller-profile`, { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok) {
-          const data = await res.json();
+        const [profileRes, catalogRes] = await Promise.all([
+          fetch(`${API_URL}/api/business-tools/seller-profile`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_URL}/api/business-tools/catalog-settings`, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        if (profileRes.ok) {
+          const data = await profileRes.json();
           if (data.profile) setProfile(data.profile);
           if (data.billingSettings) setBilling(prev => ({ ...prev, ...data.billingSettings }));
+        }
+        if (catalogRes.ok) {
+          const catData = await catalogRes.json();
+          setCatalogSettings(prev => ({ ...prev, ...catData }));
         }
       } catch { /* empty */ }
       setLoading(false);
@@ -63,13 +82,20 @@ export default function SettingsPage() {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/api/business-tools/seller-profile`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...profile, billingSettings: billing }),
-      });
-      if (res.ok) alert('Settings saved successfully');
-      else { const d = await res.json(); alert(d.detail || 'Failed to save'); }
+      const [profileRes, catalogRes] = await Promise.all([
+        fetch(`${API_URL}/api/business-tools/seller-profile`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...profile, billingSettings: billing }),
+        }),
+        fetch(`${API_URL}/api/business-tools/catalog-settings`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: catalogSettings }),
+        })
+      ]);
+      if (profileRes.ok && catalogRes.ok) alert('Settings saved successfully');
+      else alert('Some settings may not have saved');
     } catch { alert('Network error'); }
     setSaving(false);
   };
@@ -120,6 +146,7 @@ export default function SettingsPage() {
           { key: 'profile' as TabKey, label: 'Business Profile', icon: Building2 },
           { key: 'billing' as TabKey, label: 'Billing Settings', icon: CreditCard },
           { key: 'branding' as TabKey, label: 'Company Branding', icon: Palette },
+          { key: 'catalog' as TabKey, label: 'Catalog Settings', icon: FileText },
         ]).map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === tab.key ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'}`}
@@ -258,6 +285,34 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Catalog Settings Tab ── */}
+      {activeTab === 'catalog' && (
+        <div className="bg-white rounded-xl border p-6 space-y-4" data-testid="catalog-settings-section">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><FileText className="h-5 w-5 text-teal-600" /> Catalog Sharing Settings</h2>
+          <p className="text-xs text-gray-500">Choose which product fields are included when generating PDF and Excel catalogs for buyers/suppliers.</p>
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            {([
+              { key: 'showImage' as keyof CatalogSettings, label: 'Product Image' },
+              { key: 'showName' as keyof CatalogSettings, label: 'Product Name' },
+              { key: 'showCategory' as keyof CatalogSettings, label: 'Category' },
+              { key: 'showSpecification' as keyof CatalogSettings, label: 'Specification' },
+              { key: 'showDescription' as keyof CatalogSettings, label: 'Description' },
+              { key: 'showPrice' as keyof CatalogSettings, label: 'Selling Price' },
+              { key: 'showUnit' as keyof CatalogSettings, label: 'Unit' },
+              { key: 'showMoq' as keyof CatalogSettings, label: 'Minimum Order Qty (MOQ)' },
+            ]).map(field => (
+              <label key={field.key} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 cursor-pointer" data-testid={`catalog-field-${field.key}`}>
+                <input type="checkbox" checked={catalogSettings[field.key]} onChange={e => setCatalogSettings(prev => ({ ...prev, [field.key]: e.target.checked }))}
+                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                <span className="text-sm text-gray-700">{field.label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-3">These settings control both PDF and Excel catalog generation. Click Save Settings to persist.</p>
+        </div>
+      )}
+
 
       {/* ── Preview Modal: Invoice Layout ── */}
       {showPreview && (

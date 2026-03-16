@@ -13066,6 +13066,13 @@ from routers.export_import_router import init_export_import_router
 export_import_router = init_export_import_router(db, verify_firebase_token)
 app.include_router(export_import_router, prefix="/api/business-tools")
 
+from routers.product_share_router import init_product_share_router, init_public_doc_router
+product_share_router = init_product_share_router(db, verify_firebase_token)
+app.include_router(product_share_router, prefix="/api/business-tools")
+public_doc_router = init_public_doc_router(db)
+app.include_router(public_doc_router, prefix="/api")
+
+
 
 
 

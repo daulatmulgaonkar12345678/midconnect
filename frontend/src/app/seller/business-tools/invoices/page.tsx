@@ -266,14 +266,31 @@ export default function InvoicesPage() {
   };
 
   // ── WhatsApp ──
-  const openWhatsApp = (inv: Invoice, type: 'followup' | 'overdue' | 'send_invoice' = 'followup') => {
+  const openWhatsApp = async (inv: Invoice, type: 'followup' | 'overdue' | 'send_invoice' = 'followup') => {
     const phone = inv.buyerPhone || '';
     if (!phone) { alert('Buyer phone number not available'); return; }
     const cleanPhone = phone.replace(/[\s\-\+]/g, '').replace(/^(?!91)(\d{10})$/, '91$1');
     const pending = inv.pendingAmount ?? inv.total;
     let msg = '';
+
     if (type === 'send_invoice') {
-      msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nPlease find the invoice attached.\n\nRegards`;
+      // Generate secure document link for invoice download
+      try {
+        const h = await authHeaders();
+        const res = await fetch(`${API_URL}/api/business-tools/share-document`, {
+          method: 'POST', headers: { ...h, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentType: 'invoice', documentId: inv.id, recipientPhone: phone })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const docUrl = `${window.location.origin}${data.documentLink}`;
+          msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nDownload Invoice:\n${docUrl}\n\nRegards`;
+        } else {
+          msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nPlease find the invoice attached.\n\nRegards`;
+        }
+      } catch {
+        msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nPlease find the invoice attached.\n\nRegards`;
+      }
     } else if (type === 'overdue') {
       msg = `Hello ${inv.buyerName},\n\nYour payment for Invoice ${inv.invoiceNumber} is overdue.\n\nPending Amount: Rs.${fmt(pending)}\n\nKindly clear the payment at the earliest.\n\nThank you.`;
     } else {
