@@ -37,7 +37,7 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 5. **Inventory Management** - Stock tracking, low stock alerts, stock movement logs
 6. **Purchase Orders** - Create, manage, WhatsApp sharing with secure PDF links
 7. **Buyer Management** - CRUD with GSTIN and state fields
-8. **Pending Orders (Backorder)** - Partial fulfillment, stock reservation
+8. **Pending Orders (Backorder)** - Partial fulfillment, stock reservation, simplified workflow
 9. **Permissions System** - Centralized role-based access control
 10. **Employee Management** - Multi-role support per seller
 11. **Document Sharing** - Secure expiring links for invoices/catalogs
@@ -50,6 +50,12 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Invoice detail view: Full GST breakdown display
     - Place of Supply: Auto-populated from buyer state, overridable dropdown
     - Backend: 9/9 unit tests passing
+13. **Pending Orders Fix (COMPLETE):**
+    - Fixed _id→id serialization bug causing undefined in API calls
+    - Removed "Create PO" button (procurement not part of backorder workflow)
+    - Added "Create Invoice" button → redirects to invoices page with prefilled buyer/product/qty
+    - Improved card layout: Product, Buyer, Ref Invoice, Ordered, Fulfilled, Pending, Stock, Available
+    - Stock = total physical inventory, Available = stock - reserved
 
 ### Mocked
 - Resend email service (no API key configured)
@@ -78,6 +84,10 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 - `PUT /api/business-tools/seller-profile` - Update profile including gstStatus
 - `POST /api/business-tools/buyers` - Create buyer with state
 - `PUT /api/business-tools/buyers/{id}` - Update buyer with state
+- `GET /api/business-tools/pending-orders` - List pending orders (returns `id` field)
+- `POST /api/business-tools/pending-orders/{id}/fulfil` - Fulfil pending order
+- `POST /api/business-tools/pending-orders/{id}/cancel` - Cancel pending order
+- `POST /api/business-tools/pending-orders/{id}/notify` - Notify buyer via WhatsApp
 
 ## Key DB Fields
 - `users.profile.state` - Seller's state for GST
@@ -87,3 +97,8 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 - `seller_buyers.gstNumber` - Buyer's GSTIN
 - `invoices.cgst/sgst/igst` - Tax breakdown
 - `invoices.placeOfSupply/sellerState/buyerState/taxType` - GST context
+- `pending_orders` - sellerId, buyerId, listingId, orderedQty, fulfilledQty, pendingQty, price, gstPercent, status
+
+## Known Issues
+- `firebase_app` lint warning (unused import) - P2, pre-existing
+- Enterprise data integrity warnings on startup (empty searchableAttributes/images) - pre-existing
