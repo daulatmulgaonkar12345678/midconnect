@@ -138,15 +138,47 @@ def init_product_share_router(db, verify_token_func):
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
             {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
             {"$project": {
-                "productId": 1, "selling_price": 1, "stock": 1,
-                "productName": "$prod.name", "categoryName": "$prod.categoryName",
-                "description": "$prod.description", "specification": "$prod.specification",
-                "unit": "$prod.unit", "moq": "$prod.moq",
+                "productId": 1,
+                "selling_price": {"$ifNull": ["$selling_price", {"$ifNull": ["$minPrice", 0]}]},
+                "productName": "$prod.name",
+                "categoryName": "$prod.categoryName",
+                "description": "$prod.description",
+                "unit": {"$ifNull": ["$prod.unit", "piece"]},
+                "moq": {"$ifNull": ["$moq", 1]},
                 "images": {"$slice": [{"$ifNull": ["$images", []]}, 1]},
-                "hsn": "$prod.hsn"
+                "coverImageUrl": "$prod.coverImageUrl",
+                "searchableAttributes": {"$ifNull": ["$searchableAttributes", {}]},
+                "attributeLabels": {"$ifNull": ["$attributeLabels", {}]},
+                "hsn": "$prod.hsn",
+                "pricingTiers": {"$ifNull": ["$pricingTiers", []]},
             }}
         ]
         products = await db.sellerListings.aggregate(pipeline).to_list(500)
+
+        # Post-process: build specification string from searchableAttributes
+        for p in products:
+            attrs = p.get("searchableAttributes", {})
+            labels = p.get("attributeLabels", {})
+            if attrs:
+                spec_parts = []
+                for key, val in attrs.items():
+                    label = labels.get(key, key.replace("_", " ").title())
+                    spec_parts.append(f"{label}: {val}")
+                p["specification"] = ", ".join(spec_parts)
+            else:
+                p["specification"] = ""
+
+            # Resolve image: prefer listing images, fallback to product coverImageUrl
+            imgs = p.get("images", [])
+            cover = p.get("coverImageUrl")
+            if not imgs and cover:
+                p["images"] = [cover]
+
+            # Resolve selling price from pricingTiers if not set
+            if not p.get("selling_price") and p.get("pricingTiers"):
+                tiers = p["pricingTiers"]
+                if tiers and isinstance(tiers, list) and len(tiers) > 0:
+                    p["selling_price"] = tiers[0].get("pricePerUnit", 0)
 
         if not products:
             raise HTTPException(status_code=400, detail="No valid products found")
@@ -398,15 +430,15 @@ def generate_pdf_catalog(products: list, seller: dict, show_price: bool, setting
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    import requests as req_lib
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
     styles = getSampleStyleSheet()
     elements = []
 
-    # Title style
     title_style = ParagraphStyle("CatalogTitle", parent=styles["Title"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
     subtitle_style = ParagraphStyle("CatalogSub", parent=styles["Normal"], fontSize=10, textColor=colors.gray, spaceAfter=12)
     header_style = ParagraphStyle("ColHeader", parent=styles["Normal"], fontSize=9, textColor=colors.white, fontName="Helvetica-Bold")
@@ -437,8 +469,8 @@ def generate_pdf_catalog(products: list, seller: dict, show_price: bool, setting
     elements.append(Spacer(1, 8))
     elements.append(Paragraph(f"Date: {datetime.now().strftime('%d %b %Y')}  |  Total Products: {len(products)}", ParagraphStyle("DateLine", parent=styles["Normal"], fontSize=9, textColor=colors.gray, spaceAfter=10)))
 
-    # Build table
     show = {
+        "showImage": settings.get("showImage", True),
         "showName": settings.get("showName", True),
         "showCategory": settings.get("showCategory", True),
         "showSpecification": settings.get("showSpecification", True),
@@ -448,7 +480,25 @@ def generate_pdf_catalog(products: list, seller: dict, show_price: bool, setting
         "showMoq": settings.get("showMoq", True),
     }
 
+    # Download images into memory
+    image_cache = {}
+    if show["showImage"]:
+        for p in products:
+            imgs = p.get("images", [])
+            img_url = imgs[0] if imgs else None
+            if img_url:
+                try:
+                    resp = req_lib.get(img_url, timeout=5)
+                    if resp.status_code == 200:
+                        img_buf = io.BytesIO(resp.content)
+                        image_cache[str(p.get("productId", ""))] = img_buf
+                except Exception:
+                    pass
+
+    # Build table headers
     headers_list = ["#"]
+    if show["showImage"]:
+        headers_list.append("Image")
     if show["showName"]:
         headers_list.append("Product Name")
     if show["showCategory"]:
@@ -468,30 +518,44 @@ def generate_pdf_catalog(products: list, seller: dict, show_price: bool, setting
 
     for idx, p in enumerate(products, 1):
         row = [str(idx)]
+        if show["showImage"]:
+            pid = str(p.get("productId", ""))
+            if pid in image_cache:
+                try:
+                    image_cache[pid].seek(0)
+                    img = RLImage(image_cache[pid], width=12*mm, height=12*mm)
+                    row.append(img)
+                except Exception:
+                    row.append("")
+            else:
+                row.append("")
         if show["showName"]:
             row.append(Paragraph(p.get("productName", "N/A"), bold_cell))
         if show["showCategory"]:
-            row.append(Paragraph(p.get("categoryName", "-"), cell_style))
+            row.append(Paragraph(p.get("categoryName", "") or "", cell_style))
         if show["showSpecification"]:
-            spec = p.get("specification", "-") or "-"
-            row.append(Paragraph(spec[:80], cell_style))
+            spec = p.get("specification", "") or ""
+            row.append(Paragraph(spec[:120], cell_style))
         if show["showDescription"]:
-            desc = p.get("description", "-") or "-"
-            row.append(Paragraph(desc[:100], cell_style))
+            desc = p.get("description", "") or ""
+            row.append(Paragraph(desc[:150], cell_style))
         if show["showPrice"]:
             price = p.get("selling_price")
-            row.append(f"Rs.{price:,.2f}" if price else "-")
+            row.append(f"Rs.{price:,.2f}" if price else "")
         if show["showUnit"]:
-            row.append(p.get("unit", "-") or "-")
+            row.append(p.get("unit", "") or "")
         if show["showMoq"]:
-            row.append(str(p.get("moq", "-") or "-"))
+            moq = p.get("moq")
+            row.append(str(moq) if moq else "")
         table_data.append(row)
 
     # Column widths
     n_cols = len(headers_list)
     available = 180 * mm
     col_widths = [available / n_cols] * n_cols
-    col_widths[0] = 8 * mm  # # column narrow
+    col_widths[0] = 8 * mm
+    if show["showImage"] and n_cols > 1:
+        col_widths[1] = 16 * mm
 
     t = Table(table_data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
@@ -553,6 +617,8 @@ def generate_excel_catalog(products: list, seller: dict, show_price: bool, setti
         headers.append("Product Name")
     if show["showCategory"]:
         headers.append("Category")
+    if settings.get("showImage", True):
+        headers.append("Image URL")
     if show["showSpecification"]:
         headers.append("Specification")
     if show["showDescription"]:
@@ -588,6 +654,10 @@ def generate_excel_catalog(products: list, seller: dict, show_price: bool, setti
         if show["showCategory"]:
             ws.cell(row=row, column=col, value=p.get("categoryName", "")).border = thin_border
             col += 1
+        if settings.get("showImage", True):
+            imgs = p.get("images", [])
+            ws.cell(row=row, column=col, value=imgs[0] if imgs else "").border = thin_border
+            col += 1
         if show["showSpecification"]:
             ws.cell(row=row, column=col, value=p.get("specification", "")).border = thin_border
             col += 1
@@ -602,7 +672,8 @@ def generate_excel_catalog(products: list, seller: dict, show_price: bool, setti
             ws.cell(row=row, column=col, value=p.get("unit", "")).border = thin_border
             col += 1
         if show["showMoq"]:
-            ws.cell(row=row, column=col, value=p.get("moq", "")).border = thin_border
+            moq = p.get("moq")
+            ws.cell(row=row, column=col, value=moq if moq else "").border = thin_border
 
     # Auto-width
     for col_idx in range(1, len(headers) + 1):
