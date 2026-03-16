@@ -13062,6 +13062,11 @@ from routers.home_router import init_home_router
 home_router = init_home_router(db, verify_firebase_token)
 app.include_router(home_router, prefix="/api/business-tools")
 
+from routers.export_import_router import init_export_import_router
+export_import_router = init_export_import_router(db, verify_firebase_token)
+app.include_router(export_import_router, prefix="/api/business-tools")
+
+
 
 
 # ================== ROOT HEALTH CHECK (for Render/Cloud providers) ==================
