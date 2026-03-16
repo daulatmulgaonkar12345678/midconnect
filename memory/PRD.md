@@ -7,15 +7,14 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - **Frontend:** Next.js + React + TypeScript + Tailwind CSS + Recharts
 - **Backend:** FastAPI + MongoDB (motor async driver)
 - **Auth:** Firebase Authentication
-- **PDF:** ReportLab
-- **Storage:** Cloudinary
+- **PDF:** ReportLab + qrcode
+- **Storage:** Cloudinary (receipts/logos)
 - **Email:** Resend (MOCKED)
 
 ## What's Been Implemented
 
-### Phase 1-3: Payment Tracking, Receipts, Onboarding (ALL DONE)
+### Phase 1-3: Payment Tracking, Receipts, Onboarding (DONE)
 ### Phase 4: Dashboard & Notifications (DONE)
-
 ### Inventory Module (DONE)
 ### Supplier-Product Mapping (DONE)
 ### Low Stock Alerts (DONE)
@@ -25,27 +24,26 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 ### Invoice WhatsApp for Buyers (DONE)
 ### Business Tools Home Dashboard (DONE)
 ### Charts & Graphs Page (DONE)
+### Notifications System (DONE)
 
-### Notifications System (DONE - Mar 2026)
-- **Sidebar:** Purchase Orders removed, Notifications added below Home with Bell icon + red badge
-- **Badge:** Shows unread count, polls every 30s, hidden when 0
-- **Page:** Full notification center at /seller/business-tools/notifications
-- **Features:** Type filters (All/Low Stock/Invoices/Payments/Purchases/Inventory/System), Unread Only toggle, Mark as Read (single + all), Pagination
-- **Backend:** GET /notifications/unread-count, GET /notifications (with type/unread filters), PUT /notifications/{id}/read, PUT /notifications/mark-all-read
-- **Testing:** 11/11 backend tests passed
-
-### Auth Fix: Analytics 403 (DONE - Mar 2026)
-- Fixed get_seller_id() in analytics_router.py and home_router.py to default accountType to "seller" (matching business_tools_router.py pattern)
-
-## Updated Sidebar Order
-Home > Notifications > Inventory > Low Stock Alerts > Buyers > Suppliers > Invoices > Charts & Graphs > Product Analytics > Composite Products > Reports > Employees > Roles & Permissions > Activity Logs > Business Settings
+### GST Invoice System (DONE - Mar 2026)
+- **GST-Compliant PDF Template:** Seller/Buyer GSTIN, HSN codes, CGST/SGST vs IGST (auto-detected), bank details, terms & conditions, authorized signatory
+- **4 Invoice Copies:** Original for Recipient, Duplicate for Transporter, Triplicate for Supplier/CA, Office Copy — generated on-the-fly via `copy_type` parameter
+- **QR Code:** Contains Invoice No, Seller GSTIN, Buyer GSTIN, Amount, Date
+- **Amount in Words:** Indian numbering (Lakh, Crore)
+- **Transport Details:** Transporter Name, LR Number, Vehicle Number, Booking Location, No. of Packages
+- **E-Way Bill:** Placeholder endpoint returns JSON + redirects to ewaybillgst.gov.in
+- **Frontend:** 4 download buttons per invoice, transport/GST fields in form, E-Way Bill button
+- **Testing:** 22/22 backend tests passed
 
 ## Key API Endpoints
-### Notifications
-- GET /api/business-tools/notifications/unread-count
-- GET /api/business-tools/notifications?notification_type=&unread_only=&limit=&skip=
-- PUT /api/business-tools/notifications/{id}/read
-- PUT /api/business-tools/notifications/mark-all-read
+### Invoice (Updated)
+- POST /api/business-tools/invoices (new fields: poNumber, challanNumber, placeOfSupply, transport, termsAndConditions, items.hsnCode, items.discount)
+- GET /api/business-tools/invoices/{id}/pdf?copy_type=original|transporter|supplier|office
+- POST /api/business-tools/invoices/{id}/eway-bill
+
+## Sidebar Order
+Home > Notifications > Inventory > Low Stock Alerts > Buyers > Suppliers > Invoices > Charts & Graphs > Product Analytics > Composite Products > Reports > Employees > Roles & Permissions > Activity Logs > Business Settings
 
 ## Prioritized Backlog
 ### P1
