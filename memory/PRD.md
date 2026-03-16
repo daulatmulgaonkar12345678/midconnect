@@ -36,6 +36,11 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
   - Controls both PDF and Excel catalog generation
 - **Security:** Seller can only share own products; no stock/cost data exposed; links are token-based and time-limited
 
+### Admin Low Stock Alerts Access (DONE - Mar 2026)
+- **Bug Fix:** Admin users were getting 403 Permission Denied on Low Stock Alerts page
+- **Backend:** `check_permission` now allows admin users (isAdmin:true or 'admin' in roles). Low stock alerts endpoint returns all sellers' alerts for admin with `isAdminView:true` and `sellerName` per alert
+- **Frontend:** Admin view shows "Admin View" badge, seller name under each alert, hides "Order Material"/"Ignore" buttons, shows status badge instead
+
 ## Key API Endpoints
 ### Product Sharing & Documents
 - GET /api/business-tools/recipients (buyers + suppliers)
@@ -69,8 +74,9 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 
 ## Prioritized Backlog
 ### P1
-- Seller Reminder Controls (configure reminder schedule, custom messages, enable/disable)
-- Admin View for Reports
+- Seller Reminder Controls (configure reminder schedule for invoices, low stock, POs; custom messages; enable/disable)
+- Purchase Flow Integration: Low Stock Alert → auto-create PO draft → select supplier → send PO
+- Admin View for Reports (aggregated data across all sellers, filter by seller/date/category)
 - WhatsApp Business API integration (future upgrade from wa.me)
 
 ### P2
@@ -78,5 +84,6 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - Automatic email reminders
 - Buyer-facing Product Offers panel
 - Refactor inquiry modal, clean unused Pydantic models
+- Admin search insights dashboard
 
 ## Mocked: Resend email service
