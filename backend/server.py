@@ -13054,6 +13054,11 @@ from routers.po_router import init_po_router
 po_router = init_po_router(db, verify_firebase_token, activity_log_service)
 app.include_router(po_router, prefix="/api/business-tools")
 
+from routers.pending_orders_router import init_pending_orders_router
+pending_orders_router = init_pending_orders_router(db, verify_firebase_token, serialize_doc)
+app.include_router(pending_orders_router, prefix="/api/business-tools")
+
+
 from routers.analytics_router import init_analytics_router
 analytics_router = init_analytics_router(db, verify_firebase_token)
 app.include_router(analytics_router, prefix="/api/business-tools")

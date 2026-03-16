@@ -158,6 +158,26 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
             for item in serialized:
                 item.pop("purchase_price", None)
         
+        # Add reserved stock from pending orders
+        for item in serialized:
+            listing_id_str = str(item.get("listingId", item.get("id", "")))
+            if listing_id_str:
+                reserved_pipeline = [
+                    {"$match": {
+                        "sellerId": ObjectId(seller_id),
+                        "listingId": ObjectId(listing_id_str),
+                        "status": {"$in": ["pending", "partially_fulfilled"]}
+                    }},
+                    {"$group": {"_id": None, "total": {"$sum": "$pendingQty"}}}
+                ]
+                reserved_result = await db.pending_orders.aggregate(reserved_pipeline).to_list(1)
+                reserved = reserved_result[0]["total"] if reserved_result else 0
+            else:
+                reserved = 0
+            total_stock = item.get("stock", 0)
+            item["reservedStock"] = reserved
+            item["availableStock"] = max(0, total_stock - reserved)
+        
         return {
             "inventory": serialized,
             "canViewPurchasePrice": can_view_purchase_price,

@@ -248,11 +248,27 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 for s in specs:
                     if isinstance(s, dict):
                         spec_list.append({"key": str(s.get("key", s.get("name", ""))), "value": str(s.get("value", ""))})
+            stock = listing.get("stock", 0)
+            # Calculate reserved stock from pending orders
+            reserved_pipeline = [
+                {"$match": {
+                    "sellerId": ObjectId(seller_id),
+                    "listingId": listing["_id"],
+                    "status": {"$in": ["pending", "partially_fulfilled"]}
+                }},
+                {"$group": {"_id": None, "total": {"$sum": "$pendingQty"}}}
+            ]
+            reserved_result = await db.pending_orders.aggregate(reserved_pipeline).to_list(1)
+            reserved = reserved_result[0]["total"] if reserved_result else 0
+            available = max(0, stock - reserved)
+
             items.append({
                 "id": str(listing["_id"]),
                 "productName": prod.get("name", "Unknown"),
                 "productType": listing.get("productType", "single"),
-                "stock": listing.get("stock", 0),
+                "stock": stock,
+                "reservedStock": reserved,
+                "availableStock": available,
                 "price": price,
                 "specifications": spec_list
             })
@@ -294,6 +310,57 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             result.append(inv)
         return {"invoices": serialize_doc(result)}
 
+    # ─── Stock Check Before Invoice ───
+
+    @router.post("/invoices/check-stock")
+    async def check_invoice_stock(data: InvoiceCreate, authorization: str = Header(...)):
+        """Pre-check stock availability for invoice items."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.CREATE_INVOICE.value)
+        seller_id = await get_seller_id(user)
+
+        shortages = []
+        for item in data.items:
+            if not item.productId or not data.deductStock:
+                continue
+            try:
+                listing = await db.sellerListings.find_one({
+                    "_id": ObjectId(item.productId),
+                    "sellerId": ObjectId(seller_id)
+                })
+                if listing:
+                    prod = await db.products.find_one({"_id": listing.get("productId")})
+                    product_name = prod.get("name", item.productName or "Item") if prod else (item.productName or "Item")
+                    stock = listing.get("stock", 0)
+
+                    # Calculate reserved stock from pending orders
+                    pipeline = [
+                        {"$match": {
+                            "sellerId": ObjectId(seller_id),
+                            "listingId": listing["_id"],
+                            "status": {"$in": ["pending", "partially_fulfilled"]}
+                        }},
+                        {"$group": {"_id": None, "total": {"$sum": "$pendingQty"}}}
+                    ]
+                    reserved_result = await db.pending_orders.aggregate(pipeline).to_list(1)
+                    reserved = reserved_result[0]["total"] if reserved_result else 0
+                    available = max(0, stock - reserved)
+
+                    if item.quantity > available:
+                        shortages.append({
+                            "productId": item.productId,
+                            "productName": product_name,
+                            "requestedQty": item.quantity,
+                            "totalStock": stock,
+                            "reservedStock": reserved,
+                            "availableStock": available,
+                            "shortage": item.quantity - available,
+                        })
+            except Exception:
+                pass
+
+        return {"hasShortage": len(shortages) > 0, "shortages": shortages}
+
     @router.post("/invoices")
     async def create_invoice(data: InvoiceCreate, authorization: str = Header(...)):
         user = await get_current_user(authorization)
@@ -334,8 +401,10 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                                             cn = comp_prod.get("name", "Unknown") if comp_prod else "Unknown"
                                             raise HTTPException(status_code=400, detail=f"Insufficient stock for {cn} in {product_name}")
                             else:
-                                if listing.get("stock", 0) < item.quantity:
-                                    raise HTTPException(status_code=400, detail=f"Insufficient stock for {product_name}")
+                                current_stock = listing.get("stock", 0)
+                                if current_stock < item.quantity:
+                                    if not data.allowPartialFulfillment:
+                                        raise HTTPException(status_code=400, detail=f"Insufficient stock for {product_name}. Available: {current_stock}, Requested: {item.quantity}")
                 except HTTPException:
                     raise
                 except Exception:
@@ -411,7 +480,8 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         result = await db.invoices.insert_one(invoice_doc)
         invoice_doc["_id"] = result.inserted_id
 
-        # Deduct stock if requested
+        # Deduct stock if requested + create pending orders for shortages
+        pending_orders_created = []
         if data.deductStock:
             for item in invoice_items:
                 if item["productId"]:
@@ -469,42 +539,84 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                                         await composite_router.sync_composite_stock(cp_id)
                             else:
                                 prev_stock = listing.get("stock", 0)
-                                new_stock = max(0, prev_stock - item["quantity"])
-                                await db.sellerListings.update_one({"_id": ObjectId(item["productId"])}, {"$set": {"stock": new_stock, "updatedAt": now}})
-                                await db.inventory_logs.insert_one({
-                                    "sellerId": ObjectId(seller_id), "listingId": ObjectId(item["productId"]),
-                                    "productName": item["productName"], "changeType": "sale",
-                                    "quantity": -item["quantity"], "previousStock": prev_stock, "newStock": new_stock,
-                                    "note": f"Invoice {invoice_number}", "createdBy": str(user["_id"]), "createdAt": now
-                                })
-                                # Low stock alert for regular product
-                                prod_min = listing.get("minStock", 0)
-                                prod_alert = listing.get("lowStockAlertEnabled", True)
-                                if prod_alert and prod_min > 0 and new_stock <= prod_min:
-                                    existing_lsa2 = await db.low_stock_alerts.find_one({
-                                        "sellerId": ObjectId(seller_id), "listingId": ObjectId(item["productId"]), "status": "pending"
+                                requested_qty = item["quantity"]
+
+                                # Partial fulfillment: only deduct what's available
+                                if data.allowPartialFulfillment and prev_stock < requested_qty:
+                                    actual_deduct = prev_stock
+                                    shortage = requested_qty - prev_stock
+                                else:
+                                    actual_deduct = requested_qty
+                                    shortage = 0
+
+                                if actual_deduct > 0:
+                                    new_stock = max(0, prev_stock - actual_deduct)
+                                    await db.sellerListings.update_one({"_id": ObjectId(item["productId"])}, {"$set": {"stock": new_stock, "updatedAt": now}})
+                                    await db.inventory_logs.insert_one({
+                                        "sellerId": ObjectId(seller_id), "listingId": ObjectId(item["productId"]),
+                                        "productName": item["productName"], "changeType": "sale",
+                                        "quantity": -actual_deduct, "previousStock": prev_stock, "newStock": new_stock,
+                                        "note": f"Invoice {invoice_number}" + (f" (partial: {actual_deduct}/{requested_qty})" if shortage > 0 else ""),
+                                        "createdBy": str(user["_id"]), "createdAt": now
                                     })
-                                    if not existing_lsa2:
-                                        await db.low_stock_alerts.insert_one({
-                                            "sellerId": ObjectId(seller_id), "listingId": ObjectId(item["productId"]),
-                                            "productName": item["productName"], "currentStock": new_stock,
-                                            "minStock": prod_min, "status": "pending",
-                                            "createdAt": now, "updatedAt": now,
+                                    # Low stock alert for regular product
+                                    prod_min = listing.get("minStock", 0)
+                                    prod_alert = listing.get("lowStockAlertEnabled", True)
+                                    if prod_alert and prod_min > 0 and new_stock <= prod_min:
+                                        existing_lsa2 = await db.low_stock_alerts.find_one({
+                                            "sellerId": ObjectId(seller_id), "listingId": ObjectId(item["productId"]), "status": "pending"
                                         })
-                                        await db.seller_notifications.insert_one({
-                                            "sellerId": ObjectId(seller_id), "type": "low_stock",
-                                            "title": f"Low Stock Alert: {item['productName']}",
-                                            "message": f"Remaining Stock: {new_stock}, Minimum Required: {prod_min}",
-                                            "referenceId": str(item["productId"]),
-                                            "referenceType": "inventory", "read": False, "createdAt": now,
-                                        })
-                                    else:
-                                        await db.low_stock_alerts.update_one(
-                                            {"_id": existing_lsa2["_id"]},
-                                            {"$set": {"currentStock": new_stock, "updatedAt": now}}
-                                        )
-                                if composite_router and hasattr(composite_router, 'sync_all_composites_for_component'):
-                                    await composite_router.sync_all_composites_for_component(str(item["productId"]))
+                                        if not existing_lsa2:
+                                            await db.low_stock_alerts.insert_one({
+                                                "sellerId": ObjectId(seller_id), "listingId": ObjectId(item["productId"]),
+                                                "productName": item["productName"], "currentStock": new_stock,
+                                                "minStock": prod_min, "status": "pending",
+                                                "createdAt": now, "updatedAt": now,
+                                            })
+                                            await db.seller_notifications.insert_one({
+                                                "sellerId": ObjectId(seller_id), "type": "low_stock",
+                                                "title": f"Low Stock Alert: {item['productName']}",
+                                                "message": f"Remaining Stock: {new_stock}, Minimum Required: {prod_min}",
+                                                "referenceId": str(item["productId"]),
+                                                "referenceType": "inventory", "read": False, "createdAt": now,
+                                            })
+                                        else:
+                                            await db.low_stock_alerts.update_one(
+                                                {"_id": existing_lsa2["_id"]},
+                                                {"$set": {"currentStock": new_stock, "updatedAt": now}}
+                                            )
+                                    if composite_router and hasattr(composite_router, 'sync_all_composites_for_component'):
+                                        await composite_router.sync_all_composites_for_component(str(item["productId"]))
+
+                                # Create pending order for shortage
+                                if shortage > 0:
+                                    pending_doc = {
+                                        "sellerId": ObjectId(seller_id),
+                                        "buyerId": ObjectId(data.buyerId),
+                                        "listingId": ObjectId(item["productId"]),
+                                        "invoiceId": result.inserted_id,
+                                        "referenceInvoiceNumber": invoice_number,
+                                        "productName": item["productName"],
+                                        "sku": listing.get("sku", ""),
+                                        "orderedQty": requested_qty,
+                                        "fulfilledQty": actual_deduct,
+                                        "pendingQty": shortage,
+                                        "price": item["price"],
+                                        "gstPercent": item["gstPercent"],
+                                        "purchasePrice": item.get("purchase_price", 0),
+                                        "specifications": item.get("selected_specifications", []),
+                                        "status": "pending" if actual_deduct == 0 else "partially_fulfilled",
+                                        "fulfilmentInvoiceIds": [],
+                                        "createdAt": now,
+                                        "updatedAt": now,
+                                    }
+                                    po_result = await db.pending_orders.insert_one(pending_doc)
+                                    pending_orders_created.append({
+                                        "id": str(po_result.inserted_id),
+                                        "productName": item["productName"],
+                                        "pendingQty": shortage,
+                                        "fulfilledQty": actual_deduct,
+                                    })
                     except Exception as e:
                         logger.warning(f"Stock deduction failed for {item['productId']}: {e}")
 
@@ -524,7 +636,11 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         })
 
         invoice_doc["buyerName"] = buyer.get("buyerName", "Unknown")
-        return {"message": "Invoice created", "invoice": serialize_doc(invoice_doc)}
+        response = {"message": "Invoice created", "invoice": serialize_doc(invoice_doc)}
+        if pending_orders_created:
+            response["pendingOrders"] = pending_orders_created
+            response["message"] = f"Invoice created with {len(pending_orders_created)} pending order(s)"
+        return response
 
     @router.get("/invoices/{invoice_id}")
     async def get_invoice(invoice_id: str, authorization: str = Header(...)):

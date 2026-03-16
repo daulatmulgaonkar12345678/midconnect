@@ -24,7 +24,8 @@ import {
   AlertTriangle,
   Home,
   LineChart,
-  Bell
+  Bell,
+  Clock
 } from 'lucide-react';
 
 // Permission context for access control
@@ -98,6 +99,13 @@ const navItems = [
     icon: FileText,
     permission: 'create_invoice',
     color: 'orange'
+  },
+  {
+    href: '/seller/business-tools/pending-orders',
+    label: 'Pending Orders',
+    icon: Clock,
+    permission: 'create_invoice',
+    color: 'amber'
   },
   {
     href: '/seller/business-tools/charts',

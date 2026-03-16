@@ -286,6 +286,7 @@ class InvoiceCreate(BaseModel):
     items: List[InvoiceItemCreate] = Field(..., min_length=1)
     notes: Optional[str] = Field(None, max_length=1000)
     deductStock: bool = True
+    allowPartialFulfillment: bool = False
     dueDays: int = Field(7, ge=1, le=365, description="Payment due in N days")
     poNumber: Optional[str] = Field(None, max_length=100, description="Purchase Order reference")
     challanNumber: Optional[str] = Field(None, max_length=100, description="Challan number")

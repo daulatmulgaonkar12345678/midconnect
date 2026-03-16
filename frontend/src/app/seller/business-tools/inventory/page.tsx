@@ -20,6 +20,8 @@ interface InventoryItem {
   categoryName?: string;
   sku: string;
   stock: number;
+  reservedStock: number;
+  availableStock: number;
   lowStockAlert: number;
   minStock: number;
   reorderQuantity: number;
@@ -415,10 +417,19 @@ export default function InventoryPage() {
                     </td>
                     {/* Stock */}
                     <td className="px-6 py-4 text-center whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${item.isLowStock ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                        {item.stock}
-                      </span>
-                      {isComposite(item) && <p className="text-[10px] text-gray-400 mt-0.5">auto</p>}
+                      <div>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${item.isLowStock ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                          {item.stock}
+                        </span>
+                        {item.reservedStock > 0 && (
+                          <div className="text-[10px] mt-0.5">
+                            <span className="text-amber-600" data-testid={`reserved-${item.listingId}`}>Reserved: {item.reservedStock}</span>
+                            <span className="text-gray-400 mx-1">|</span>
+                            <span className="text-emerald-600" data-testid={`available-${item.listingId}`}>Avail: {item.availableStock}</span>
+                          </div>
+                        )}
+                        {isComposite(item) && <p className="text-[10px] text-gray-400 mt-0.5">auto</p>}
+                      </div>
                     </td>
                     {/* Min Stock */}
                     <td className="px-6 py-4 text-center whitespace-nowrap" data-testid={`min-stock-cell-${item.listingId}`}>

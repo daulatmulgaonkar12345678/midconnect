@@ -6,7 +6,7 @@ import { usePermissions } from '../layout';
 import {
   FileText, Plus, X, Download, Eye, Trash2, Send, CreditCard,
   IndianRupee, ChevronDown, ChevronUp, Clock, CheckCircle2,
-  AlertCircle, Banknote, Calendar, MessageCircle, Upload, Image as ImageIcon,
+  AlertCircle, AlertTriangle, Banknote, Calendar, MessageCircle, Upload, Image as ImageIcon,
   FileDown, Bell, Settings, ExternalLink, Paperclip, Loader2
 } from 'lucide-react';
 import { uploadPaymentReceipt } from '@/lib/cloudinary';
@@ -16,7 +16,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 // ── Types ──
 
 interface Spec { key: string; value: string; }
-interface InvoiceListing { id: string; productName: string; productType: string; stock: number; price: number; specifications: Spec[]; }
+interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; specifications: Spec[]; }
 interface InvoiceFormItem { productId: string; productName: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
 interface Buyer { id: string; buyerName: string; company?: string; phone?: string; }
 interface InvoiceItem { productName: string; quantity: number; price: number; gstPercent: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
@@ -92,6 +92,16 @@ export default function InvoicesPage() {
   const [reminderDaysInput, setReminderDaysInput] = useState('3, 7, 15');
   // Image preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // Stock shortage modal
+  const [shortageModal, setShortageModal] = useState<{
+    shortages: Array<{
+      productId: string; productName: string;
+      requestedQty: number; totalStock: number; reservedStock: number;
+      availableStock: number; shortage: number;
+    }>;
+    payload: any;
+  } | null>(null);
+  const [shortageSubmitting, setShortageSubmitting] = useState(false);
   // PDF Download modal
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfModalInvoice, setPdfModalInvoice] = useState<{ id: string; invoiceNumber: string } | null>(null);
@@ -178,14 +188,11 @@ export default function InvoicesPage() {
 
   const formTotals = formData.items.reduce((a, it) => { const l = calcLine(it.quantity, it.price, it.gstPercent); return { subtotal: a.subtotal + l.subtotal, gst: a.gst + l.gstAmount, total: a.total + l.total }; }, { subtotal: 0, gst: 0, total: 0 });
 
-  const handleSubmit = async () => {
-    if (!formData.buyerId) { alert('Select a buyer'); return; }
-    if (formData.items.some(i => !i.productName && !i.productId)) { alert('All items need a product'); return; }
-    const h = await authHeaders();
+  const buildPayload = () => {
     const transportData = formData.transport.transporterName || formData.transport.lrNumber || formData.transport.vehicleNumber
       ? { ...formData.transport, numberOfPackages: formData.transport.numberOfPackages ? parseInt(formData.transport.numberOfPackages) : undefined }
       : undefined;
-    const payload = {
+    return {
       buyerId: formData.buyerId,
       items: formData.items.map(i => ({
         productId: i.productId || null, productName: i.productName || null,
@@ -202,6 +209,10 @@ export default function InvoicesPage() {
       transport: transportData,
       termsAndConditions: formData.termsAndConditions || undefined,
     };
+  };
+
+  const submitInvoice = async (payload: any) => {
+    const h = await authHeaders();
     const res = await fetch(`${API_URL}/api/business-tools/invoices`, { method: 'POST', headers: h, body: JSON.stringify(payload) });
     const data = await res.json();
     if (!res.ok) { alert(data.detail || 'Failed to create invoice'); return; }
@@ -212,6 +223,40 @@ export default function InvoicesPage() {
       transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
     });
     fetchAll();
+    if (data.pendingOrders?.length > 0) {
+      const names = data.pendingOrders.map((p: any) => `${p.productName}: ${p.pendingQty} units`).join('\n');
+      alert(`Invoice created with pending orders:\n${names}\n\nView them in Pending Orders section.`);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.buyerId) { alert('Select a buyer'); return; }
+    if (formData.items.some(i => !i.productName && !i.productId)) { alert('All items need a product'); return; }
+    const payload = buildPayload();
+
+    // Check stock before creating
+    if (payload.deductStock) {
+      const h = await authHeaders();
+      const checkRes = await fetch(`${API_URL}/api/business-tools/invoices/check-stock`, { method: 'POST', headers: h, body: JSON.stringify(payload) });
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.hasShortage) {
+          setShortageModal({ shortages: checkData.shortages, payload });
+          return;
+        }
+      }
+    }
+
+    await submitInvoice(payload);
+  };
+
+  const handleShortageAction = async (action: 'partial' | 'full_pending' | 'cancel') => {
+    if (action === 'cancel' || !shortageModal) { setShortageModal(null); return; }
+    setShortageSubmitting(true);
+    const payload = { ...shortageModal.payload, allowPartialFulfillment: true };
+    await submitInvoice(payload);
+    setShortageSubmitting(false);
+    setShortageModal(null);
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -492,7 +537,7 @@ export default function InvoicesPage() {
                             <label className="text-xs text-gray-500 mb-1 block">Product</label>
                             <select value={item.productId} onChange={e => onProductSelect(idx, e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-product-${idx}`}>
                               <option value="">Select / Manual</option>
-                              {listings.map(l => <option key={l.id} value={l.id}>{l.productName} (Stock: {l.stock})</option>)}
+                              {listings.map(l => <option key={l.id} value={l.id}>{l.productName} (Avail: {l.availableStock}{l.reservedStock > 0 ? `, Reserved: ${l.reservedStock}` : ''})</option>)}
                             </select>
                             {item.productId && item.allSpecs.length > 0 && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{item.allSpecs.map(s => `${s.key}: ${s.value}`).join(' | ')}</p>}
                             {!item.productId && <input type="text" value={item.productName} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], productName: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="Manual entry" className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-name-${idx}`} />}
@@ -879,6 +924,49 @@ export default function InvoicesPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {/* ── Stock Shortage Modal ── */}
+      {shortageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="shortage-modal">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-amber-100 rounded-lg"><AlertTriangle className="h-5 w-5 text-amber-600" /></div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Stock Insufficient</h3>
+                <p className="text-sm text-gray-500">Some items exceed available stock</p>
+              </div>
+            </div>
+            <div className="space-y-3 mb-6">
+              {shortageModal.shortages.map((s, i) => (
+                <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg p-3" data-testid={`shortage-item-${i}`}>
+                  <p className="font-medium text-gray-900">{s.productName}</p>
+                  <div className="flex flex-wrap gap-4 mt-1 text-sm">
+                    <span>Available: <strong className="text-emerald-600">{s.availableStock}</strong></span>
+                    <span>Requested: <strong>{s.requestedQty}</strong></span>
+                    <span>Shortage: <strong className="text-red-600">{s.shortage}</strong></span>
+                    {s.reservedStock > 0 && <span className="text-xs text-gray-500">(Reserved: {s.reservedStock})</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <button onClick={() => handleShortageAction('partial')} disabled={shortageSubmitting}
+                className="w-full flex items-center justify-between px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+                data-testid="shortage-partial-btn">
+                <div className="text-left">
+                  <p className="font-medium text-sm">Deliver Available Stock & Create Pending Order</p>
+                  <p className="text-xs text-indigo-200">Invoice for available qty, backorder for the rest</p>
+                </div>
+                {shortageSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
+              </button>
+              <button onClick={() => handleShortageAction('cancel')}
+                className="w-full px-4 py-3 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition text-left"
+                data-testid="shortage-cancel-btn">
+                Cancel — Go back to edit invoice
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
