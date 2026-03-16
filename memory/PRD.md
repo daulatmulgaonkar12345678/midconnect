@@ -51,6 +51,11 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - **Root Cause:** Backend `POST /share-document` endpoint defined params as query parameters, but frontend sent them in JSON body. `documentId` always defaulted to empty string
 - **Fix:** Created `ShareDocumentRequest` Pydantic model to correctly parse JSON body. Also replaced hardcoded `app_url` with `os.environ.get("FRONTEND_URL")`
 
+### PO WhatsApp Sharing with Secure Download Link (DONE - Mar 2026)
+- **Feature:** Added secure document link (`/api/doc/{token}`) to PO WhatsApp messages, consistent with invoice and catalog sharing
+- **Backend:** Updated `GET /purchase-orders/{poId}/whatsapp-link` to create `document_shares` record (7-day expiry), return `documentLink`, `whatsappLink`, `supplierPhone`. Fixed `/api/doc/{token}` PO handler to return actual PDF (was returning raw JSON). PO status auto-updates from draft to sent
+- **Frontend:** WhatsApp button visible for all non-terminal PO statuses. Phone input modal shown when supplier phone is missing. "Opening WhatsApp..." confirmation on send
+
 ## Key API Endpoints
 ### Product Sharing & Documents
 - GET /api/business-tools/recipients (buyers + suppliers)
