@@ -394,8 +394,10 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             invoice_items.append({
                 "productId": item.productId,
                 "productName": product_name,
+                "hsnCode": item.hsnCode or "",
                 "quantity": item.quantity,
                 "price": item.price,
+                "discount": item.discount,
                 "purchase_price": round(item_purchase_price, 2),
                 "gstPercent": item.gstPercent,
                 "gstAmount": gst_amount,
@@ -424,6 +426,11 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "pendingAmount": grand_total,
             "status": "draft",
             "notes": data.notes,
+            "poNumber": data.poNumber or "",
+            "challanNumber": data.challanNumber or "",
+            "placeOfSupply": data.placeOfSupply or "",
+            "transport": data.transport.model_dump() if data.transport else {},
+            "termsAndConditions": data.termsAndConditions or "",
             "createdBy": str(user["_id"]),
             "createdAt": now,
             "updatedAt": now
@@ -750,10 +757,14 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
     # ==========================================
 
     @router.get("/invoices/{invoice_id}/pdf")
-    async def get_invoice_pdf(invoice_id: str, authorization: str = Header(...)):
+    async def get_invoice_pdf(invoice_id: str, authorization: str = Header(...), copy_type: str = "original"):
         user = await get_current_user(authorization)
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
+
+        valid_copies = ["original", "transporter", "supplier", "office"]
+        if copy_type not in valid_copies:
+            copy_type = "original"
 
         try:
             inv = await db.invoices.find_one({"_id": ObjectId(invoice_id), "sellerId": ObjectId(seller_id)})
@@ -769,6 +780,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         # Build seller dict for PDF from user profile
         profile = seller.get("profile") or {}
         gst = seller.get("gst") or {}
+        bank_details = seller.get("bankDetails") or profile.get("bankDetails") or {}
         seller_data = {
             "businessName": profile.get("businessName", ""),
             "name": profile.get("businessName", seller.get("email", "")),
@@ -779,18 +791,75 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "email": seller.get("email", ""),
             "gstNumber": gst.get("number", ""),
             "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
+            "bankDetails": bank_details,
         }
 
         buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
         if not buyer:
             buyer = {}
 
-        pdf_bytes = generate_invoice_pdf(inv, seller_data, buyer)
+        inv_serialized = serialize_doc([inv])[0]
+        pdf_bytes = generate_invoice_pdf(inv_serialized, seller_data, buyer, copy_type=copy_type)
+        copy_labels = {"original": "original", "transporter": "transporter", "supplier": "supplier", "office": "office"}
+        filename = f"invoice-{inv.get('invoiceNumber', '')}-{copy_labels.get(copy_type, 'original')}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="invoice-{inv.get("invoiceNumber", "")}.pdf"'}
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
+
+    @router.post("/invoices/{invoice_id}/eway-bill")
+    async def generate_eway_bill(invoice_id: str, authorization: str = Header(...)):
+        """Prepare E-Way Bill data from invoice. Returns JSON for GST portal submission."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.CREATE_INVOICE.value)
+        seller_id = await get_seller_id(user)
+
+        try:
+            inv = await db.invoices.find_one({"_id": ObjectId(invoice_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid invoice ID")
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        seller = await db.users.find_one({"_id": ObjectId(seller_id)})
+        profile = (seller or {}).get("profile", {})
+        gst = (seller or {}).get("gst", {})
+        buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")}) or {}
+        transport = inv.get("transport", {})
+
+        eway_data = {
+            "invoiceNumber": inv.get("invoiceNumber", ""),
+            "invoiceDate": inv.get("date").isoformat() if hasattr(inv.get("date"), "isoformat") else str(inv.get("date", "")),
+            "supplierGstin": gst.get("number", ""),
+            "supplierName": profile.get("businessName", ""),
+            "supplierAddress": profile.get("address", ""),
+            "supplierState": profile.get("state", ""),
+            "recipientGstin": buyer.get("gstNumber", ""),
+            "recipientName": buyer.get("buyerName", buyer.get("name", "")),
+            "recipientAddress": buyer.get("address", ""),
+            "recipientState": buyer.get("state", inv.get("placeOfSupply", "")),
+            "totalAmount": inv.get("total", 0),
+            "taxableAmount": inv.get("subtotal", 0),
+            "gstAmount": inv.get("gst", 0),
+            "transporterName": transport.get("transporterName", ""),
+            "transporterId": transport.get("transporterId", ""),
+            "lrNumber": transport.get("lrNumber", ""),
+            "vehicleNumber": transport.get("vehicleNumber", ""),
+            "items": [{
+                "productName": item.get("productName", ""),
+                "hsnCode": item.get("hsnCode", ""),
+                "quantity": item.get("quantity", 0),
+                "taxableValue": round(item.get("price", 0) * item.get("quantity", 0), 2),
+                "gstRate": item.get("gstPercent", 0),
+            } for item in inv.get("items", [])],
+            "portalUrl": "https://ewaybillgst.gov.in",
+            "status": "prepared",
+            "message": "E-Way Bill data prepared. Please submit on the GST E-Way Bill portal."
+        }
+        return eway_data
+
+
 
     @router.delete("/invoices/{invoice_id}")
     async def delete_invoice(invoice_id: str, authorization: str = Header(...)):

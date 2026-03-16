@@ -93,8 +93,14 @@ export default function InvoicesPage() {
   // Image preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   // Invoice form
-  const [formData, setFormData] = useState<{ buyerId: string; items: InvoiceFormItem[]; notes: string; deductStock: boolean; dueDays: number }>({
+  const [formData, setFormData] = useState<{
+    buyerId: string; items: InvoiceFormItem[]; notes: string; deductStock: boolean; dueDays: number;
+    poNumber: string; challanNumber: string; placeOfSupply: string; termsAndConditions: string;
+    transport: { transporterName: string; lrNumber: string; vehicleNumber: string; bookingLocation: string; numberOfPackages: string; };
+  }>({
     buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7,
+    poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
+    transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
   });
 
   const authHeaders = useCallback(async () => {
@@ -171,15 +177,36 @@ export default function InvoicesPage() {
     if (!formData.buyerId) { alert('Select a buyer'); return; }
     if (formData.items.some(i => !i.productName && !i.productId)) { alert('All items need a product'); return; }
     const h = await authHeaders();
+    const transportData = formData.transport.transporterName || formData.transport.lrNumber || formData.transport.vehicleNumber
+      ? { ...formData.transport, numberOfPackages: formData.transport.numberOfPackages ? parseInt(formData.transport.numberOfPackages) : undefined }
+      : undefined;
     const payload = {
       buyerId: formData.buyerId,
-      items: formData.items.map(i => ({ productId: i.productId || null, productName: i.productName || null, quantity: i.quantity, price: i.price, gstPercent: i.gstPercent, selected_specifications: [...i.selectedSpecs, ...i.customSpecs.filter(s => s.key && s.value)] })),
+      items: formData.items.map(i => ({
+        productId: i.productId || null, productName: i.productName || null,
+        hsnCode: (i as InvoiceFormItem & { hsnCode?: string }).hsnCode || null,
+        quantity: i.quantity, price: i.price,
+        discount: (i as InvoiceFormItem & { discount?: number }).discount || 0,
+        gstPercent: i.gstPercent,
+        selected_specifications: [...i.selectedSpecs, ...i.customSpecs.filter(s => s.key && s.value)]
+      })),
       notes: formData.notes, deductStock: formData.deductStock, dueDays: formData.dueDays,
+      poNumber: formData.poNumber || undefined,
+      challanNumber: formData.challanNumber || undefined,
+      placeOfSupply: formData.placeOfSupply || undefined,
+      transport: transportData,
+      termsAndConditions: formData.termsAndConditions || undefined,
     };
     const res = await fetch(`${API_URL}/api/business-tools/invoices`, { method: 'POST', headers: h, body: JSON.stringify(payload) });
     const data = await res.json();
     if (!res.ok) { alert(data.detail || 'Failed to create invoice'); return; }
-    setShowForm(false); setFormData({ buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7 }); fetchAll();
+    setShowForm(false);
+    setFormData({
+      buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7,
+      poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
+      transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
+    });
+    fetchAll();
   };
 
   const updateStatus = async (id: string, status: string) => {
@@ -193,12 +220,21 @@ export default function InvoicesPage() {
     await fetch(`${API_URL}/api/business-tools/invoices/${id}`, { method: 'DELETE', headers: h });
     if (viewInvoice?.id === id) setViewInvoice(null); fetchAll();
   };
-  const downloadPdf = async (id: string, num: string) => {
+  const downloadPdf = async (id: string, num: string, copyType: string = 'original') => {
     const h = await authHeaders();
-    const res = await fetch(`${API_URL}/api/business-tools/invoices/${id}/pdf`, { headers: h });
+    const res = await fetch(`${API_URL}/api/business-tools/invoices/${id}/pdf?copy_type=${copyType}`, { headers: h });
     if (!res.ok) { alert('Failed to download'); return; }
     const blob = await res.blob(); const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${num}.pdf`; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = `${num}-${copyType}.pdf`; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const openEwayBill = async (id: string) => {
+    const h = await authHeaders();
+    const res = await fetch(`${API_URL}/api/business-tools/invoices/${id}/eway-bill`, { method: 'POST', headers: h });
+    if (!res.ok) { alert('Failed to prepare E-Way Bill data'); return; }
+    const data = await res.json();
+    alert(`E-Way Bill data prepared for Invoice ${data.invoiceNumber}.\n\nYou will be redirected to the GST E-Way Bill portal.`);
+    window.open(data.portalUrl, '_blank');
   };
 
   // ── WhatsApp ──
@@ -446,6 +482,28 @@ export default function InvoicesPage() {
                 <div className="flex justify-between font-semibold text-base border-t border-gray-200 pt-2 mt-2"><span>Grand Total</span><span className="flex items-center gap-1"><IndianRupee className="w-4 h-4" />{fmt(formTotals.total)}</span></div>
               </div>
               <div className="flex items-center gap-2"><input type="checkbox" id="deductStock" checked={formData.deductStock} onChange={e => setFormData(p => ({ ...p, deductStock: e.target.checked }))} className="rounded" data-testid="deduct-stock-checkbox" /><label htmlFor="deductStock" className="text-sm text-gray-700">Deduct stock from inventory</label></div>
+              {/* GST & Reference Fields */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">Invoice Reference & GST</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div><label className="block text-xs text-gray-500 mb-1">PO Number</label><input type="text" value={formData.poNumber} onChange={e => setFormData(p => ({ ...p, poNumber: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="PO-001" data-testid="po-number-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">Challan No.</label><input type="text" value={formData.challanNumber} onChange={e => setFormData(p => ({ ...p, challanNumber: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="CH-001" data-testid="challan-number-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">Place of Supply</label><input type="text" value={formData.placeOfSupply} onChange={e => setFormData(p => ({ ...p, placeOfSupply: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="State" data-testid="place-of-supply-input" /></div>
+                </div>
+              </div>
+              {/* Transport Details */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">Transport Details</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div><label className="block text-xs text-gray-500 mb-1">Transporter Name</label><input type="text" value={formData.transport.transporterName} onChange={e => setFormData(p => ({ ...p, transport: { ...p.transport, transporterName: e.target.value } }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid="transporter-name-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">LR Number</label><input type="text" value={formData.transport.lrNumber} onChange={e => setFormData(p => ({ ...p, transport: { ...p.transport, lrNumber: e.target.value } }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid="lr-number-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">Vehicle Number</label><input type="text" value={formData.transport.vehicleNumber} onChange={e => setFormData(p => ({ ...p, transport: { ...p.transport, vehicleNumber: e.target.value } }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid="vehicle-number-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">Booking Location</label><input type="text" value={formData.transport.bookingLocation} onChange={e => setFormData(p => ({ ...p, transport: { ...p.transport, bookingLocation: e.target.value } }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid="booking-location-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">No. of Packages</label><input type="text" value={formData.transport.numberOfPackages} onChange={e => setFormData(p => ({ ...p, transport: { ...p.transport, numberOfPackages: e.target.value } }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid="num-packages-input" /></div>
+                </div>
+              </div>
+              {/* Terms */}
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label><textarea value={formData.termsAndConditions} onChange={e => setFormData(p => ({ ...p, termsAndConditions: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} placeholder="Payment terms, conditions..." data-testid="terms-input" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label><textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} data-testid="invoice-notes" /></div>
             </div>
             <div className="flex gap-3 mt-6 justify-end">
@@ -542,30 +600,45 @@ export default function InvoicesPage() {
             </div>
             {viewInvoice.notes && <div className="text-sm text-gray-600 mb-4"><span className="font-medium">Notes:</span> {viewInvoice.notes}</div>}
             {/* Actions */}
-            <div className="flex gap-2 flex-wrap border-t border-gray-100 pt-4">
-              <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber)} className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700" data-testid="download-pdf-btn"><Download className="w-4 h-4" /> PDF</button>
-              {viewInvoice.buyerPhone && (
-                <button onClick={() => openWhatsApp(viewInvoice, 'send_invoice')}
-                  className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700" data-testid="send-invoice-whatsapp-btn">
-                  <Send className="w-4 h-4" /> Send Invoice WhatsApp
+            <div className="space-y-3 border-t border-gray-100 pt-4">
+              {/* Invoice Copy Downloads */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">Download Invoice Copies</p>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'original')} className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-700" data-testid="download-original"><Download className="w-3.5 h-3.5" /> Original</button>
+                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'transporter')} className="flex items-center gap-1 bg-violet-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-violet-700" data-testid="download-transporter"><Download className="w-3.5 h-3.5" /> Transporter</button>
+                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'supplier')} className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-700" data-testid="download-supplier"><Download className="w-3.5 h-3.5" /> Supplier/CA</button>
+                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'office')} className="flex items-center gap-1 bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-700" data-testid="download-office"><Download className="w-3.5 h-3.5" /> Office</button>
+                </div>
+              </div>
+              {/* Actions Row */}
+              <div className="flex gap-2 flex-wrap">
+                {viewInvoice.buyerPhone && (
+                  <button onClick={() => openWhatsApp(viewInvoice, 'send_invoice')}
+                    className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700" data-testid="send-invoice-whatsapp-btn">
+                    <Send className="w-4 h-4" /> Send Invoice WhatsApp
+                  </button>
+                )}
+                <button onClick={() => openEwayBill(viewInvoice.id)}
+                  className="flex items-center gap-1 bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-700" data-testid="eway-bill-btn">
+                  <ExternalLink className="w-4 h-4" /> Generate E-Way Bill
                 </button>
-              )}
-              {viewInvoice.status === 'draft' && <button onClick={() => updateStatus(viewInvoice.id, 'sent')} className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700" data-testid="mark-sent-btn"><Send className="w-4 h-4" /> Mark Sent</button>}
-              {viewInvoice.status !== 'cancelled' && viewInvoice.status !== 'paid' && (
-                <button onClick={() => openPaymentModal(viewInvoice.id)} className="flex items-center gap-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700" data-testid="add-payment-action-btn"><CreditCard className="w-4 h-4" /> Add Payment</button>
-              )}
-              {/* WhatsApp Follow-Up */}
-              {(viewInvoice.pendingAmount ?? viewInvoice.total) > 0 && viewInvoice.status !== 'cancelled' && (
-                <button onClick={() => openWhatsApp(viewInvoice, viewInvoice.status === 'overdue' ? 'overdue' : 'followup')}
-                  className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700" data-testid="whatsapp-followup-btn">
-                  <MessageCircle className="w-4 h-4" /> {viewInvoice.status === 'overdue' ? 'Overdue Reminder' : 'WhatsApp Follow-Up'}
-                </button>
-              )}
-              {viewInvoice.status !== 'cancelled' && viewInvoice.status !== 'paid' && (
-                <button onClick={() => updateStatus(viewInvoice.id, 'overdue')} className="flex items-center gap-1 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm font-medium" data-testid="mark-overdue-btn"><AlertCircle className="w-4 h-4" /> Mark Overdue</button>
-              )}
-              {viewInvoice.status !== 'cancelled' && viewInvoice.status !== 'paid' && <button onClick={() => updateStatus(viewInvoice.id, 'cancelled')} className="text-red-500 hover:text-red-700 px-3 py-1.5 text-sm font-medium" data-testid="cancel-invoice-status-btn">Cancel</button>}
-              {(viewInvoice.status === 'draft' || viewInvoice.status === 'cancelled') && <button onClick={() => deleteInvoice(viewInvoice.id)} className="text-red-500 hover:text-red-700 px-3 py-1.5 text-sm font-medium" data-testid="delete-invoice-btn"><Trash2 className="w-4 h-4 inline mr-1" />Delete</button>}
+                {viewInvoice.status === 'draft' && <button onClick={() => updateStatus(viewInvoice.id, 'sent')} className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700" data-testid="mark-sent-btn"><Send className="w-4 h-4" /> Mark Sent</button>}
+                {viewInvoice.status !== 'cancelled' && viewInvoice.status !== 'paid' && (
+                  <button onClick={() => openPaymentModal(viewInvoice.id)} className="flex items-center gap-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700" data-testid="add-payment-action-btn"><CreditCard className="w-4 h-4" /> Add Payment</button>
+                )}
+                {(viewInvoice.pendingAmount ?? viewInvoice.total) > 0 && viewInvoice.status !== 'cancelled' && (
+                  <button onClick={() => openWhatsApp(viewInvoice, viewInvoice.status === 'overdue' ? 'overdue' : 'followup')}
+                    className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700" data-testid="whatsapp-followup-btn">
+                    <MessageCircle className="w-4 h-4" /> {viewInvoice.status === 'overdue' ? 'Overdue Reminder' : 'WhatsApp Follow-Up'}
+                  </button>
+                )}
+                {viewInvoice.status !== 'cancelled' && viewInvoice.status !== 'paid' && (
+                  <button onClick={() => updateStatus(viewInvoice.id, 'overdue')} className="flex items-center gap-1 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm font-medium" data-testid="mark-overdue-btn"><AlertCircle className="w-4 h-4" /> Mark Overdue</button>
+                )}
+                {viewInvoice.status !== 'cancelled' && viewInvoice.status !== 'paid' && <button onClick={() => updateStatus(viewInvoice.id, 'cancelled')} className="text-red-500 hover:text-red-700 px-3 py-1.5 text-sm font-medium" data-testid="cancel-invoice-status-btn">Cancel</button>}
+                {(viewInvoice.status === 'draft' || viewInvoice.status === 'cancelled') && <button onClick={() => deleteInvoice(viewInvoice.id)} className="text-red-500 hover:text-red-700 px-3 py-1.5 text-sm font-medium" data-testid="delete-invoice-btn"><Trash2 className="w-4 h-4 inline mr-1" />Delete</button>}
+              </div>
             </div>
           </div>
         </div>
@@ -717,7 +790,7 @@ export default function InvoicesPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button onClick={() => openInvoiceDetail(inv)} className="text-gray-400 hover:text-indigo-600" data-testid={`view-invoice-${inv.id}`} title="View"><Eye className="w-4 h-4" /></button>
-                      <button onClick={() => downloadPdf(inv.id, inv.invoiceNumber)} className="text-gray-400 hover:text-indigo-600" data-testid={`download-invoice-${inv.id}`} title="PDF"><Download className="w-4 h-4" /></button>
+                      <button onClick={() => downloadPdf(inv.id, inv.invoiceNumber, 'original')} className="text-gray-400 hover:text-indigo-600" data-testid={`download-invoice-${inv.id}`} title="PDF"><Download className="w-4 h-4" /></button>
                       {inv.buyerPhone && <button onClick={() => openWhatsApp(inv, 'send_invoice')} className="text-gray-400 hover:text-green-600" data-testid={`send-invoice-wa-${inv.id}`} title="Send Invoice WhatsApp"><Send className="w-4 h-4" /></button>}
                       {inv.status !== 'cancelled' && inv.status !== 'paid' && <button onClick={() => openPaymentModal(inv.id)} className="text-gray-400 hover:text-emerald-600" data-testid={`add-payment-row-${inv.id}`} title="Add Payment"><CreditCard className="w-4 h-4" /></button>}
                       {(inv.pendingAmount ?? inv.total) > 0 && inv.buyerPhone && inv.status !== 'cancelled' && <button onClick={() => openWhatsApp(inv, inv.status === 'overdue' ? 'overdue' : 'followup')} className="text-gray-400 hover:text-green-600" data-testid={`wa-invoice-${inv.id}`} title="WhatsApp"><MessageCircle className="w-4 h-4" /></button>}

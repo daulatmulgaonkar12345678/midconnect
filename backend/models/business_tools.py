@@ -267,10 +267,19 @@ class CompositeProductSell(BaseModel):
 class InvoiceItemCreate(BaseModel):
     productId: Optional[str] = None
     productName: Optional[str] = None
+    hsnCode: Optional[str] = Field(None, max_length=20, description="HSN/SAC code")
     quantity: int = Field(..., ge=1)
     price: float = Field(..., ge=0)
+    discount: float = Field(0, ge=0, description="Discount amount on this line")
     gstPercent: float = Field(0, ge=0, le=100)
     selected_specifications: Optional[List[dict]] = Field(None, description="List of {key, value} specs")
+
+class TransportDetails(BaseModel):
+    transporterName: Optional[str] = Field(None, max_length=200)
+    lrNumber: Optional[str] = Field(None, max_length=100, description="Lorry Receipt Number")
+    vehicleNumber: Optional[str] = Field(None, max_length=50)
+    bookingLocation: Optional[str] = Field(None, max_length=200)
+    numberOfPackages: Optional[int] = Field(None, ge=0)
 
 class InvoiceCreate(BaseModel):
     buyerId: str
@@ -278,6 +287,11 @@ class InvoiceCreate(BaseModel):
     notes: Optional[str] = Field(None, max_length=1000)
     deductStock: bool = True
     dueDays: int = Field(7, ge=1, le=365, description="Payment due in N days")
+    poNumber: Optional[str] = Field(None, max_length=100, description="Purchase Order reference")
+    challanNumber: Optional[str] = Field(None, max_length=100, description="Challan number")
+    placeOfSupply: Optional[str] = Field(None, max_length=100, description="Place of supply for GST")
+    transport: Optional[TransportDetails] = None
+    termsAndConditions: Optional[str] = Field(None, max_length=2000)
 
 class InvoiceStatusUpdate(BaseModel):
     status: str  # draft, sent, viewed, partially_paid, paid, overdue, cancelled
