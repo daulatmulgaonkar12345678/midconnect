@@ -21,6 +21,7 @@ interface LowStockAlert {
   minStock: number;
   status: string;
   createdAt: string;
+  sellerName?: string;
 }
 
 interface SupplierOption {
@@ -55,12 +56,13 @@ function timeAgo(dateStr: string) {
 
 export default function LowStockAlertsPage() {
   const { getIdToken } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isAdmin } = usePermissions();
   const [alerts, setAlerts] = useState<LowStockAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [filter, setFilter] = useState<string>('pending');
   const [error, setError] = useState<string | null>(null);
+  const [isAdminView, setIsAdminView] = useState(false);
 
   // Order modal state
   const [orderModal, setOrderModal] = useState<LowStockAlert | null>(null);
@@ -87,6 +89,7 @@ export default function LowStockAlertsPage() {
         const data = await res.json();
         setAlerts(data.alerts || []);
         setPendingCount(data.pendingCount || 0);
+        setIsAdminView(data.isAdminView || false);
       }
     } catch { /* empty */ }
     setLoading(false);
@@ -216,6 +219,7 @@ export default function LowStockAlertsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="alerts-heading">Low Stock Alerts</h1>
           <p className="text-gray-600 mt-1">
+            {isAdminView && <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-medium px-2 py-0.5 rounded-full mr-2" data-testid="admin-badge">Admin View</span>}
             {pendingCount > 0 ? `${pendingCount} items need attention` : 'All stock levels healthy'}
           </p>
         </div>
@@ -263,6 +267,11 @@ export default function LowStockAlertsPage() {
                   <div>
                     <h3 className="font-semibold text-gray-900">{alert.productName}</h3>
                     {alert.sku && <p className="text-xs text-gray-500 font-mono mt-0.5">{alert.sku}</p>}
+                    {isAdminView && alert.sellerName && (
+                      <p className="text-xs text-indigo-600 font-medium mt-0.5" data-testid={`seller-name-${alert.id}`}>
+                        Seller: {alert.sellerName}
+                      </p>
+                    )}
                     <div className="flex items-center gap-4 mt-2">
                       <span className="text-sm">Current Stock: <span className="font-semibold text-red-600">{alert.currentStock}</span></span>
                       <span className="text-sm">Min Stock: <span className="font-semibold text-gray-700">{alert.minStock}</span></span>
@@ -271,7 +280,7 @@ export default function LowStockAlertsPage() {
                   </div>
                 </div>
 
-                {alert.status === 'pending' && (
+                {alert.status === 'pending' && !isAdminView && (
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button onClick={() => openOrderModal(alert)} disabled={actionLoading === alert.id}
                       className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition"
@@ -284,6 +293,12 @@ export default function LowStockAlertsPage() {
                       Ignore
                     </button>
                   </div>
+                )}
+
+                {alert.status === 'pending' && isAdminView && (
+                  <span className="text-xs font-medium px-2.5 py-1 rounded-full capitalize bg-orange-100 text-orange-700" data-testid={`pending-badge-${alert.id}`}>
+                    pending
+                  </span>
                 )}
 
                 {alert.status !== 'pending' && (

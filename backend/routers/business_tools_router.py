@@ -107,6 +107,10 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
     
     async def check_permission(user: dict, permission: str) -> bool:
         """Check if user has a specific permission."""
+        # Platform admin has all permissions
+        if user.get("isAdmin") is True or "admin" in user.get("roles", []):
+            return True
+        
         account_type = user.get("accountType", "seller")
         
         # Seller Admin has all permissions
@@ -821,6 +825,17 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
     async def get_my_permissions(authorization: str = Header(...)):
         """Get current user's permissions."""
         user = await get_current_user(authorization)
+        
+        # Platform admin has all permissions
+        is_platform_admin = user.get("isAdmin") is True or "admin" in user.get("roles", [])
+        if is_platform_admin:
+            return {
+                "accountType": "admin",
+                "isAdmin": True,
+                "permissions": ALL_PERMISSIONS,
+                "role": None
+            }
+        
         account_type = user.get("accountType", "seller")
         
         if account_type == "seller":
@@ -895,17 +910,26 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         limit: int = 50,
         skip: int = 0
     ):
-        """Get low stock alerts for the seller."""
+        """Get low stock alerts for the seller or all sellers (admin)."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
-        seller_id = await get_seller_id(user)
         
-        query = {"sellerId": ObjectId(seller_id)}
+        is_platform_admin = user.get("isAdmin") is True or "admin" in user.get("roles", [])
+        
+        if is_platform_admin:
+            query = {}
+        else:
+            seller_id = await get_seller_id(user)
+            query = {"sellerId": ObjectId(seller_id)}
+        
         if status:
             query["status"] = status
         
         total = await db.low_stock_alerts.count_documents(query)
         alerts = await db.low_stock_alerts.find(query).sort("createdAt", -1).skip(skip).limit(limit).to_list(limit)
+        
+        # Cache seller names for admin view
+        seller_cache = {}
         
         # Enrich with product data
         enriched = []
@@ -931,14 +955,35 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
                 item["specification"] = "\n".join(specs) if specs else ""
             else:
                 item["specification"] = ""
+            
+            # For admin view: enrich with seller name
+            if is_platform_admin:
+                alert_seller_id = str(alert.get("sellerId", ""))
+                if alert_seller_id and alert_seller_id not in seller_cache:
+                    try:
+                        seller_user = await db.users.find_one({"_id": ObjectId(alert_seller_id)})
+                        if seller_user:
+                            profile = seller_user.get("profile", {}) or {}
+                            seller_cache[alert_seller_id] = profile.get("businessName") or seller_user.get("name") or seller_user.get("email", "Unknown Seller")
+                        else:
+                            seller_cache[alert_seller_id] = "Unknown Seller"
+                    except Exception:
+                        seller_cache[alert_seller_id] = "Unknown Seller"
+                item["sellerName"] = seller_cache.get(alert_seller_id, "Unknown Seller")
+            
             enriched.append(item)
         
-        pending_count = await db.low_stock_alerts.count_documents({"sellerId": ObjectId(seller_id), "status": "pending"})
+        # Pending count: scoped to seller or all
+        if is_platform_admin:
+            pending_count = await db.low_stock_alerts.count_documents({"status": "pending"})
+        else:
+            pending_count = await db.low_stock_alerts.count_documents({"sellerId": ObjectId(seller_id), "status": "pending"})
         
         return {
             "alerts": enriched,
             "total": total,
             "pendingCount": pending_count,
+            "isAdminView": is_platform_admin,
             "limit": limit,
             "skip": skip
         }

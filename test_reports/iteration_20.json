@@ -64,7 +64,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://erp-invoicing-3.preview.emergentagent.com"
+    "api_url": "https://low-stock-admin.preview.emergentagent.com"
   },
   
   "seed_data_creation": "None needed",

@@ -22,7 +22,7 @@ import os
 from bson import ObjectId
 
 # Use the production/preview API URL
-BASE_URL = os.environ.get('NEXT_PUBLIC_API_URL', 'https://erp-invoicing-3.preview.emergentagent.com/api').rstrip('/')
+BASE_URL = os.environ.get('NEXT_PUBLIC_API_URL', 'https://low-stock-admin.preview.emergentagent.com/api').rstrip('/')
 
 
 # ==== Health Check ====
