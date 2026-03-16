@@ -7,6 +7,7 @@ import {
   Building2, Save, Loader2, Image as ImageIcon, X, Eye,
   CreditCard, FileText, Upload
 } from 'lucide-react';
+import { uploadSellerProductImage } from '@/lib/cloudinary';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -75,15 +76,9 @@ export default function SettingsPage() {
     if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) { alert('Only PNG/JPG allowed.'); return; }
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'ml_default');
     try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/dco24qmoq/image/upload', { method: 'POST', body: formData });
-      if (res.ok) {
-        const data = await res.json();
-        setBilling(prev => ({ ...prev, invoiceBackgroundImage: data.secure_url }));
-      } else { alert('Upload failed'); }
+      const result = await uploadSellerProductImage(file);
+      setBilling(prev => ({ ...prev, invoiceBackgroundImage: result.url }));
     } catch { alert('Upload failed'); }
     setUploading(false);
   };
