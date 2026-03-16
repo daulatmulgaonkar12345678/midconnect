@@ -46,6 +46,11 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - **Root Cause:** 12 routers had duplicated, inconsistent permission logic. Some checked `user.get("accountType")` without a default value
 - **Fix:** Created `/app/backend/utils/permissions.py` with centralized `authenticate_user`, `resolve_seller_id`, `check_user_permission`, `require_user_permission`, `is_platform_admin`. All 12 routers now import from this shared utility
 
+### Invoice Share Link Fix (DONE - Mar 2026)
+- **Bug Fix:** Shared invoice links via WhatsApp returned "Document reference missing"
+- **Root Cause:** Backend `POST /share-document` endpoint defined params as query parameters, but frontend sent them in JSON body. `documentId` always defaulted to empty string
+- **Fix:** Created `ShareDocumentRequest` Pydantic model to correctly parse JSON body. Also replaced hardcoded `app_url` with `os.environ.get("FRONTEND_URL")`
+
 ## Key API Endpoints
 ### Product Sharing & Documents
 - GET /api/business-tools/recipients (buyers + suppliers)

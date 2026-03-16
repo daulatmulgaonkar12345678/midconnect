@@ -13,6 +13,7 @@ from bson import ObjectId
 from pydantic import BaseModel
 import io
 import csv
+import os
 import secrets
 import urllib.parse
 import logging
@@ -29,6 +30,13 @@ class ProductShareRequest(BaseModel):
     showPrice: bool = True
     sendWhatsApp: bool = False
     recipientPhone: Optional[str] = None
+
+
+class ShareDocumentRequest(BaseModel):
+    documentType: str = "invoice"
+    documentId: str = ""
+    recipientPhone: str = ""
+    message: str = ""
 
 
 def serialize_doc(doc):
@@ -221,7 +229,7 @@ def init_product_share_router(db, verify_token_func):
         # Build WhatsApp link if requested
         whatsapp_link = None
         if data.sendWhatsApp and data.recipientPhone:
-            app_url = "https://low-stock-admin.preview.emergentagent.com"
+            app_url = os.environ.get("FRONTEND_URL", "https://low-stock-admin.preview.emergentagent.com")
             doc_url = f"{app_url}/api/doc/{token}"
             msg = f"Hello,\n\nPlease find our product catalog below.\n\nDownload here:\n{doc_url}\n\nRegards,\n{seller_info['businessName']}"
             phone = data.recipientPhone.replace("+", "").replace(" ", "").replace("-", "")
@@ -258,7 +266,7 @@ def init_product_share_router(db, verify_token_func):
 
     # ─── Generate secure link for any document (invoice, PO, catalog) ───
     @router.post("/share-document")
-    async def share_document(authorization: str = Header(...), documentType: str = "invoice", documentId: str = "", recipientPhone: str = "", message: str = ""):
+    async def share_document(data: ShareDocumentRequest, authorization: str = Header(...)):
         user = await get_current_user(authorization)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
@@ -270,14 +278,14 @@ def init_product_share_router(db, verify_token_func):
         await db.document_shares.insert_one({
             "token": token,
             "sellerId": ObjectId(seller_id),
-            "documentType": documentType,
-            "documentId": documentId,
-            "recipientPhone": recipientPhone,
+            "documentType": data.documentType,
+            "documentId": data.documentId,
+            "recipientPhone": data.recipientPhone,
             "expiresAt": now + timedelta(days=7),
             "createdAt": now,
         })
 
-        app_url = "https://low-stock-admin.preview.emergentagent.com"
+        app_url = os.environ.get("FRONTEND_URL", "https://low-stock-admin.preview.emergentagent.com")
         doc_url = f"{app_url}/api/doc/{token}"
 
         templates = {
@@ -285,9 +293,9 @@ def init_product_share_router(db, verify_token_func):
             "po": f"Hello,\n\nPlease find the purchase order.\n\nDownload here:\n{doc_url}\n\nRegards,\n{biz_name}",
             "catalog": f"Hello,\n\nPlease find our product catalog.\n\nDownload here:\n{doc_url}\n\nRegards,\n{biz_name}",
         }
-        msg = message or templates.get(documentType, templates["catalog"])
+        msg = data.message or templates.get(data.documentType, templates["catalog"])
 
-        phone = recipientPhone.replace("+", "").replace(" ", "").replace("-", "")
+        phone = data.recipientPhone.replace("+", "").replace(" ", "").replace("-", "")
         if phone and not phone.startswith("91"):
             phone = "91" + phone
 
