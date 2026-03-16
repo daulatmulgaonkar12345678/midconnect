@@ -15,80 +15,68 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 
 ### Phase 1-3: Payment Tracking, Receipts, Onboarding (DONE)
 ### Phase 4: Dashboard & Notifications (DONE)
-### Inventory Module (DONE)
-### Supplier-Product Mapping (DONE)
-### Low Stock Alerts (DONE)
-### Purchase Order System (DONE)
-### Goods Received (GRN) Flow (DONE)
-### Product Analytics Charts (DONE)
-### Invoice WhatsApp for Buyers (DONE)
-### Business Tools Home Dashboard (DONE)
-### Charts & Graphs Page (DONE)
-### Notifications System (DONE)
+### Inventory, Suppliers, Low Stock Alerts, PO/GRN (DONE)
+### Product Analytics, Charts & Graphs (DONE)
+### GST Invoice System with Merged PDF Modal (DONE)
+### Centralized Billing & Company Branding Settings (DONE)
+### Export & Import System (DONE)
 
-### GST Invoice System (DONE)
-- GST-Compliant PDF with seller/buyer GSTIN, HSN codes, CGST/SGST vs IGST
-- 4 Invoice Copies: Original, Transporter, Supplier/CA, Office
-- QR Code, Amount in Words, Transport Details, E-Way Bill placeholder
-
-### Invoice Checkbox Modal for Merged PDF (DONE)
-- Single "Download PDF" button opens modal with copy selection checkboxes
-- Select All, Download Selected with dynamic count
-- Merged PDF via GET /api/business-tools/invoices/{id}/pdf-merged?copies=...
-
-### Centralized Billing Settings (DONE)
-- Billing tab: Bank Details (6 fields), Terms & Conditions
-- Auto-rendered on invoice PDF footer
-
-### Company Branding (DONE)
-- "Company Branding" tab in Business Settings (3 tabs: Profile, Billing, Branding)
-- Company Logo upload (PNG/JPG/SVG, max 2MB) stored as billingSettings.companyLogoUrl
-- Invoice Background Template upload (PNG/JPG, max 5MB) stored as billingSettings.invoiceBackgroundImage
-- Preview modal showing sample invoice layout with logo at top-left + background at 8% opacity
-- Multi-company support: each seller stores separate branding
-
-### Export & Import System (DONE - Mar 2026)
-- **Export:** CSV and Excel (.xlsx) buttons on every report tab
-  - Sales, Profit, Inventory, Buyers, Invoices export endpoints
-  - Exports respect date range filters
-  - Styled Excel files with colored headers and auto-width columns
-- **Import:** 3-step modal workflow
-  - Step 1: Select data type (Products/Inventory/Suppliers/Buyers), download templates
-  - Step 2: Upload CSV/XLSX, validate, preview parsed data table
-  - Step 3: Confirm import, shows imported/skipped/total counts with error notes
-  - Validation: required fields, duplicate checks, GSTIN length, numeric fields
-  - Templates available in both CSV and Excel formats
+### Share Product Catalog & WhatsApp Document Sharing (DONE - Mar 2026)
+- **Inventory "Share Product Catalog" flow:**
+  - Product selection: individual checkboxes, category-based (Select All in Category), global Select All
+  - 4-step modal: Product review (category grouping) → Recipient selection (buyers + suppliers with type badge) → Format & Options (PDF/Excel + Show/Hide Price) → Result (download + WhatsApp per recipient)
+  - Generates professional PDF catalog (reportlab) or styled Excel catalog (openpyxl)
+  - Secure document links (7-day expiry, no auth required) via GET /api/doc/{token}
+- **WhatsApp Document Sharing (wa.me mode):**
+  - Catalog sharing via WhatsApp with secure download link
+  - Invoice sharing enhanced: generates secure link in WhatsApp message
+  - Message templates for catalogs, invoices, POs
+- **Catalog Sharing Settings (Business Settings → Catalog tab):**
+  - 8 field toggles: Image, Name, Category, Specification, Description, Price, Unit, MOQ
+  - Controls both PDF and Excel catalog generation
+- **Security:** Seller can only share own products; no stock/cost data exposed; links are token-based and time-limited
 
 ## Key API Endpoints
+### Product Sharing & Documents
+- GET /api/business-tools/recipients (buyers + suppliers)
+- POST /api/business-tools/product-shares (generate catalog)
+- GET /api/business-tools/product-shares/{id}/download
+- POST /api/business-tools/share-document (secure link for any doc)
+- GET /api/doc/{token} (public, no auth, 7-day expiry)
+- GET /api/business-tools/catalog-settings
+- PUT /api/business-tools/catalog-settings
+
 ### Invoice
 - POST /api/business-tools/invoices
 - GET /api/business-tools/invoices/{id}/pdf?copy_type=...
 - GET /api/business-tools/invoices/{id}/pdf-merged?copies=...
 
+### Export/Import
+- GET /api/business-tools/export/{type}?format=csv|xlsx
+- GET /api/business-tools/import/template/{type}
+- POST /api/business-tools/import/validate
+- POST /api/business-tools/import/process
+
 ### Settings
-- GET /api/business-tools/seller-profile (returns billingSettings with companyLogoUrl)
-- PUT /api/business-tools/seller-profile
+- GET/PUT /api/business-tools/seller-profile
+- GET/PUT /api/business-tools/catalog-settings
 
-### Export
-- GET /api/business-tools/export/sales?format=csv|xlsx&startDate=&endDate=
-- GET /api/business-tools/export/profit?format=csv|xlsx&startDate=&endDate=
-- GET /api/business-tools/export/inventory?format=csv|xlsx
-- GET /api/business-tools/export/buyers?format=csv|xlsx&startDate=&endDate=
-- GET /api/business-tools/export/invoices?format=csv|xlsx&startDate=&endDate=
-
-### Import
-- GET /api/business-tools/import/template/{type}?format=csv|xlsx
-- POST /api/business-tools/import/validate (file + data_type)
-- POST /api/business-tools/import/process (file + data_type)
+## Business Settings Tabs
+1. Business Profile (name, GSTIN, contact, address)
+2. Billing Settings (bank details, T&C)
+3. Company Branding (logo, background template)
+4. Catalog Settings (field visibility toggles)
 
 ## Prioritized Backlog
 ### P1
 - Seller Reminder Controls (configure reminder schedule, custom messages, enable/disable)
 - Admin View for Reports
+- WhatsApp Business API integration (future upgrade from wa.me)
 
 ### P2
-- Token-based search, Redis caching, server.py refactor, email reminders
-- Refactor inquiry modal to shared component
-- Clean unused Pydantic models
+- Token-based search, Redis caching, server.py refactor
+- Automatic email reminders
+- Buyer-facing Product Offers panel
+- Refactor inquiry modal, clean unused Pydantic models
 
 ## Mocked: Resend email service
