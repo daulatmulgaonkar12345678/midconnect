@@ -41,7 +41,23 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - **Backend:** `check_permission` now allows admin users (isAdmin:true or 'admin' in roles). Low stock alerts endpoint returns all sellers' alerts for admin with `isAdminView:true` and `sellerName` per alert
 - **Frontend:** Admin view shows "Admin View" badge, seller name under each alert, hides "Order Material"/"Ignore" buttons, shows status badge instead
 
-### Shared Permissions Utility Refactor (DONE - Mar 2026)
+### Pending Orders (Backorder) System (DONE - Mar 2026)
+- **New Feature:** Partial fulfillment and backorder management during invoice creation
+- **Backend:**
+  - `POST /invoices/check-stock` — Pre-checks stock availability, returns shortage info with reserved stock
+  - `POST /invoices` — `allowPartialFulfillment` flag: deducts available stock, creates pending_orders for shortage
+  - `GET /pending-orders` — List with status filters, enriched with buyer/product/stock info
+  - `POST /pending-orders/{id}/fulfil` — Fulfils pending qty, creates new invoice, deducts stock
+  - `POST /pending-orders/{id}/cancel` — Cancels order, releases reserved stock
+  - `POST /pending-orders/{id}/create-po` — Auto-creates purchase order for shortage qty
+  - `POST /pending-orders/{id}/notify` — WhatsApp notification to buyer about pending order
+  - Inventory list now includes `reservedStock` and `availableStock` fields
+- **Frontend:**
+  - Stock shortage modal during invoice creation (3 options: partial fulfil, cancel)
+  - Pending Orders dashboard page with filter tabs, action buttons (Fulfil, Create PO, Notify Buyer, Cancel)
+  - Inventory page shows "Reserved: X | Avail: Y" when reservedStock > 0
+  - Invoice product dropdown shows available stock with reserved info
+- **DB:** New `pending_orders` collection, new `pending_order_fulfillments` collection
 - **Bug Fix:** POST /api/business-tools/purchase-orders returned 403 for sellers because `accountType` was missing from user records
 - **Root Cause:** 12 routers had duplicated, inconsistent permission logic. Some checked `user.get("accountType")` without a default value
 - **Fix:** Created `/app/backend/utils/permissions.py` with centralized `authenticate_user`, `resolve_seller_id`, `check_user_permission`, `require_user_permission`, `is_platform_admin`. All 12 routers now import from this shared utility
@@ -92,6 +108,7 @@ Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce 
 - Seller Reminder Controls (configure reminder schedule for invoices, low stock, POs; custom messages; enable/disable)
 - Purchase Flow Integration: Low Stock Alert → auto-create PO draft → select supplier → send PO
 - Admin View for Reports (aggregated data across all sellers, filter by seller/date/category)
+- Phase 4 Smart Automation: When stock arrives (GRN/stock update), suggest fulfilling pending orders
 - WhatsApp Business API integration (future upgrade from wa.me)
 
 ### P2
