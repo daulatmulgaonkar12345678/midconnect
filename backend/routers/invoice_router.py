@@ -13,7 +13,7 @@ import logging
 import urllib.parse
 
 from models.business_tools import InvoiceCreate, InvoiceStatusUpdate, PaymentEntryCreate, ReminderSettingsUpdate, Permission
-from services.invoice_pdf_service import generate_invoice_pdf
+from services.invoice_pdf_service import generate_invoice_pdf, generate_merged_invoice_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -780,7 +780,15 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         # Build seller dict for PDF from user profile
         profile = seller.get("profile") or {}
         gst = seller.get("gst") or {}
-        bank_details = seller.get("bankDetails") or profile.get("bankDetails") or {}
+        billing = seller.get("billingSettings") or {}
+        bank_details = {
+            "bankName": billing.get("bankName", ""),
+            "accountNumber": billing.get("accountNumber", ""),
+            "accountName": billing.get("accountName", ""),
+            "ifscCode": billing.get("ifscCode", ""),
+            "branch": billing.get("branch", ""),
+            "upiId": billing.get("upiId", ""),
+        }
         seller_data = {
             "businessName": profile.get("businessName", ""),
             "name": profile.get("businessName", seller.get("email", "")),
@@ -792,6 +800,8 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "gstNumber": gst.get("number", ""),
             "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
             "bankDetails": bank_details,
+            "invoiceTerms": billing.get("invoiceTerms", ""),
+            "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
         }
 
         buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
@@ -807,6 +817,68 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
+
+    @router.get("/invoices/{invoice_id}/pdf-merged")
+    async def get_invoice_pdf_merged(invoice_id: str, authorization: str = Header(...), copies: str = "original,transporter,supplier,office"):
+        """Generate a merged PDF with multiple invoice copies (one per page)."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.CREATE_INVOICE.value)
+        seller_id = await get_seller_id(user)
+
+        valid_copies = ["original", "transporter", "supplier", "office"]
+        copy_list = [c.strip() for c in copies.split(",") if c.strip() in valid_copies]
+        if not copy_list:
+            copy_list = ["original"]
+
+        try:
+            inv = await db.invoices.find_one({"_id": ObjectId(invoice_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid invoice ID")
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        seller = await db.users.find_one({"_id": ObjectId(seller_id)}) or {}
+        profile = seller.get("profile") or {}
+        gst = seller.get("gst") or {}
+        billing = seller.get("billingSettings") or {}
+        bank_details = {
+            "bankName": billing.get("bankName", ""),
+            "accountNumber": billing.get("accountNumber", ""),
+            "accountName": billing.get("accountName", ""),
+            "ifscCode": billing.get("ifscCode", ""),
+            "branch": billing.get("branch", ""),
+            "upiId": billing.get("upiId", ""),
+        }
+        seller_data = {
+            "businessName": profile.get("businessName", ""),
+            "name": profile.get("businessName", seller.get("email", "")),
+            "address": profile.get("address", ""),
+            "city": profile.get("city", ""),
+            "state": profile.get("state", ""),
+            "phone": profile.get("phone", ""),
+            "email": seller.get("email", ""),
+            "gstNumber": gst.get("number", ""),
+            "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
+            "bankDetails": bank_details,
+            "invoiceTerms": billing.get("invoiceTerms", ""),
+            "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
+        }
+        buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")}) or {}
+        inv_serialized = serialize_doc([inv])[0]
+
+        if len(copy_list) == 1:
+            pdf_bytes = generate_invoice_pdf(inv_serialized, seller_data, buyer, copy_type=copy_list[0])
+        else:
+            pdf_bytes = generate_merged_invoice_pdf(inv_serialized, seller_data, buyer, copy_list)
+
+        filename = f"invoice-{inv.get('invoiceNumber', '')}-{'_'.join(copy_list)}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+
 
     @router.post("/invoices/{invoice_id}/eway-bill")
     async def generate_eway_bill(invoice_id: str, authorization: str = Header(...)):
@@ -1214,6 +1286,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         seller_id = await get_seller_id(user)
         profile = user.get("profile") or {}
         gst = user.get("gst") or {}
+        billing = user.get("billingSettings") or {}
 
         # Get counter info for abbreviation/code
         counter = await db.seller_invoice_counters.find_one(
@@ -1230,6 +1303,16 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "state": profile.get("state", ""),
                 "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
                 "gstNumber": gst.get("number", ""),
+            },
+            "billingSettings": {
+                "bankName": billing.get("bankName", ""),
+                "accountNumber": billing.get("accountNumber", ""),
+                "accountName": billing.get("accountName", ""),
+                "ifscCode": billing.get("ifscCode", ""),
+                "branch": billing.get("branch", ""),
+                "upiId": billing.get("upiId", ""),
+                "invoiceTerms": billing.get("invoiceTerms", ""),
+                "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
             },
             "invoiceIdentity": {
                 "sellerAbbreviation": counter.get("sellerAbbreviation", "") if counter else "",
@@ -1276,6 +1359,13 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             if user_doc.get("gst") is None:
                 await db.users.update_one({"_id": user["_id"]}, {"$set": {"gst": {}}})
             profile_update["gst.number"] = gst_number.strip()
+
+        # Billing Settings (only update if provided)
+        billing_data = data.get("billingSettings")
+        if billing_data and isinstance(billing_data, dict):
+            for field in ["bankName", "accountNumber", "accountName", "ifscCode", "branch", "upiId", "invoiceTerms", "invoiceBackgroundImage"]:
+                if field in billing_data:
+                    profile_update[f"billingSettings.{field}"] = str(billing_data[field]).strip() if billing_data[field] else ""
 
         await db.users.update_one({"_id": user["_id"]}, {"$set": profile_update})
 

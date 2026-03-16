@@ -70,6 +70,26 @@ def generate_qr_code(data_str: str) -> Image:
 def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: str = "original") -> bytes:
     """Generate a GST-compliant PDF invoice."""
     buffer = io.BytesIO()
+
+    # Background watermark callback
+    bg_url = seller.get("invoiceBackgroundImage", "")
+    bg_image_data = None
+    if bg_url:
+        try:
+            req = urllib.request.Request(bg_url, headers={'User-Agent': 'Mozilla/5.0'})
+            bg_image_data = urllib.request.urlopen(req, timeout=5).read()
+        except Exception:
+            pass
+
+    def draw_background(canvas, doc):
+        if bg_image_data:
+            from reportlab.lib.utils import ImageReader
+            canvas.saveState()
+            canvas.setFillAlpha(0.08)
+            img_reader = ImageReader(io.BytesIO(bg_image_data))
+            canvas.drawImage(img_reader, 0, 0, width=A4[0], height=A4[1], preserveAspectRatio=True, anchor='c', mask='auto')
+            canvas.restoreState()
+
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=12 * mm, bottomMargin=12 * mm, leftMargin=12 * mm, rightMargin=12 * mm)
 
     styles = getSampleStyleSheet()
@@ -353,7 +373,7 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
     if bank.get("branch"):
         bank_text += f"<br/>Branch: {bank['branch']}"
 
-    terms = invoice.get("termsAndConditions", "")
+    terms = invoice.get("termsAndConditions", "") or seller.get("invoiceTerms", "")
     terms_text = "<b>Terms &amp; Conditions</b>"
     if terms:
         terms_text += f"<br/>{terms}"
@@ -392,7 +412,7 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
     elements.append(Spacer(1, 3 * mm))
     elements.append(Paragraph("This is a computer-generated invoice and does not require a physical signature.", s_small))
 
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_background, onLaterPages=draw_background)
     buffer.seek(0)
     return buffer.getvalue()
 
@@ -402,3 +422,20 @@ def _is_igst(seller_state: str, place_of_supply: str) -> bool:
     if not seller_state or not place_of_supply:
         return False
     return seller_state.strip().lower() != place_of_supply.strip().lower()
+
+
+def generate_merged_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_types: list) -> bytes:
+    """Generate a single PDF with multiple invoice copies, one per page."""
+    from PyPDF2 import PdfReader, PdfWriter
+
+    writer = PdfWriter()
+    for ct in copy_types:
+        page_bytes = generate_invoice_pdf(invoice, seller, buyer, copy_type=ct)
+        reader = PdfReader(io.BytesIO(page_bytes))
+        for page in reader.pages:
+            writer.add_page(page)
+
+    output = io.BytesIO()
+    writer.write(output)
+    output.seek(0)
+    return output.getvalue()

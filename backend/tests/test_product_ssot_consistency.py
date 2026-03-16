@@ -21,7 +21,7 @@ import requests
 import os
 
 # Get BASE_URL from environment (frontend env for public testing)
-BASE_URL = "https://supplier-orders-3.preview.emergentagent.com"
+BASE_URL = "https://erp-invoicing-3.preview.emergentagent.com"
 
 # Expected test data (from seed data)
 EXPECTED_PRODUCT_ID = "6981a9a74108b0cbd93aa631"

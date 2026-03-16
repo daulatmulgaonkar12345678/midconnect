@@ -75,7 +75,7 @@
   
   "test_credentials": {
     "dev_token": "dev-test-token",
-    "api_url": "https://supplier-orders-3.preview.emergentagent.com",
+    "api_url": "https://erp-invoicing-3.preview.emergentagent.com",
     "seller_id": "699ca5c7fe015041f7de460c"
   },
   
