@@ -13,6 +13,7 @@ from models.business_tools import (
     InventoryUpdate, InventoryLogCreate, InventoryLogResponse,
     InventoryLogType, Permission
 )
+from utils.permissions import authenticate_user, resolve_seller_id, require_user_permission, check_user_permission
 
 logger = logging.getLogger(__name__)
 
@@ -48,91 +49,23 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
     
     async def get_current_user(authorization: str):
         """Get current user from Firebase token."""
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-        
-        token = authorization.replace("Bearer ", "")
-        
-        try:
-            decoded_token = await verify_token_func(token)
-        except Exception as e:
-            logger.error(f"Token verification error: {e}")
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        if not decoded_token:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        # Get user from database
-        firebase_uid = decoded_token.get("uid")
-        if not firebase_uid:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-        
-        user = await db.users.find_one({"firebaseUid": firebase_uid})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        
-        # Check account status
-        if user.get("accountStatus") == "deleted":
-            raise HTTPException(status_code=403, detail="Account has been deactivated")
-        
-        # For employees, check if status is active
-        if user.get("accountType") == "employee" and user.get("status") != "active":
-            raise HTTPException(status_code=403, detail="Employee account is inactive")
-        
-        return user
+        return await authenticate_user(db, verify_token_func, authorization)
     
     async def get_seller_id(user: dict) -> str:
         """Get seller ID for current user."""
-        account_type = user.get("accountType", "seller")
-        
-        if account_type == "employee":
-            seller_id = user.get("sellerId")
-            if not seller_id:
-                raise HTTPException(status_code=403, detail="Employee not linked to seller")
-            return str(seller_id)
-        else:
-            return str(user.get("_id"))
+        return resolve_seller_id(user)
     
     async def check_permission(user: dict, permission: str) -> bool:
         """Check if user has a specific permission."""
-        account_type = user.get("accountType", "seller")
-        
-        if account_type == "seller":
-            return True
-        
-        role_id = user.get("roleId")
-        if not role_id:
-            return False
-        
-        try:
-            role = await db.roles.find_one({"_id": ObjectId(role_id), "isActive": True})
-            if role and permission in role.get("permissions", []):
-                return True
-        except Exception:
-            pass
-        
-        return False
+        return await check_user_permission(db, user, permission)
     
     async def require_permission(user: dict, permission: str):
         """Require a specific permission or raise 403."""
-        has_perm = await check_permission(user, permission)
-        if not has_perm:
-            raise HTTPException(
-                status_code=403, 
-                detail=f"Permission denied: {permission} required"
-            )
+        return await require_user_permission(db, user, permission)
     
     async def has_permission(user: dict, permission: str) -> bool:
         """Check if user has a specific permission (non-throwing)."""
-        if user.get("accountType", "seller") == "seller":
-            return True
-        role_id = user.get("roleId")
-        if not role_id:
-            return False
-        role = await db.roles.find_one({"_id": ObjectId(role_id), "isActive": True})
-        if not role:
-            return False
-        return permission in role.get("permissions", [])
+        return await check_user_permission(db, user, permission)
     
     # ===========================================
     # INVENTORY ENDPOINTS

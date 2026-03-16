@@ -8,6 +8,8 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import logging
 
+from utils.permissions import authenticate_user, resolve_seller_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,23 +17,10 @@ def init_home_router(db, verify_token_func):
     router = APIRouter(tags=["Business Tools Home"])
 
     async def get_current_user(authorization: str):
-        scheme, _, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not token:
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-        decoded = await verify_token_func(token)
-        user = await db.users.find_one({"firebaseUid": decoded["uid"]})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
+        return await authenticate_user(db, verify_token_func, authorization)
 
     async def get_seller_id(user):
-        account_type = user.get("accountType", "seller")
-        if account_type == "employee":
-            seller_id = user.get("sellerId")
-            if not seller_id:
-                raise HTTPException(status_code=403, detail="Employee not linked to seller")
-            return str(seller_id)
-        return str(user.get("_id"))
+        return resolve_seller_id(user)
 
     @router.get("/home/summary")
     async def get_home_summary(authorization: str = Header(...)):

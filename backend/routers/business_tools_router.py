@@ -19,6 +19,10 @@ from models.business_tools import (
     Permission, ALL_PERMISSIONS, AccountType,
     LowStockAlertStatusUpdate
 )
+from utils.permissions import (
+    authenticate_user, resolve_seller_id, check_user_permission,
+    require_user_permission, is_platform_admin
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,87 +62,19 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
     
     async def get_current_user(authorization: str = Header(...)):
         """Get current user from Firebase token."""
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-        
-        token = authorization.replace("Bearer ", "")
-        
-        try:
-            decoded_token = await verify_token_func(token)
-        except Exception as e:
-            logger.error(f"Token verification error: {e}")
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        if not decoded_token:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        # Get user from database
-        firebase_uid = decoded_token.get("uid")
-        if not firebase_uid:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-        
-        user = await db.users.find_one({"firebaseUid": firebase_uid})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        
-        # Check account status
-        if user.get("accountStatus") == "deleted":
-            raise HTTPException(status_code=403, detail="Account has been deactivated")
-        
-        # For employees, check if status is active
-        if user.get("accountType") == "employee" and user.get("status") != "active":
-            raise HTTPException(status_code=403, detail="Employee account is inactive")
-        
-        return user
+        return await authenticate_user(db, verify_token_func, authorization)
     
     async def get_seller_id(user: dict) -> str:
         """Get seller ID for current user (seller or employee)."""
-        account_type = user.get("accountType", "seller")
-        
-        if account_type == "employee":
-            # Employee - return their linked sellerId
-            seller_id = user.get("sellerId")
-            if not seller_id:
-                raise HTTPException(status_code=403, detail="Employee not linked to seller")
-            return str(seller_id)
-        else:
-            # Seller - return their own ID
-            return str(user.get("_id"))
+        return resolve_seller_id(user)
     
     async def check_permission(user: dict, permission: str) -> bool:
         """Check if user has a specific permission."""
-        # Platform admin has all permissions
-        if user.get("isAdmin") is True or "admin" in user.get("roles", []):
-            return True
-        
-        account_type = user.get("accountType", "seller")
-        
-        # Seller Admin has all permissions
-        if account_type == "seller":
-            return True
-        
-        # Employee - check role permissions
-        role_id = user.get("roleId")
-        if not role_id:
-            return False
-        
-        try:
-            role = await db.roles.find_one({"_id": ObjectId(role_id), "isActive": True})
-            if role and permission in role.get("permissions", []):
-                return True
-        except Exception:
-            pass
-        
-        return False
+        return await check_user_permission(db, user, permission)
     
     async def require_permission(user: dict, permission: str):
         """Require a specific permission or raise 403."""
-        has_perm = await check_permission(user, permission)
-        if not has_perm:
-            raise HTTPException(
-                status_code=403, 
-                detail=f"Permission denied: {permission} required"
-            )
+        return await require_user_permission(db, user, permission)
     
     # ===========================================
     # ROLE ENDPOINTS
@@ -827,8 +763,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         user = await get_current_user(authorization)
         
         # Platform admin has all permissions
-        is_platform_admin = user.get("isAdmin") is True or "admin" in user.get("roles", [])
-        if is_platform_admin:
+        if is_platform_admin(user):
             return {
                 "accountType": "admin",
                 "isAdmin": True,
@@ -914,9 +849,9 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         
-        is_platform_admin = user.get("isAdmin") is True or "admin" in user.get("roles", [])
+        is_admin = is_platform_admin(user)
         
-        if is_platform_admin:
+        if is_admin:
             query = {}
         else:
             seller_id = await get_seller_id(user)
@@ -957,7 +892,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
                 item["specification"] = ""
             
             # For admin view: enrich with seller name
-            if is_platform_admin:
+            if is_admin:
                 alert_seller_id = str(alert.get("sellerId", ""))
                 if alert_seller_id and alert_seller_id not in seller_cache:
                     try:
@@ -974,7 +909,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
             enriched.append(item)
         
         # Pending count: scoped to seller or all
-        if is_platform_admin:
+        if is_admin:
             pending_count = await db.low_stock_alerts.count_documents({"status": "pending"})
         else:
             pending_count = await db.low_stock_alerts.count_documents({"sellerId": ObjectId(seller_id), "status": "pending"})
@@ -983,7 +918,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
             "alerts": enriched,
             "total": total,
             "pendingCount": pending_count,
-            "isAdminView": is_platform_admin,
+            "isAdminView": is_admin,
             "limit": limit,
             "skip": skip
         }

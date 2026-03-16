@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from models.business_tools import Permission
+from utils.permissions import authenticate_user, resolve_seller_id, require_user_permission
 
 logger = logging.getLogger(__name__)
 
@@ -70,42 +71,13 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
         return doc
 
     async def get_current_user(authorization: str):
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-        token = authorization.replace("Bearer ", "")
-        try:
-            decoded_token = await verify_token_func(token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        if not decoded_token:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        firebase_uid = decoded_token.get("uid")
-        if not firebase_uid:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-        user = await db.users.find_one({"firebaseUid": firebase_uid})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        if user.get("accountType") == "employee" and user.get("status") != "active":
-            raise HTTPException(status_code=403, detail="Employee account is inactive")
-        return user
+        return await authenticate_user(db, verify_token_func, authorization)
 
     async def get_seller_id(user: dict) -> str:
-        if user.get("accountType") == "employee":
-            sid = user.get("sellerId")
-            if not sid:
-                raise HTTPException(status_code=403, detail="Employee not linked to seller")
-            return str(sid)
-        return str(user.get("_id"))
+        return resolve_seller_id(user)
 
     async def require_permission(user: dict, permission: str):
-        if user.get("accountType", "seller") == "seller":
-            return
-        role_id = user.get("roleId")
-        if not role_id:
-            raise HTTPException(status_code=403, detail=f"Permission denied: {permission} required")
-        role = await db.roles.find_one({"_id": ObjectId(role_id), "isActive": True})
-        if not role or permission not in role.get("permissions", []):
-            raise HTTPException(status_code=403, detail=f"Permission denied: {permission} required")
+        return await require_user_permission(db, user, permission)
 
     async def calc_available_stock(components):
         """Calculate available stock = min(listing_stock / component_qty) for each component."""

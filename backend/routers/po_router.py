@@ -14,6 +14,7 @@ import urllib.parse
 
 from services.po_pdf_service import generate_po_pdf
 from models.business_tools import Permission
+from utils.permissions import authenticate_user, resolve_seller_id, require_user_permission
 
 logger = logging.getLogger(__name__)
 
@@ -76,32 +77,13 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         return doc
 
     async def get_current_user(authorization: str):
-        scheme, _, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not token:
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-        decoded = await verify_token_func(token)
-        user = await db.users.find_one({"firebaseUid": decoded["uid"]})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
+        return await authenticate_user(db, verify_token_func, authorization)
 
     async def get_seller_id(user):
-        if user.get("accountType") == "seller":
-            return str(user["_id"])
-        elif user.get("accountType") == "employee":
-            return str(user.get("employerId", user["_id"]))
-        raise HTTPException(status_code=403, detail="Not authorized")
+        return resolve_seller_id(user)
 
     async def require_permission(user, permission):
-        if user.get("accountType") == "seller":
-            return
-        if user.get("accountType") == "employee":
-            role_id = user.get("roleId")
-            if role_id:
-                role = await db.seller_roles.find_one({"_id": role_id})
-                if role and permission in role.get("permissions", []):
-                    return
-        raise HTTPException(status_code=403, detail="Permission denied")
+        return await require_user_permission(db, user, permission)
 
     async def generate_po_number(seller_id: str) -> str:
         """Generate next PO number: PO-{YEAR}-{SEQUENCE}"""
