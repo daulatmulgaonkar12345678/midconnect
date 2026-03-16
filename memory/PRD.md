@@ -1,121 +1,89 @@
-# PRD - B2B E-commerce Seller Dashboard (UdyogConnect)
+# PRD - B2B E-commerce & ERP Platform (UdyogConnect)
 
 ## Original Problem Statement
-Build a comprehensive ERP/Business Tools system for sellers on a B2B e-commerce platform.
+Build a B2B marketplace for Indian industrial products with seller tools including invoicing, inventory, purchase orders, and buyer management. Recent upgrade: GST-compliant billing and professional reporting system.
 
-## Core Architecture
-- **Frontend:** Next.js + React + TypeScript + Tailwind CSS + Recharts
-- **Backend:** FastAPI + MongoDB (motor async driver)
-- **Auth:** Firebase Authentication
-- **PDF:** ReportLab + qrcode + PyPDF2 (merging)
-- **Storage:** Cloudinary (receipts/logos/invoice backgrounds)
+## Core Tech Stack
+- **Backend:** FastAPI, MongoDB (Motor), Python 3.11
+- **Frontend:** Next.js 16, React, TypeScript, Tailwind CSS, Shadcn/UI
+- **Auth:** Firebase Admin (phone OTP)
+- **Storage:** Cloudinary
+- **PDF:** reportlab, PyPDF2
 - **Email:** Resend (MOCKED)
+- **Charts:** recharts
+
+## Architecture
+```
+/app/backend/
+  routers/          - All API routers
+  models/           - Pydantic models
+  utils/            - Shared utilities (permissions.py, gst.py)
+  services/         - PDF generation, etc.
+  constants.py      - Global constants
+  server.py         - Main FastAPI app
+/app/frontend/src/
+  app/seller/business-tools/  - Seller dashboard pages
+  components/ui/              - Shadcn components
+  lib/                        - Utilities, auth, indian-states
+```
 
 ## What's Been Implemented
 
-### Phase 1-3: Payment Tracking, Receipts, Onboarding (DONE)
-### Phase 4: Dashboard & Notifications (DONE)
-### Inventory, Suppliers, Low Stock Alerts, PO/GRN (DONE)
-### Product Analytics, Charts & Graphs (DONE)
-### GST Invoice System with Merged PDF Modal (DONE)
-### Centralized Billing & Company Branding Settings (DONE)
-### Export & Import System (DONE)
+### Completed Features
+1. **Full B2B Marketplace** - Product listings, search, categories, inquiries
+2. **Seller Dashboard** - Products, inventory, invoices, buyers, POs, settings
+3. **Admin Dashboard** - User management, seller verification, subscription mgmt
+4. **Invoice System** - Full CRUD, payments, reminders, PDF generation
+5. **Inventory Management** - Stock tracking, low stock alerts, stock movement logs
+6. **Purchase Orders** - Create, manage, WhatsApp sharing with secure PDF links
+7. **Buyer Management** - CRUD with GSTIN and state fields
+8. **Pending Orders (Backorder)** - Partial fulfillment, stock reservation
+9. **Permissions System** - Centralized role-based access control
+10. **Employee Management** - Multi-role support per seller
+11. **Document Sharing** - Secure expiring links for invoices/catalogs
+12. **GST Billing Engine (P0 - COMPLETE):**
+    - Automatic CGST/SGST vs IGST calculation based on seller/buyer states
+    - Seller settings: State dropdown + GST enabled toggle
+    - Buyer records: State field with standard Indian states dropdown
+    - Invoice form: HSN, Taxable Amount, CGST, SGST, IGST, Total columns
+    - Invoice totals: Taxable, CGST, SGST, IGST, Grand Total breakdown
+    - Invoice detail view: Full GST breakdown display
+    - Place of Supply: Auto-populated from buyer state, overridable dropdown
+    - Backend: 9/9 unit tests passing
 
-### Share Product Catalog & WhatsApp Document Sharing (DONE - Mar 2026)
-- **Inventory "Share Product Catalog" flow:**
-  - Product selection: individual checkboxes, category-based (Select All in Category), global Select All
-  - 4-step modal: Product review (category grouping) → Recipient selection (buyers + suppliers with type badge) → Format & Options (PDF/Excel + Show/Hide Price) → Result (download + WhatsApp per recipient)
-  - Generates professional PDF catalog (reportlab) or styled Excel catalog (openpyxl)
-  - Secure document links (7-day expiry, no auth required) via GET /api/doc/{token}
-- **WhatsApp Document Sharing (wa.me mode):**
-  - Catalog sharing via WhatsApp with secure download link
-  - Invoice sharing enhanced: generates secure link in WhatsApp message
-  - Message templates for catalogs, invoices, POs
-- **Catalog Sharing Settings (Business Settings → Catalog tab):**
-  - 8 field toggles: Image, Name, Category, Specification, Description, Price, Unit, MOQ
-  - Controls both PDF and Excel catalog generation
-- **Security:** Seller can only share own products; no stock/cost data exposed; links are token-based and time-limited
-
-### Admin Low Stock Alerts Access (DONE - Mar 2026)
-- **Bug Fix:** Admin users were getting 403 Permission Denied on Low Stock Alerts page
-- **Backend:** `check_permission` now allows admin users (isAdmin:true or 'admin' in roles). Low stock alerts endpoint returns all sellers' alerts for admin with `isAdminView:true` and `sellerName` per alert
-- **Frontend:** Admin view shows "Admin View" badge, seller name under each alert, hides "Order Material"/"Ignore" buttons, shows status badge instead
-
-### Pending Orders (Backorder) System (DONE - Mar 2026)
-- **New Feature:** Partial fulfillment and backorder management during invoice creation
-- **Backend:**
-  - `POST /invoices/check-stock` — Pre-checks stock availability, returns shortage info with reserved stock
-  - `POST /invoices` — `allowPartialFulfillment` flag: deducts available stock, creates pending_orders for shortage
-  - `GET /pending-orders` — List with status filters, enriched with buyer/product/stock info
-  - `POST /pending-orders/{id}/fulfil` — Fulfils pending qty, creates new invoice, deducts stock
-  - `POST /pending-orders/{id}/cancel` — Cancels order, releases reserved stock
-  - `POST /pending-orders/{id}/create-po` — Auto-creates purchase order for shortage qty
-  - `POST /pending-orders/{id}/notify` — WhatsApp notification to buyer about pending order
-  - Inventory list now includes `reservedStock` and `availableStock` fields
-- **Frontend:**
-  - Stock shortage modal during invoice creation (3 options: partial fulfil, cancel)
-  - Pending Orders dashboard page with filter tabs, action buttons (Fulfil, Create PO, Notify Buyer, Cancel)
-  - Inventory page shows "Reserved: X | Avail: Y" when reservedStock > 0
-  - Invoice product dropdown shows available stock with reserved info
-- **DB:** New `pending_orders` collection, new `pending_order_fulfillments` collection
-- **Bug Fix:** POST /api/business-tools/purchase-orders returned 403 for sellers because `accountType` was missing from user records
-- **Root Cause:** 12 routers had duplicated, inconsistent permission logic. Some checked `user.get("accountType")` without a default value
-- **Fix:** Created `/app/backend/utils/permissions.py` with centralized `authenticate_user`, `resolve_seller_id`, `check_user_permission`, `require_user_permission`, `is_platform_admin`. All 12 routers now import from this shared utility
-
-### Invoice Share Link Fix (DONE - Mar 2026)
-- **Bug Fix:** Shared invoice links via WhatsApp returned "Document reference missing"
-- **Root Cause:** Backend `POST /share-document` endpoint defined params as query parameters, but frontend sent them in JSON body. `documentId` always defaulted to empty string
-- **Fix:** Created `ShareDocumentRequest` Pydantic model to correctly parse JSON body. Also replaced hardcoded `app_url` with `os.environ.get("FRONTEND_URL")`
-
-### PO WhatsApp Sharing with Secure Download Link (DONE - Mar 2026)
-- **Feature:** Added secure document link (`/api/doc/{token}`) to PO WhatsApp messages, consistent with invoice and catalog sharing
-- **Backend:** Updated `GET /purchase-orders/{poId}/whatsapp-link` to create `document_shares` record (7-day expiry), return `documentLink`, `whatsappLink`, `supplierPhone`. Fixed `/api/doc/{token}` PO handler to return actual PDF (was returning raw JSON). PO status auto-updates from draft to sent
-- **Frontend:** WhatsApp button visible for all non-terminal PO statuses. Phone input modal shown when supplier phone is missing. "Opening WhatsApp..." confirmation on send
-
-## Key API Endpoints
-### Product Sharing & Documents
-- GET /api/business-tools/recipients (buyers + suppliers)
-- POST /api/business-tools/product-shares (generate catalog)
-- GET /api/business-tools/product-shares/{id}/download
-- POST /api/business-tools/share-document (secure link for any doc)
-- GET /api/doc/{token} (public, no auth, 7-day expiry)
-- GET /api/business-tools/catalog-settings
-- PUT /api/business-tools/catalog-settings
-
-### Invoice
-- POST /api/business-tools/invoices
-- GET /api/business-tools/invoices/{id}/pdf?copy_type=...
-- GET /api/business-tools/invoices/{id}/pdf-merged?copies=...
-
-### Export/Import
-- GET /api/business-tools/export/{type}?format=csv|xlsx
-- GET /api/business-tools/import/template/{type}
-- POST /api/business-tools/import/validate
-- POST /api/business-tools/import/process
-
-### Settings
-- GET/PUT /api/business-tools/seller-profile
-- GET/PUT /api/business-tools/catalog-settings
-
-## Business Settings Tabs
-1. Business Profile (name, GSTIN, contact, address)
-2. Billing Settings (bank details, T&C)
-3. Company Branding (logo, background template)
-4. Catalog Settings (field visibility toggles)
+### Mocked
+- Resend email service (no API key configured)
 
 ## Prioritized Backlog
-### P1
-- Seller Reminder Controls (configure reminder schedule for invoices, low stock, POs; custom messages; enable/disable)
-- Purchase Flow Integration: Low Stock Alert → auto-create PO draft → select supplier → send PO
-- Admin View for Reports (aggregated data across all sellers, filter by seller/date/category)
-- Phase 4 Smart Automation: When stock arrives (GRN/stock update), suggest fulfilling pending orders
-- WhatsApp Business API integration (future upgrade from wa.me)
 
-### P2
-- Token-based search, Redis caching, server.py refactor
-- Automatic email reminders
-- Buyer-facing Product Offers panel
-- Refactor inquiry modal, clean unused Pydantic models
+### P1 - Next Up
+- **GST Batch 2:** GST-compliant PDF invoice layout, GST Summary Report (GSTR-1), Place of Supply on PDF
+- **Standardize Reports:** Professional Sales, Inventory, Profit, Low Stock, Stock Movement reports
+- **Seller Reminder Controls:** Configurable smart reminder schedules for invoices
+- **Admin View for Reports:** Aggregated data views for admin users
+
+### P2 - Future
+- Refactor inquiry modal to shared component
+- Advanced token-based search system
 - Admin search insights dashboard
+- Redis caching for performance
+- WhatsApp Business API upgrade
+- Extract GST/backorder logic into service files
 
-## Mocked: Resend email service
+## Key API Endpoints
+- `POST /api/business-tools/invoices` - Create invoice (auto GST)
+- `GET /api/business-tools/gst-config` - States list and GST rates
+- `POST /api/business-tools/gst-calculate` - Preview GST calculation
+- `GET /api/business-tools/seller-profile` - Seller profile with state and GST status
+- `PUT /api/business-tools/seller-profile` - Update profile including gstStatus
+- `POST /api/business-tools/buyers` - Create buyer with state
+- `PUT /api/business-tools/buyers/{id}` - Update buyer with state
+
+## Key DB Fields
+- `users.profile.state` - Seller's state for GST
+- `users.gst.number` - Seller's GSTIN
+- `users.gst.status` - "enabled" or "disabled"
+- `seller_buyers.state` - Buyer's state for GST
+- `seller_buyers.gstNumber` - Buyer's GSTIN
+- `invoices.cgst/sgst/igst` - Tax breakdown
+- `invoices.placeOfSupply/sellerState/buyerState/taxType` - GST context
