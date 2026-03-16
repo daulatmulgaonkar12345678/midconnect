@@ -23,6 +23,7 @@ from utils.permissions import (
     authenticate_user, resolve_seller_id, check_user_permission,
     require_user_permission, is_platform_admin
 )
+from utils.gst import INDIAN_STATES, GST_RATES, calculate_gst
 
 logger = logging.getLogger(__name__)
 
@@ -1014,5 +1015,36 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         )
         
         return {"message": f"Alert marked as {data.status}"}
-    
+
+    # ─── GST CONFIG ENDPOINTS ───
+
+    @router.get("/gst-config")
+    async def get_gst_config():
+        """Get Indian states list and GST rates for frontend dropdowns."""
+        return {"states": INDIAN_STATES, "gstRates": GST_RATES}
+
+    @router.post("/gst-calculate")
+    async def calculate_gst_preview(authorization: str = Header(...), buyerId: str = "", gstPercent: float = 0, taxableAmount: float = 0):
+        """Preview GST calculation for given buyer and seller states."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)}) if seller_id else None
+        seller_state = (seller_user or {}).get("profile", {}).get("state", "")
+
+        buyer_state = ""
+        if buyerId:
+            try:
+                buyer = await db.seller_buyers.find_one({"_id": ObjectId(buyerId)})
+                buyer_state = (buyer or {}).get("state", "")
+            except Exception:
+                pass
+
+        gst_enabled = (seller_user or {}).get("gst", {}).get("status") != "disabled"
+        result = calculate_gst(taxableAmount, gstPercent, seller_state, buyer_state, gst_enabled)
+        result["sellerState"] = seller_state
+        result["buyerState"] = buyer_state
+        result["taxType"] = "intra" if seller_state and buyer_state and seller_state.strip().lower() == buyer_state.strip().lower() else "inter"
+        return result
+
     return router

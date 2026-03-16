@@ -15,6 +15,7 @@ import urllib.parse
 from models.business_tools import InvoiceCreate, InvoiceStatusUpdate, PaymentEntryCreate, ReminderSettingsUpdate, Permission
 from services.invoice_pdf_service import generate_invoice_pdf, generate_merged_invoice_pdf
 from utils.permissions import authenticate_user, resolve_seller_id, require_user_permission
+from utils.gst import calculate_gst, INDIAN_STATES
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +271,8 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "reservedStock": reserved,
                 "availableStock": available,
                 "price": price,
+                "gstRate": listing.get("gstRate", 0),
+                "hsnCode": listing.get("hsnCode", ""),
                 "specifications": spec_list
             })
         return {"products": items}
@@ -371,11 +374,24 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         if not buyer:
             raise HTTPException(status_code=404, detail="Buyer not found")
 
+        # Get seller and buyer states for GST calculation
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        seller_state = (seller_user or {}).get("profile", {}).get("state", "")
+        buyer_state = buyer.get("state", "")
+        gst_enabled = (seller_user or {}).get("gst", {}).get("status") != "disabled"
+
+        # Use placeOfSupply if provided, else buyer state
+        place_of_supply = data.placeOfSupply or buyer_state
+
         invoice_items = []
         subtotal = 0.0
+        total_cgst = 0.0
+        total_sgst = 0.0
+        total_igst = 0.0
 
         for item in data.items:
             product_name = item.productName or "Item"
+            item_hsn = item.hsnCode or ""
             if item.productId:
                 try:
                     listing = await db.sellerListings.find_one({
@@ -386,6 +402,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                         prod = await db.products.find_one({"_id": listing.get("productId")})
                         if prod:
                             product_name = prod.get("name", product_name)
+                        # Use listing's HSN/GST if not overridden
+                        if not item_hsn:
+                            item_hsn = listing.get("hsnCode", "")
                         if data.deductStock:
                             if listing.get("productType") == "composite":
                                 cp_id = listing.get("compositeProductId")
@@ -410,9 +429,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 except Exception:
                     pass
 
-            line_subtotal = item.price * item.quantity
-            gst_amount = round(line_subtotal * item.gstPercent / 100, 2)
-            line_total = round(line_subtotal + gst_amount, 2)
+            # Calculate GST breakdown using tax engine
+            line_subtotal = round(item.price * item.quantity - item.discount, 2)
+            gst_breakdown = calculate_gst(line_subtotal, item.gstPercent, seller_state, place_of_supply, gst_enabled)
 
             item_purchase_price = 0
             if item.productId:
@@ -435,22 +454,37 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             invoice_items.append({
                 "productId": item.productId,
                 "productName": product_name,
-                "hsnCode": item.hsnCode or "",
+                "hsnCode": item_hsn,
                 "quantity": item.quantity,
                 "price": item.price,
                 "discount": item.discount,
                 "purchase_price": round(item_purchase_price, 2),
                 "gstPercent": item.gstPercent,
-                "gstAmount": gst_amount,
-                "total": line_total,
+                "taxableAmount": gst_breakdown["taxableAmount"],
+                "cgst": gst_breakdown["cgst"],
+                "cgstRate": gst_breakdown["cgstRate"],
+                "sgst": gst_breakdown["sgst"],
+                "sgstRate": gst_breakdown["sgstRate"],
+                "igst": gst_breakdown["igst"],
+                "igstRate": gst_breakdown["igstRate"],
+                "gstAmount": gst_breakdown["totalTax"],
+                "total": gst_breakdown["totalAmount"],
                 "selected_specifications": item.selected_specifications or []
             })
             subtotal += line_subtotal
+            total_cgst += gst_breakdown["cgst"]
+            total_sgst += gst_breakdown["sgst"]
+            total_igst += gst_breakdown["igst"]
 
         subtotal = round(subtotal, 2)
-        total_gst = round(sum(i["gstAmount"] for i in invoice_items), 2)
+        total_gst = round(total_cgst + total_sgst + total_igst, 2)
         grand_total = round(subtotal + total_gst, 2)
         invoice_number = await get_next_invoice_number(seller_id)
+
+        # Determine tax type
+        seller_state_norm = seller_state.strip().lower() if seller_state else ""
+        pos_norm = place_of_supply.strip().lower() if place_of_supply else ""
+        tax_type = "intra" if seller_state_norm and pos_norm and seller_state_norm == pos_norm else "inter"
 
         now = datetime.now(timezone.utc)
         invoice_doc = {
@@ -461,6 +495,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "dueDays": data.dueDays,
             "items": invoice_items,
             "subtotal": subtotal,
+            "cgst": round(total_cgst, 2),
+            "sgst": round(total_sgst, 2),
+            "igst": round(total_igst, 2),
             "gst": total_gst,
             "total": grand_total,
             "totalPaid": 0,
@@ -469,7 +506,10 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "notes": data.notes,
             "poNumber": data.poNumber or "",
             "challanNumber": data.challanNumber or "",
-            "placeOfSupply": data.placeOfSupply or "",
+            "placeOfSupply": place_of_supply,
+            "sellerState": seller_state,
+            "buyerState": buyer_state,
+            "taxType": tax_type,
             "transport": data.transport.model_dump() if data.transport else {},
             "termsAndConditions": data.termsAndConditions or "",
             "createdBy": str(user["_id"]),

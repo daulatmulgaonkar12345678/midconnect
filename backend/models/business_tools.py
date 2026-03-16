@@ -114,7 +114,10 @@ class BuyerCreate(BaseModel):
     phone: Optional[str] = Field(None, max_length=20)
     email: Optional[str] = Field(None, max_length=100)
     gstNumber: Optional[str] = Field(None, max_length=20)
+    state: Optional[str] = Field(None, max_length=100)
     address: Optional[str] = Field(None, max_length=500)
+    billingAddress: Optional[str] = Field(None, max_length=500)
+    shippingAddress: Optional[str] = Field(None, max_length=500)
     notes: Optional[str] = Field(None, max_length=1000)
 
 
@@ -124,7 +127,10 @@ class BuyerUpdate(BaseModel):
     phone: Optional[str] = Field(None, max_length=20)
     email: Optional[str] = Field(None, max_length=100)
     gstNumber: Optional[str] = Field(None, max_length=20)
+    state: Optional[str] = Field(None, max_length=100)
     address: Optional[str] = Field(None, max_length=500)
+    billingAddress: Optional[str] = Field(None, max_length=500)
+    shippingAddress: Optional[str] = Field(None, max_length=500)
     notes: Optional[str] = Field(None, max_length=1000)
 
 
@@ -136,7 +142,10 @@ class BuyerResponse(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     gstNumber: Optional[str] = None
+    state: Optional[str] = None
     address: Optional[str] = None
+    billingAddress: Optional[str] = None
+    shippingAddress: Optional[str] = None
     notes: Optional[str] = None
     totalOrders: int = 0
     totalSpent: float = 0

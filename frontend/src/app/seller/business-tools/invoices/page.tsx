@@ -16,16 +16,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 // ── Types ──
 
 interface Spec { key: string; value: string; }
-interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; specifications: Spec[]; }
-interface InvoiceFormItem { productId: string; productName: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
-interface Buyer { id: string; buyerName: string; company?: string; phone?: string; }
-interface InvoiceItem { productName: string; quantity: number; price: number; gstPercent: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
+interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; gstRate: number; hsnCode: string; specifications: Spec[]; }
+interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
+interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; }
+interface InvoiceItem { productName: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
 interface PaymentEntry { id: string; amount: number; paymentDate: string; paymentMethod: string; accountName?: string; referenceNumber?: string; notes?: string; receiptUrls?: string[]; createdAt: string; }
 interface Invoice {
   id: string; invoiceNumber: string; buyerName: string; buyerPhone?: string; date: string;
-  items: InvoiceItem[]; subtotal: number; gst: number; total: number;
+  items: InvoiceItem[]; subtotal: number; cgst?: number; sgst?: number; igst?: number; gst: number; total: number;
   totalPaid: number; pendingAmount: number; status: string; notes?: string;
   payments?: PaymentEntry[]; buyerDetails?: Record<string, string>; dueDays?: number;
+  taxType?: string; placeOfSupply?: string;
 }
 interface Reminder {
   invoiceId: string; invoiceNumber: string; buyerName: string; buyerPhone: string;
@@ -53,7 +54,7 @@ const paymentMethods = [
 const RECEIPT_REQUIRED_METHODS = ['upi', 'bank_transfer', 'cheque'];
 
 function emptyItem(): InvoiceFormItem {
-  return { productId: '', productName: '', quantity: 1, price: 0, gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
+  return { productId: '', productName: '', hsnCode: '', quantity: 1, price: 0, gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
 }
 function calcLine(qty: number, price: number, gst: number) {
   const sub = qty * price; const gstAmt = Math.round(sub * gst / 100 * 100) / 100;
@@ -171,7 +172,7 @@ export default function InvoicesPage() {
   const onProductSelect = (idx: number, listingId: string) => {
     const listing = listings.find(l => l.id === listingId);
     const items = [...formData.items];
-    items[idx] = { ...items[idx], productId: listingId, productName: listing?.productName || '', price: listing?.price || items[idx].price, allSpecs: listing?.specifications || [], selectedSpecs: [...(listing?.specifications || [])], customSpecs: [], showSpecs: (listing?.specifications?.length || 0) > 0 };
+    items[idx] = { ...items[idx], productId: listingId, productName: listing?.productName || '', hsnCode: listing?.hsnCode || '', price: listing?.price || items[idx].price, gstPercent: listing?.gstRate || items[idx].gstPercent, allSpecs: listing?.specifications || [], selectedSpecs: [...(listing?.specifications || [])], customSpecs: [], showSpecs: (listing?.specifications?.length || 0) > 0 };
     setFormData(p => ({ ...p, items }));
   };
   const toggleSpec = (itemIdx: number, specIdx: number) => {
@@ -533,7 +534,7 @@ export default function InvoicesPage() {
                     return (
                       <div key={idx} className="bg-gray-50 rounded-lg p-3 space-y-2" data-testid={`invoice-item-${idx}`}>
                         <div className="grid grid-cols-12 gap-2 items-start">
-                          <div className="col-span-4">
+                          <div className="col-span-3">
                             <label className="text-xs text-gray-500 mb-1 block">Product</label>
                             <select value={item.productId} onChange={e => onProductSelect(idx, e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-product-${idx}`}>
                               <option value="">Select / Manual</option>
@@ -542,10 +543,11 @@ export default function InvoicesPage() {
                             {item.productId && item.allSpecs.length > 0 && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{item.allSpecs.map(s => `${s.key}: ${s.value}`).join(' | ')}</p>}
                             {!item.productId && <input type="text" value={item.productName} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], productName: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="Manual entry" className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-name-${idx}`} />}
                           </div>
+                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">HSN</label><input type="text" value={item.hsnCode} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], hsnCode: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="HSN" className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-hsn-${idx}`} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Qty</label><input type="number" min={1} value={item.quantity} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], quantity: parseInt(e.target.value) || 1 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center" data-testid={`invoice-item-qty-${idx}`} /></div>
-                          <div className="col-span-2"><label className="text-xs text-gray-500 mb-1 block">Price</label><input type="number" min={0} step={0.01} value={item.price} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-price-${idx}`} /></div>
-                          <div className="col-span-2"><label className="text-xs text-gray-500 mb-1 block">GST %</label><select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: parseFloat(e.target.value) }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-gst-${idx}`}>{[0, 5, 12, 18, 28].map(g => <option key={g} value={g}>{g}%</option>)}</select></div>
-                          <div className="col-span-2"><label className="text-xs text-gray-500 mb-1 block">Total</label><div className="px-2 py-1.5 bg-white border border-gray-200 rounded text-sm font-medium text-right">{fmt(lineTotal.total)}</div><div className="text-[10px] text-gray-400 text-right mt-0.5">GST: {fmt(lineTotal.gstAmount)}</div></div>
+                          <div className="col-span-2"><label className="text-xs text-gray-500 mb-1 block">Rate</label><input type="number" min={0} step={0.01} value={item.price} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-price-${idx}`} /></div>
+                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">GST %</label><select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: parseFloat(e.target.value) }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-gst-${idx}`}>{[0, 5, 12, 18, 28].map(g => <option key={g} value={g}>{g}%</option>)}</select></div>
+                          <div className="col-span-3"><label className="text-xs text-gray-500 mb-1 block">Total</label><div className="px-2 py-1.5 bg-white border border-gray-200 rounded text-sm font-medium text-right">{fmt(lineTotal.total)}</div><div className="text-[10px] text-gray-400 text-right mt-0.5">GST: {fmt(lineTotal.gstAmount)}</div></div>
                           <div className="col-span-1 pt-5 flex gap-1">
                             {(item.allSpecs.length > 0 || item.customSpecs.length > 0) && <button onClick={() => { const items = [...formData.items]; items[idx] = { ...items[idx], showSpecs: !items[idx].showSpecs }; setFormData(p => ({ ...p, items })); }} className="text-indigo-400 hover:text-indigo-600">{item.showSpecs ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</button>}
                             {formData.items.length > 1 && <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600" data-testid={`remove-invoice-item-${idx}`}><Trash2 className="w-4 h-4" /></button>}
