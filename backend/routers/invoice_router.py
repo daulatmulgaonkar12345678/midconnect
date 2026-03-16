@@ -798,7 +798,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "phone": profile.get("phone", ""),
             "email": seller.get("email", ""),
             "gstNumber": gst.get("number", ""),
-            "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
+            "sellerLogoUrl": billing.get("companyLogoUrl", "") or profile.get("sellerLogoUrl", ""),
             "bankDetails": bank_details,
             "invoiceTerms": billing.get("invoiceTerms", ""),
             "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
@@ -858,7 +858,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "phone": profile.get("phone", ""),
             "email": seller.get("email", ""),
             "gstNumber": gst.get("number", ""),
-            "sellerLogoUrl": profile.get("sellerLogoUrl", ""),
+            "sellerLogoUrl": billing.get("companyLogoUrl", "") or profile.get("sellerLogoUrl", ""),
             "bankDetails": bank_details,
             "invoiceTerms": billing.get("invoiceTerms", ""),
             "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
@@ -1313,6 +1313,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "upiId": billing.get("upiId", ""),
                 "invoiceTerms": billing.get("invoiceTerms", ""),
                 "invoiceBackgroundImage": billing.get("invoiceBackgroundImage", ""),
+                "companyLogoUrl": billing.get("companyLogoUrl", ""),
             },
             "invoiceIdentity": {
                 "sellerAbbreviation": counter.get("sellerAbbreviation", "") if counter else "",
@@ -1363,7 +1364,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         # Billing Settings (only update if provided)
         billing_data = data.get("billingSettings")
         if billing_data and isinstance(billing_data, dict):
-            for field in ["bankName", "accountNumber", "accountName", "ifscCode", "branch", "upiId", "invoiceTerms", "invoiceBackgroundImage"]:
+            for field in ["bankName", "accountNumber", "accountName", "ifscCode", "branch", "upiId", "invoiceTerms", "invoiceBackgroundImage", "companyLogoUrl"]:
                 if field in billing_data:
                     profile_update[f"billingSettings.{field}"] = str(billing_data[field]).strip() if billing_data[field] else ""
 
