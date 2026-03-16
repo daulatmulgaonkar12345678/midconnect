@@ -6,11 +6,13 @@ Supports: PDF generation, WhatsApp sending, status tracking, auto PO numbering.
 from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import Response
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from pydantic import BaseModel, Field
 import logging
 import urllib.parse
+import secrets
+import os
 
 from services.po_pdf_service import generate_po_pdf
 from models.business_tools import Permission
@@ -81,6 +83,13 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
 
     async def get_seller_id(user):
         return resolve_seller_id(user)
+
+    def po_query(po_id: str, seller_id):
+        """Build a PO query that scopes by seller if not admin."""
+        q = {"_id": ObjectId(po_id)}
+        if seller_id:
+            q["sellerId"] = ObjectId(seller_id)
+        return q
 
     async def require_permission(user, permission):
         return await require_user_permission(db, user, permission)
@@ -183,7 +192,7 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         seller_id = await get_seller_id(user)
 
-        query: dict = {"sellerId": ObjectId(seller_id)}
+        query: dict = {"sellerId": ObjectId(seller_id)} if seller_id else {}
         if status:
             query["status"] = status
         if search:
@@ -217,7 +226,7 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         seller_id = await get_seller_id(user)
 
         try:
-            po = await db.purchase_orders.find_one({"_id": ObjectId(po_id), "sellerId": ObjectId(seller_id)})
+            po = await db.purchase_orders.find_one(po_query(po_id, seller_id))
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid PO ID")
         if not po:
@@ -258,7 +267,7 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid PO ID")
 
-        po = await db.purchase_orders.find_one({"_id": po_oid, "sellerId": ObjectId(seller_id)})
+        po = await db.purchase_orders.find_one(po_query(po_id, seller_id))
         if not po:
             raise HTTPException(status_code=404, detail="Purchase order not found")
 
@@ -280,14 +289,15 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         seller_id = await get_seller_id(user)
 
         try:
-            po = await db.purchase_orders.find_one({"_id": ObjectId(po_id), "sellerId": ObjectId(seller_id)})
+            po = await db.purchase_orders.find_one(po_query(po_id, seller_id))
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid PO ID")
         if not po:
             raise HTTPException(status_code=404, detail="Purchase order not found")
 
         # Seller data
-        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        po_seller_id = str(po.get("sellerId", "")) or seller_id
+        seller_user = await db.users.find_one({"_id": ObjectId(po_seller_id)}) if po_seller_id else None
         profile = (seller_user.get("profile") or {}) if seller_user else {}
         gst = (seller_user.get("gst") or {}) if seller_user else {}
         seller_data = {
@@ -324,7 +334,10 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         seller_id = await get_seller_id(user)
 
         try:
-            po = await db.purchase_orders.find_one({"_id": ObjectId(po_id), "sellerId": ObjectId(seller_id)})
+            po_query = {"_id": ObjectId(po_id)}
+            if seller_id:
+                po_query["sellerId"] = ObjectId(seller_id)
+            po = await db.purchase_orders.find_one(po_query)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid PO ID")
         if not po:
@@ -334,27 +347,38 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         if not supplier or not supplier.get("phone"):
             raise HTTPException(status_code=400, detail="Supplier phone not available")
 
-        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        po_seller_id = str(po.get("sellerId", "")) or seller_id
+        seller_user = await db.users.find_one({"_id": ObjectId(po_seller_id)}) if po_seller_id else None
         profile = (seller_user.get("profile") or {}) if seller_user else {}
         business_name = profile.get("businessName", "Seller")
 
-        # Build message
+        # Create a secure document share token
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        await db.document_shares.insert_one({
+            "token": token,
+            "sellerId": ObjectId(po_seller_id) if po_seller_id else user["_id"],
+            "documentType": "po",
+            "documentId": str(po["_id"]),
+            "recipientPhone": supplier["phone"],
+            "expiresAt": now + timedelta(days=7),
+            "createdAt": now,
+        })
+
+        app_url = os.environ.get("FRONTEND_URL", "")
+        doc_url = f"{app_url}/api/doc/{token}"
+
+        # Build message with download link
         items = po.get("items", [])
-        msg = "Hello,\n\nPlease find the purchase order for the following material.\n\n"
-        msg += f"PO Number: {po.get('poNumber', '')}\n\n"
+        msg = f"Hello,\n\nPlease find the Purchase Order below.\n\nPO Number: {po.get('poNumber', '')}\n\n"
 
         for item in items:
-            msg += f"Product: {item.get('productName', '')}\n"
+            msg += f"- {item.get('productName', '')}"
             if item.get("sku"):
-                msg += f"SKU: {item['sku']}\n"
-            if item.get("specification"):
-                msg += f"\nSpecification:\n{item['specification']}\n"
-            if item.get("description"):
-                msg += f"\nDescription:\n{item['description']}\n"
-            msg += f"\nRequired Quantity: {item.get('quantity', 0)} Nos\n\n"
+                msg += f" ({item['sku']})"
+            msg += f" | Qty: {item.get('quantity', 0)}\n"
 
-        msg += "A PDF copy of the purchase order is available for download.\n\n"
-        msg += f"Please confirm availability and delivery timeline.\n\nRegards\n{business_name}"
+        msg += f"\nDownload PO:\n{doc_url}\n\nPlease confirm availability and delivery timeline.\n\nRegards,\n{business_name}"
 
         phone = supplier["phone"].replace(" ", "").replace("-", "").replace("+", "")
         if not phone.startswith("91") and len(phone) == 10:
@@ -366,10 +390,10 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         if po.get("status") == "draft":
             await db.purchase_orders.update_one(
                 {"_id": po["_id"]},
-                {"$set": {"status": "sent", "updatedAt": datetime.now(timezone.utc)}}
+                {"$set": {"status": "sent", "updatedAt": now}}
             )
 
-        return {"whatsappLink": wa_link, "message": msg, "supplierPhone": supplier["phone"]}
+        return {"whatsappLink": wa_link, "message": msg, "supplierPhone": supplier["phone"], "documentLink": f"/api/doc/{token}"}
 
     # ==========================================
     # RECEIVE GOODS (GRN)
@@ -382,14 +406,12 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         seller_id = await get_seller_id(user)
 
-        try:
-            po_oid = ObjectId(po_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid PO ID")
-
-        po = await db.purchase_orders.find_one({"_id": po_oid, "sellerId": ObjectId(seller_id)})
+        po = await db.purchase_orders.find_one(po_query(po_id, seller_id))
         if not po:
             raise HTTPException(status_code=404, detail="Purchase order not found")
+
+        po_oid = po["_id"]
+        po_seller_id = str(po.get("sellerId", "")) or seller_id
 
         if po.get("status") in ("cancelled", "received"):
             raise HTTPException(status_code=400, detail=f"Cannot receive goods for a {po['status']} PO")
@@ -429,7 +451,7 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
 
             # Create inventory log
             await db.inventory_logs.insert_one({
-                "sellerId": ObjectId(seller_id),
+                "sellerId": ObjectId(po_seller_id),
                 "listingId": listing_oid,
                 "productName": product_name,
                 "changeType": "purchase_receipt",
@@ -445,12 +467,12 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
             min_stock = listing.get("minStock", 0)
             if min_stock > 0 and new_stock > min_stock:
                 await db.low_stock_alerts.update_many(
-                    {"sellerId": ObjectId(seller_id), "listingId": listing_oid, "status": "pending"},
+                    {"sellerId": ObjectId(po_seller_id), "listingId": listing_oid, "status": "pending"},
                     {"$set": {"status": "resolved", "updatedAt": now}}
                 )
                 # Also update ordered alerts for this listing
                 await db.low_stock_alerts.update_many(
-                    {"sellerId": ObjectId(seller_id), "listingId": listing_oid, "status": "ordered"},
+                    {"sellerId": ObjectId(po_seller_id), "listingId": listing_oid, "status": "ordered"},
                     {"$set": {"status": "resolved", "updatedAt": now}}
                 )
 
@@ -474,7 +496,7 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
 
         # Create GRN record
         grn_doc = {
-            "sellerId": ObjectId(seller_id),
+            "sellerId": ObjectId(po_seller_id),
             "poId": po_oid,
             "poNumber": po.get("poNumber", ""),
             "items": grn_items,
@@ -531,7 +553,10 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid PO ID")
 
-        grns = await db.goods_receipts.find({"poId": po_oid, "sellerId": ObjectId(seller_id)}).sort("createdAt", -1).to_list(100)
+        grn_query = {"poId": po_oid}
+        if seller_id:
+            grn_query["sellerId"] = ObjectId(seller_id)
+        grns = await db.goods_receipts.find(grn_query).sort("createdAt", -1).to_list(100)
         return {"receipts": serialize_doc(grns)}
 
     return router

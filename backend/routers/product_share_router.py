@@ -398,13 +398,36 @@ def init_public_doc_router(db):
                 return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
             elif doc_type == "po":
+                from services.po_pdf_service import generate_po_pdf
                 po = await db.purchase_orders.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
                 if not po:
                     raise HTTPException(status_code=404, detail="Purchase order not found")
+                seller = await db.users.find_one({"_id": seller_id})
+                profile = (seller or {}).get("profile", {})
+                billing = (seller or {}).get("billingSettings", {})
+                gst = (seller or {}).get("gst", {})
+                seller_data = {
+                    "businessName": profile.get("businessName", ""),
+                    "address": profile.get("address", ""),
+                    "city": profile.get("city", ""),
+                    "state": profile.get("state", ""),
+                    "phone": profile.get("phone", ""),
+                    "email": (seller or {}).get("email", ""),
+                    "gstNumber": gst.get("number", ""),
+                    "sellerLogoUrl": billing.get("companyLogoUrl", "") or profile.get("sellerLogoUrl", ""),
+                }
+                supplier = await db.seller_suppliers.find_one({"_id": po.get("supplierId")}) or {}
+                supplier_data = {
+                    "name": supplier.get("name", ""),
+                    "phone": supplier.get("phone", ""),
+                    "email": supplier.get("email", ""),
+                    "address": supplier.get("address", ""),
+                    "gstNumber": supplier.get("gstNumber", ""),
+                }
                 po_data = serialize_doc(po)
-                for k in ["_id", "sellerId"]:
-                    po_data.pop(k, None)
-                return po_data
+                pdf_bytes = generate_po_pdf(po_data, seller_data, supplier_data)
+                filename = f"PO-{po.get('poNumber', 'document')}.pdf"
+                return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
             raise HTTPException(status_code=400, detail="Unsupported document type")
 

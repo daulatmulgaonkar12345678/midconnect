@@ -59,6 +59,12 @@ export default function PurchaseOrdersPage() {
   const [filter, setFilter] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
+  const [whatsappSending, setWhatsappSending] = useState<string | null>(null);
+  const [whatsappConfirm, setWhatsappConfirm] = useState<string | null>(null);
+
+  // WhatsApp phone modal state (for POs without supplier phone)
+  const [waPhoneModal, setWaPhoneModal] = useState<PurchaseOrder | null>(null);
+  const [waManualPhone, setWaManualPhone] = useState('');
 
   // GRN modal state
   const [grnModal, setGrnModal] = useState<PurchaseOrder | null>(null);
@@ -103,17 +109,42 @@ export default function PurchaseOrdersPage() {
   };
 
   const sendWhatsApp = async (poId: string) => {
+    setWhatsappSending(poId);
     try {
       const h = await authHeaders();
       const res = await fetch(`${API_URL}/api/business-tools/purchase-orders/${poId}/whatsapp-link`, { headers: h });
       if (res.ok) {
         const data = await res.json();
-        if (data.whatsappLink) { window.open(data.whatsappLink, '_blank'); fetchPOs(); }
+        if (data.whatsappLink) {
+          setWhatsappConfirm(poId);
+          setTimeout(() => setWhatsappConfirm(null), 3000);
+          window.open(data.whatsappLink, '_blank');
+          fetchPOs();
+        }
       } else {
         const data = await res.json();
-        setError(data.detail || 'Failed to generate WhatsApp link');
+        if (data.detail?.includes('phone')) {
+          // Supplier phone missing — show phone input modal
+          const po = pos.find(p => p.id === poId);
+          if (po) {
+            setWaPhoneModal(po);
+            setWaManualPhone(po.supplierPhone || '');
+          }
+        } else {
+          setError(data.detail || 'Failed to generate WhatsApp link');
+        }
       }
     } catch { setError('Failed to send WhatsApp'); }
+    setWhatsappSending(null);
+  };
+
+  const handleWhatsAppClick = (po: PurchaseOrder) => {
+    if (po.supplierPhone) {
+      sendWhatsApp(po.id);
+    } else {
+      setWaPhoneModal(po);
+      setWaManualPhone('');
+    }
   };
 
   const updateStatus = async (poId: string, status: string) => {
@@ -265,11 +296,12 @@ export default function PurchaseOrdersPage() {
                     <Download className="h-3.5 w-3.5" /> PDF
                   </button>
 
-                  {po.supplierPhone && !['received', 'cancelled'].includes(po.status) && (
-                    <button onClick={() => sendWhatsApp(po.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 transition"
+                  {!['received', 'cancelled'].includes(po.status) && (
+                    <button onClick={() => handleWhatsAppClick(po)} disabled={whatsappSending === po.id}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 transition disabled:opacity-50"
                       data-testid={`po-whatsapp-${po.id}`}>
-                      <Send className="h-3.5 w-3.5" /> WhatsApp
+                      {whatsappSending === po.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                      {whatsappConfirm === po.id ? 'Opening WhatsApp...' : 'WhatsApp'}
                     </button>
                   )}
 
@@ -410,6 +442,54 @@ export default function PurchaseOrdersPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* WhatsApp Phone Input Modal */}
+      {waPhoneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="wa-phone-modal">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Send via WhatsApp</h3>
+              <button onClick={() => setWaPhoneModal(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-1">PO: <span className="font-medium">{waPhoneModal.poNumber}</span></p>
+            <p className="text-sm text-gray-600 mb-4">Supplier: <span className="font-medium">{waPhoneModal.supplierName}</span></p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Phone</label>
+            <input
+              type="tel"
+              value={waManualPhone}
+              onChange={(e) => setWaManualPhone(e.target.value)}
+              placeholder="+91XXXXXXXXXX"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 mb-4"
+              data-testid="wa-phone-input"
+            />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setWaPhoneModal(null)} className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!waManualPhone.trim()) { setError('Please enter a phone number'); return; }
+                  // Update supplier phone first, then send
+                  try {
+                    const h = await authHeaders();
+                    await fetch(`${API_URL}/api/business-tools/suppliers/${waPhoneModal.supplierId}`, {
+                      method: 'PUT', headers: h,
+                      body: JSON.stringify({ phone: waManualPhone.trim() })
+                    });
+                  } catch { /* continue even if update fails */ }
+                  setWaPhoneModal(null);
+                  sendWhatsApp(waPhoneModal.id);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition"
+                data-testid="wa-send-btn"
+              >
+                <Send className="h-4 w-4" /> Send
+              </button>
+            </div>
           </div>
         </div>
       )}
