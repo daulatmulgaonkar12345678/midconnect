@@ -7,7 +7,7 @@ import {
   FileText, Plus, X, Download, Eye, Trash2, Send, CreditCard,
   IndianRupee, ChevronDown, ChevronUp, Clock, CheckCircle2,
   AlertCircle, Banknote, Calendar, MessageCircle, Upload, Image as ImageIcon,
-  FileDown, Bell, Settings, ExternalLink, Paperclip
+  FileDown, Bell, Settings, ExternalLink, Paperclip, Loader2
 } from 'lucide-react';
 import { uploadPaymentReceipt } from '@/lib/cloudinary';
 
@@ -92,6 +92,11 @@ export default function InvoicesPage() {
   const [reminderDaysInput, setReminderDaysInput] = useState('3, 7, 15');
   // Image preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // PDF Download modal
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [pdfModalInvoice, setPdfModalInvoice] = useState<{ id: string; invoiceNumber: string } | null>(null);
+  const [pdfCopies, setPdfCopies] = useState<Record<string, boolean>>({ original: true, transporter: true, supplier: true, office: true });
+  const [pdfDownloading, setPdfDownloading] = useState(false);
   // Invoice form
   const [formData, setFormData] = useState<{
     buyerId: string; items: InvoiceFormItem[]; notes: string; deductStock: boolean; dueDays: number;
@@ -220,12 +225,35 @@ export default function InvoicesPage() {
     await fetch(`${API_URL}/api/business-tools/invoices/${id}`, { method: 'DELETE', headers: h });
     if (viewInvoice?.id === id) setViewInvoice(null); fetchAll();
   };
-  const downloadPdf = async (id: string, num: string, copyType: string = 'original') => {
-    const h = await authHeaders();
-    const res = await fetch(`${API_URL}/api/business-tools/invoices/${id}/pdf?copy_type=${copyType}`, { headers: h });
-    if (!res.ok) { alert('Failed to download'); return; }
-    const blob = await res.blob(); const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${num}-${copyType}.pdf`; a.click(); URL.revokeObjectURL(url);
+  const openPdfModal = (id: string, invoiceNumber: string) => {
+    setPdfModalInvoice({ id, invoiceNumber });
+    setPdfCopies({ original: true, transporter: true, supplier: true, office: true });
+    setShowPdfModal(true);
+  };
+
+  const togglePdfCopy = (key: string) => setPdfCopies(p => ({ ...p, [key]: !p[key] }));
+  const toggleAllCopies = (checked: boolean) => setPdfCopies({ original: checked, transporter: checked, supplier: checked, office: checked });
+  const selectedCopyCount = Object.values(pdfCopies).filter(Boolean).length;
+  const allCopiesSelected = selectedCopyCount === 4;
+
+  const downloadMergedPdf = async () => {
+    if (!pdfModalInvoice || selectedCopyCount === 0) return;
+    setPdfDownloading(true);
+    try {
+      const h = await authHeaders();
+      const selected = Object.entries(pdfCopies).filter(([, v]) => v).map(([k]) => k);
+      const res = await fetch(`${API_URL}/api/business-tools/invoices/${pdfModalInvoice.id}/pdf-merged?copies=${selected.join(',')}`, { headers: h });
+      if (!res.ok) { alert('Failed to download PDF'); setPdfDownloading(false); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${pdfModalInvoice.invoiceNumber}-${selected.length > 1 ? 'merged' : selected[0]}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShowPdfModal(false);
+    } catch { alert('Download failed'); }
+    setPdfDownloading(false);
   };
 
   const openEwayBill = async (id: string) => {
@@ -601,15 +629,9 @@ export default function InvoicesPage() {
             {viewInvoice.notes && <div className="text-sm text-gray-600 mb-4"><span className="font-medium">Notes:</span> {viewInvoice.notes}</div>}
             {/* Actions */}
             <div className="space-y-3 border-t border-gray-100 pt-4">
-              {/* Invoice Copy Downloads */}
+              {/* Invoice PDF Download */}
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">Download Invoice Copies</p>
-                <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'original')} className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-700" data-testid="download-original"><Download className="w-3.5 h-3.5" /> Original</button>
-                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'transporter')} className="flex items-center gap-1 bg-violet-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-violet-700" data-testid="download-transporter"><Download className="w-3.5 h-3.5" /> Transporter</button>
-                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'supplier')} className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-700" data-testid="download-supplier"><Download className="w-3.5 h-3.5" /> Supplier/CA</button>
-                  <button onClick={() => downloadPdf(viewInvoice.id, viewInvoice.invoiceNumber, 'office')} className="flex items-center gap-1 bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-700" data-testid="download-office"><Download className="w-3.5 h-3.5" /> Office</button>
-                </div>
+                <button onClick={() => openPdfModal(viewInvoice.id, viewInvoice.invoiceNumber)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700" data-testid="download-pdf-btn"><Download className="w-4 h-4" /> Download PDF</button>
               </div>
               {/* Actions Row */}
               <div className="flex gap-2 flex-wrap">
@@ -749,6 +771,45 @@ export default function InvoicesPage() {
         </div>
       )}
 
+      {/* ──── PDF Copy Selection Modal ──── */}
+      {showPdfModal && pdfModalInvoice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" data-testid="pdf-copy-modal">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold flex items-center gap-2"><FileDown className="w-5 h-5 text-indigo-600" /> Download Invoice PDF</h2>
+              <button onClick={() => setShowPdfModal(false)} className="text-gray-400 hover:text-gray-600" data-testid="close-pdf-modal"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">Invoice: <span className="font-medium text-gray-700">{pdfModalInvoice.invoiceNumber}</span></p>
+            <div className="space-y-1 mb-4">
+              <label className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer border border-gray-100" data-testid="select-all-copies">
+                <input type="checkbox" checked={allCopiesSelected} onChange={e => toggleAllCopies(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                <span className="text-sm font-medium text-gray-800">Select All</span>
+              </label>
+              <div className="h-px bg-gray-100 my-1" />
+              {([
+                { key: 'original', label: 'Original for Recipient' },
+                { key: 'transporter', label: 'Duplicate for Transporter' },
+                { key: 'supplier', label: 'Triplicate for Supplier / CA' },
+                { key: 'office', label: 'Office Copy' },
+              ] as const).map(item => (
+                <label key={item.key} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer" data-testid={`copy-check-${item.key}`}>
+                  <input type="checkbox" checked={pdfCopies[item.key]} onChange={() => togglePdfCopy(item.key)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                  <span className="text-sm text-gray-700">{item.label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowPdfModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800" data-testid="cancel-pdf-modal">Cancel</button>
+              <button onClick={downloadMergedPdf} disabled={pdfDownloading || selectedCopyCount === 0}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium disabled:opacity-50" data-testid="download-selected-btn">
+                {pdfDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                {pdfDownloading ? 'Generating...' : `Download Selected (${selectedCopyCount})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ──── Image Preview Modal ──── */}
       {previewImage && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[70] p-4" onClick={() => setPreviewImage(null)} data-testid="image-preview-modal">
@@ -790,7 +851,7 @@ export default function InvoicesPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button onClick={() => openInvoiceDetail(inv)} className="text-gray-400 hover:text-indigo-600" data-testid={`view-invoice-${inv.id}`} title="View"><Eye className="w-4 h-4" /></button>
-                      <button onClick={() => downloadPdf(inv.id, inv.invoiceNumber, 'original')} className="text-gray-400 hover:text-indigo-600" data-testid={`download-invoice-${inv.id}`} title="PDF"><Download className="w-4 h-4" /></button>
+                      <button onClick={() => openPdfModal(inv.id, inv.invoiceNumber)} className="text-gray-400 hover:text-indigo-600" data-testid={`download-invoice-${inv.id}`} title="Download PDF"><Download className="w-4 h-4" /></button>
                       {inv.buyerPhone && <button onClick={() => openWhatsApp(inv, 'send_invoice')} className="text-gray-400 hover:text-green-600" data-testid={`send-invoice-wa-${inv.id}`} title="Send Invoice WhatsApp"><Send className="w-4 h-4" /></button>}
                       {inv.status !== 'cancelled' && inv.status !== 'paid' && <button onClick={() => openPaymentModal(inv.id)} className="text-gray-400 hover:text-emerald-600" data-testid={`add-payment-row-${inv.id}`} title="Add Payment"><CreditCard className="w-4 h-4" /></button>}
                       {(inv.pendingAmount ?? inv.total) > 0 && inv.buyerPhone && inv.status !== 'cancelled' && <button onClick={() => openWhatsApp(inv, inv.status === 'overdue' ? 'overdue' : 'followup')} className="text-gray-400 hover:text-green-600" data-testid={`wa-invoice-${inv.id}`} title="WhatsApp"><MessageCircle className="w-4 h-4" /></button>}
