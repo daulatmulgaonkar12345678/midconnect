@@ -373,7 +373,7 @@ export default function InvoicesPage() {
     // Use backend API as single source of truth for all WhatsApp messages
     try {
       const h = await authHeaders();
-      const res = await fetch(`${API_URL}/api/invoices/${inv.id}/whatsapp-link?reminder_type=${type}`, { headers: h });
+      const res = await fetch(`${API_URL}/api/business-tools/invoices/${inv.id}/whatsapp-link?reminder_type=${type}`, { headers: h });
       if (res.ok) {
         const data = await res.json();
         if (data.whatsappLink) {
