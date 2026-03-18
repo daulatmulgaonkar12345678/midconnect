@@ -20,7 +20,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 interface Spec { key: string; value: string; }
 interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; gstRate: number; hsnCode: string; specifications: Spec[]; }
 interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
-interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; address?: string; }
+interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; address?: string; shippingAddresses?: { id: string; addressLine1: string; addressLine2?: string; city: string; state: string; pincode: string; country: string; contactPerson?: string; phone?: string; isDefault: boolean; }[]; }
 interface InvoiceItem { productName: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
 interface PaymentEntry { id: string; amount: number; paymentDate: string; paymentMethod: string; accountName?: string; referenceNumber?: string; notes?: string; receiptUrls?: string[]; createdAt: string; }
 interface Invoice {
@@ -114,10 +114,12 @@ export default function InvoicesPage() {
   const [formData, setFormData] = useState<{
     buyerId: string; items: InvoiceFormItem[]; notes: string; deductStock: boolean; dueDays: number;
     poNumber: string; challanNumber: string; placeOfSupply: string; termsAndConditions: string;
+    shippingAddressId: string;
     transport: { transporterName: string; lrNumber: string; vehicleNumber: string; bookingLocation: string; numberOfPackages: string; };
   }>({
     buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7,
     poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
+    shippingAddressId: '',
     transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
   });
 
@@ -240,6 +242,9 @@ export default function InvoicesPage() {
     const transportData = formData.transport.transporterName || formData.transport.lrNumber || formData.transport.vehicleNumber
       ? { ...formData.transport, numberOfPackages: formData.transport.numberOfPackages ? parseInt(formData.transport.numberOfPackages) : undefined }
       : undefined;
+    // Build shipping address from selected ID
+    const selectedBuyer = buyers.find(b => b.id === formData.buyerId);
+    const selectedAddr = formData.shippingAddressId ? (selectedBuyer?.shippingAddresses || []).find(a => a.id === formData.shippingAddressId) : undefined;
     return {
       buyerId: formData.buyerId,
       items: formData.items.map(i => ({
@@ -256,6 +261,7 @@ export default function InvoicesPage() {
       placeOfSupply: formData.placeOfSupply || undefined,
       transport: transportData,
       termsAndConditions: formData.termsAndConditions || undefined,
+      shippingAddress: selectedAddr ? { id: selectedAddr.id, addressLine1: selectedAddr.addressLine1, addressLine2: selectedAddr.addressLine2, city: selectedAddr.city, state: selectedAddr.state, pincode: selectedAddr.pincode, country: selectedAddr.country, contactPerson: selectedAddr.contactPerson, phone: selectedAddr.phone } : undefined,
     };
   };
 
@@ -560,7 +566,8 @@ export default function InvoicesPage() {
                   <select value={formData.buyerId} onChange={e => {
                     const buyerId = e.target.value;
                     const selectedBuyer = buyers.find(b => b.id === buyerId);
-                    setFormData(p => ({ ...p, buyerId, placeOfSupply: selectedBuyer?.state || p.placeOfSupply }));
+                    const defaultAddr = (selectedBuyer?.shippingAddresses || []).find(a => a.isDefault);
+                    setFormData(p => ({ ...p, buyerId, placeOfSupply: selectedBuyer?.state || p.placeOfSupply, shippingAddressId: defaultAddr?.id || '' }));
                   }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="buyer-select">
                     <option value="">Select buyer</option>
@@ -574,6 +581,42 @@ export default function InvoicesPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="due-days-input" />
                 </div>
               </div>
+
+              {/* Shipping Address */}
+              {formData.buyerId && (() => {
+                const selectedBuyer = buyers.find(b => b.id === formData.buyerId);
+                const addrs = selectedBuyer?.shippingAddresses || [];
+                return (
+                  <div data-testid="shipping-address-section">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Shipping Address</label>
+                    {addrs.length > 0 ? (
+                      <select value={formData.shippingAddressId} onChange={e => setFormData(p => ({ ...p, shippingAddressId: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="shipping-address-select">
+                        <option value="">Select shipping address</option>
+                        {addrs.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.addressLine1}, {a.city} - {a.pincode}{a.isDefault ? ' (Default)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        No shipping address found. <a href="/seller/business-tools/buyers" className="text-indigo-600 hover:underline font-medium">+ Add Address in Buyer section</a>
+                      </div>
+                    )}
+                    {formData.shippingAddressId && (() => {
+                      const addr = addrs.find(a => a.id === formData.shippingAddressId);
+                      return addr ? (
+                        <div className="mt-1.5 text-xs text-gray-500 bg-gray-50 rounded px-3 py-2" data-testid="shipping-address-preview">
+                          <p>{addr.addressLine1}{addr.addressLine2 ? `, ${addr.addressLine2}` : ''}</p>
+                          <p>{addr.city}, {addr.state} - {addr.pincode}, {addr.country}</p>
+                          {addr.contactPerson && <p className="mt-0.5">Contact: {addr.contactPerson}{addr.phone ? ` (${addr.phone})` : ''}</p>}
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                );
+              })()}
 
               {/* Items */}
               <div>
@@ -693,6 +736,17 @@ export default function InvoicesPage() {
               <div><span className="text-gray-500">Buyer:</span> <span className="font-medium">{viewInvoice.buyerName}</span></div>
               <div><span className="text-gray-500">Date:</span> <span className="font-medium">{fmtDate(viewInvoice.date)}</span></div>
             </div>
+            {(viewInvoice as Record<string, unknown>).shippingAddress && typeof (viewInvoice as Record<string, unknown>).shippingAddress === 'object' && (((viewInvoice as Record<string, unknown>).shippingAddress as Record<string, string>).addressLine1) && (() => {
+              const sa = (viewInvoice as Record<string, unknown>).shippingAddress as Record<string, string>;
+              return (
+                <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm" data-testid="invoice-shipping-addr">
+                  <span className="text-xs font-medium text-gray-500 uppercase">Ship To</span>
+                  <p className="text-gray-800 mt-1">{sa.addressLine1}{sa.addressLine2 ? `, ${sa.addressLine2}` : ''}</p>
+                  <p className="text-gray-600">{sa.city}, {sa.state} - {sa.pincode}</p>
+                  {sa.contactPerson && <p className="text-xs text-gray-500 mt-1">Contact: {sa.contactPerson}{sa.phone ? ` (${sa.phone})` : ''}</p>}
+                </div>
+              );
+            })()}
             {/* Items Table */}
             <div className="overflow-x-auto mb-4">
             <table className="w-full text-sm">

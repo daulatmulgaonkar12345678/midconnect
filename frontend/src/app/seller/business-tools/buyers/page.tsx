@@ -19,6 +19,19 @@ import {
 } from 'lucide-react';
 import { INDIAN_STATES } from '@/lib/indian-states';
 
+interface ShippingAddress {
+  id: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+  contactPerson?: string;
+  phone?: string;
+  isDefault: boolean;
+}
+
 interface Buyer {
   id: string;
   buyerName: string;
@@ -29,10 +42,15 @@ interface Buyer {
   state?: string;
   address?: string;
   notes?: string;
+  shippingAddresses?: ShippingAddress[];
   totalOrders: number;
   totalSpent: number;
   createdAt: string;
 }
+
+const emptyAddr = (): ShippingAddress => ({
+  id: '', addressLine1: '', addressLine2: '', city: '', state: '', pincode: '', country: 'India', contactPerson: '', phone: '', isDefault: false,
+});
 
 export default function BuyersPage() {
   const { getIdToken } = useAuth();
@@ -45,6 +63,11 @@ export default function BuyersPage() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  // Shipping address management
+  const [addrBuyer, setAddrBuyer] = useState<Buyer | null>(null);
+  const [addrForm, setAddrForm] = useState<ShippingAddress>(emptyAddr());
+  const [addrEditing, setAddrEditing] = useState(false);
+  const [addrSaving, setAddrSaving] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -160,6 +183,58 @@ export default function BuyersPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete buyer');
     }
+  };
+
+  // ── Shipping Address CRUD ──
+  const openAddrManager = (buyer: Buyer) => {
+    setAddrBuyer(buyer);
+    setAddrForm(emptyAddr());
+    setAddrEditing(false);
+  };
+  const startEditAddr = (addr: ShippingAddress) => { setAddrForm({ ...addr }); setAddrEditing(true); };
+  const cancelAddrEdit = () => { setAddrForm(emptyAddr()); setAddrEditing(false); };
+
+  const saveAddr = async () => {
+    if (!addrBuyer || !addrForm.addressLine1 || !addrForm.city || !addrForm.state || !addrForm.pincode) {
+      setError('Address Line 1, City, State and Pincode are required');
+      return;
+    }
+    setAddrSaving(true);
+    try {
+      const token = await getIdToken();
+      const isEdit = addrEditing && addrForm.id;
+      const url = isEdit
+        ? `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/buyers/${addrBuyer.id}/shipping-addresses/${addrForm.id}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/buyers/${addrBuyer.id}/shipping-addresses`;
+      const res = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(addrForm),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed to save address'); }
+      const data = await res.json();
+      setAddrBuyer(prev => prev ? { ...prev, shippingAddresses: data.addresses } : prev);
+      // Also update in the buyers list
+      setBuyers(prev => prev.map(b => b.id === addrBuyer.id ? { ...b, shippingAddresses: data.addresses } : b));
+      setAddrForm(emptyAddr());
+      setAddrEditing(false);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to save address'); }
+    setAddrSaving(false);
+  };
+
+  const deleteAddr = async (addrId: string) => {
+    if (!addrBuyer) return;
+    try {
+      const token = await getIdToken();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/buyers/${addrBuyer.id}/shipping-addresses/${addrId}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error('Failed to delete');
+      const data = await res.json();
+      setAddrBuyer(prev => prev ? { ...prev, shippingAddresses: data.addresses } : prev);
+      setBuyers(prev => prev.map(b => b.id === addrBuyer.id ? { ...b, shippingAddresses: data.addresses } : b));
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete address'); }
   };
 
   if (!hasPermission('manage_buyers')) {
@@ -307,6 +382,12 @@ export default function BuyersPage() {
                 <span className="text-xs font-medium text-gray-500">{buyer.state}</span>
               </div>
             )}
+            <div className="mt-3 pt-3 border-t flex items-center justify-between">
+              <button onClick={() => openAddrManager(buyer)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1" data-testid={`manage-addr-${buyer.id}`}>
+                <MapPin className="h-3 w-3" />
+                Shipping Addresses ({(buyer.shippingAddresses || []).length})
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -326,7 +407,7 @@ export default function BuyersPage() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Buyer Form Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -441,6 +522,77 @@ export default function BuyersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Shipping Address Modal */}
+      {addrBuyer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="addr-modal">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Shipping Addresses</h2>
+                <p className="text-sm text-gray-500">{addrBuyer.buyerName}</p>
+              </div>
+              <button onClick={() => { setAddrBuyer(null); setAddrEditing(false); setAddrForm(emptyAddr()); }} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Existing addresses */}
+              {(addrBuyer.shippingAddresses || []).length > 0 ? (
+                <div className="space-y-2">
+                  {(addrBuyer.shippingAddresses || []).map(a => (
+                    <div key={a.id} className={`border rounded-lg p-3 text-sm ${a.isDefault ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200'}`} data-testid={`addr-${a.id}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900">{a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}</p>
+                          <p className="text-gray-600">{a.city}, {a.state} - {a.pincode}</p>
+                          {a.contactPerson && <p className="text-xs text-gray-500 mt-1">Contact: {a.contactPerson}{a.phone ? ` (${a.phone})` : ''}</p>}
+                          {a.isDefault && <span className="inline-block mt-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full font-medium">Default</span>}
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button onClick={() => startEditAddr(a)} className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded" data-testid={`edit-addr-${a.id}`}><Pencil className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => deleteAddr(a.id)} className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded" data-testid={`del-addr-${a.id}`}><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-400 text-sm py-4">No shipping addresses yet</p>
+              )}
+              {/* Add / Edit form */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">{addrEditing ? 'Edit Address' : 'Add New Address'}</h3>
+                <div className="space-y-3">
+                  <div><label className="block text-xs font-medium text-gray-600 mb-1">Address Line 1 *</label><input type="text" value={addrForm.addressLine1} onChange={e => setAddrForm(p => ({ ...p, addressLine1: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Building, Street" data-testid="addr-line1" /></div>
+                  <div><label className="block text-xs font-medium text-gray-600 mb-1">Address Line 2</label><input type="text" value={addrForm.addressLine2 || ''} onChange={e => setAddrForm(p => ({ ...p, addressLine2: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Area, Landmark" data-testid="addr-line2" /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-xs font-medium text-gray-600 mb-1">City *</label><input type="text" value={addrForm.city} onChange={e => setAddrForm(p => ({ ...p, city: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="addr-city" /></div>
+                    <div><label className="block text-xs font-medium text-gray-600 mb-1">State *</label><select value={addrForm.state} onChange={e => setAddrForm(p => ({ ...p, state: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="addr-state"><option value="">Select</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-xs font-medium text-gray-600 mb-1">Pincode *</label><input type="text" value={addrForm.pincode} onChange={e => setAddrForm(p => ({ ...p, pincode: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxLength={6} data-testid="addr-pincode" /></div>
+                    <div><label className="block text-xs font-medium text-gray-600 mb-1">Country</label><input type="text" value={addrForm.country} onChange={e => setAddrForm(p => ({ ...p, country: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="addr-country" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-xs font-medium text-gray-600 mb-1">Contact Person</label><input type="text" value={addrForm.contactPerson || ''} onChange={e => setAddrForm(p => ({ ...p, contactPerson: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="addr-contact" /></div>
+                    <div><label className="block text-xs font-medium text-gray-600 mb-1">Phone</label><input type="tel" value={addrForm.phone || ''} onChange={e => setAddrForm(p => ({ ...p, phone: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="addr-phone" /></div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setAddrForm(p => ({ ...p, isDefault: !p.isDefault }))} className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${addrForm.isDefault ? 'bg-indigo-500' : 'bg-gray-300'}`} data-testid="addr-default-toggle"><span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition ${addrForm.isDefault ? 'translate-x-4' : 'translate-x-0.5'}`} /></button>
+                    <span className="text-xs text-gray-600">Mark as default</span>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={saveAddr} disabled={addrSaving} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50" data-testid="save-addr-btn">
+                      {addrSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {addrEditing ? 'Update' : 'Add Address'}
+                    </button>
+                    {addrEditing && <button onClick={cancelAddrEdit} className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">Cancel</button>}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

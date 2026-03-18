@@ -290,6 +290,17 @@ class TransportDetails(BaseModel):
     bookingLocation: Optional[str] = Field(None, max_length=200)
     numberOfPackages: Optional[int] = Field(None, ge=0)
 
+class ShippingAddressRef(BaseModel):
+    id: Optional[str] = None
+    addressLine1: str = ""
+    addressLine2: Optional[str] = ""
+    city: str = ""
+    state: str = ""
+    pincode: str = ""
+    country: str = "India"
+    contactPerson: Optional[str] = ""
+    phone: Optional[str] = ""
+
 class InvoiceCreate(BaseModel):
     buyerId: str
     items: List[InvoiceItemCreate] = Field(..., min_length=1)
@@ -302,6 +313,7 @@ class InvoiceCreate(BaseModel):
     placeOfSupply: Optional[str] = Field(None, max_length=100, description="Place of supply for GST")
     transport: Optional[TransportDetails] = None
     termsAndConditions: Optional[str] = Field(None, max_length=2000)
+    shippingAddress: Optional[ShippingAddressRef] = None
 
 class InvoiceStatusUpdate(BaseModel):
     status: str  # draft, sent, viewed, partially_paid, paid, overdue, cancelled

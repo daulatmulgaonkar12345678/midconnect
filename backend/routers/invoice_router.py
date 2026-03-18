@@ -512,6 +512,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "taxType": tax_type,
             "transport": data.transport.model_dump() if data.transport else {},
             "termsAndConditions": data.termsAndConditions or "",
+            "shippingAddress": data.shippingAddress.model_dump() if data.shippingAddress else {},
             "createdBy": str(user["_id"]),
             "createdAt": now,
             "updatedAt": now

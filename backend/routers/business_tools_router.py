@@ -2,7 +2,7 @@
 Business Tools Router - RBAC, Employees, Buyers, Suppliers
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, Body
 from typing import Optional, List
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -563,6 +563,132 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         
         return {"message": "Buyer deleted"}
     
+    # ── Shipping Address CRUD ──
+
+    @router.get("/buyers/{buyer_id}/shipping-addresses")
+    async def list_shipping_addresses(buyer_id: str, authorization: str = Header(...)):
+        """List all shipping addresses for a buyer."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_BUYERS.value)
+        seller_id = await get_seller_id(user)
+        try:
+            buyer_oid = ObjectId(buyer_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid buyer ID")
+        buyer = await db.seller_buyers.find_one({"_id": buyer_oid, "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+        return {"addresses": buyer.get("shippingAddresses", [])}
+
+    @router.post("/buyers/{buyer_id}/shipping-addresses")
+    async def add_shipping_address(buyer_id: str, data: dict = Body(...), authorization: str = Header(...)):
+        """Add a new shipping address to a buyer."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_BUYERS.value)
+        seller_id = await get_seller_id(user)
+        try:
+            buyer_oid = ObjectId(buyer_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid buyer ID")
+        buyer = await db.seller_buyers.find_one({"_id": buyer_oid, "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+
+        import uuid
+        addr = {
+            "id": str(uuid.uuid4())[:8],
+            "addressLine1": data.get("addressLine1", ""),
+            "addressLine2": data.get("addressLine2", ""),
+            "city": data.get("city", ""),
+            "state": data.get("state", ""),
+            "pincode": data.get("pincode", ""),
+            "country": data.get("country", "India"),
+            "contactPerson": data.get("contactPerson", ""),
+            "phone": data.get("phone", ""),
+            "isDefault": bool(data.get("isDefault", False)),
+        }
+        # If default, unset other defaults
+        if addr["isDefault"]:
+            existing = buyer.get("shippingAddresses", [])
+            for a in existing:
+                a["isDefault"] = False
+            await db.seller_buyers.update_one({"_id": buyer_oid}, {"$set": {"shippingAddresses": existing}})
+
+        await db.seller_buyers.update_one(
+            {"_id": buyer_oid},
+            {"$push": {"shippingAddresses": addr}, "$set": {"updatedAt": datetime.now(timezone.utc)}}
+        )
+        updated = await db.seller_buyers.find_one({"_id": buyer_oid})
+        return {"message": "Address added", "address": addr, "addresses": updated.get("shippingAddresses", [])}
+
+    @router.put("/buyers/{buyer_id}/shipping-addresses/{addr_id}")
+    async def update_shipping_address(buyer_id: str, addr_id: str, data: dict = Body(...), authorization: str = Header(...)):
+        """Update a shipping address."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_BUYERS.value)
+        seller_id = await get_seller_id(user)
+        try:
+            buyer_oid = ObjectId(buyer_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid buyer ID")
+        buyer = await db.seller_buyers.find_one({"_id": buyer_oid, "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+
+        addresses = buyer.get("shippingAddresses", [])
+        found = False
+        is_default = bool(data.get("isDefault", False))
+        for i, a in enumerate(addresses):
+            if a["id"] == addr_id:
+                addresses[i] = {
+                    "id": addr_id,
+                    "addressLine1": data.get("addressLine1", a.get("addressLine1", "")),
+                    "addressLine2": data.get("addressLine2", a.get("addressLine2", "")),
+                    "city": data.get("city", a.get("city", "")),
+                    "state": data.get("state", a.get("state", "")),
+                    "pincode": data.get("pincode", a.get("pincode", "")),
+                    "country": data.get("country", a.get("country", "India")),
+                    "contactPerson": data.get("contactPerson", a.get("contactPerson", "")),
+                    "phone": data.get("phone", a.get("phone", "")),
+                    "isDefault": is_default,
+                }
+                found = True
+            elif is_default:
+                addresses[i]["isDefault"] = False
+        if not found:
+            raise HTTPException(status_code=404, detail="Address not found")
+
+        await db.seller_buyers.update_one(
+            {"_id": buyer_oid},
+            {"$set": {"shippingAddresses": addresses, "updatedAt": datetime.now(timezone.utc)}}
+        )
+        return {"message": "Address updated", "addresses": addresses}
+
+    @router.delete("/buyers/{buyer_id}/shipping-addresses/{addr_id}")
+    async def delete_shipping_address(buyer_id: str, addr_id: str, authorization: str = Header(...)):
+        """Delete a shipping address."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_BUYERS.value)
+        seller_id = await get_seller_id(user)
+        try:
+            buyer_oid = ObjectId(buyer_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid buyer ID")
+        buyer = await db.seller_buyers.find_one({"_id": buyer_oid, "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+
+        addresses = buyer.get("shippingAddresses", [])
+        new_addresses = [a for a in addresses if a["id"] != addr_id]
+        if len(new_addresses) == len(addresses):
+            raise HTTPException(status_code=404, detail="Address not found")
+
+        await db.seller_buyers.update_one(
+            {"_id": buyer_oid},
+            {"$set": {"shippingAddresses": new_addresses, "updatedAt": datetime.now(timezone.utc)}}
+        )
+        return {"message": "Address deleted", "addresses": new_addresses}
+
     # ===========================================
     # SUPPLIER ENDPOINTS
     # ===========================================
