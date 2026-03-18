@@ -1,0 +1,117 @@
+{
+  "summary": "Invoice Freight, TCS, Round Off & Payment Terms feature testing complete. All 105 tests PASS: 24 new Freight/TCS/RoundOff tests + 18 PDF address tests + 48 WhatsApp tests + 15 HSN fixes. TypeScript compiles with 0 errors. Frontend has proper data-testid attributes for all new form fields.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "features_tested": {
+    "1_payment_terms_field": {
+      "status": "PASS",
+      "backend": "InvoiceCreate model accepts paymentTerms field (max 500 chars)",
+      "frontend": "Form has data-testid='payment-terms-input' text input",
+      "pdf": "Payment Terms shown in header info section",
+      "detail_view": "Invoice detail shows paymentTerms in payment summary"
+    },
+    "2_freight_additional_charge": {
+      "status": "PASS",
+      "backend": "additionalCharges array with AdditionalCharge model (name, type, value)",
+      "frontend": "Form has data-testid='freight-input' number input",
+      "pdf": "Freight shown in totals section",
+      "detail_view": "Invoice detail shows additionalCharges in payment summary"
+    },
+    "3_tcs_toggle_and_percent": {
+      "status": "PASS",
+      "backend": "tcsEnabled (bool) and tcsPercent (0-5%, default 0.1%)",
+      "frontend": "Form has data-testid='tcs-toggle' checkbox and data-testid='tcs-percent-input'",
+      "calculation": "TCS = tcsPercent% of (subtotal + GST), NOT on freight",
+      "pdf": "TCS shown in totals section with percentage",
+      "detail_view": "Invoice detail shows TCS amount in payment summary"
+    },
+    "4_auto_round_off": {
+      "status": "PASS",
+      "backend": "roundOff = round(pre_round_total) - pre_round_total",
+      "frontend": "Live charges preview shows calculated Round Off",
+      "pdf": "Round Off shown in totals section with +/- sign",
+      "detail_view": "Invoice detail shows roundOff in payment summary"
+    },
+    "5_charges_preview": {
+      "status": "PASS",
+      "frontend": "data-testid='charges-preview' shows when freight > 0 OR tcsEnabled",
+      "content": "Shows Freight, TCS, Round Off, and Grand Total"
+    },
+    "6_tcs_validation": {
+      "status": "PASS",
+      "backend": "Pydantic validation rejects tcsPercent > 5 or < 0",
+      "frontend": "Input constrained with max=5 and Math.min/max clamping"
+    },
+    "7_backwards_compatibility": {
+      "status": "PASS",
+      "backend": "Invoice creation works without new fields",
+      "pdf": "PDF generates correctly without new fields"
+    },
+    "8_typescript_compilation": {
+      "status": "PASS",
+      "verification": "yarn tsc --noEmit completed with 0 errors"
+    }
+  },
+
+  "test_results": {
+    "total_tests": 105,
+    "passed": 105,
+    "failed": 0,
+    "test_files": [
+      "/app/backend/tests/test_invoice_freight_tcs_roundoff.py (24 tests - NEW)",
+      "/app/backend/tests/test_invoice_pdf_addresses.py (18 tests)",
+      "/app/backend/tests/test_whatsapp_template_engine.py (48 tests)",
+      "/app/backend/tests/test_hsn_whatsapp_fixes.py (15 tests)"
+    ]
+  },
+
+  "test_report_links": [
+    "/app/backend/tests/test_invoice_freight_tcs_roundoff.py",
+    "/app/test_reports/pytest/invoice_freight_tcs_roundoff_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "CORRECT: AdditionalCharge model has flexible schema (name, type: 'fixed'|'percentage', value)",
+    "CORRECT: InvoiceCreate accepts paymentTerms, additionalCharges, tcsEnabled, tcsPercent fields",
+    "CORRECT: TCS calculated on (subtotal + GST), NOT on freight per GST guidelines",
+    "CORRECT: Round off auto-calculates: round(pre_round) - pre_round",
+    "CORRECT: Invoice router stores all new fields in document (lines 554-560)",
+    "CORRECT: PDF service shows Payment Terms in header info section",
+    "CORRECT: PDF service shows all additional charges in totals section",
+    "CORRECT: PDF service shows TCS with percentage and Round Off with +/- sign",
+    "CORRECT: Frontend form has all required data-testid attributes",
+    "CORRECT: Frontend charges preview shows live calculations",
+    "CORRECT: Frontend invoice detail view shows all new fields in payment summary"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_invoice_freight_tcs_roundoff.py (new file - 24 tests)"
+  ],
+
+  "success_rate": {
+    "backend": "100% (105/105 unit tests passed)",
+    "frontend": "Code verified (TypeScript compiles, Firebase Auth required for UI integration testing)"
+  },
+
+  "mocked_integrations": {
+    "Resend email service": "MOCKED (as per backend .env)"
+  },
+
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Invoice Freight/TCS/RoundOff/PaymentTerms feature fully verified. Key implementation details: (1) TCS calculated on (subtotal + GST), not on freight - matches GST regulations, (2) Round off uses Python's round() for nearest rupee, (3) Frontend shows live charges preview with data-testid='charges-preview' when freight > 0 or TCS enabled, (4) All 105 tests pass including new 24 feature tests. Firebase Auth required for authenticated API endpoint testing. TypeScript compiles with 0 errors."
+}

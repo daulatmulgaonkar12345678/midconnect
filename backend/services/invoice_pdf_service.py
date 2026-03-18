@@ -150,6 +150,9 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
         info_left += f"<br/><b>PO No:</b> {po_number}"
     if challan_number:
         info_left += f"<br/><b>Challan No:</b> {challan_number}"
+    payment_terms = invoice.get("paymentTerms", "")
+    if payment_terms:
+        info_left += f"<br/><b>Payment Terms:</b> {payment_terms}"
 
     info_right = ""
     if transport.get("transporterName"):
@@ -338,11 +341,20 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
     elements.append(items_table)
     elements.append(Spacer(1, 3 * mm))
 
-    # === TAX SUMMARY + TOTALS ===
+    # === TAX SUMMARY + CHARGES + TOTALS ===
     subtotal = invoice.get("subtotal", total_taxable)
     total_gst_amt = invoice.get("gst", total_cgst + total_sgst + total_igst)
     total_paid = invoice.get("totalPaid", 0)
     pending = invoice.get("pendingAmount", grand_total)
+
+    # Additional charges from invoice
+    inv_charges = invoice.get("additionalCharges", [])
+    freight = invoice.get("freight", 0)
+    tcs_enabled = invoice.get("tcsEnabled", False)
+    tcs_percent = invoice.get("tcsPercent", 0)
+    tcs_amount = invoice.get("tcsAmount", 0)
+    round_off = invoice.get("roundOff", 0)
+
     amount_words = number_to_words(grand_total)
 
     totals_rows = [
@@ -353,6 +365,22 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
     else:
         totals_rows.append([f'CGST:', f"{total_cgst:,.2f}"])
         totals_rows.append([f'SGST:', f"{total_sgst:,.2f}"])
+
+    # Additional charges (Freight, Packing, etc.)
+    for ch in inv_charges:
+        ch_name = ch.get("name", "Charge")
+        ch_amt = ch.get("amount", 0)
+        if ch_amt > 0:
+            totals_rows.append([f'{ch_name}:', f"{ch_amt:,.2f}"])
+
+    # TCS
+    if tcs_enabled and tcs_amount > 0:
+        totals_rows.append([f'TCS ({tcs_percent}%):', f"{tcs_amount:,.2f}"])
+
+    # Round Off
+    if round_off != 0:
+        sign = "+" if round_off > 0 else ""
+        totals_rows.append([f'Round Off:', f"{sign}{round_off:.2f}"])
 
     totals_rows.append(['Grand Total:', f"{grand_total:,.2f}"])
 

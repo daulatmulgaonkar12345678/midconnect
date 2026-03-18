@@ -302,6 +302,13 @@ class ShippingAddressRef(BaseModel):
     contactPerson: Optional[str] = ""
     phone: Optional[str] = ""
 
+class AdditionalCharge(BaseModel):
+    """Flexible additional charge (Freight, Packing, Loading, Insurance, etc.)"""
+    name: str = Field(..., min_length=1, max_length=100)
+    type: str = Field("fixed", description="'fixed' for Rs amount, 'percentage' for %")
+    value: float = Field(0, ge=0)
+
+
 class InvoiceCreate(BaseModel):
     buyerId: str
     items: List[InvoiceItemCreate] = Field(..., min_length=1)
@@ -315,6 +322,10 @@ class InvoiceCreate(BaseModel):
     transport: Optional[TransportDetails] = None
     termsAndConditions: Optional[str] = Field(None, max_length=2000)
     shippingAddress: Optional[ShippingAddressRef] = None
+    paymentTerms: Optional[str] = Field(None, max_length=500, description="Mode/Terms of Payment (free text)")
+    additionalCharges: Optional[List[AdditionalCharge]] = Field(default_factory=list)
+    tcsEnabled: bool = Field(False, description="Apply TCS (Tax Collected at Source)")
+    tcsPercent: float = Field(0.1, ge=0, le=5, description="TCS percentage (0-5%)")
 
 class InvoiceStatusUpdate(BaseModel):
     status: str  # draft, sent, viewed, partially_paid, paid, overdue, cancelled

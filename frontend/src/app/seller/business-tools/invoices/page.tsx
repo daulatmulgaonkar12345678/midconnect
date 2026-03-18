@@ -29,6 +29,9 @@ interface Invoice {
   totalPaid: number; pendingAmount: number; status: string; notes?: string;
   payments?: PaymentEntry[]; buyerDetails?: Record<string, string>; dueDays?: number;
   taxType?: string; placeOfSupply?: string;
+  paymentTerms?: string;
+  additionalCharges?: { name: string; type: string; value: number; amount: number }[];
+  freight?: number; tcsEnabled?: boolean; tcsPercent?: number; tcsAmount?: number; roundOff?: number;
 }
 interface Reminder {
   invoiceId: string; invoiceNumber: string; buyerName: string; buyerPhone: string;
@@ -116,11 +119,19 @@ export default function InvoicesPage() {
     poNumber: string; challanNumber: string; placeOfSupply: string; termsAndConditions: string;
     shippingAddressId: string;
     transport: { transporterName: string; lrNumber: string; vehicleNumber: string; bookingLocation: string; numberOfPackages: string; };
+    paymentTerms: string;
+    freight: number;
+    tcsEnabled: boolean;
+    tcsPercent: number;
   }>({
     buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7,
     poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
     shippingAddressId: '',
     transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
+    paymentTerms: '',
+    freight: 0,
+    tcsEnabled: false,
+    tcsPercent: 0.1,
   });
 
   const authHeaders = useCallback(async () => {
@@ -262,6 +273,10 @@ export default function InvoicesPage() {
       transport: transportData,
       termsAndConditions: formData.termsAndConditions || undefined,
       shippingAddress: selectedAddr ? { id: selectedAddr.id, addressLine1: selectedAddr.addressLine1, addressLine2: selectedAddr.addressLine2, city: selectedAddr.city, state: selectedAddr.state, pincode: selectedAddr.pincode, country: selectedAddr.country, contactPerson: selectedAddr.contactPerson, phone: selectedAddr.phone } : undefined,
+      paymentTerms: formData.paymentTerms || undefined,
+      additionalCharges: formData.freight > 0 ? [{ name: "Freight", type: "fixed", value: formData.freight }] : [],
+      tcsEnabled: formData.tcsEnabled,
+      tcsPercent: formData.tcsEnabled ? formData.tcsPercent : 0,
     };
   };
 
@@ -276,6 +291,7 @@ export default function InvoicesPage() {
       poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
       shippingAddressId: '',
       transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
+      paymentTerms: '', freight: 0, tcsEnabled: false, tcsPercent: 0.1,
     });
     fetchAll();
     if (data.pendingOrders?.length > 0) {
@@ -699,6 +715,35 @@ export default function InvoicesPage() {
                   <div><label className="block text-xs text-gray-500 mb-1">No. of Packages</label><input type="text" value={formData.transport.numberOfPackages} onChange={e => setFormData(p => ({ ...p, transport: { ...p.transport, numberOfPackages: e.target.value } }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid="num-packages-input" /></div>
                 </div>
               </div>
+              {/* Payment Terms & Additional Charges */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700">Payment & Additional Charges</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2"><label className="block text-xs text-gray-500 mb-1">Mode / Terms of Payment</label><input type="text" value={formData.paymentTerms} onChange={e => setFormData(p => ({ ...p, paymentTerms: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="e.g. 100% advance, 30 days credit" data-testid="payment-terms-input" /></div>
+                  <div><label className="block text-xs text-gray-500 mb-1">Freight (Rs.)</label><input type="number" min="0" step="0.01" value={formData.freight || ''} onChange={e => setFormData(p => ({ ...p, freight: parseFloat(e.target.value) || 0 }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="0.00" data-testid="freight-input" /></div>
+                </div>
+                <div className="flex items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={formData.tcsEnabled} onChange={e => setFormData(p => ({ ...p, tcsEnabled: e.target.checked }))} className="rounded" data-testid="tcs-toggle" />
+                    Apply TCS
+                  </label>
+                  {formData.tcsEnabled && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-500">TCS %</label>
+                      <input type="number" min="0" max="5" step="0.01" value={formData.tcsPercent} onChange={e => setFormData(p => ({ ...p, tcsPercent: Math.min(5, Math.max(0, parseFloat(e.target.value) || 0)) }))} className="w-20 px-2 py-1 border border-gray-300 rounded text-sm" data-testid="tcs-percent-input" />
+                      <span className="text-xs text-gray-400">of taxable + GST</span>
+                    </div>
+                  )}
+                </div>
+                {/* Live charges preview */}
+                {(formData.freight > 0 || formData.tcsEnabled) && (
+                  <div className="bg-gray-50 rounded p-2 text-xs text-gray-600 space-y-0.5 mt-1" data-testid="charges-preview">
+                    {formData.freight > 0 && <div className="flex justify-between"><span>Freight</span><span>Rs.{formData.freight.toFixed(2)}</span></div>}
+                    {formData.tcsEnabled && <div className="flex justify-between"><span>TCS ({formData.tcsPercent}%)</span><span>Rs.{((formTotals.subtotal + formTotals.gst) * formData.tcsPercent / 100).toFixed(2)}</span></div>}
+                    {(() => { const preRound = formTotals.total + formData.freight + (formData.tcsEnabled ? (formTotals.subtotal + formTotals.gst) * formData.tcsPercent / 100 : 0); const rounded = Math.round(preRound); const diff = +(rounded - preRound).toFixed(2); return (<><div className="flex justify-between"><span>Round Off</span><span>{diff >= 0 ? '+' : ''}{diff.toFixed(2)}</span></div><div className="flex justify-between font-semibold text-gray-800 border-t border-gray-200 pt-1 mt-1"><span>Grand Total</span><span>Rs.{rounded.toLocaleString('en-IN')}</span></div></>); })()}
+                  </div>
+                )}
+              </div>
               {/* Terms */}
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label><textarea value={formData.termsAndConditions} onChange={e => setFormData(p => ({ ...p, termsAndConditions: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} placeholder="Payment terms, conditions..." data-testid="terms-input" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label><textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} data-testid="invoice-notes" /></div>
@@ -798,7 +843,18 @@ export default function InvoicesPage() {
               {(viewInvoice.igst ?? 0) > 0 && <div className="flex justify-between text-amber-600"><span>IGST</span><span>{fmt(viewInvoice.igst || 0)}</span></div>}
               {viewInvoice.gst === 0 && <div className="flex justify-between text-gray-400"><span>GST</span><span>0.00</span></div>}
               {viewInvoice.placeOfSupply && <div className="text-xs text-gray-400">Place of Supply: {viewInvoice.placeOfSupply}{viewInvoice.taxType === 'intra' ? ' (Intra-state)' : viewInvoice.taxType === 'inter' ? ' (Inter-state)' : ''}</div>}
+              {/* Additional Charges */}
+              {(viewInvoice.additionalCharges || []).filter(c => c.amount > 0).map((ch, i) => (
+                <div key={i} className="flex justify-between text-gray-600"><span>{ch.name}</span><span>{fmt(ch.amount)}</span></div>
+              ))}
+              {viewInvoice.tcsEnabled && (viewInvoice.tcsAmount ?? 0) > 0 && (
+                <div className="flex justify-between text-purple-600"><span>TCS ({viewInvoice.tcsPercent}%)</span><span>{fmt(viewInvoice.tcsAmount || 0)}</span></div>
+              )}
+              {(viewInvoice.roundOff ?? 0) !== 0 && (
+                <div className="flex justify-between text-gray-400"><span>Round Off</span><span>{(viewInvoice.roundOff ?? 0) >= 0 ? '+' : ''}{(viewInvoice.roundOff ?? 0).toFixed(2)}</span></div>
+              )}
               <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2 mt-1"><span>Grand Total</span><span className="flex items-center gap-1"><IndianRupee className="w-4 h-4" />{fmt(viewInvoice.total)}</span></div>
+              {viewInvoice.paymentTerms && <div className="text-xs text-gray-500 pt-1">Payment Terms: {viewInvoice.paymentTerms}</div>}
               <div className="flex justify-between text-emerald-600 font-medium"><span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Total Paid</span><span>{fmt(viewInvoice.totalPaid || 0)}</span></div>
               <div className="flex justify-between text-amber-600 font-medium"><span className="flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" /> Pending Amount</span><span>{fmt(viewInvoice.pendingAmount ?? viewInvoice.total)}</span></div>
             </div>

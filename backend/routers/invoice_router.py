@@ -486,7 +486,37 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
 
         subtotal = round(subtotal, 2)
         total_gst = round(total_cgst + total_sgst + total_igst, 2)
-        grand_total = round(subtotal + total_gst, 2)
+
+        # ── Additional Charges ──
+        additional_charges = []
+        freight_amount = 0.0
+        other_charges_total = 0.0
+        for ch in (data.additionalCharges or []):
+            if ch.type == "fixed":
+                amt = round(ch.value, 2)
+            else:
+                amt = round((subtotal + total_gst) * ch.value / 100, 2)
+            additional_charges.append({"name": ch.name, "type": ch.type, "value": ch.value, "amount": amt})
+            if ch.name.lower() == "freight":
+                freight_amount = amt
+            else:
+                other_charges_total += amt
+
+        # TCS calculation (on subtotal + GST, not on freight)
+        tcs_amount = 0.0
+        tcs_percent = 0.0
+        if data.tcsEnabled and data.tcsPercent > 0:
+            tcs_percent = round(data.tcsPercent, 2)
+            tcs_amount = round((subtotal + total_gst) * tcs_percent / 100, 2)
+
+        # Pre-round total
+        pre_round_total = subtotal + total_gst + freight_amount + other_charges_total + tcs_amount
+
+        # Auto round off to nearest rupee
+        rounded_total = round(pre_round_total)
+        round_off = round(rounded_total - pre_round_total, 2)
+        grand_total = rounded_total
+
         invoice_number = await get_next_invoice_number(seller_id)
 
         # Determine tax type
@@ -521,6 +551,13 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "transport": data.transport.model_dump() if data.transport else {},
             "termsAndConditions": data.termsAndConditions or "",
             "shippingAddress": data.shippingAddress.model_dump() if data.shippingAddress else {},
+            "paymentTerms": data.paymentTerms or "",
+            "additionalCharges": additional_charges,
+            "freight": freight_amount,
+            "tcsEnabled": data.tcsEnabled,
+            "tcsPercent": tcs_percent,
+            "tcsAmount": tcs_amount,
+            "roundOff": round_off,
             "createdBy": str(user["_id"]),
             "createdAt": now,
             "updatedAt": now
