@@ -15,7 +15,8 @@ import {
   Building2,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  Send
 } from 'lucide-react';
 import { INDIAN_STATES } from '@/lib/indian-states';
 
@@ -237,6 +238,30 @@ export default function BuyersPage() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete address'); }
   };
 
+  const handleSalesPush = async (buyer: Buyer) => {
+    if (!buyer.phone) {
+      setError('Buyer has no phone number. Add phone to send sales push.');
+      return;
+    }
+    try {
+      const token = await getIdToken();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/buyers/${buyer.id}/sales-push`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appUrl: window.location.origin }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data.whatsappLink) {
+        window.open(data.whatsappLink, '_blank');
+      } else {
+        setError(data.detail || 'Failed to generate sales push');
+      }
+    } catch { setError('Failed to generate sales push'); }
+  };
+
   if (!hasPermission('manage_buyers')) {
     return (
       <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
@@ -385,8 +410,14 @@ export default function BuyersPage() {
             <div className="mt-3 pt-3 border-t flex items-center justify-between">
               <button onClick={() => openAddrManager(buyer)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1" data-testid={`manage-addr-${buyer.id}`}>
                 <MapPin className="h-3 w-3" />
-                Shipping Addresses ({(buyer.shippingAddresses || []).length})
+                Addresses ({(buyer.shippingAddresses || []).length})
               </button>
+              {buyer.phone && (
+                <button onClick={() => handleSalesPush(buyer)} className="text-xs text-green-600 hover:text-green-800 font-medium flex items-center gap-1" data-testid={`sales-push-${buyer.id}`}>
+                  <Send className="h-3 w-3" />
+                  Sales Push
+                </button>
+              )}
             </div>
           </div>
         ))}

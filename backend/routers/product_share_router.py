@@ -231,7 +231,11 @@ def init_product_share_router(db, verify_token_func):
         if data.sendWhatsApp and data.recipientPhone:
             app_url = os.environ.get("FRONTEND_URL", "https://invoice-gst-calc.preview.emergentagent.com")
             doc_url = f"{app_url}/api/doc/{token}"
-            msg = f"Hello,\n\nPlease find our product catalog below.\n\nDownload here:\n{doc_url}\n\nRegards,\n{seller_info['businessName']}"
+            from utils.whatsapp_messages import catalog_message
+            msg = catalog_message(
+                catalog_url=doc_url,
+                business_name=seller_info['businessName'],
+            )
             phone = data.recipientPhone.replace("+", "").replace(" ", "").replace("-", "")
             if not phone.startswith("91"):
                 phone = "91" + phone
@@ -288,12 +292,22 @@ def init_product_share_router(db, verify_token_func):
         app_url = os.environ.get("FRONTEND_URL", "https://invoice-gst-calc.preview.emergentagent.com")
         doc_url = f"{app_url}/api/doc/{token}"
 
-        templates = {
-            "invoice": f"Hello,\n\nYour invoice has been generated.\n\nDownload here:\n{doc_url}\n\nRegards,\n{biz_name}",
-            "po": f"Hello,\n\nPlease find the purchase order.\n\nDownload here:\n{doc_url}\n\nRegards,\n{biz_name}",
-            "catalog": f"Hello,\n\nPlease find our product catalog.\n\nDownload here:\n{doc_url}\n\nRegards,\n{biz_name}",
+        from utils.whatsapp_messages import invoice_message, po_message, catalog_message, build_footer
+        default_templates = {
+            "invoice": invoice_message(
+                invoice_number="", amount=0, doc_url=doc_url,
+                business_name=biz_name,
+            ),
+            "po": po_message(
+                po_number="", items=[], doc_url=doc_url,
+                business_name=biz_name,
+            ),
+            "catalog": catalog_message(
+                catalog_url=doc_url,
+                business_name=biz_name,
+            ),
         }
-        msg = data.message or templates.get(data.documentType, templates["catalog"])
+        msg = data.message or default_templates.get(data.documentType, default_templates["catalog"])
 
         phone = data.recipientPhone.replace("+", "").replace(" ", "").replace("-", "")
         if phone and not phone.startswith("91"):

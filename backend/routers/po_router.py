@@ -369,16 +369,15 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
         doc_url = f"{app_url}/api/doc/{token}"
 
         # Build message with download link
+        from utils.whatsapp_messages import po_message
         items = po.get("items", [])
-        msg = f"Hello,\n\nPlease find the Purchase Order below.\n\nPO Number: {po.get('poNumber', '')}\n\n"
-
-        for item in items:
-            msg += f"- {item.get('productName', '')}"
-            if item.get("sku"):
-                msg += f" ({item['sku']})"
-            msg += f" | Qty: {item.get('quantity', 0)}\n"
-
-        msg += f"\nDownload PO:\n{doc_url}\n\nPlease confirm availability and delivery timeline.\n\nRegards,\n{business_name}"
+        msg = po_message(
+            po_number=po.get("poNumber", ""),
+            items=items,
+            doc_url=doc_url,
+            business_name=business_name,
+            supplier_name=supplier.get("name", ""),
+        )
 
         phone = supplier["phone"].replace(" ", "").replace("-", "").replace("+", "")
         if not phone.startswith("91") and len(phone) == 10:

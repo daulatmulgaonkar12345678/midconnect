@@ -689,6 +689,48 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         )
         return {"message": "Address deleted", "addresses": new_addresses}
 
+    # ── Sales Push (WhatsApp) ──
+
+    @router.post("/buyers/{buyer_id}/sales-push")
+    async def send_sales_push(buyer_id: str, data: dict = Body(...), authorization: str = Header(...)):
+        """Generate WhatsApp sales push link for a buyer with catalog + optional invoice."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_BUYERS.value)
+        seller_id = await get_seller_id(user)
+        try:
+            buyer_oid = ObjectId(buyer_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid buyer ID")
+        buyer = await db.seller_buyers.find_one({"_id": buyer_oid, "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+        if not buyer.get("phone"):
+            raise HTTPException(status_code=400, detail="Buyer phone number not available")
+
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        profile = (seller_user.get("profile") or {}) if seller_user else {}
+        business_name = profile.get("businessName", "Seller")
+
+        app_url = data.get("appUrl", "")
+        catalog_url = data.get("catalogUrl", app_url or "www.udyogconnect.in")
+        invoice_url = data.get("invoiceUrl", "")
+
+        from utils.whatsapp_messages import sales_push_message
+        import urllib.parse
+        msg = sales_push_message(
+            catalog_url=catalog_url,
+            business_name=business_name,
+            buyer_name=buyer.get("buyerName", ""),
+            invoice_url=invoice_url,
+        )
+
+        phone = buyer["phone"].replace(" ", "").replace("-", "").replace("+", "")
+        if not phone.startswith("91") and len(phone) == 10:
+            phone = "91" + phone
+
+        wa_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
+        return {"whatsappLink": wa_link, "message": msg, "buyerPhone": buyer["phone"]}
+
     # ===========================================
     # SUPPLIER ENDPOINTS
     # ===========================================

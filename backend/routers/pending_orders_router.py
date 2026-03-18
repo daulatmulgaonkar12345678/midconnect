@@ -435,12 +435,12 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
         profile = (seller_user.get("profile") or {}) if seller_user else {}
         business_name = profile.get("businessName", "Seller")
 
-        msg = (
-            f"Hello,\n\n"
-            f"Your order for {order.get('productName', 'product')} has been partially fulfilled.\n\n"
-            f"Pending Quantity: {order.get('pendingQty', 0)}\n\n"
-            f"We will notify you once the remaining stock is available.\n\n"
-            f"Thank you.\n{business_name}"
+        from utils.whatsapp_messages import pending_order_notify, build_wa_link
+        msg = pending_order_notify(
+            product_name=order.get('productName', 'product'),
+            pending_qty=order.get('pendingQty', 0),
+            business_name=business_name,
+            buyer_name=buyer.get("buyerName", ""),
         )
 
         phone = buyer["phone"].replace(" ", "").replace("-", "").replace("+", "")

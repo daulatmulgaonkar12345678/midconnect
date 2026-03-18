@@ -1161,6 +1161,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         if not settings.get("enabled", True):
             return {"reminders": [], "enabled": False}
 
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        seller_biz_name = ((seller_user or {}).get("profile") or {}).get("businessName", "Seller")
+
         reminder_days = sorted(settings.get("reminderDays", [3, 7, 15]))
         now = datetime.now(timezone.utc)
 
@@ -1206,12 +1209,24 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             custom_msgs = settings.get("customMessages", {})
             msg = custom_msgs.get(str(applicable_reminder))
             if not msg:
-                if applicable_reminder <= 3:
-                    msg = f"Hello {buyer_name},\n\nThis is a friendly reminder regarding Invoice {inv_num}.\n\nPending Amount: Rs.{pending:,.2f}\n\nKindly process the payment at your convenience.\n\nThank you."
-                elif applicable_reminder <= 7:
-                    msg = f"Hello {buyer_name},\n\nThis is regarding Invoice {inv_num}.\n\nTotal Amount: Rs.{total:,.2f}\nAmount Paid: Rs.{paid:,.2f}\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the pending payment.\n\nThank you."
+                from utils.whatsapp_messages import payment_reminder_soft, payment_reminder_strict
+                due_date_str = inv.get("dueDate", "")
+                if isinstance(due_date_str, datetime):
+                    due_date_str = due_date_str.strftime("%d %b %Y")
+                elif not due_date_str:
+                    due_date_str = "N/A"
+                if applicable_reminder <= 7:
+                    msg = payment_reminder_soft(
+                        invoice_number=inv_num, pending_amount=pending,
+                        due_date=due_date_str, doc_url="",
+                        business_name=seller_biz_name, buyer_name=buyer_name,
+                    )
                 else:
-                    msg = f"Hello {buyer_name},\n\nYour payment for Invoice {inv_num} is overdue.\n\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the payment at the earliest.\n\nThank you."
+                    msg = payment_reminder_strict(
+                        invoice_number=inv_num, pending_amount=pending,
+                        due_date=due_date_str, doc_url="",
+                        business_name=seller_biz_name, buyer_name=buyer_name,
+                    )
 
             wa_link = None
             if buyer_phone:
@@ -1279,12 +1294,31 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         profile = (seller_user.get("profile") or {}) if seller_user else {}
         business_name = profile.get("businessName", "Seller")
 
+        from utils.whatsapp_messages import invoice_message, payment_reminder_soft, payment_reminder_strict
+
         if reminder_type == "send_invoice":
-            msg = f"Hello {buyer_name},\n\nThank you for your purchase.\n\nInvoice Number: {inv_num}\nTotal Amount: Rs.{total:,.2f}\n\nPlease find the invoice attached.\n\nRegards\n{business_name}"
+            msg = invoice_message(
+                invoice_number=inv_num, amount=total,
+                doc_url="", business_name=business_name, buyer_name=buyer_name,
+            )
         elif reminder_type == "overdue":
-            msg = f"Hello {buyer_name},\n\nYour payment for Invoice {inv_num} is overdue.\n\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the payment at the earliest.\n\nThank you."
+            due_date_str = inv.get("dueDate", "")
+            if hasattr(due_date_str, "strftime"):
+                due_date_str = due_date_str.strftime("%d %b %Y")
+            msg = payment_reminder_strict(
+                invoice_number=inv_num, pending_amount=pending,
+                due_date=due_date_str or "N/A", doc_url="",
+                business_name=business_name, buyer_name=buyer_name,
+            )
         else:
-            msg = f"Hello {buyer_name},\n\nThis is regarding Invoice {inv_num}.\n\nTotal Amount: Rs.{total:,.2f}\nAmount Paid: Rs.{paid:,.2f}\nPending Amount: Rs.{pending:,.2f}\n\nKindly clear the pending payment.\n\nThank you."
+            due_date_str = inv.get("dueDate", "")
+            if hasattr(due_date_str, "strftime"):
+                due_date_str = due_date_str.strftime("%d %b %Y")
+            msg = payment_reminder_soft(
+                invoice_number=inv_num, pending_amount=pending,
+                due_date=due_date_str or "N/A", doc_url="",
+                business_name=business_name, buyer_name=buyer_name,
+            )
 
         clean_phone = buyer_phone.replace(" ", "").replace("-", "").replace("+", "")
         if not clean_phone.startswith("91") and len(clean_phone) == 10:
