@@ -24,7 +24,7 @@ interface Buyer { id: string; buyerName: string; company?: string; phone?: strin
 interface InvoiceItem { productName: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
 interface PaymentEntry { id: string; amount: number; paymentDate: string; paymentMethod: string; accountName?: string; referenceNumber?: string; notes?: string; receiptUrls?: string[]; createdAt: string; }
 interface Invoice {
-  id: string; invoiceNumber: string; buyerName: string; buyerPhone?: string; date: string;
+  id: string; invoiceNumber: string; buyerName: string; buyerPhone?: string; buyerId?: string; date: string;
   items: InvoiceItem[]; subtotal: number; cgst?: number; sgst?: number; igst?: number; gst: number; total: number;
   totalPaid: number; pendingAmount: number; status: string; notes?: string;
   payments?: PaymentEntry[]; buyerDetails?: Record<string, string>; dueDays?: number;
