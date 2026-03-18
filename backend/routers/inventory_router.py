@@ -249,6 +249,8 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
             update_fields["selling_price"] = data.selling_price
             # Also update pricingTiers for marketplace display
             update_fields["pricingTiers"] = [{"minQty": 1, "maxQty": None, "pricePerUnit": data.selling_price}]
+        if data.hsnCode is not None:
+            update_fields["hsnCode"] = data.hsnCode
         
         await db.sellerListings.update_one({"_id": listing_oid}, {"$set": update_fields})
         

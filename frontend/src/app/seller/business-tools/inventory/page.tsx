@@ -19,6 +19,7 @@ interface InventoryItem {
   productName: string;
   categoryName?: string;
   sku: string;
+  hsnCode: string;
   stock: number;
   reservedStock: number;
   availableStock: number;
@@ -37,6 +38,7 @@ interface InventoryItem {
 
 interface EditState {
   sku?: string;
+  hsnCode?: string;
   warehouseLocation?: string;
   selling_price?: number | null;
   purchase_price?: number | null;
@@ -115,7 +117,7 @@ export default function InventoryPage() {
     isEditing.current = true;
     setEditingItem(item.listingId);
     setEditState({
-      sku: item.sku, warehouseLocation: item.warehouseLocation,
+      sku: item.sku, hsnCode: item.hsnCode || '', warehouseLocation: item.warehouseLocation,
       selling_price: item.selling_price, purchase_price: item.purchase_price,
       minStock: item.minStock || 0, reorderQuantity: item.reorderQuantity || 0,
       lowStockAlertEnabled: item.lowStockAlertEnabled !== false,
@@ -130,6 +132,7 @@ export default function InventoryPage() {
       const token = await getIdToken();
       const payload: Record<string, unknown> = {};
       if (editState.sku !== undefined && editState.sku !== item.sku) payload.sku = editState.sku;
+      if (editState.hsnCode !== undefined && editState.hsnCode !== (item.hsnCode || '')) payload.hsnCode = editState.hsnCode;
       if (editState.warehouseLocation !== undefined && editState.warehouseLocation !== item.warehouseLocation) payload.warehouseLocation = editState.warehouseLocation;
       if (editState.selling_price !== undefined && editState.selling_price !== item.selling_price) payload.selling_price = editState.selling_price;
       if (item.productType !== 'composite' && editState.purchase_price !== undefined && editState.purchase_price !== item.purchase_price) payload.purchase_price = editState.purchase_price;
@@ -367,6 +370,7 @@ export default function InventoryPage() {
                   {selectionMode && <th className="px-3 py-3 w-10" />}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Product</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">SKU</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">HSN</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Stock</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Min Stock</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Selling Price</th>
@@ -413,6 +417,15 @@ export default function InventoryPage() {
                           className="w-24 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" data-testid={`sku-input-${item.listingId}`} />
                       ) : (
                         <span className="text-gray-600 font-mono text-sm">{item.sku || '-'}</span>
+                      )}
+                    </td>
+                    {/* HSN Code */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {isEditingThis(item) && !isComposite(item) ? (
+                        <input type="text" value={editState.hsnCode ?? ''} onChange={(e) => setEditState(s => ({ ...s, hsnCode: e.target.value }))}
+                          className="w-24 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" placeholder="HSN" data-testid={`hsn-input-${item.listingId}`} />
+                      ) : (
+                        <span className="text-gray-600 font-mono text-sm">{item.hsnCode || '-'}</span>
                       )}
                     </td>
                     {/* Stock */}

@@ -216,6 +216,7 @@ class InventoryUpdate(BaseModel):
     warehouseLocation: Optional[str] = Field(None, max_length=100)
     purchase_price: Optional[float] = Field(None, ge=0)
     selling_price: Optional[float] = Field(None, ge=0)
+    hsnCode: Optional[str] = Field(None, max_length=20)
 
 
 class InventoryLogType(str, Enum):
