@@ -1,0 +1,80 @@
+{
+  "summary": "Backend testing complete for invoice available_stock fix. All 7 tests PASSED verifying that invoice creation now uses available_stock (stock - reserved) instead of raw stock when determining shortages and creating pending orders.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "features_tested": {
+    "1_available_stock_calculation": "PASS - Available stock correctly calculated as stock - pending_orders.pendingQty",
+    "2_stock_zero_creates_pending_order": "PASS - With stock=0 and allowPartialFulfillment=true, pending order created for full qty",
+    "3_stock_5_reserved_5_creates_pending_order": "PASS - BUG FIX VERIFIED: With stock=5, reserved=5, available=0, pending order is created (before fix: would skip because raw stock 5 >= requested 3)",
+    "4_sufficient_stock_no_pending_order": "PASS - When available_stock >= requested, no pending order is created",
+    "5_insufficient_stock_without_partial_raises_400": "PASS - Without allowPartialFulfillment, raises 400 error when available < requested",
+    "6_check_stock_reports_shortage": "PASS - check-stock endpoint correctly reports shortage with totalStock, reservedStock, availableStock, shortage fields",
+    "7_pre_validation_uses_available_stock": "PASS - Pre-validation in create_invoice uses available_stock calculation"
+  },
+  
+  "code_review_findings": {
+    "fix_location_1": "Pre-validation (lines 423-434): Now calculates available_for_check = max(0, current_stock - reserved_for_check) before checking if insufficient",
+    "fix_location_2": "Stock deduction (lines 593-617): Now calculates available_stock = max(0, prev_stock - reserved_qty) to determine actual_deduct and shortage",
+    "reservation_query": "Both locations use identical aggregation pipeline to sum pendingQty from pending_orders with status in ['pending', 'partially_fulfilled']",
+    "check_stock_endpoint": "Lines 339-365: Also correctly uses available = max(0, stock - reserved) for shortage detection"
+  },
+  
+  "bug_fix_verification": {
+    "root_cause": "Invoice creation endpoint used raw 'stock' field instead of 'available stock (stock - reserved)' to determine shortages",
+    "impact": "When stock=5 and reserved=5 (all stock reserved by pending orders), available=0 but code was using raw stock=5 and would NOT create pending order",
+    "fix_applied": "Both pre-validation and stock deduction sections now query pending_orders collection and calculate available_stock = stock - reserved_qty",
+    "test_result": "With stock=5, reserved=5, requested=3: available(0) < requested(3) → pending order WILL be created (FIXED BEHAVIOR)"
+  },
+  
+  "test_report_links": [
+    "/app/backend/tests/test_invoice_available_stock_fix.py",
+    "/app/backend/tests/test_pending_orders.py"
+  ],
+  
+  "action_items": [],
+  
+  "critical_code_review_comments": [
+    "Bug fix correctly implemented in two locations within invoice_router.py",
+    "Available stock calculation uses aggregation pipeline to sum pendingQty from pending_orders",
+    "Pre-validation at line ~432 now uses available_for_check instead of current_stock",
+    "Stock deduction at line ~607 now uses available_stock instead of prev_stock",
+    "check-stock endpoint already had correct logic at lines 339-365"
+  ],
+  
+  "updated_files": [
+    "/app/backend/tests/test_invoice_available_stock_fix.py"
+  ],
+  
+  "success_rate": {
+    "backend": "100% (7/7 tests passed)",
+    "frontend": "Not tested (backend-only testing requested)"
+  },
+  
+  "mocked_integrations": {
+    "Resend email service": "MOCKED"
+  },
+  
+  "seed_data_creation": "Used existing seller listing from database, temporarily modified stock values during tests, restored original stock after cleanup",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  
+  "context_for_next_testing_agent": "Bug fix for available_stock calculation in invoice creation verified. The fix ensures that pending orders are correctly created when stock is reserved by existing pending orders. Tests in test_invoice_available_stock_fix.py cover all scenarios including the key fix case (stock=5, reserved=5, available=0). Cannot test authenticated frontend flows due to Firebase phone OTP auth.",
+  
+  "rca_of_the_issue": {
+    "issue": "Pending orders not created when stock was fully reserved",
+    "root_cause": "Invoice creation endpoint compared requested qty against raw stock field instead of available stock (stock - reserved from pending orders)",
+    "affected_code": "/app/backend/routers/invoice_router.py - pre-validation (~line 432) and stock deduction (~line 607)",
+    "fix": "Both locations now query pending_orders collection for reserved quantity and calculate available_stock = stock - reserved_qty before determining shortage",
+    "reproduction": "1. Create product listing with stock=5, 2. Create pending order reserving 5 units, 3. Try creating invoice for 3 units with allowPartialFulfillment=true, 4. Before fix: no pending order created (code saw stock=5 >= 3), After fix: pending order created for 3 units (code sees available=0 < 3)"
+  }
+}

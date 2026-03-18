@@ -421,9 +421,17 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                                             raise HTTPException(status_code=400, detail=f"Insufficient stock for {cn} in {product_name}")
                             else:
                                 current_stock = listing.get("stock", 0)
-                                if current_stock < item.quantity:
+                                # Calculate available stock (accounting for reservations)
+                                res_pipe = [
+                                    {"$match": {"sellerId": ObjectId(seller_id), "listingId": listing["_id"], "status": {"$in": ["pending", "partially_fulfilled"]}}},
+                                    {"$group": {"_id": None, "total": {"$sum": "$pendingQty"}}}
+                                ]
+                                res_r = await db.pending_orders.aggregate(res_pipe).to_list(1)
+                                reserved_for_check = res_r[0]["total"] if res_r else 0
+                                available_for_check = max(0, current_stock - reserved_for_check)
+                                if available_for_check < item.quantity:
                                     if not data.allowPartialFulfillment:
-                                        raise HTTPException(status_code=400, detail=f"Insufficient stock for {product_name}. Available: {current_stock}, Requested: {item.quantity}")
+                                        raise HTTPException(status_code=400, detail=f"Insufficient stock for {product_name}. Available: {available_for_check}, Requested: {item.quantity}")
                 except HTTPException:
                     raise
                 except Exception:
@@ -582,10 +590,28 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                                 prev_stock = listing.get("stock", 0)
                                 requested_qty = item["quantity"]
 
-                                # Partial fulfillment: only deduct what's available
-                                if data.allowPartialFulfillment and prev_stock < requested_qty:
-                                    actual_deduct = prev_stock
-                                    shortage = requested_qty - prev_stock
+                                # Calculate available stock (considering reservations from existing pending orders)
+                                reserved_pipeline = [
+                                    {"$match": {
+                                        "sellerId": ObjectId(seller_id),
+                                        "listingId": ObjectId(item["productId"]),
+                                        "status": {"$in": ["pending", "partially_fulfilled"]}
+                                    }},
+                                    {"$group": {"_id": None, "total": {"$sum": "$pendingQty"}}}
+                                ]
+                                reserved_result = await db.pending_orders.aggregate(reserved_pipeline).to_list(1)
+                                reserved_qty = reserved_result[0]["total"] if reserved_result else 0
+                                available_stock = max(0, prev_stock - reserved_qty)
+
+                                # Partial fulfillment: only deduct what's truly available
+                                if data.allowPartialFulfillment and available_stock < requested_qty:
+                                    actual_deduct = available_stock
+                                    shortage = requested_qty - available_stock
+                                elif available_stock < requested_qty:
+                                    if not data.allowPartialFulfillment:
+                                        raise HTTPException(status_code=400, detail=f"Insufficient stock for {item['productName']}. Available: {available_stock}, Requested: {requested_qty}")
+                                    actual_deduct = available_stock
+                                    shortage = requested_qty - available_stock
                                 else:
                                     actual_deduct = requested_qty
                                     shortage = 0
