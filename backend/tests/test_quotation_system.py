@@ -31,7 +31,7 @@ import re
 from datetime import datetime, timezone
 
 # API configuration
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://invoice-gst-calc.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-india-suite.preview.emergentagent.com')
 DEV_TOKEN = "dev-test-token"
 
 # Test data from the main agent

@@ -257,9 +257,8 @@ export default function InventoryPage() {
 
   const handleWhatsAppShare = (phone: string) => {
     if (!shareResult) return;
-    const appUrl = window.location.origin;
-    const docUrl = `${appUrl}${shareResult.documentLink}`;
-    const msg = `Hello,\n\nPlease find our product catalog below.\n\nDownload here:\n${docUrl}`;
+    // Use the marketing message from backend (includes branding footer + rotating ads)
+    const msg = shareResult.whatsappMessage || '';
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     const fullPhone = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
     window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`, '_blank');

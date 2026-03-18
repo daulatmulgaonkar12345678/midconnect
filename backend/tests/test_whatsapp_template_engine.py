@@ -10,7 +10,7 @@ Features to test:
 5. payment_reminder_soft() - Gentle reminder template
 6. payment_reminder_strict() - Overdue reminder template
 7. catalog_message() - Catalog sharing template
-8. sales_push_message() - Sales push with catalog and optional invoice
+8. catalog_marketing_message() - Catalog marketing with catalog and optional invoice
 9. pending_order_notify() - Pending order notification template
 10. build_wa_link() and clean_phone() helper functions
 """
@@ -33,7 +33,7 @@ from utils.whatsapp_messages import (
     payment_reminder_strict,
     dispatch_message,
     catalog_message,
-    sales_push_message,
+    catalog_marketing_message,
     pending_order_notify,
 )
 
@@ -415,7 +415,7 @@ class TestSalesPushMessage:
     
     def test_sales_push_contains_catalog_url(self):
         """Sales push must include catalog URL"""
-        msg = sales_push_message(
+        msg = catalog_marketing_message(
             catalog_url="https://example.com/catalog/123",
             business_name="Test Business"
         )
@@ -424,7 +424,7 @@ class TestSalesPushMessage:
     
     def test_sales_push_contains_business_name(self):
         """Sales push must include business name"""
-        msg = sales_push_message(
+        msg = catalog_marketing_message(
             catalog_url="https://example.com/catalog/123",
             business_name="XYZ Enterprises"
         )
@@ -433,7 +433,7 @@ class TestSalesPushMessage:
     
     def test_sales_push_with_optional_invoice_url(self):
         """Sales push should include invoice URL if provided"""
-        msg = sales_push_message(
+        msg = catalog_marketing_message(
             catalog_url="https://example.com/catalog/123",
             business_name="Test Business",
             invoice_url="https://example.com/sample-invoice/456"
@@ -444,7 +444,7 @@ class TestSalesPushMessage:
     
     def test_sales_push_without_invoice_url(self):
         """Sales push should work without invoice URL"""
-        msg = sales_push_message(
+        msg = catalog_marketing_message(
             catalog_url="https://example.com/catalog/123",
             business_name="Test Business"
         )
@@ -455,7 +455,7 @@ class TestSalesPushMessage:
     
     def test_sales_push_contains_footer(self):
         """Sales push must include Udyog Connect footer"""
-        msg = sales_push_message(
+        msg = catalog_marketing_message(
             catalog_url="https://example.com/catalog/123",
             business_name="Test Business"
         )
@@ -465,7 +465,7 @@ class TestSalesPushMessage:
     
     def test_sales_push_with_buyer_name(self):
         """Sales push should greet buyer by name if provided"""
-        msg = sales_push_message(
+        msg = catalog_marketing_message(
             catalog_url="https://example.com/catalog/123",
             business_name="Test Business",
             buyer_name="Dear Customer"

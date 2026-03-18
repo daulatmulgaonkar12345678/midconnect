@@ -15,7 +15,7 @@ import os
 from datetime import datetime
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://invoice-gst-calc.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-india-suite.preview.emergentagent.com').rstrip('/')
 
 
 class TestSpecTemplatesByCategoryEndpoint:

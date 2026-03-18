@@ -413,9 +413,9 @@ export default function BuyersPage() {
                 Addresses ({(buyer.shippingAddresses || []).length})
               </button>
               {buyer.phone && (
-                <button onClick={() => handleSalesPush(buyer)} className="text-xs text-green-600 hover:text-green-800 font-medium flex items-center gap-1" data-testid={`sales-push-${buyer.id}`}>
+                <button onClick={() => handleSalesPush(buyer)} className="text-xs text-green-600 hover:text-green-800 font-medium flex items-center gap-1" data-testid={`share-catalog-${buyer.id}`}>
                   <Send className="h-3 w-3" />
-                  Sales Push
+                  Share Catalog
                 </button>
               )}
             </div>

@@ -711,13 +711,12 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         profile = (seller_user.get("profile") or {}) if seller_user else {}
         business_name = profile.get("businessName", "Seller")
 
-        app_url = data.get("appUrl", "")
-        catalog_url = data.get("catalogUrl", app_url or "www.udyogconnect.in")
+        from utils.whatsapp_messages import catalog_marketing_message, BASE_URL
+        import urllib.parse
+        catalog_url = data.get("catalogUrl", f"{BASE_URL}/catalog")
         invoice_url = data.get("invoiceUrl", "")
 
-        from utils.whatsapp_messages import sales_push_message
-        import urllib.parse
-        msg = sales_push_message(
+        msg = catalog_marketing_message(
             catalog_url=catalog_url,
             business_name=business_name,
             buyer_name=buyer.get("buyerName", ""),

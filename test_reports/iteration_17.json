@@ -85,7 +85,7 @@
   
   "test_credentials": {
     "test_product_id": "699be9023cbe1a8c31591668",
-    "api_url": "https://invoice-gst-calc.preview.emergentagent.com"
+    "api_url": "https://erp-india-suite.preview.emergentagent.com"
   },
   
   "seed_data_context": {

@@ -23,7 +23,7 @@ from datetime import datetime, timezone, timedelta
 import time
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://invoice-gst-calc.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-india-suite.preview.emergentagent.com').rstrip('/')
 DEV_TOKEN = "dev-test-token"
 
 # Test user ID from the review request

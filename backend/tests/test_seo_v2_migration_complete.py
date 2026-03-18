@@ -19,7 +19,7 @@ import os
 import re
 
 # Use environment variable for API URL
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://invoice-gst-calc.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-india-suite.preview.emergentagent.com')
 
 # Test product and category from previous iteration
 TEST_PRODUCT_ID = "699be9023cbe1a8c31591668"

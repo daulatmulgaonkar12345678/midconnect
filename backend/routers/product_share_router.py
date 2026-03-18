@@ -226,20 +226,21 @@ def init_product_share_router(db, verify_token_func):
             "createdAt": now,
         })
 
+        # Build WhatsApp message using marketing template
+        from utils.whatsapp_messages import catalog_marketing_message, build_doc_url
+        doc_url = build_doc_url(token)
+        wa_message = catalog_marketing_message(
+            catalog_url=doc_url,
+            business_name=seller_info['businessName'],
+        )
+
         # Build WhatsApp link if requested
         whatsapp_link = None
         if data.sendWhatsApp and data.recipientPhone:
-            app_url = os.environ.get("FRONTEND_URL", "https://invoice-gst-calc.preview.emergentagent.com")
-            doc_url = f"{app_url}/api/doc/{token}"
-            from utils.whatsapp_messages import catalog_message
-            msg = catalog_message(
-                catalog_url=doc_url,
-                business_name=seller_info['businessName'],
-            )
             phone = data.recipientPhone.replace("+", "").replace(" ", "").replace("-", "")
             if not phone.startswith("91"):
                 phone = "91" + phone
-            whatsapp_link = f"https://wa.me/{phone}?text={urllib.parse.quote(msg)}"
+            whatsapp_link = f"https://wa.me/{phone}?text={urllib.parse.quote(wa_message)}"
 
         return {
             "shareId": share_id,
@@ -247,6 +248,7 @@ def init_product_share_router(db, verify_token_func):
             "downloadUrl": f"/api/business-tools/product-shares/{share_id}/download",
             "documentLink": f"/api/doc/{token}",
             "whatsappLink": whatsapp_link,
+            "whatsappMessage": wa_message,
             "productCount": len(products),
             "recipientCount": len(data.recipientIds),
         }
@@ -289,10 +291,8 @@ def init_product_share_router(db, verify_token_func):
             "createdAt": now,
         })
 
-        app_url = os.environ.get("FRONTEND_URL", "https://invoice-gst-calc.preview.emergentagent.com")
-        doc_url = f"{app_url}/api/doc/{token}"
-
-        from utils.whatsapp_messages import invoice_message, po_message, catalog_message, build_footer
+        from utils.whatsapp_messages import invoice_message, po_message, catalog_marketing_message, build_footer, build_doc_url
+        doc_url = build_doc_url(token)
         default_templates = {
             "invoice": invoice_message(
                 invoice_number="", amount=0, doc_url=doc_url,
@@ -302,7 +302,7 @@ def init_product_share_router(db, verify_token_func):
                 po_number="", items=[], doc_url=doc_url,
                 business_name=biz_name,
             ),
-            "catalog": catalog_message(
+            "catalog": catalog_marketing_message(
                 catalog_url=doc_url,
                 business_name=biz_name,
             ),

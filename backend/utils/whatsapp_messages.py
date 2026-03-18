@@ -7,6 +7,8 @@ Structure: [Business Message] → [Call to Action] → [Branding Block]
 import random
 import urllib.parse
 
+# All outgoing WhatsApp links MUST use this domain
+BASE_URL = "https://udyogconnect.in"
 
 ROTATING_ADS = [
     "Digitize your business with Udyog Connect",
@@ -177,9 +179,14 @@ def catalog_message(
     ) + build_footer()
 
 
-# ── Template #7: Combined Sales Push ──
+def build_doc_url(token: str) -> str:
+    """Build a public document URL using the production base domain."""
+    return f"{BASE_URL}/api/doc/{token}"
 
-def sales_push_message(
+
+# ── Template #7: Catalog Marketing (Share Catalog) ──
+
+def catalog_marketing_message(
     catalog_url: str,
     business_name: str,
     buyer_name: str = "",

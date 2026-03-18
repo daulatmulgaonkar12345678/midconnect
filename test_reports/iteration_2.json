@@ -73,7 +73,7 @@
   "context_for_next_testing_agent": "All role-based registration flow features are implemented correctly. Firebase Auth is not configured so actual user registration/login cannot be tested end-to-end. The GST pending banner on seller dashboard will show when isSeller is true and isGstVerified is false - this requires a logged-in seller user to verify visually. All protected routes correctly redirect to /register or /login when user is not authenticated.",
 
   "test_environment": {
-    "api_url": "https://invoice-gst-calc.preview.emergentagent.com",
+    "api_url": "https://erp-india-suite.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"
   }

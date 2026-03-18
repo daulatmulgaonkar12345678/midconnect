@@ -365,8 +365,8 @@ def init_po_router(db, verify_token_func, activity_log_service=None):
             "createdAt": now,
         })
 
-        app_url = os.environ.get("FRONTEND_URL", "")
-        doc_url = f"{app_url}/api/doc/{token}"
+        from utils.whatsapp_messages import build_doc_url
+        doc_url = build_doc_url(token)
 
         # Build message with download link
         from utils.whatsapp_messages import po_message

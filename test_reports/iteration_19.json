@@ -63,7 +63,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://invoice-gst-calc.preview.emergentagent.com"
+    "api_url": "https://erp-india-suite.preview.emergentagent.com"
   },
   
   "seed_data_creation": "activeSellerCities collection contains Delhi with 1 seller (rebuilt via POST /api/search/locations/rebuild)",

@@ -1,58 +1,46 @@
 <analysis>**original_problem_statement:**
-The user wants to upgrade the ERP system to support Indian GST-compliant billing and generate professional, standardized reports similar to platforms like Zoho Inventory, Tally, and Vyapar.
+The user's primary goal is to upgrade their ERP system to support Indian GST-compliant billing, generate professional reports, and manage backorders.
 
-**PRODUCT REQUIREMENTS:**
-1.  **GST Billing Engine:**
-    *   Sellers must be able to configure their business GST details (GSTIN, State).
-    *   Products must have configurable GST rates (0%, 5%, 12%, 18%, 28%) and HSN codes.
-    *   Customer records must include their state and GSTIN.
-    *   The system must automatically calculate taxes (CGST/SGST vs. IGST) based on a comparison between the seller's state and the buyer's state (Place of Supply). The seller should not manually select the tax type.
-2.  **GST-Compliant Invoices:**
-    *   The invoice creation UI must show columns for HSN, Taxable Amount, CGST, SGST, IGST, and Total.
-    *   The generated PDF invoice must be GST-compliant, including all necessary business/customer details and a full tax breakdown.
-3.  **Standardized & GST Reports:**
-    *   Create a GST Summary Report (similar to GSTR-1) showing taxable amounts and tax totals grouped by GST rate.
-    *   Standardize existing reports (Sales, Inventory) and add new ones (Profit, Low Stock, Stock Movement) with professional layouts and relevant data columns.
-4.  **Pending Orders (Backorder) System:**
-    *   During invoice creation, if the requested quantity exceeds available stock, the system should allow for partial fulfillment.
-    *   The remaining quantity should be automatically placed into a Pending Order.
-    *   A new Pending Orders dashboard should be created for sellers to manage and fulfill these backorders when stock is replenished.
-    *   Inventory display should be updated to show Total Stock, Reserved Stock (for pending orders), and Available Stock.
+During this session, several new requirements and bug fixes were addressed:
+1.  **GST Billing Engine:** Complete the implementation of an automatic GST calculation engine (CGST/SGST vs. IGST).
+2.  **Pending Orders Fixes:** Resolve API errors and simplify the user workflow for managing pending orders.
+3.  **Shipping Address Management:** Implement a feature for sellers to manage multiple shipping addresses per buyer and select one during invoice creation.
+4.  **Vercel Build Failures:** Fix multiple deployment build errors caused by git merge conflicts and TypeScript type errors.
+5.  **Stock Calculation Bug:** Correct the backend logic to ensure pending orders are created when stock is reserved but not yet deducted.
+6.  **Centralized Messaging:** Refactor all hardcoded WhatsApp messages into a centralized, scalable template engine with branding and dynamic ads.
+7.  **HSN Code in Inventory:** Allow sellers to add HSN codes to their products in the inventory section so they auto-populate on invoices.
+8.  **Catalog Sharing Flow:** The user reported that the Sales Push button for sending catalogs is not working correctly and that the rotating ad in the message footer is broken. They want to remove the button and integrate its marketing message into the main catalog sharing flow.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack B2B ERP application with a FastAPI backend and React frontend. In this session, the agent completed several major tasks:
--   **Admin Permission Fix:** Resolved a 403 error for admins on the Low Stock Alerts page.
--   **Permissions Refactor:** Centralized duplicated permission and authentication logic from 12 different routers into a single shared utility (), significantly improving code consistency and maintainability.
--   **Bug Fixes:** Fixed a critical bug in the document sharing feature () that was causing a Document reference missing error for shared invoices.
--   **PO WhatsApp Sharing:** Implemented a Send via WhatsApp feature for Purchase Orders, which generates a secure, expiring PDF link, consistent with existing invoice/catalog sharing.
--   **Pending Orders System:** Implemented a complete backorder system. When creating an invoice with insufficient stock, the system now partially fulfills the order, creates a Pending Order for the remainder, and reserves the stock. This included backend logic, new API endpoints, and frontend UI for a Pending Orders dashboard and updates to the inventory page.
--   **GST Engine (In Progress):** Began implementing the GST-compliant billing engine. Backend models were updated, new constants and API endpoints for GST configuration were created, and the core invoice creation logic was heavily modified to support automatic tax calculation. Frontend work on the invoice form was started.
+A full-stack B2B ERP application with a FastAPI backend and a React (Next.js) frontend. The following work was completed in this session:
+-   **Core GST Engine:** An automatic GST calculation engine was fully implemented and tested. The system now correctly applies CGST/SGST for same-state transactions and IGST for inter-state transactions.
+-   **Pending Orders Module Refactor:** API errors were fixed, and the workflow was simplified. A Create Invoice button now redirects to a pre-filled invoice form.
+-   **Shipping Address Management:** A complete CRUD feature for managing multiple buyer shipping addresses was implemented on both the backend and frontend, including integration with the invoice creation form.
+-   **Vercel Build Fixes:** Several critical build failures caused by git merge conflicts and TypeScript errors in  were resolved.
+-   **Stock Calculation Bug Fix:** The invoice creation logic was corrected to use  (total stock - reserved stock), ensuring pending orders are created reliably.
+-   **Centralized WhatsApp Messaging Engine:** A new utility () was created to manage all WhatsApp message templates. All 6 message generation points in the app were refactored to use this engine, which includes a consistent branding footer and rotating advertisements.
+-   **HSN Code in Inventory:** Sellers can now add/edit HSN codes for products on the inventory page, which then auto-populate during invoice creation.
 
 **Last working item**:
--   **Last item agent was working:** Implementing **Batch 1 (Core GST Engine)** of the GST-compliant billing and reporting system. The agent had just performed a large number of parallel file modifications to both the backend (invoice router) and the frontend (invoice creation page) to support the new automatic tax calculation logic.
+-   **Last item agent was working:** Investigating and fixing issues with the catalog sharing (Sales Push) feature and the rotating advertisements in the WhatsApp message footer. The user wants to remove the Sales Push button from the Buyers page and merge its functionality into the existing Share Catalog flow on the Inventory page.
 -   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
 -   **Which testing method agent to use?** both
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Complete and Test GST Billing Engine (P0)**
-    -   **Description:** The implementation of the core GST engine (Batch 1) is incomplete and untested. The backend has been modified to auto-calculate CGST/SGST/IGST, but the frontend UI is only partially updated and the end-to-end flow is not verified.
-    -   **Attempted fixes:** The agent has laid the foundation by creating a  constant file, adding a  endpoint, and overhauling the  function in . Frontend work was started on .
+-   **Issue 1: Fix Catalog Sharing Flow and Ad Rotation (P0)**
+    -   **Description:** The Sales Push button on the Buyers page is sending a generic link instead of a catalog link. Additionally, the rotating advertisement in the WhatsApp footer is not functioning correctly. The user has requested to remove the Sales Push button entirely and use its more marketing-focused message template when a seller shares their catalog from the Inventory page.
+    -   **Attempted fixes:** The agent began investigating by locating all WhatsApp-related code in the backend, focusing on  and the new  utility.
     -   **Next debug checklist:**
-        1.  **Finalize Frontend UI:**
-            -   In , complete the invoice item table to correctly display columns for , , , , , and .
-            -   Ensure the invoice totals section correctly sums up all tax components and the grand total.
-        2.  **Update Data Entry Forms:**
-            -   Modify the buyer creation/editing modal to include a dropdown for  (using the new states API).
-            -   Modify the business settings page to ensure the seller's  is captured and stored.
-        3.  **End-to-End Testing:**
-            -   **Test Case 1 (Same State):** Create an invoice where the seller's state and buyer's state are the same (e.g., Maharashtra). Verify that  and  are calculated and  is zero.
-            -   **Test Case 2 (Interstate):** Create an invoice where the states are different (e.g., Seller: Maharashtra, Buyer: Gujarat). Verify that  is calculated and / are zero.
-            -   Confirm the correct  (buyer's state) is saved with the invoice.
-    -   **Why fix this issue and what will be achieved with the fix?** Completing this is the core requirement of the user's latest request and will enable GST-compliant billing.
+        1.  **Fix Ad Rotation:** In , ensure the  module is imported at the top of the file () to fix the ad rotation in .
+        2.  **Update Catalog Share Message:** In , find the endpoint for catalog sharing (e.g., ). Change the message generation to use  instead of .
+        3.  **Remove Frontend Button:** In , delete the Sales Push button and its associated handler function ().
+        4.  **Remove Backend Endpoint:** In , delete the  API endpoint.
+        5.  **Test:** Go to the Inventory page, select products, and click Share Catalog. Verify the generated WhatsApp message uses the correct marketing template and that the ad in the footer changes with each generation.
+    -   **Why fix this issue and what will be achieved with the fix?** This will resolve a broken feature, simplify the user interface by removing a redundant button, and ensure the platform's branding and marketing messages are working as designed.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** Both
@@ -64,9 +52,9 @@ A full-stack B2B ERP application with a FastAPI backend and React frontend. In t
     -   **Is recurring issue?** Y
 
 **In progress Task List**:
--   **Task 1: Complete GST Billing Engine Implementation (P0)**
-    -   **Where to resume:** Finalize the frontend UI changes in  and conduct end-to-end testing of the new GST calculation logic.
-    -   **What will be achieved with this?** A functional, automatic GST calculation system for invoices.
+-   **Task 1: Fix Catalog Sharing & Ad Rotation (P0)**
+    -   **Where to resume:** Start by implementing the Next debug checklist for Issue 1, beginning with adding  to .
+    -   **What will be achieved with this?** A streamlined, functional catalog sharing feature that uses the correct marketing message and has a working rotating ad footer.
     -   **Status:** IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** Both
     -   **Blocked on something:** None
@@ -76,104 +64,105 @@ A full-stack B2B ERP application with a FastAPI backend and React frontend. In t
     -   **P1: GST System (Batch 2):**
         -   Implement the GST-compliant PDF invoice layout.
         -   Create the GST Summary Report (GSTR-1 format).
-        -   Add the Place of Supply field to the invoice PDF.
     -   **P1: Standardize All Reports:**
-        -   Implement professional Sales, Inventory, Profit, Low Stock, and Stock Movement reports as per the user's specification.
-    -   **P1: Seller Reminder Controls:** Allow sellers to configure smart reminder schedules for invoices.
-    -   **P1: Admin View for Reports:** Enhance the reports module to allow admin users to view aggregated data for all sellers.
+        -   Implement professional Sales, Inventory, Profit, Low Stock, and Stock Movement reports.
+    -   **P1: Seller Reminder Controls:**
+        -   Allow sellers to configure smart reminder schedules for invoices.
 -   **Future Tasks:**
-    -   **P2:** Refactor the inquiry modal on the product page to use the shared .
-    -   **P2:** Implement an advanced token-based search system.
-    -   **P2:** Create an admin search insights dashboard.
-    -   **P2:** Add Redis caching for global performance improvement.
-    -   **P2:** Upgrade WhatsApp sharing from  links to a full WhatsApp Business API integration.
+    -   **P2:** Short link tracking for WhatsApp to provide analytics on shared links.
+    -   **P2:** Add a white-label toggle for premium users to hide the Powered by Udyog Connect branding.
+    -   **P2:** Refactor the inquiry modal on the product page.
+    -   **P2:** Implement an advanced token-based search system and an admin search insights dashboard.
+    -   **P2:** Add Redis caching for performance.
+    -   **P2:** Upgrade to a full WhatsApp Business API integration.
 
 **Completed work in this session**
--   **Pending Orders (Backorder) System (DONE):** Implemented a full backorder system for invoices with insufficient stock, including partial fulfillment, a new  collection, a management dashboard, and inventory reservation display.
--   **Permissions Logic Refactor (DONE):** Centralized duplicated authentication/permission logic from 12 backend routers into a single, reusable utility (), fixing multiple role-based access bugs.
--   **Purchase Order WhatsApp Sharing (DONE):** Added a Send via WhatsApp feature to Purchase Orders, generating a secure, expiring PDF link.
--   **Bug Fix - Invoice Sharing Link (DONE):** Resolved a critical bug where shared invoice links failed with a Document reference missing error by fixing how the backend endpoint receives the .
--   **Bug Fix - Admin Low Stock Alerts (DONE):** Fixed a 403 Permission Denied error, allowing admins to view the Low Stock Alerts page for all sellers.
+-   **WhatsApp Messaging Engine (DONE):** Centralized all 7 WhatsApp message types into a scalable template engine at  with rotating ads and a consistent branding footer.
+-   **HSN Code in Inventory (DONE):** Enabled sellers to add HSN codes to products in the inventory, which now auto-populate on invoices.
+-   **Pending Order Creation Bug (DONE):** Fixed a critical bug where pending orders weren't created for items with reserved stock by correcting the backend to use  for calculations.
+-   **Vercel Build Failures (DONE):** Resolved multiple build-breaking issues, including git merge conflicts and several TypeScript type errors in .
+-   **Shipping Address Management (DONE):** Implemented full CRUD functionality for buyer shipping addresses and integrated it into the invoice creation workflow.
+-   **Pending Orders Module Refactor (DONE):** Fixed API errors by correcting  to uid=0(root) gid=0(root) groups=0(root) mapping and improved the workflow by redirecting to a pre-filled invoice form.
+-   **GST Billing Engine (Batch 1) (DONE):** Completed and tested the core automatic tax calculation engine.
 
 **Earlier issues found/mentioned but not fixed**
 -   **Issue 1: Backend Lint Error **
-    -   **Debug checklist:** The lint command reports an unused  import.
-    -   **Why to solve this issue and what will be achieved with this?** Improves code cleanliness.
+    -   **Debug checklist:** The lint command reports an unused  import in  and other files.
+    -   **Why to solve this issue and what will be achieved with this?** Code cleanliness.
     -   **Should Test frontend/backend/both after fix:** Backend
     -   **Is recurring issue?** Y
 
 **Known issue recurrence from previous fork**
--   **Issue recurrence in previous fork:**  package being added to .
--   **Recurrence count:** 1
--   **Status:** RESOLVED. The agent correctly checked  before finishing tasks and the issue did not recur.
+-   None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, MongoDB, Pydantic.
--   **Frontend:** React, Next.js, TypeScript, Tailwind CSS.
--   **Permissions Refactor:** Abstracting repeated permission checks into a centralized, reusable utility () to enforce role-based access control consistently across all API routers.
--   **Backorder System:** A state management system involving partial object creation (invoice) and deferred object creation (pending order) based on inventory checks, with stock reservation to prevent overselling.
--   **Automatic Tax Engine:** Conditional logic that determines tax types (CGST/SGST vs. IGST) based on geographical data (seller vs. buyer state) rather than user input.
+-   **Centralized Template Engine:** Abstracting hardcoded string formatting into a dedicated, reusable Python module () for consistency and scalability.
+-   **Stock Management Logic:** Differentiating between , , and  is critical for accurate order fulfillment and backorder creation.
+-   **Full-Stack Feature Implementation:** The Shipping Address feature involved creating new Pydantic models, new FastAPI endpoints, and new React state management and UI components that work together.
+-   **Build & Deployment Debugging:** Identifying and fixing issues (merge conflicts, type errors) from build logs is a crucial skill.
 
 **key DB schema**
--   **pending_orders:** (New Collection) 
--   **users:** (in  collection) -  field added to buyer profiles.
--   **invoices:** (in  collection) - Item list now includes , ,  breakdown. Top-level document includes .
--   **inventory_listings:** (in  collection) - Enriched with a calculated  field.
+-   **users (buyers):**  array added. Each object in the array is a  with fields like uid=0(root) gid=0(root) groups=0(root), , , , , .
+-   **sellerListings:**  (string) field added to store the Harmonized System of Nomenclature code for products.
+-   **invoices:**  (object) field added to store the selected address for an invoice.
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--    (Heavily modified for GST and backorders)
--    (Heavily modified for GST and backorders)
--    (New, critical file for authentication)
--    (New file for backorder feature)
--    (New page for backorder feature)
--    (New file for GST feature)
--    (Modified for permissions refactor and WhatsApp sharing)
--   All other router files in  were modified to use the new  utility.
+-    (New file, central to the current task)
+-    (Needs modification for the current task)
+-    (Needs modification for the current task)
+-    (Needs modification for the current task)
+-    (Recently modified for HSN)
+-    (Recently modified for stock bug and messaging)
+-    (Source of recent build errors)
 
 **Areas that need refactoring**:
--   The GST and backorder logic within  is becoming very complex. It could be beneficial to extract this business logic into dedicated service files (e.g., , ) to keep the router lean.
+-    remains very large and complex. The business logic for invoice creation, stock checking, and pending orders could be extracted into separate service files to improve maintainability.
 
 **key api endpoints**
--    (Modified to handle partial fulfillment, backorders, and auto-GST calculation)
--    (New endpoint to provide frontend with GST config like the list of states)
--    (New endpoint for the pending orders dashboard)
--    (New endpoint to fulfill backorders)
--    (Modified to generate secure PDF links)
--    (Fixed to correctly handle  from JSON body)
+-    (New)
+-    (New)
+-    (New)
+-    (To be deleted)
+-    (Modified to accept )
+-    (Modified to use  for shortage checks)
+-   All WhatsApp link endpoints (, , ) were internally refactored.
 
 **Critical Info for New Agent**
-1.  **Top Priority:** Your immediate task is to complete and test the **Core GST Engine (Batch 1)**.
-2.  **State of Play:** The backend logic in  has been significantly altered to automatically calculate CGST/SGST/IGST. The frontend invoice page at  has been partially updated.
-3.  **Execution Plan:**
-    *   Focus on finishing the frontend UI to display the new tax columns and totals correctly.
-    *   Ensure the buyer/seller state information is being captured in the UI and passed to the backend.
-    *   Perform thorough end-to-end testing with both same-state and inter-state transactions to validate the automatic tax calculation.
-    *   Once Batch 1 is stable and tested, you can proceed to Batch 2 (PDF generation and reports).
+1.  **Immediate Task:** Your top priority is to fix the catalog sharing flow as requested by the user. This involves removing the Sales Push button and its backend, then modifying the existing catalog share feature to use the marketing-oriented message template.
+2.  **Ad Rotation Fix:** A key part of the task is to fix the rotating ad in the WhatsApp footer. This is very likely due to a missing  statement in .
+3.  **File Complexity:** Be cautious when editing . It is a large, complex file that has been the source of multiple recent build failures.
+4.  **Stock Logic:** The distinction between , , and  is now critical to the application's logic. Ensure any future inventory-related changes respect this.
 
 **documents and test reports created in this job**
--    (Continuously updated with feature progress)
--   Multiple test reports in , with all tests passing for completed features. The last report was .
+-    (Updated after each major feature/fix)
+-    (WhatsApp Engine Test)
+-    (Pending Order Stock Fix Test)
+-    (Shipping Address Test)
+-    (Pending Orders Refactor Test)
+-    (GST Engine Test)
+-   
+-   
 
 **Last 10 User Messages and any pending HUMAN messages**
-10. : Requested Send via WhatsApp feature for Purchase Orders.
-9.  : Implemented the PO WhatsApp feature with secure PDF links.
-8.  : Requested a comprehensive Pending Orders (Backorder) system for when invoice stock is insufficient.
-7.  : Proposed a phased plan for the backorder system.
-6.  : Approved the backorder plan with clarifications on UI and notifications.
-5.  : Implemented the full Pending Orders system (Phases 1-3).
-4.  : Provided a detailed implementation plan for a full GST-compliant billing and reporting system.
-3.  : Broke down the user's plan into two main batches and asked for clarification.
-2.  : Approved Batch 1 (Core GST Engine) and provided specific rules for implementation, including reusing existing GST fields and the exact tax calculation logic.
-1.  : Acknowledged the plan and started the implementation of Batch 1.
+10. : Requested HSN code management in the inventory.
+9.  : Implemented HSN code management feature.
+8.  : Reported Sales Push button not working, ads not rotating, and requested button removal.
+7.  : Started investigation into the catalog sharing flow.
+6.  : Provided final decisions on the messaging engine: mandatory footer, add Sales Push button, and gave a detailed architecture plan.
+5.  : Implemented the centralized WhatsApp messaging engine and Sales Push feature.
+4.  : Reported a bug where pending orders were not being created for items with unavailable stock.
+3.  : Fixed the stock calculation bug in the invoice creation logic.
+2.  : Reported a Vercel build failure due to a TypeScript  error.
+1.  : Fixed the TypeScript error in the invoice detail view.
 
 **Project Health Check:**
--   **Broken**: The invoice creation feature is currently in a broken state due to the mid-flight implementation of the GST engine.
+-   **Broken**: The catalog sharing flow has two issues: the Sales Push button sends the wrong link, and the rotating ad in the message footer is not working.
 -   **Mocked**:  for email sending.
 
 **3rd Party Integrations**
@@ -188,14 +177,14 @@ A full-stack B2B ERP application with a FastAPI backend and React frontend. In t
 -   **file-saver & xlsx:** Frontend file downloading.
 
 **Testing status**
--   **Testing agent used after significant changes**: YES. The testing agent was used successfully after each major completed feature/refactor (Permissions Refactor, PO Sharing, Pending Orders).
+-   **Testing agent used after significant changes**: YES. The testing agent was used for every major feature and bug fix, with detailed test reports generated.
 -   **Troubleshoot agent used after agent stuck in loop**: NO
--   **Test files created**: None.
+-   **Test files created**: [, ]
 -   **Known regressions**: None.
 
 **Credentials to test flow:**
--   **Seller:** Register a new user via the OTP flow and complete the seller onboarding. This is the primary user type for testing the new features.
--   **Admin:** Log in as an admin user to test platform-wide views. The previous agent successfully logged in as an admin for testing.
+-   **Seller:** Register a new user via the OTP flow and complete the seller onboarding. Use this user to test inventory, buyer, and invoice features.
+-   **Admin:** Log in as an admin user to test platform-wide views if needed.
 
 **What agent forgot to execute**
--   The agent did not forget to execute any tasks. The current task (GST Engine) is large and was correctly identified as being in progress at the end of the session.</analysis>
+-   The agent did not forget anything. The current issue with catalog sharing was reported by the user at the end of the session and is the immediate next task.</analysis>
