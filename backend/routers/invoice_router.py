@@ -1209,7 +1209,21 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             custom_msgs = settings.get("customMessages", {})
             msg = custom_msgs.get(str(applicable_reminder))
             if not msg:
-                from utils.whatsapp_messages import payment_reminder_soft, payment_reminder_strict
+                from utils.whatsapp_messages import payment_reminder_soft, payment_reminder_strict, build_doc_url
+                import secrets as _secrets
+                # Generate secure document share link for this invoice
+                _now = datetime.now(timezone.utc)
+                _token = _secrets.token_urlsafe(32)
+                await db.document_shares.insert_one({
+                    "token": _token,
+                    "sellerId": inv.get("sellerId"),
+                    "documentType": "invoice",
+                    "documentId": str(inv["_id"]),
+                    "recipientPhone": buyer_phone,
+                    "expiresAt": _now + timedelta(days=30),
+                    "createdAt": _now,
+                })
+                _doc_url = build_doc_url(_token)
                 due_date_str = inv.get("dueDate", "")
                 if isinstance(due_date_str, datetime):
                     due_date_str = due_date_str.strftime("%d %b %Y")
@@ -1218,13 +1232,13 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 if applicable_reminder <= 7:
                     msg = payment_reminder_soft(
                         invoice_number=inv_num, pending_amount=pending,
-                        due_date=due_date_str, doc_url="",
+                        due_date=due_date_str, doc_url=_doc_url,
                         business_name=seller_biz_name, buyer_name=buyer_name,
                     )
                 else:
                     msg = payment_reminder_strict(
                         invoice_number=inv_num, pending_amount=pending,
-                        due_date=due_date_str, doc_url="",
+                        due_date=due_date_str, doc_url=_doc_url,
                         business_name=seller_biz_name, buyer_name=buyer_name,
                     )
 
@@ -1294,12 +1308,26 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         profile = (seller_user.get("profile") or {}) if seller_user else {}
         business_name = profile.get("businessName", "Seller")
 
-        from utils.whatsapp_messages import invoice_message, payment_reminder_soft, payment_reminder_strict
+        # Generate secure document share link for this invoice
+        from utils.whatsapp_messages import invoice_message, payment_reminder_soft, payment_reminder_strict, build_doc_url
+        import secrets as _secrets
+        now_utc = datetime.now(timezone.utc)
+        token = _secrets.token_urlsafe(32)
+        await db.document_shares.insert_one({
+            "token": token,
+            "sellerId": ObjectId(seller_id),
+            "documentType": "invoice",
+            "documentId": str(inv["_id"]),
+            "recipientPhone": buyer_phone,
+            "expiresAt": now_utc + timedelta(days=30),
+            "createdAt": now_utc,
+        })
+        doc_url = build_doc_url(token)
 
         if reminder_type == "send_invoice":
             msg = invoice_message(
                 invoice_number=inv_num, amount=total,
-                doc_url="", business_name=business_name, buyer_name=buyer_name,
+                doc_url=doc_url, business_name=business_name, buyer_name=buyer_name,
             )
         elif reminder_type == "overdue":
             due_date_str = inv.get("dueDate", "")
@@ -1307,7 +1335,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 due_date_str = due_date_str.strftime("%d %b %Y")
             msg = payment_reminder_strict(
                 invoice_number=inv_num, pending_amount=pending,
-                due_date=due_date_str or "N/A", doc_url="",
+                due_date=due_date_str or "N/A", doc_url=doc_url,
                 business_name=business_name, buyer_name=buyer_name,
             )
         else:
@@ -1316,7 +1344,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 due_date_str = due_date_str.strftime("%d %b %Y")
             msg = payment_reminder_soft(
                 invoice_number=inv_num, pending_amount=pending,
-                due_date=due_date_str or "N/A", doc_url="",
+                due_date=due_date_str or "N/A", doc_url=doc_url,
                 business_name=business_name, buyer_name=buyer_name,
             )
 

@@ -1,0 +1,118 @@
+{
+  "summary": "All HSN code and WhatsApp messaging bug fixes verified. 63 unit tests PASS (48 template engine + 15 bug fix tests). All code changes correctly implemented.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "features_tested": {
+    "1_HSN_code_in_inventory_API": {
+      "status": "PASS",
+      "verification": "GET /api/business-tools/inventory returns hsnCode field via $project at line 106 in inventory_router.py",
+      "code_location": "/app/backend/routers/inventory_router.py line 106"
+    },
+    "2_BASE_URL_changed_to_www": {
+      "status": "PASS",
+      "verification": "BASE_URL = 'https://www.udyogconnect.in' (previously 'https://udyogconnect.in')",
+      "code_location": "/app/backend/utils/whatsapp_messages.py line 11"
+    },
+    "3_build_doc_url_uses_BASE_URL": {
+      "status": "PASS",
+      "verification": "build_doc_url(token) returns 'https://www.udyogconnect.in/api/doc/{token}'",
+      "code_location": "/app/backend/utils/whatsapp_messages.py lines 188-190"
+    },
+    "4_invoice_whatsapp_endpoint": {
+      "status": "PASS",
+      "verification": "GET /api/invoices/{id}/whatsapp-link generates doc share token and uses build_doc_url()",
+      "code_location": "/app/backend/routers/invoice_router.py lines 1275-1356"
+    },
+    "5_invoice_message_contains_footer": {
+      "status": "PASS",
+      "verification": "Invoice messages contain 'Powered by Udyog Connect' and 'Regards,\\n{business_name}'",
+      "test_file": "/app/backend/tests/test_hsn_whatsapp_fixes.py"
+    },
+    "6_overdue_reminder_contains_doc_url": {
+      "status": "PASS",
+      "verification": "payment_reminder_strict() includes doc_url in message",
+      "test_file": "/app/backend/tests/test_whatsapp_template_engine.py"
+    },
+    "7_followup_reminder_contains_doc_url": {
+      "status": "PASS",
+      "verification": "payment_reminder_soft() includes doc_url in message",
+      "test_file": "/app/backend/tests/test_whatsapp_template_engine.py"
+    },
+    "8_buyer_name_trimmed": {
+      "status": "PASS",
+      "verification": "All template functions use (buyer_name or '').strip() to remove extra spaces",
+      "code_locations": "Lines 54, 88, 111, 135, 157, 177, 201, 225 in whatsapp_messages.py"
+    },
+    "9_catalog_url_fallback": {
+      "status": "PASS",
+      "verification": "POST /api/business-tools/buyers/{id}/sales-push uses BASE_URL as fallback (not /catalog)",
+      "code_location": "/app/backend/routers/business_tools_router.py line 716"
+    },
+    "10_frontend_no_hardcoded_messages": {
+      "status": "PASS",
+      "verification": "Invoice page handleWhatsApp now calls /api/invoices/{id}/whatsapp-link endpoint",
+      "code_location": "/app/frontend/src/app/seller/business-tools/invoices/page.tsx lines 369-389"
+    },
+    "11_frontend_HSN_column": {
+      "status": "PASS",
+      "verification": "Inventory table has HSN column displaying hsnCode values",
+      "code_location": "/app/frontend/src/app/seller/business-tools/inventory/page.tsx line 372, 421-428"
+    }
+  },
+
+  "test_results": {
+    "total_tests": 63,
+    "passed": 63,
+    "failed": 0,
+    "test_files": [
+      "/app/backend/tests/test_whatsapp_template_engine.py (48 tests)",
+      "/app/backend/tests/test_hsn_whatsapp_fixes.py (15 tests)"
+    ]
+  },
+
+  "test_report_links": [
+    "/app/backend/tests/test_whatsapp_template_engine.py",
+    "/app/backend/tests/test_hsn_whatsapp_fixes.py",
+    "/app/test_reports/pytest/hsn_whatsapp_fixes_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "CORRECT: BASE_URL changed from 'https://udyogconnect.in' to 'https://www.udyogconnect.in'",
+    "CORRECT: build_doc_url() uses BASE_URL for all document share links",
+    "CORRECT: All template functions strip() buyer/supplier names",
+    "CORRECT: Frontend invoices page now calls backend API for all WhatsApp messages",
+    "CORRECT: HSN code added to inventory pipeline $project stage",
+    "CORRECT: catalog_url fallback is BASE_URL (not /catalog)"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_hsn_whatsapp_fixes.py (new file)"
+  ],
+
+  "success_rate": {
+    "backend": "100% (63/63 unit tests)",
+    "frontend": "Code verified (requires Firebase Auth for UI testing)"
+  },
+
+  "mocked_integrations": {
+    "Resend email service": "MOCKED"
+  },
+
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "All HSN and WhatsApp messaging fixes verified. Key changes: (1) BASE_URL='https://www.udyogconnect.in' in whatsapp_messages.py, (2) build_doc_url() helper uses BASE_URL, (3) all template functions strip() buyer/supplier names, (4) frontend invoice page uses backend /api/invoices/{id}/whatsapp-link endpoint (no hardcoded messages), (5) HSN code in inventory API via $project, (6) catalog_url fallback is BASE_URL. Firebase Auth required for authenticated API endpoint testing."
+}

@@ -369,34 +369,23 @@ export default function InvoicesPage() {
   const openWhatsApp = async (inv: Invoice, type: 'followup' | 'overdue' | 'send_invoice' = 'followup') => {
     const phone = inv.buyerPhone || '';
     if (!phone) { alert('Buyer phone number not available'); return; }
-    const cleanPhone = phone.replace(/[\s\-\+]/g, '').replace(/^(?!91)(\d{10})$/, '91$1');
-    const pending = inv.pendingAmount ?? inv.total;
-    let msg = '';
 
-    if (type === 'send_invoice') {
-      // Generate secure document link for invoice download
-      try {
-        const h = await authHeaders();
-        const res = await fetch(`${API_URL}/api/business-tools/share-document`, {
-          method: 'POST', headers: { ...h, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ documentType: 'invoice', documentId: inv.id, recipientPhone: phone })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const docUrl = `${window.location.origin}${data.documentLink}`;
-          msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nDownload Invoice:\n${docUrl}\n\nRegards`;
-        } else {
-          msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nPlease find the invoice attached.\n\nRegards`;
+    // Use backend API as single source of truth for all WhatsApp messages
+    try {
+      const h = await authHeaders();
+      const res = await fetch(`${API_URL}/api/invoices/${inv.id}/whatsapp-link?reminder_type=${type}`, { headers: h });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.whatsappLink) {
+          window.open(data.whatsappLink, '_blank');
+          return;
         }
-      } catch {
-        msg = `Hello ${inv.buyerName},\n\nThank you for your purchase.\n\nInvoice Number: ${inv.invoiceNumber}\nTotal Amount: Rs.${fmt(inv.total)}\n\nPlease find the invoice attached.\n\nRegards`;
       }
-    } else if (type === 'overdue') {
-      msg = `Hello ${inv.buyerName},\n\nYour payment for Invoice ${inv.invoiceNumber} is overdue.\n\nPending Amount: Rs.${fmt(pending)}\n\nKindly clear the payment at the earliest.\n\nThank you.`;
-    } else {
-      msg = `Hello ${inv.buyerName},\n\nThis is regarding Invoice ${inv.invoiceNumber}.\n\nTotal Amount: Rs.${fmt(inv.total)}\nAmount Paid: Rs.${fmt(inv.totalPaid || 0)}\nPending Amount: Rs.${fmt(pending)}\n\nKindly clear the pending payment.\n\nThank you.`;
+      // Fallback: if API fails, alert user
+      alert('Failed to generate WhatsApp message. Please try again.');
+    } catch {
+      alert('Failed to generate WhatsApp message. Please try again.');
     }
-    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   // ── Payment handlers ──

@@ -103,6 +103,7 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
                 "productName": "$productData.name",
                 "categoryName": "$productData.categoryName",
                 "sku": {"$ifNull": ["$sku", ""]},
+                "hsnCode": {"$ifNull": ["$hsnCode", ""]},
                 "stock": {"$ifNull": ["$stock", 0]},
                 "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]},
                 "minStock": {"$ifNull": ["$minStock", 0]},

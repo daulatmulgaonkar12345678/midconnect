@@ -713,7 +713,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
 
         from utils.whatsapp_messages import catalog_marketing_message, BASE_URL
         import urllib.parse
-        catalog_url = data.get("catalogUrl", f"{BASE_URL}/catalog")
+        catalog_url = data.get("catalogUrl", BASE_URL)
         invoice_url = data.get("invoiceUrl", "")
 
         msg = catalog_marketing_message(

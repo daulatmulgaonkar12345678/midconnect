@@ -8,7 +8,7 @@ import random
 import urllib.parse
 
 # All outgoing WhatsApp links MUST use this domain
-BASE_URL = "https://udyogconnect.in"
+BASE_URL = "https://www.udyogconnect.in"
 
 ROTATING_ADS = [
     "Digitize your business with Udyog Connect",
@@ -51,6 +51,7 @@ def po_message(
     business_name: str,
     supplier_name: str = "",
 ) -> str:
+    supplier_name = (supplier_name or "").strip()
     greeting = f"Hello {supplier_name},\n\n" if supplier_name else "Hello,\n\n"
     msg = (
         f"{greeting}"
@@ -84,6 +85,7 @@ def invoice_message(
     business_name: str,
     buyer_name: str = "",
 ) -> str:
+    buyer_name = (buyer_name or "").strip()
     greeting = f"Hello {buyer_name},\n\n" if buyer_name else "Hello,\n\n"
     return (
         f"{greeting}"
@@ -106,6 +108,7 @@ def payment_reminder_soft(
     business_name: str,
     buyer_name: str = "",
 ) -> str:
+    buyer_name = (buyer_name or "").strip()
     greeting = f"Hello {buyer_name},\n\n" if buyer_name else "Hello,\n\n"
     return (
         f"{greeting}"
@@ -129,6 +132,7 @@ def payment_reminder_strict(
     business_name: str,
     buyer_name: str = "",
 ) -> str:
+    buyer_name = (buyer_name or "").strip()
     greeting = f"Hello {buyer_name},\n\n" if buyer_name else "Hello,\n\n"
     return (
         f"{greeting}"
@@ -150,6 +154,7 @@ def dispatch_message(
     business_name: str,
     buyer_name: str = "",
 ) -> str:
+    buyer_name = (buyer_name or "").strip()
     greeting = f"Hello {buyer_name},\n\n" if buyer_name else "Hello,\n\n"
     return (
         f"{greeting}"
@@ -169,6 +174,7 @@ def catalog_message(
     business_name: str,
     recipient_name: str = "",
 ) -> str:
+    recipient_name = (recipient_name or "").strip()
     greeting = f"Hello {recipient_name},\n\n" if recipient_name else "Hello,\n\n"
     return (
         f"{greeting}"
@@ -192,6 +198,7 @@ def catalog_marketing_message(
     buyer_name: str = "",
     invoice_url: str = "",
 ) -> str:
+    buyer_name = (buyer_name or "").strip()
     greeting = f"Hello {buyer_name},\n\n" if buyer_name else "Hello,\n\n"
     msg = (
         f"{greeting}"
@@ -215,6 +222,7 @@ def pending_order_notify(
     business_name: str,
     buyer_name: str = "",
 ) -> str:
+    buyer_name = (buyer_name or "").strip()
     greeting = f"Hello {buyer_name},\n\n" if buyer_name else "Hello,\n\n"
     return (
         f"{greeting}"
