@@ -274,6 +274,7 @@ export default function InvoicesPage() {
     setFormData({
       buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7,
       poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
+      shippingAddressId: '',
       transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
     });
     fetchAll();
