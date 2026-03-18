@@ -16,78 +16,53 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 
 ### Completed Features
 1. Full B2B Marketplace
-2. Seller Dashboard
-3. Admin Dashboard
-4. Invoice System with GST
-5. Inventory Management with HSN Codes
-6. Purchase Orders + WhatsApp sharing
-7. Buyer Management + Shipping Addresses
-8. Pending Orders (Backorder) - fixed stock reservation
-9. Permissions System (centralized)
-10. Employee Management
-11. Document Sharing (secure expiring links)
-12. **GST Billing Engine** - Auto CGST/SGST vs IGST
-13. **Shipping Address Management** - Multi-address per buyer, invoice integration
-14. **Pending Orders Bug Fix** - Uses available_stock (stock - reserved) not raw stock
-15. **WhatsApp Messaging Engine (SINGLE SOURCE OF TRUTH - COMPLETE):**
-    - Centralized template engine at `/app/backend/utils/whatsapp_messages.py`
-    - `BASE_URL = "https://www.udyogconnect.in"` - consistent domain for all shared links
-    - `build_doc_url(token)` helper for consistent document URLs
-    - 8 templates: PO, Invoice, Payment Soft, Payment Strict, Dispatch, Catalog, Catalog Marketing, Pending Order
-    - Rotating ads in branded footer: "Powered by Udyog Connect / www.udyogconnect.in"
-    - ALL WhatsApp messages (frontend + backend) use centralized templates
-    - Names auto-trimmed to prevent extra spaces
-    - 63 tests passed (48 template + 15 integration)
-16. **Catalog Sharing Flow:**
-    - "Share Catalog" button on Buyers page (renamed from Sales Push)
-    - Catalog marketing template with branding
-    - Inventory page catalog share uses backend message with footer
-17. **HSN Code Fix:**
-    - HSN code now correctly returned in inventory API response
-    - Editable in inventory table, auto-populates on invoices
+2. Seller Dashboard + Admin Dashboard
+3. Invoice System with GST (CGST/SGST vs IGST)
+4. Inventory Management with HSN Codes
+5. Purchase Orders + WhatsApp sharing
+6. Buyer Management + Shipping Addresses (CRUD)
+7. Pending Orders (Backorder) with stock reservation logic
+8. Permissions System + Employee Management
+9. Document Sharing (secure expiring links)
+10. **WhatsApp Messaging Engine (Single Source of Truth):**
+    - `BASE_URL = "https://www.udyogconnect.in"` for all shared links
+    - 8 templates with branded footer + rotating ads
+    - All messages generated server-side, no frontend hardcoding
+    - Name trimming, 81 tests passing
+11. **Invoice PDF Upgrade (2026-03-18):**
+    - Removed QR code completely from PDF
+    - New layout: Seller (full-width header) → Bill To (left) | Ship To (right)
+    - If shipping address different from billing → shows separate Ship To details
+    - If same/missing → shows "Same as Billing Address"
+    - Shipping address selected during invoice creation from buyer's saved addresses
+    - Works on both PDF download and UI detail view
+    - 18 dedicated PDF tests passing
 
 ### Mocked
 - Resend email service
 
 ## Prioritized Backlog
 
-### P1 - Next Up (User-defined order)
-1. **Seller Reminder Controls:** Configurable invoice reminder schedules (HIGH IMPACT)
-2. **GST Batch 2:** GST-compliant PDF invoice layout, GST Summary Report (GSTR-1)
-3. **Standardize Reports:** Professional Sales, Inventory, Profit, Low Stock, Stock Movement reports
+### P1 - Next Up
+1. **Seller Reminder Controls:** Configurable invoice reminder schedules
+2. **GST Batch 2:** GST-compliant PDF enhancements, GST Summary Report (GSTR-1)
+3. **Standardize Reports:** Sales, Inventory, Profit, Low Stock, Stock Movement
 
 ### P2 - Future
-- Short link tracking for WhatsApp shared links (VERY IMPORTANT per user)
-- Premium toggle to hide branding (revenue feature)
-- Inquiry modal refactor on product page
-- Advanced token-based search + admin search dashboard
-- Redis caching for performance
+- Short link tracking for WhatsApp shared links
+- Premium toggle to hide branding
+- Inquiry modal refactor
+- Advanced search + admin dashboard
+- Redis caching
 - Full WhatsApp Business API upgrade
 
 ## Key Files
-- `/app/backend/utils/whatsapp_messages.py` - Centralized WhatsApp template engine (BASE_URL, build_doc_url, 8 templates, name trimming)
-- `/app/backend/utils/gst.py` - GST calculation engine
-- `/app/backend/utils/permissions.py` - Centralized auth/permissions
-- `/app/backend/routers/invoice_router.py` - Invoice CRUD + GST + reminders + WhatsApp (with doc share tokens)
-- `/app/backend/routers/inventory_router.py` - Inventory management (includes hsnCode in pipeline)
-- `/app/backend/routers/business_tools_router.py` - Buyers + shipping addresses + share catalog
-- `/app/backend/routers/product_share_router.py` - Catalog generation + WhatsApp sharing
-- `/app/backend/routers/pending_orders_router.py` - Backorder management
-- `/app/backend/tests/test_whatsapp_template_engine.py` - Template tests (48/48)
-- `/app/backend/tests/test_hsn_whatsapp_fixes.py` - HSN + messaging integration tests (15/15)
+- `/app/backend/services/invoice_pdf_service.py` - GST invoice PDF (no QR, Bill To/Ship To layout)
+- `/app/backend/utils/whatsapp_messages.py` - Centralized WhatsApp templates
+- `/app/backend/routers/invoice_router.py` - Invoice CRUD + PDF + WhatsApp
+- `/app/backend/routers/inventory_router.py` - Inventory with HSN codes
+- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Invoice UI
 
-## Single Source of Truth: WhatsApp Messages
-ALL WhatsApp messages across the entire app flow through `/app/backend/utils/whatsapp_messages.py`:
-- Invoice sending → `invoice_message()`
-- Payment reminder (soft) → `payment_reminder_soft()`
-- Payment reminder (overdue) → `payment_reminder_strict()`
-- PO sharing → `po_message()`
-- Catalog sharing (from inventory) → `catalog_marketing_message()`
-- Share Catalog (from buyers) → `catalog_marketing_message()`
-- Pending order notify → `pending_order_notify()`
-- Dispatch → `dispatch_message()`
-- All doc URLs → `build_doc_url(token)` using `BASE_URL`
-
-## Refactoring Needed
-- `/app/backend/routers/invoice_router.py` - Very large, extract business logic to services
-- `firebase_app` unused lint warning in `business_tools_router.py` (P2)
+## Test Coverage
+- 81 total tests: 48 WhatsApp + 15 HSN/messaging + 18 PDF address tests
+- Test files: `test_whatsapp_template_engine.py`, `test_hsn_whatsapp_fixes.py`, `test_invoice_pdf_addresses.py`
