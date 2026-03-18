@@ -737,8 +737,9 @@ export default function InvoicesPage() {
               <div><span className="text-gray-500">Buyer:</span> <span className="font-medium">{viewInvoice.buyerName}</span></div>
               <div><span className="text-gray-500">Date:</span> <span className="font-medium">{fmtDate(viewInvoice.date)}</span></div>
             </div>
-            {(viewInvoice as Record<string, unknown>).shippingAddress && typeof (viewInvoice as Record<string, unknown>).shippingAddress === 'object' && (((viewInvoice as Record<string, unknown>).shippingAddress as Record<string, string>).addressLine1) && (() => {
-              const sa = (viewInvoice as Record<string, unknown>).shippingAddress as Record<string, string>;
+            {(() => {
+              const sa = (viewInvoice as any)?.shippingAddress;
+              if (!sa || !sa.addressLine1) return null;
               return (
                 <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm" data-testid="invoice-shipping-addr">
                   <span className="text-xs font-medium text-gray-500 uppercase">Ship To</span>
