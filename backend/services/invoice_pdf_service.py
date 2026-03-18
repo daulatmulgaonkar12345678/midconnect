@@ -1,11 +1,10 @@
 """
 GST-Compliant Invoice PDF Generation Service
-Generates A4 tax invoices with multiple copy types, QR code, and full GST layout.
+Generates A4 tax invoices with multiple copy types and full GST layout.
 """
 
 import io
 import urllib.request
-import qrcode
 from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -53,18 +52,6 @@ def number_to_words(n: float) -> str:
     if paise > 0:
         words += f" and {_convert(paise)} Paise"
     return words.strip() + " Only"
-
-
-def generate_qr_code(data_str: str) -> Image:
-    """Generate a QR code image for the invoice."""
-    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=4, border=1)
-    qr.add_data(data_str)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    buf.seek(0)
-    return Image(buf, width=22 * mm, height=22 * mm)
 
 
 def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: str = "original") -> bytes:
@@ -121,7 +108,6 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
         except Exception:
             pass
 
-    # QR Code
     inv_num = invoice.get("invoiceNumber", "N/A")
     seller_gstin = seller.get("gstNumber", "")
     buyer_gstin = buyer.get("gstNumber", "")
@@ -137,21 +123,16 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
     else:
         inv_date_str = str(inv_date)
 
-    qr_data = f"INV:{inv_num}|SELLER:{seller_gstin}|BUYER:{buyer_gstin}|AMT:{grand_total:.2f}|DT:{inv_date_str}"
-    qr_img = generate_qr_code(qr_data)
-
-    # Header row: Logo | Title + Copy | QR
+    # Header row: Logo | Title + Copy (no QR code)
     title_block = Paragraph(f"<b>TAX INVOICE</b><br/><font size='7' color='#666'>{copy_label}</font>", s_title)
-    header_cells = []
     if logo_element:
-        header_cells = [[logo_element, title_block, qr_img]]
-        header_table = Table(header_cells, colWidths=[24 * mm, page_w - 50 * mm, 26 * mm])
+        header_cells = [[logo_element, title_block]]
+        header_table = Table(header_cells, colWidths=[24 * mm, page_w - 24 * mm])
     else:
-        header_cells = [[title_block, qr_img]]
-        header_table = Table(header_cells, colWidths=[page_w - 26 * mm, 26 * mm])
+        header_cells = [[title_block]]
+        header_table = Table(header_cells, colWidths=[page_w])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (-1, 0), (-1, 0), 'RIGHT'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
@@ -195,7 +176,7 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
     elements.append(info_table)
     elements.append(Spacer(1, 3 * mm))
 
-    # === SELLER & BUYER DETAILS ===
+    # === SELLER DETAILS (Full Width) ===
     seller_name = seller.get("businessName", seller.get("name", "Seller"))
     seller_addr = seller.get("address", "")
     seller_city = seller.get("city", "")
@@ -204,37 +185,79 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
     seller_email = seller.get("email", "")
     bank = seller.get("bankDetails", {})
 
+    seller_text = f"<b>{seller_name}</b>"
+    if seller_addr:
+        seller_text += f"<br/>{seller_addr}"
+    if seller_city or seller_state:
+        seller_text += f"<br/>{', '.join(filter(None, [seller_city, seller_state]))}"
+    if seller_gstin:
+        seller_text += f"<br/><b>GSTIN:</b> {seller_gstin}"
+    if seller_phone:
+        seller_text += f"<br/>Ph: {seller_phone}"
+    if seller_email:
+        seller_text += f"<br/>{seller_email}"
+
+    seller_row = [[Paragraph(seller_text, s_normal)]]
+    seller_table = Table(seller_row, colWidths=[page_w])
+    seller_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#ccc')),
+    ]))
+    elements.append(seller_table)
+    elements.append(Spacer(1, 2 * mm))
+
+    # === BILLING ADDRESS (Left) + SHIPPING ADDRESS (Right) ===
     buyer_name = buyer.get("buyerName", buyer.get("name", "Buyer"))
     buyer_company = buyer.get("company", "")
     buyer_addr = buyer.get("address", "")
     buyer_phone = buyer.get("phone", "")
     place_of_supply = invoice.get("placeOfSupply", buyer.get("state", seller_state))
 
-    from_text = f"<b>Seller Details</b><br/><b>{seller_name}</b>"
-    if seller_addr:
-        from_text += f"<br/>{seller_addr}"
-    if seller_city or seller_state:
-        from_text += f"<br/>{', '.join(filter(None, [seller_city, seller_state]))}"
-    if seller_gstin:
-        from_text += f"<br/><b>GSTIN:</b> {seller_gstin}"
-    if seller_phone:
-        from_text += f"<br/>Ph: {seller_phone}"
-    if seller_email:
-        from_text += f"<br/>{seller_email}"
-
-    to_text = f"<b>Buyer Details</b><br/><b>{buyer_name}</b>"
+    bill_to = f"<b>Bill To</b><br/><b>{buyer_name}</b>"
     if buyer_company:
-        to_text += f"<br/>{buyer_company}"
+        bill_to += f"<br/>{buyer_company}"
     if buyer_addr:
-        to_text += f"<br/>{buyer_addr}"
+        bill_to += f"<br/>{buyer_addr}"
     if buyer_gstin:
-        to_text += f"<br/><b>GSTIN:</b> {buyer_gstin}"
+        bill_to += f"<br/><b>GSTIN:</b> {buyer_gstin}"
     if buyer_phone:
-        to_text += f"<br/>Ph: {buyer_phone}"
+        bill_to += f"<br/>Ph: {buyer_phone}"
     if place_of_supply:
-        to_text += f"<br/><b>Place of Supply:</b> {place_of_supply}"
+        bill_to += f"<br/><b>Place of Supply:</b> {place_of_supply}"
 
-    party_data = [[Paragraph(from_text, s_normal), Paragraph(to_text, s_normal)]]
+    # Determine shipping address
+    ship_addr = invoice.get("shippingAddress", {}) or {}
+    # Build a billing address string for comparison
+    billing_str = buyer_addr.strip().lower() if buyer_addr else ""
+    shipping_str = ""
+    if ship_addr.get("addressLine1"):
+        shipping_parts = [ship_addr.get("addressLine1", ""), ship_addr.get("addressLine2", ""),
+                          ship_addr.get("city", ""), ship_addr.get("state", ""), ship_addr.get("pincode", "")]
+        shipping_str = " ".join(filter(None, shipping_parts)).strip().lower()
+
+    # Check if shipping is different from billing
+    show_separate_shipping = bool(ship_addr.get("addressLine1")) and shipping_str != billing_str
+
+    if show_separate_shipping:
+        ship_to = "<b>Ship To</b>"
+        if ship_addr.get("contactPerson"):
+            ship_to += f"<br/><b>{ship_addr['contactPerson']}</b>"
+        ship_to += f"<br/>{ship_addr.get('addressLine1', '')}"
+        if ship_addr.get("addressLine2"):
+            ship_to += f", {ship_addr['addressLine2']}"
+        ship_to += f"<br/>{', '.join(filter(None, [ship_addr.get('city', ''), ship_addr.get('state', '')]))}"
+        if ship_addr.get("pincode"):
+            ship_to += f" - {ship_addr['pincode']}"
+        if ship_addr.get("phone"):
+            ship_to += f"<br/>Ph: {ship_addr['phone']}"
+    else:
+        # Same address or no shipping address → show billing as Ship To
+        ship_to = "<b>Ship To</b><br/><i>Same as Billing Address</i>"
+
+    party_data = [[Paragraph(bill_to, s_normal), Paragraph(ship_to, s_normal)]]
     party_table = Table(party_data, colWidths=[page_w / 2, page_w / 2])
     party_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),

@@ -726,15 +726,38 @@ export default function InvoicesPage() {
               <div><span className="text-gray-500">Buyer:</span> <span className="font-medium">{viewInvoice.buyerName}</span></div>
               <div><span className="text-gray-500">Date:</span> <span className="font-medium">{fmtDate(viewInvoice.date)}</span></div>
             </div>
+            {/* Billing & Shipping Address */}
             {(() => {
               const sa = (viewInvoice as any)?.shippingAddress;
-              if (!sa || !sa.addressLine1) return null;
+              const buyer = buyers.find(b => b.id === viewInvoice.buyerId);
+              const billingAddr = buyer?.address || '';
+              const hasShipping = sa && sa.addressLine1;
+              const shippingStr = hasShipping ? `${sa.addressLine1} ${sa.city} ${sa.state} ${sa.pincode}`.toLowerCase().trim() : '';
+              const isSame = billingAddr && shippingStr && billingAddr.toLowerCase().trim() === shippingStr;
+
               return (
-                <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm" data-testid="invoice-shipping-addr">
-                  <span className="text-xs font-medium text-gray-500 uppercase">Ship To</span>
-                  <p className="text-gray-800 mt-1">{sa.addressLine1}{sa.addressLine2 ? `, ${sa.addressLine2}` : ''}</p>
-                  <p className="text-gray-600">{sa.city}, {sa.state} - {sa.pincode}</p>
-                  {sa.contactPerson && <p className="text-xs text-gray-500 mt-1">Contact: {sa.contactPerson}{sa.phone ? ` (${sa.phone})` : ''}</p>}
+                <div className="grid grid-cols-2 gap-4 mb-4" data-testid="invoice-addresses">
+                  <div className="bg-gray-50 rounded-lg p-3 text-sm" data-testid="invoice-billing-addr">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Bill To</span>
+                    <p className="text-gray-800 font-medium mt-1">{viewInvoice.buyerName}</p>
+                    {buyer?.company && <p className="text-gray-600 text-xs">{buyer.company}</p>}
+                    {billingAddr && <p className="text-gray-600 mt-0.5">{billingAddr}</p>}
+                    {buyer?.gstNumber && <p className="text-xs text-gray-500 mt-0.5"><span className="font-medium">GSTIN:</span> {buyer.gstNumber}</p>}
+                    {buyer?.phone && <p className="text-xs text-gray-500">Ph: {buyer.phone}</p>}
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3 text-sm" data-testid="invoice-shipping-addr">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Ship To</span>
+                    {hasShipping && !isSame ? (
+                      <>
+                        {sa.contactPerson && <p className="text-gray-800 font-medium mt-1">{sa.contactPerson}</p>}
+                        <p className="text-gray-600 mt-0.5">{sa.addressLine1}{sa.addressLine2 ? `, ${sa.addressLine2}` : ''}</p>
+                        <p className="text-gray-600">{sa.city}, {sa.state} - {sa.pincode}</p>
+                        {sa.phone && <p className="text-xs text-gray-500 mt-0.5">Ph: {sa.phone}</p>}
+                      </>
+                    ) : (
+                      <p className="text-gray-500 italic mt-1">Same as Billing Address</p>
+                    )}
+                  </div>
                 </div>
               );
             })()}
