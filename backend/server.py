@@ -1156,7 +1156,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://revenue-insights-59.preview.emergentagent.com",
+        "https://invoice-tracker-pro-4.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
