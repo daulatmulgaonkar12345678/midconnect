@@ -11,27 +11,19 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 
 ## Completed Features
 1. Full B2B Marketplace + Seller/Admin Dashboards
-2. **Invoice System (GST-Compliant):**
-   - Auto CGST/SGST vs IGST based on state
-   - Bill To / Ship To layout on PDF + UI, QR code removed
-   - Freight, TCS, Auto Round Off, Payment Terms, Product Description
+2. **Invoice System (GST-Compliant)** — Auto CGST/SGST vs IGST, Bill To/Ship To, Freight/TCS/Round Off, Payment Terms, Product Description
 3. Inventory Management with HSN Codes + Product Description
 4. Purchase Orders + WhatsApp sharing
 5. Buyer Management + Shipping Addresses (CRUD)
 6. Pending Orders (Backorder) with stock reservation
 7. WhatsApp Messaging Engine (Single Source of Truth, 8 templates)
-8. **Reporting System Phase 1 (DONE):**
-   - Outstanding/Receivables Report (aging buckets, buyer filter, partial payments)
-   - Purchase Report (confirmed/received POs, supplier filter)
-   - Stock Movement Report (opening/closing stock, $facet aggregation)
-   - CSV/Excel export for all 3 reports
-9. **Reporting System Phase 2 (DONE - Feb 2026):**
-   - **Buyer Ledger** — buyer-wise sales/paid/pending with drill-down transaction history per buyer
-   - **Product Performance** — qty sold, revenue, profit, profit%, with Top Selling (top 5) & Slow Moving (bottom 5) sections
-   - **Category Report** — sales, revenue, profit grouped by product category (with Uncategorized fallback)
-   - **Low Stock Analytics** — min stock, current stock, times hit low, avg consumption/day, days of stock remaining, out-of-stock/low-stock/healthy status sorting
-   - CSV/Excel export for all 4 reports
-   - MongoDB indexes for performance
+8. **Reporting Phase 1** — Outstanding/Receivables, Purchase, Stock Movement reports
+9. **Reporting Phase 2** — Buyer Ledger (with drill-down transactions), Product Performance (top/slow movers), Category Report, Low Stock Analytics
+10. **Business Insights Dashboard Widget (NEW - Feb 2026):**
+    - GET /reports/overview — lightweight aggregation returning 8 key metrics
+    - 4 clickable insight cards on Business Tools homepage: Outstanding Alerts, Low Stock Alerts, Top Product, Monthly Sales + Growth %
+    - Color-coded (red=urgent, amber=warning, green=good), links to respective report tabs via ?tab= query param
+    - Reports page reads ?tab= URL param for deep linking
 
 ## Report Tabs (14 total)
 Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
@@ -44,17 +36,14 @@ Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Categor
 
 ### P2
 - Custom Material Report | Short link tracking | White-label toggle | WhatsApp Business API | Redis caching
+- Extend insights widget: Profit summary, Cash flow alerts, Purchase alerts
 
-## Test Coverage: 181+ tests
-- WhatsApp: 48 | HSN: 15 | PDF Address: 18 | Freight/TCS: 24 | Description: 17 | Reports Phase 1: 27 | Reports Phase 2: 32
+## Test Coverage: 203+ tests
+- WhatsApp: 48 | HSN: 15 | PDF Address: 18 | Freight/TCS: 24 | Description: 17 | Reports P1: 27 | Reports P2: 32 | Insights Overview: 22
 
 ## Key Files
-- `/app/backend/routers/reports_router.py` - All reports (14 endpoints)
-- `/app/backend/routers/export_import_router.py` - Export/import (12 export endpoints)
-- `/app/backend/services/invoice_pdf_service.py` - GST invoice PDF
-- `/app/backend/utils/whatsapp_messages.py` - WhatsApp templates
-- `/app/backend/routers/invoice_router.py` - Invoice CRUD + charges + description
-- `/app/backend/routers/inventory_router.py` - Inventory with HSN + description
-- `/app/backend/models/business_tools.py` - Models
-- `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (14 tabs)
-- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Invoice UI
+- `/app/backend/routers/reports_router.py` - All reports (15 endpoints incl. overview)
+- `/app/backend/routers/export_import_router.py` - 12 export endpoints
+- `/app/backend/routers/home_router.py` - Dashboard home summary/charts
+- `/app/frontend/src/app/seller/business-tools/page.tsx` - Dashboard with Business Insights
+- `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (14 tabs, ?tab= deep link)
