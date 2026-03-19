@@ -14,7 +14,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-india-suite.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://revenue-insights-59.preview.emergentagent.com')
 DEV_TOKEN = "dev-test-token"
 
 class TestSellerSubscriptionStatusEndpoint:

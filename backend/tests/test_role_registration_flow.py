@@ -13,7 +13,7 @@ import requests
 import os
 
 # Use PUBLIC URL from environment - this is what users see
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-india-suite.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://revenue-insights-59.preview.emergentagent.com').rstrip('/')
 
 
 class TestHealthEndpoint:
