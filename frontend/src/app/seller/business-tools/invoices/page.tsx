@@ -141,11 +141,7 @@ export default function InvoicesPage() {
 
   // Offline invoices hook
   const userId = user?.uid || null;
-  const [authToken, setAuthToken] = useState<string | null>(null);
-  useEffect(() => {
-    getIdToken().then(t => setAuthToken(t));
-  }, [getIdToken]);
-  const { offlineDrafts, saveDraftOffline, deleteDraftOffline } = useOfflineInvoices(userId, authToken);
+  const { offlineDrafts, saveDraftOffline, deleteDraftOffline } = useOfflineInvoices(userId);
 
   const authHeaders = useCallback(async () => {
     const t = await getIdToken();

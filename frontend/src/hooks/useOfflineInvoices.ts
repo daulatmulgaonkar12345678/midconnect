@@ -1,6 +1,7 @@
 /**
  * Hook to manage offline draft invoices.
- * Provides: save draft locally, list offline drafts, delete draft, sync status.
+ * Provides: save draft locally, list offline drafts, delete draft.
+ * Sync is handled centrally by NetworkContext.
  */
 
 'use client';
@@ -14,9 +15,7 @@ import {
   updateOfflineItem,
   getPendingCount,
   generateTempId,
-  OfflineItem,
 } from '@/lib/offlineStore';
-import { processOfflineQueue } from '@/lib/syncEngine';
 import { registerSyncListener } from '@/context/NetworkContext';
 import { toast } from 'sonner';
 
@@ -29,10 +28,9 @@ export interface OfflineDraftInvoice {
   lastError?: string;
 }
 
-export function useOfflineInvoices(userId: string | null, token: string | null) {
-  const { isOnline, setSyncState } = useNetworkContext();
+export function useOfflineInvoices(userId: string | null) {
+  const { setSyncState } = useNetworkContext();
   const [offlineDrafts, setOfflineDrafts] = useState<OfflineDraftInvoice[]>([]);
-  const [loading, setLoading] = useState(false);
 
   // Load offline drafts from IndexedDB
   const loadDrafts = useCallback(async () => {
@@ -60,6 +58,14 @@ export function useOfflineInvoices(userId: string | null, token: string | null) 
 
   useEffect(() => {
     loadDrafts();
+  }, [loadDrafts]);
+
+  // Refresh drafts when sync completes (called by NetworkContext)
+  useEffect(() => {
+    const unregister = registerSyncListener(() => {
+      loadDrafts();
+    });
+    return unregister;
   }, [loadDrafts]);
 
   // Save a new draft invoice offline
@@ -110,53 +116,10 @@ export function useOfflineInvoices(userId: string | null, token: string | null) 
     [loadDrafts]
   );
 
-  // Run sync when triggered
-  const runSync = useCallback(async () => {
-    if (!token || !isOnline) return;
-    setLoading(true);
-    try {
-      const result = await processOfflineQueue(token, (state) => {
-        setSyncState(state);
-      });
-      if (result.synced > 0) {
-        toast.success(`${result.synced} offline item${result.synced > 1 ? 's' : ''} synced`);
-      }
-      if (result.failed > 0) {
-        toast.error(`${result.failed} item${result.failed > 1 ? 's' : ''} failed to sync. Will retry.`);
-      }
-      await loadDrafts();
-    } catch {
-      toast.error('Sync failed. Retrying...');
-    }
-    setLoading(false);
-  }, [token, isOnline, setSyncState, loadDrafts]);
-
-  // Register sync listener (auto-sync when coming online)
-  useEffect(() => {
-    const unregister = registerSyncListener(() => {
-      runSync();
-    });
-    return unregister;
-  }, [runSync]);
-
-  // Auto-sync on mount if online and there are pending items
-  useEffect(() => {
-    if (isOnline && offlineDrafts.length > 0 && token) {
-      const hasPending = offlineDrafts.some((d) => d.status !== 'synced');
-      if (hasPending) {
-        runSync();
-      }
-    }
-    // Only run on mount + when online status changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline]);
-
   return {
     offlineDrafts,
     saveDraftOffline,
     updateDraftOffline,
     deleteDraftOffline,
-    runSync,
-    isSyncing: loading,
   };
 }

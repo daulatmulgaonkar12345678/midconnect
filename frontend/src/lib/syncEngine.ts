@@ -18,6 +18,17 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
+function parseErrorDetail(body: Record<string, unknown>, status: number): string {
+  const detail = body.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((e: { msg?: string; loc?: unknown[] }) =>
+      `${(e.loc || []).slice(-2).join('.')}: ${e.msg || 'invalid'}`
+    ).join('; ');
+  }
+  return `Server error ${status}`;
+}
+
 export interface SyncResult {
   total: number;
   synced: number;
@@ -122,7 +133,7 @@ async function syncInvoice(item: OfflineItem, token: string): Promise<void> {
   delete payload._tempId;
   delete payload._offlineCreated;
 
-  const res = await fetch(`${API_URL}/api/invoices/sync-offline-draft`, {
+  const res = await fetch(`${API_URL}/api/business-tools/invoices/sync-offline-draft`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -133,7 +144,7 @@ async function syncInvoice(item: OfflineItem, token: string): Promise<void> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `Server error ${res.status}`);
+    throw new Error(parseErrorDetail(body, res.status));
   }
 }
 
@@ -152,7 +163,7 @@ async function syncInventoryUpdate(item: OfflineItem, token: string): Promise<vo
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `Server error ${res.status}`);
+    throw new Error(parseErrorDetail(body, res.status));
   }
 }
 
@@ -174,7 +185,7 @@ async function syncPurchaseOrder(item: OfflineItem, token: string): Promise<void
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `Server error ${res.status}`);
+    throw new Error(parseErrorDetail(body, res.status));
   }
 }
 

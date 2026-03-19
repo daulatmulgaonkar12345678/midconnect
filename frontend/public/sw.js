@@ -9,7 +9,6 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(APP_SHELL).catch(() => {
-        // Some routes may fail during install, that's ok
         console.log('[SW] Some app shell routes failed to cache');
       });
     })
@@ -31,13 +30,24 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch — Network first, fallback to cache for navigation
+// Fetch handler
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET and API requests
-  if (request.method !== 'GET' || url.pathname.startsWith('/api')) {
+  // Skip non-GET requests entirely (POST, PUT, DELETE etc.)
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  // Skip API requests — never cache or intercept
+  if (url.pathname.startsWith('/api')) {
+    return;
+  }
+
+  // Skip Next.js RSC data requests — let them go straight to network
+  // These are internal React Server Component fetches and should not be cached
+  if (url.searchParams.has('_rsc')) {
     return;
   }
 
@@ -46,8 +56,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful page responses for offline
-          if (response.ok) {
+          if (response && response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(request, clone);
@@ -56,9 +65,16 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // Offline — serve from cache
           return caches.match(request).then((cached) => {
-            return cached || caches.match('/seller/business-tools');
+            if (cached) return cached;
+            return caches.match('/seller/business-tools').then((fallback) => {
+              if (fallback) return fallback;
+              // Ultimate fallback: return a basic offline page
+              return new Response(
+                '<html><body><h1>Offline</h1><p>Please check your internet connection.</p></body></html>',
+                { status: 503, headers: { 'Content-Type': 'text/html' } }
+              );
+            });
           });
         })
     );
@@ -79,23 +95,25 @@ self.addEventListener('fetch', (event) => {
       caches.match(request).then((cached) => {
         if (cached) return cached;
         return fetch(request).then((response) => {
-          if (response.ok) {
+          if (response && response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(request, clone);
             });
           }
           return response;
+        }).catch(() => {
+          // If fetch fails and nothing cached, return empty response
+          return new Response('', { status: 503, statusText: 'Offline' });
         });
       })
     );
     return;
   }
 
-  // Default — network with cache fallback
-  event.respondWith(
-    fetch(request).catch(() => caches.match(request))
-  );
+  // Default — pass through to network, don't intercept
+  // This avoids the "Failed to convert value to Response" error
+  return;
 });
 
 // Listen for messages from the app
