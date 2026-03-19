@@ -74,7 +74,9 @@ type ImportType = "products" | "inventory" | "suppliers" | "buyers";
 
 export default function ReportsPage() {
   const { hasPermission, token } = usePermissions();
-  const [tab, setTab] = useState<Tab>("sales");
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const initialTab = (searchParams?.get("tab") as Tab) || "outstanding";
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [period, setPeriod] = useState("monthly");
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);

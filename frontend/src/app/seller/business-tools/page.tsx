@@ -7,7 +7,8 @@ import Link from 'next/link';
 import {
   Package2, Truck, FileText, Layers, BarChart3,
   IndianRupee, AlertTriangle, TrendingUp, Clock,
-  ArrowRight, ShoppingCart, LineChart as LineChartIcon, Loader2
+  ArrowRight, ShoppingCart, LineChart as LineChartIcon, Loader2,
+  ArrowUpRight, ArrowDownRight, PackageX, Zap
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -35,6 +36,17 @@ interface HomeCharts {
   stockDistribution: Array<{ category: string; stock: number; products: number }>;
 }
 
+interface OverviewData {
+  totalOutstanding: number;
+  outstandingCount: number;
+  overdueInvoices: number;
+  lowStockCount: number;
+  topProduct: { name: string | null; qtySold: number; revenue: number };
+  monthlySales: number;
+  monthlyInvoiceCount: number;
+  growthPercentage: number;
+}
+
 function fmt(n: number) { return n.toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
 function fmtCurrency(n: number) { return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
@@ -43,6 +55,7 @@ export default function BusinessToolsHomePage() {
   const { hasPermission, token, loading: permLoading } = usePermissions();
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [charts, setCharts] = useState<HomeCharts | null>(null);
+  const [overview, setOverview] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,12 +63,14 @@ export default function BusinessToolsHomePage() {
     (async () => {
       try {
         const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-        const [sumRes, chartRes] = await Promise.all([
+        const [sumRes, chartRes, ovRes] = await Promise.all([
           fetch(`${API_URL}/api/business-tools/home/summary`, { headers: h }),
           fetch(`${API_URL}/api/business-tools/home/charts`, { headers: h }),
+          fetch(`${API_URL}/api/business-tools/reports/overview`, { headers: h }),
         ]);
         if (sumRes.ok) setSummary(await sumRes.json());
         if (chartRes.ok) setCharts(await chartRes.json());
+        if (ovRes.ok) setOverview(await ovRes.json());
       } catch { /* empty */ }
       setLoading(false);
     })();
@@ -127,6 +142,114 @@ export default function BusinessToolsHomePage() {
             <p className="text-xl font-bold text-gray-900 flex items-center">
               <IndianRupee className="w-3.5 h-3.5" />{fmtCurrency(summary.totalRevenue)}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Business Insights */}
+      {overview && (
+        <div data-testid="business-insights">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Business Insights</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+
+            {/* Outstanding Alerts */}
+            <Link href="/seller/business-tools/reports?tab=outstanding"
+              className="group bg-white rounded-xl border border-gray-100 hover:border-red-200 hover:shadow-md transition-all p-4 space-y-2"
+              data-testid="insight-outstanding">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${overview.totalOutstanding > 0 ? "bg-red-50" : "bg-green-50"}`}>
+                    <Clock className={`w-4 h-4 ${overview.totalOutstanding > 0 ? "text-red-500" : "text-green-500"}`} />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Outstanding</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-red-400 transition-colors" />
+              </div>
+              <p className="text-lg font-bold text-gray-900 flex items-center gap-0.5">
+                <IndianRupee className="w-4 h-4" />{fmtCurrency(overview.totalOutstanding)}
+              </p>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="text-gray-500">{overview.outstandingCount} pending</span>
+                {overview.overdueInvoices > 0 && (
+                  <span className="text-red-600 font-semibold">{overview.overdueInvoices} overdue 90+d</span>
+                )}
+              </div>
+            </Link>
+
+            {/* Low Stock Alerts */}
+            <Link href="/seller/business-tools/reports?tab=low-stock"
+              className="group bg-white rounded-xl border border-gray-100 hover:border-amber-200 hover:shadow-md transition-all p-4 space-y-2"
+              data-testid="insight-low-stock">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${overview.lowStockCount > 0 ? "bg-amber-50" : "bg-green-50"}`}>
+                    <PackageX className={`w-4 h-4 ${overview.lowStockCount > 0 ? "text-amber-500" : "text-green-500"}`} />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Low Stock</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-amber-400 transition-colors" />
+              </div>
+              <p className={`text-2xl font-bold ${overview.lowStockCount > 0 ? "text-amber-600" : "text-green-600"}`}>
+                {overview.lowStockCount}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                {overview.lowStockCount > 0 ? "products below minimum" : "All stock levels healthy"}
+              </p>
+            </Link>
+
+            {/* Top Product */}
+            <Link href="/seller/business-tools/reports?tab=product-perf"
+              className="group bg-white rounded-xl border border-gray-100 hover:border-indigo-200 hover:shadow-md transition-all p-4 space-y-2"
+              data-testid="insight-top-product">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50">
+                    <Zap className="w-4 h-4 text-indigo-500" />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Top Product</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+              </div>
+              {overview.topProduct?.name ? (
+                <>
+                  <p className="text-sm font-bold text-gray-900 truncate">{overview.topProduct.name}</p>
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <span className="text-gray-500">{overview.topProduct.qtySold} sold</span>
+                    <span className="text-indigo-600 font-semibold flex items-center"><IndianRupee className="w-3 h-3" />{fmtCurrency(overview.topProduct.revenue)}</span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-400">No sales this month</p>
+              )}
+            </Link>
+
+            {/* Monthly Sales */}
+            <Link href="/seller/business-tools/reports?tab=sales"
+              className="group bg-white rounded-xl border border-gray-100 hover:border-green-200 hover:shadow-md transition-all p-4 space-y-2"
+              data-testid="insight-monthly-sales">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-50">
+                    <TrendingUp className="w-4 h-4 text-green-500" />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">This Month</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-green-400 transition-colors" />
+              </div>
+              <p className="text-lg font-bold text-gray-900 flex items-center gap-0.5">
+                <IndianRupee className="w-4 h-4" />{fmtCurrency(overview.monthlySales)}
+              </p>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="text-gray-500">{overview.monthlyInvoiceCount} invoices</span>
+                {overview.growthPercentage !== 0 && (
+                  <span className={`font-semibold flex items-center gap-0.5 ${overview.growthPercentage > 0 ? "text-green-600" : "text-red-600"}`}>
+                    {overview.growthPercentage > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                    {Math.abs(overview.growthPercentage)}% vs last month
+                  </span>
+                )}
+              </div>
+            </Link>
+
           </div>
         </div>
       )}

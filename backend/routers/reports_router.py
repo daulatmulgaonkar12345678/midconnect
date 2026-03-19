@@ -59,6 +59,112 @@ def init_reports_router(db, verify_token_func):
 
     # Active invoice statuses for reports (all except cancelled)
     REPORT_STATUSES = ["draft", "sent", "viewed", "partially_paid", "paid", "overdue"]
+    OUTSTANDING_STATUSES = ["sent", "viewed", "partially_paid", "overdue"]
+
+    # ─── REPORTS OVERVIEW (lightweight dashboard widget) ───
+
+    @router.get("/reports/overview")
+    async def reports_overview(authorization: str = Header(...)):
+        """Lightweight aggregation for the Business Insights dashboard widget."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        seller_oid = ObjectId(seller_id)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        prev_month_start = (month_start - timedelta(days=1)).replace(day=1)
+
+        # Run all aggregations in parallel-ish (sequential but lightweight)
+        # 1. Outstanding totals
+        outstanding_pipeline = [
+            {"$match": {"sellerId": seller_oid, "status": {"$in": OUTSTANDING_STATUSES}}},
+            {"$group": {
+                "_id": None,
+                "totalOutstanding": {"$sum": {"$ifNull": ["$pendingAmount", "$total"]}},
+                "count": {"$sum": 1}
+            }}
+        ]
+        outstanding_result = await db.invoices.aggregate(outstanding_pipeline).to_list(1)
+        outstanding = outstanding_result[0] if outstanding_result else {}
+
+        # 2. Overdue 90+ days
+        cutoff_90 = now - timedelta(days=90 + 30)  # invoice date + 30 day payment = 120 days ago
+        overdue_count = await db.invoices.count_documents({
+            "sellerId": seller_oid,
+            "status": {"$in": OUTSTANDING_STATUSES},
+            "date": {"$lt": cutoff_90}
+        })
+
+        # 3. Low stock count
+        low_stock_pipeline = [
+            {"$match": {"sellerId": seller_oid, "status": "active"}},
+            {"$match": {"$expr": {"$lte": ["$stock", {"$ifNull": ["$lowStockAlert", 10]}]}}},
+            {"$count": "count"}
+        ]
+        low_stock_result = await db.sellerListings.aggregate(low_stock_pipeline).to_list(1)
+        low_stock_count = low_stock_result[0]["count"] if low_stock_result else 0
+
+        # 4. Top product this month
+        top_product_pipeline = [
+            {"$match": {
+                "sellerId": seller_oid,
+                "createdAt": {"$gte": month_start},
+                "status": {"$in": REPORT_STATUSES}
+            }},
+            {"$unwind": "$items"},
+            {"$group": {
+                "_id": "$items.productName",
+                "qtySold": {"$sum": "$items.quantity"},
+                "revenue": {"$sum": "$items.total"}
+            }},
+            {"$sort": {"revenue": -1}},
+            {"$limit": 1}
+        ]
+        top_product_result = await db.invoices.aggregate(top_product_pipeline).to_list(1)
+        top_product = top_product_result[0] if top_product_result else None
+
+        # 5. This month sales
+        monthly_pipeline = [
+            {"$match": {
+                "sellerId": seller_oid,
+                "createdAt": {"$gte": month_start},
+                "status": {"$in": REPORT_STATUSES}
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$total"}, "count": {"$sum": 1}}}
+        ]
+        monthly_result = await db.invoices.aggregate(monthly_pipeline).to_list(1)
+        this_month = monthly_result[0] if monthly_result else {}
+
+        # 6. Last month sales (for growth %)
+        prev_pipeline = [
+            {"$match": {
+                "sellerId": seller_oid,
+                "createdAt": {"$gte": prev_month_start, "$lt": month_start},
+                "status": {"$in": REPORT_STATUSES}
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$total"}}}
+        ]
+        prev_result = await db.invoices.aggregate(prev_pipeline).to_list(1)
+        last_month_total = prev_result[0]["total"] if prev_result else 0
+
+        this_month_total = this_month.get("total", 0)
+        growth = round(((this_month_total - last_month_total) / last_month_total * 100) if last_month_total > 0 else 0, 1)
+
+        return {
+            "totalOutstanding": round(outstanding.get("totalOutstanding", 0), 2),
+            "outstandingCount": outstanding.get("count", 0),
+            "overdueInvoices": overdue_count,
+            "lowStockCount": low_stock_count,
+            "topProduct": {
+                "name": top_product["_id"] if top_product else None,
+                "qtySold": top_product["qtySold"] if top_product else 0,
+                "revenue": round(top_product["revenue"], 2) if top_product else 0
+            },
+            "monthlySales": round(this_month_total, 2),
+            "monthlyInvoiceCount": this_month.get("count", 0),
+            "growthPercentage": growth
+        }
 
     @router.get("/reports/sales-summary")
     async def sales_summary(
@@ -469,7 +575,6 @@ def init_reports_router(db, verify_token_func):
         }
 
     # ─── OUTSTANDING / RECEIVABLES REPORT ───
-    OUTSTANDING_STATUSES = ["sent", "viewed", "partially_paid", "overdue"]
     DEFAULT_PAYMENT_DAYS = 30
 
     @router.get("/reports/outstanding")
