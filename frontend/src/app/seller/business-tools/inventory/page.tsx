@@ -20,6 +20,7 @@ interface InventoryItem {
   categoryName?: string;
   sku: string;
   hsnCode: string;
+  description: string;
   stock: number;
   reservedStock: number;
   availableStock: number;
@@ -39,6 +40,7 @@ interface InventoryItem {
 interface EditState {
   sku?: string;
   hsnCode?: string;
+  description?: string;
   warehouseLocation?: string;
   selling_price?: number | null;
   purchase_price?: number | null;
@@ -117,7 +119,7 @@ export default function InventoryPage() {
     isEditing.current = true;
     setEditingItem(item.listingId);
     setEditState({
-      sku: item.sku, hsnCode: item.hsnCode || '', warehouseLocation: item.warehouseLocation,
+      sku: item.sku, hsnCode: item.hsnCode || '', description: item.description || '', warehouseLocation: item.warehouseLocation,
       selling_price: item.selling_price, purchase_price: item.purchase_price,
       minStock: item.minStock || 0, reorderQuantity: item.reorderQuantity || 0,
       lowStockAlertEnabled: item.lowStockAlertEnabled !== false,
@@ -133,6 +135,7 @@ export default function InventoryPage() {
       const payload: Record<string, unknown> = {};
       if (editState.sku !== undefined && editState.sku !== item.sku) payload.sku = editState.sku;
       if (editState.hsnCode !== undefined && editState.hsnCode !== (item.hsnCode || '')) payload.hsnCode = editState.hsnCode;
+      if (editState.description !== undefined && editState.description !== (item.description || '')) payload.description = editState.description;
       if (editState.warehouseLocation !== undefined && editState.warehouseLocation !== item.warehouseLocation) payload.warehouseLocation = editState.warehouseLocation;
       if (editState.selling_price !== undefined && editState.selling_price !== item.selling_price) payload.selling_price = editState.selling_price;
       if (item.productType !== 'composite' && editState.purchase_price !== undefined && editState.purchase_price !== item.purchase_price) payload.purchase_price = editState.purchase_price;
@@ -370,6 +373,7 @@ export default function InventoryPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Product</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">SKU</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">HSN</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Description</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Stock</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Min Stock</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Selling Price</th>
@@ -425,6 +429,15 @@ export default function InventoryPage() {
                           className="w-24 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" placeholder="HSN" data-testid={`hsn-input-${item.listingId}`} />
                       ) : (
                         <span className="text-gray-600 font-mono text-sm">{item.hsnCode || '-'}</span>
+                      )}
+                    </td>
+                    {/* Description */}
+                    <td className="px-6 py-4">
+                      {isEditingThis(item) && !isComposite(item) ? (
+                        <input type="text" value={editState.description ?? ''} onChange={(e) => setEditState(s => ({ ...s, description: e.target.value.slice(0, 150) }))}
+                          className="w-40 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" placeholder="e.g. ISI Mark, Size 10" maxLength={150} data-testid={`desc-input-${item.listingId}`} />
+                      ) : (
+                        <span className="text-gray-500 text-xs">{item.description || '-'}</span>
                       )}
                     </td>
                     {/* Stock */}

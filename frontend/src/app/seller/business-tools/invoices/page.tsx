@@ -18,10 +18,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 // ── Types ──
 
 interface Spec { key: string; value: string; }
-interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; gstRate: number; hsnCode: string; specifications: Spec[]; }
-interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
+interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; gstRate: number; hsnCode: string; description: string; specifications: Spec[]; }
+interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; description: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
 interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; address?: string; shippingAddresses?: { id: string; addressLine1: string; addressLine2?: string; city: string; state: string; pincode: string; country: string; contactPerson?: string; phone?: string; isDefault: boolean; }[]; }
-interface InvoiceItem { productName: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
+interface InvoiceItem { productName: string; description?: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
 interface PaymentEntry { id: string; amount: number; paymentDate: string; paymentMethod: string; accountName?: string; referenceNumber?: string; notes?: string; receiptUrls?: string[]; createdAt: string; }
 interface Invoice {
   id: string; invoiceNumber: string; buyerName: string; buyerPhone?: string; buyerId?: string; date: string;
@@ -59,7 +59,7 @@ const paymentMethods = [
 const RECEIPT_REQUIRED_METHODS = ['upi', 'bank_transfer', 'cheque'];
 
 function emptyItem(): InvoiceFormItem {
-  return { productId: '', productName: '', hsnCode: '', quantity: 1, price: 0, gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
+  return { productId: '', productName: '', hsnCode: '', description: '', quantity: 1, price: 0, gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
 }
 function fmt(n: number) { return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } }
@@ -227,7 +227,7 @@ export default function InvoicesPage() {
   const onProductSelect = (idx: number, listingId: string) => {
     const listing = listings.find(l => l.id === listingId);
     const items = [...formData.items];
-    items[idx] = { ...items[idx], productId: listingId, productName: listing?.productName || '', hsnCode: listing?.hsnCode || '', price: listing?.price || items[idx].price, gstPercent: listing?.gstRate || items[idx].gstPercent, allSpecs: listing?.specifications || [], selectedSpecs: [...(listing?.specifications || [])], customSpecs: [], showSpecs: (listing?.specifications?.length || 0) > 0 };
+    items[idx] = { ...items[idx], productId: listingId, productName: listing?.productName || '', hsnCode: listing?.hsnCode || '', description: listing?.description || '', price: listing?.price || items[idx].price, gstPercent: listing?.gstRate || items[idx].gstPercent, allSpecs: listing?.specifications || [], selectedSpecs: [...(listing?.specifications || [])], customSpecs: [], showSpecs: (listing?.specifications?.length || 0) > 0 };
     setFormData(p => ({ ...p, items }));
   };
   const toggleSpec = (itemIdx: number, specIdx: number) => {
@@ -261,6 +261,7 @@ export default function InvoicesPage() {
       items: formData.items.map(i => ({
         productId: i.productId || null, productName: i.productName || null,
         hsnCode: (i as InvoiceFormItem & { hsnCode?: string }).hsnCode || null,
+        description: i.description || null,
         quantity: i.quantity, price: i.price,
         discount: (i as InvoiceFormItem & { discount?: number }).discount || 0,
         gstPercent: i.gstPercent,
@@ -640,7 +641,7 @@ export default function InvoicesPage() {
                             <label className="text-xs text-gray-500 mb-1 block">Product</label>
                             <select value={item.productId} onChange={e => onProductSelect(idx, e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-product-${idx}`}>
                               <option value="">Select / Manual</option>
-                              {listings.map(l => <option key={l.id} value={l.id}>{l.productName} (Avail: {l.availableStock}{l.reservedStock > 0 ? `, Reserved: ${l.reservedStock}` : ''})</option>)}
+                              {listings.map(l => <option key={l.id} value={l.id}>{l.productName}{l.description ? ` — ${l.description}` : ''} (Avail: {l.availableStock}{l.reservedStock > 0 ? `, Reserved: ${l.reservedStock}` : ''})</option>)}
                             </select>
                             {!item.productId && <input type="text" value={item.productName} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], productName: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="Manual entry" className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-name-${idx}`} />}
                           </div>
@@ -820,7 +821,7 @@ export default function InvoicesPage() {
               </tr></thead>
               <tbody>{viewInvoice.items.map((item, i) => (
                 <tr key={i} className="border-b border-gray-50">
-                  <td className="py-2"><div>{item.productName}</div>{item.selected_specifications && item.selected_specifications.length > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{item.selected_specifications.map(s => `${s.key}: ${s.value}`).join(' | ')}</div>}</td>
+                  <td className="py-2"><div className="font-medium">{item.productName}</div>{item.description && <div className="text-[10px] text-gray-500 mt-0.5">({item.description})</div>}{item.selected_specifications && item.selected_specifications.length > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{item.selected_specifications.map(s => `${s.key}: ${s.value}`).join(' | ')}</div>}</td>
                   <td className="py-2 text-xs text-gray-500">{item.hsnCode || '-'}</td>
                   <td className="py-2 text-right">{item.quantity}</td>
                   <td className="py-2 text-right">{fmt(item.price)}</td>

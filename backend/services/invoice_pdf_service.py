@@ -301,7 +301,10 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
         line_total = item.get("total", round(taxable + gst_amt, 2))
         total_taxable += taxable
 
-        product_text = str(item.get("productName", "Item"))
+        product_text = f"<b>{str(item.get('productName', 'Item'))}</b>"
+        description = item.get("description", "")
+        if description:
+            product_text += f"<br/><font size='6' color='#666'>({description})</font>"
         specs = item.get("selected_specifications", [])
         if specs:
             spec_parts = [f"{s.get('key', '')}: {s.get('value', '')}" for s in specs if s.get('key')]

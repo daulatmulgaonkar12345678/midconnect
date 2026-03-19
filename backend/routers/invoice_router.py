@@ -273,6 +273,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "price": price,
                 "gstRate": listing.get("gstRate", 0),
                 "hsnCode": listing.get("hsnCode", ""),
+                "description": listing.get("description", ""),
                 "specifications": spec_list
             })
         return {"products": items}
@@ -392,6 +393,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         for item in data.items:
             product_name = item.productName or "Item"
             item_hsn = item.hsnCode or ""
+            item_description = ""
             if item.productId:
                 try:
                     listing = await db.sellerListings.find_one({
@@ -405,6 +407,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                         # Use listing's HSN/GST if not overridden
                         if not item_hsn:
                             item_hsn = listing.get("hsnCode", "")
+                        item_description = listing.get("description", "")
                         if data.deductStock:
                             if listing.get("productType") == "composite":
                                 cp_id = listing.get("compositeProductId")
@@ -462,6 +465,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             invoice_items.append({
                 "productId": item.productId,
                 "productName": product_name,
+                "description": item_description,
                 "hsnCode": item_hsn,
                 "quantity": item.quantity,
                 "price": item.price,

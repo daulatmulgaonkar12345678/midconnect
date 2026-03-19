@@ -104,6 +104,7 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
                 "categoryName": "$productData.categoryName",
                 "sku": {"$ifNull": ["$sku", ""]},
                 "hsnCode": {"$ifNull": ["$hsnCode", ""]},
+                "description": {"$ifNull": ["$description", ""]},
                 "stock": {"$ifNull": ["$stock", 0]},
                 "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]},
                 "minStock": {"$ifNull": ["$minStock", 0]},
@@ -252,6 +253,8 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
             update_fields["pricingTiers"] = [{"minQty": 1, "maxQty": None, "pricePerUnit": data.selling_price}]
         if data.hsnCode is not None:
             update_fields["hsnCode"] = data.hsnCode
+        if data.description is not None:
+            update_fields["description"] = data.description
         
         await db.sellerListings.update_one({"_id": listing_oid}, {"$set": update_fields})
         
