@@ -20,16 +20,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND
 
 const PIE_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
 
-interface HomeSummary {
-  totalProducts: number;
-  lowStockItems: number;
-  pendingPOs: number;
-  totalSuppliers: number;
-  todaySales: number;
-  todaySalesCount: number;
-  totalRevenue: number;
-}
-
 interface HomeCharts {
   salesTrend: Array<{ date: string; amount: number; orders: number }>;
   purchaseTrend: Array<{ date: string; amount: number; orders: number }>;
@@ -48,13 +38,11 @@ interface OverviewData {
   growthPercentage: number;
 }
 
-function fmt(n: number) { return n.toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
 function fmtCurrency(n: number) { return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 export default function BusinessToolsHomePage() {
   const { getIdToken } = useAuth();
   const { hasPermission, token, loading: permLoading } = usePermissions();
-  const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [charts, setCharts] = useState<HomeCharts | null>(null);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,12 +52,10 @@ export default function BusinessToolsHomePage() {
     (async () => {
       try {
         const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-        const [sumRes, chartRes, ovRes] = await Promise.all([
-          fetch(`${API_URL}/api/business-tools/home/summary`, { headers: h }),
+        const [chartRes, ovRes] = await Promise.all([
           fetch(`${API_URL}/api/business-tools/home/charts`, { headers: h }),
           fetch(`${API_URL}/api/business-tools/reports/overview`, { headers: h }),
         ]);
-        if (sumRes.ok) setSummary(await sumRes.json());
         if (chartRes.ok) setCharts(await chartRes.json());
         if (ovRes.ok) setOverview(await ovRes.json());
       } catch { /* empty */ }
@@ -117,58 +103,6 @@ export default function BusinessToolsHomePage() {
               {syncState.isSyncing ? 'Syncing...' : 'Sync Now'}
             </button>
           )}
-        </div>
-      )}
-
-      {/* Summary Widgets */}
-      {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="home-summary-widgets">
-          <div className="bg-white rounded-xl border p-4" data-testid="widget-total-products">
-            <div className="flex items-center gap-2 text-blue-500 mb-2">
-              <Package2 className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wide">Products</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{fmt(summary.totalProducts)}</p>
-          </div>
-          <div className="bg-white rounded-xl border p-4" data-testid="widget-low-stock">
-            <div className="flex items-center gap-2 text-red-500 mb-2">
-              <AlertTriangle className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wide">Low Stock</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{fmt(summary.lowStockItems)}</p>
-          </div>
-          <div className="bg-white rounded-xl border p-4" data-testid="widget-pending-pos">
-            <div className="flex items-center gap-2 text-amber-500 mb-2">
-              <Clock className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wide">Pending POs</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{fmt(summary.pendingPOs)}</p>
-          </div>
-          <div className="bg-white rounded-xl border p-4" data-testid="widget-suppliers">
-            <div className="flex items-center gap-2 text-purple-500 mb-2">
-              <Truck className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wide">Suppliers</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{fmt(summary.totalSuppliers)}</p>
-          </div>
-          <div className="bg-white rounded-xl border p-4" data-testid="widget-today-sales">
-            <div className="flex items-center gap-2 text-green-500 mb-2">
-              <TrendingUp className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wide">Today Sales</span>
-            </div>
-            <p className="text-xl font-bold text-gray-900 flex items-center">
-              <IndianRupee className="w-3.5 h-3.5" />{fmtCurrency(summary.todaySales)}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl border p-4" data-testid="widget-total-revenue">
-            <div className="flex items-center gap-2 text-emerald-500 mb-2">
-              <IndianRupee className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wide">Revenue</span>
-            </div>
-            <p className="text-xl font-bold text-gray-900 flex items-center">
-              <IndianRupee className="w-3.5 h-3.5" />{fmtCurrency(summary.totalRevenue)}
-            </p>
-          </div>
         </div>
       )}
 
