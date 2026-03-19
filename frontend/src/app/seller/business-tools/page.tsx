@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from './layout';
 import { useNetworkContext } from '@/context/NetworkContext';
+import ReferralWidget from '@/components/ReferralWidget';
+import ReferralModal from '@/components/ReferralModal';
 import Link from 'next/link';
 import {
   Package2, Truck, FileText, Layers, BarChart3,
@@ -58,6 +60,9 @@ export default function BusinessToolsHomePage() {
         ]);
         if (chartRes.ok) setCharts(await chartRes.json());
         if (ovRes.ok) setOverview(await ovRes.json());
+        
+        // Silently check referral activation in background
+        fetch(`${API_URL}/api/referral/check-activation`, { method: 'POST', headers: h }).catch(() => {});
       } catch { /* empty */ }
       setLoading(false);
     })();
@@ -73,6 +78,7 @@ export default function BusinessToolsHomePage() {
   ];
 
   const { isOnline, syncState, triggerSync } = useNetworkContext();
+  const [showReferralModal, setShowReferralModal] = useState(false);
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
 
@@ -82,6 +88,10 @@ export default function BusinessToolsHomePage() {
         <h1 className="text-2xl font-bold text-gray-900" data-testid="home-heading">Business Dashboard</h1>
         <p className="text-gray-600 mt-1">Overview of your business operations</p>
       </div>
+
+      {/* Referral Widget */}
+      <ReferralWidget token={token} onOpenModal={() => setShowReferralModal(true)} />
+      <ReferralModal isOpen={showReferralModal} onClose={() => setShowReferralModal(false)} token={token} />
 
       {/* Sync Status Widget */}
       {(syncState.pendingCount > 0 || !isOnline) && (

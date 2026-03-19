@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { NetworkProvider, useNetworkContext } from '@/context/NetworkContext';
 import NetworkStatusBanner from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
+import ReferralModal from '@/components/ReferralModal';
 import Link from 'next/link';
 import { 
   Package2,
@@ -30,7 +31,8 @@ import {
   Bell,
   Clock,
   Wifi,
-  WifiOff
+  WifiOff,
+  Gift
 } from 'lucide-react';
 
 // Permission context for access control
@@ -222,6 +224,7 @@ export default function BusinessToolsLayout({
     businessName: '', phone: '', address: '', city: '', state: '', gstNumber: '',
   });
   const [onboardingSaving, setOnboardingSaving] = useState(false);
+  const [showReferral, setShowReferral] = useState(false);
 
   const loadPermissions = useCallback(async () => {
     try {
@@ -382,6 +385,15 @@ export default function BusinessToolsLayout({
               </div>
               
               <div className="flex items-center gap-3">
+                {/* Refer & Earn Button */}
+                <button
+                  onClick={() => setShowReferral(true)}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium hover:bg-indigo-100 transition-colors"
+                  data-testid="refer-earn-header-btn"
+                >
+                  <Gift className="h-3.5 w-3.5" />
+                  Refer & Earn
+                </button>
                 {/* Network Status Indicator */}
                 <NetworkIndicator />
                 {/* Mobile menu button */}
@@ -545,6 +557,8 @@ export default function BusinessToolsLayout({
             </div>
           </div>
         )}
+      {/* Referral Modal */}
+      <ReferralModal isOpen={showReferral} onClose={() => setShowReferral(false)} token={token} />
       </div>
       </NetworkProvider>
     </PermissionContext.Provider>

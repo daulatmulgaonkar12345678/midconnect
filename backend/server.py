@@ -13077,6 +13077,12 @@ app.include_router(product_share_router, prefix="/api/business-tools")
 public_doc_router = init_public_doc_router(db)
 app.include_router(public_doc_router, prefix="/api")
 
+# ── Referral Router ──
+from routers.referral_router import init_referral_router
+referral_router = init_referral_router(db, verify_firebase_token)
+app.include_router(referral_router, prefix="/api")
+
+
 
 
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 import { Eye, EyeOff, UserPlus, AlertCircle, Mail, ArrowLeft, RefreshCw, CheckCircle } from 'lucide-react';
@@ -12,6 +12,7 @@ type RegistrationStep = 'details' | 'otp' | 'success';
 
 function RegisterContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signUp, error, clearError, loading: authLoading, user, needsEmailVerification, needsRegistration, isAuthenticated } = useAuth();
   
   // Form state
@@ -39,6 +40,14 @@ function RegisterContent() {
       else if (isAuthenticated) router.push('/dashboard');
     }
   }, [user, needsEmailVerification, needsRegistration, isAuthenticated, router]);
+
+  // Capture referral code from URL
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      localStorage.setItem('referralCode', ref);
+    }
+  }, [searchParams]);
 
   // Resend cooldown timer
   useEffect(() => {

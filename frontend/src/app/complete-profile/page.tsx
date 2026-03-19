@@ -100,6 +100,21 @@ export default function CompleteProfilePage() {
         }) 
       };
       await completeRegistration(profileData);
+      
+      // Track referral if user signed up via referral link
+      try {
+        const refCode = localStorage.getItem('referralCode');
+        if (refCode) {
+          const token = await user.getIdToken();
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/referral/track-signup`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ referralCode: refCode }),
+          });
+          localStorage.removeItem('referralCode');
+        }
+      } catch { /* Referral tracking failed silently */ }
+      
       router.push(selectedRole === 'seller' ? '/seller?welcome=true' : '/dashboard?welcome=true');
     } catch {} finally { setIsSubmitting(false); }
   };
