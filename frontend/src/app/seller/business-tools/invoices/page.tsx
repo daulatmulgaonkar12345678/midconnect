@@ -32,6 +32,7 @@ interface Invoice {
   paymentTerms?: string;
   additionalCharges?: { name: string; type: string; value: number; amount: number }[];
   freight?: number; tcsEnabled?: boolean; tcsPercent?: number; tcsAmount?: number; roundOff?: number;
+  sentAt?: string; sentVia?: string;
 }
 interface Reminder {
   invoiceId: string; invoiceNumber: string; buyerName: string; buyerPhone: string;
@@ -333,7 +334,11 @@ export default function InvoicesPage() {
 
   const updateStatus = async (id: string, status: string) => {
     const h = await authHeaders();
-    await fetch(`${API_URL}/api/business-tools/invoices/${id}/status`, { method: 'PUT', headers: h, body: JSON.stringify({ status }) });
+    if (status === 'sent') {
+      await fetch(`${API_URL}/api/business-tools/invoices/${id}/mark-sent`, { method: 'PUT', headers: h });
+    } else {
+      await fetch(`${API_URL}/api/business-tools/invoices/${id}/status`, { method: 'PUT', headers: h, body: JSON.stringify({ status }) });
+    }
     fetchAll(); if (viewInvoice?.id === id) fetchInvoiceDetail(id);
   };
   const deleteInvoice = async (id: string) => {
@@ -764,7 +769,10 @@ export default function InvoicesPage() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-lg font-semibold">{viewInvoice.invoiceNumber}</h2>
-                <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${statusColors[viewInvoice.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabels[viewInvoice.status] || viewInvoice.status}</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${statusColors[viewInvoice.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabels[viewInvoice.status] || viewInvoice.status}</span>
+                  {viewInvoice.sentAt && <span className="text-[11px] text-gray-400">Sent on {fmtDate(viewInvoice.sentAt)}{viewInvoice.sentVia ? ` via ${viewInvoice.sentVia}` : ''}</span>}
+                </div>
               </div>
               <button onClick={() => setViewInvoice(null)} className="text-gray-400 hover:text-gray-600" data-testid="close-invoice-detail"><X className="w-5 h-5" /></button>
             </div>

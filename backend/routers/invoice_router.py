@@ -1394,7 +1394,52 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             clean_phone = "91" + clean_phone
 
         wa_link = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(msg)}"
+
+        # Auto-update status to "sent" if currently draft
+        if inv.get("status") == "draft":
+            await db.invoices.update_one(
+                {"_id": inv_oid, "status": "draft"},
+                {"$set": {
+                    "status": "sent",
+                    "sentAt": datetime.now(timezone.utc),
+                    "sentVia": "whatsapp",
+                    "updatedAt": datetime.now(timezone.utc)
+                }}
+            )
+
         return {"whatsappLink": wa_link, "message": msg, "buyerPhone": buyer_phone}
+
+    @router.put("/invoices/{invoice_id}/mark-sent")
+    async def mark_invoice_sent(invoice_id: str, authorization: str = Header(...)):
+        """Manually mark a draft invoice as sent."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.CREATE_INVOICE.value)
+        seller_id = await get_seller_id(user)
+
+        try:
+            inv_oid = ObjectId(invoice_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid invoice ID")
+
+        inv = await db.invoices.find_one({"_id": inv_oid, "sellerId": ObjectId(seller_id)})
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        if inv.get("status") != "draft":
+            return {"message": "Invoice is already sent or in a later status", "status": inv.get("status")}
+
+        now_utc = datetime.now(timezone.utc)
+        await db.invoices.update_one(
+            {"_id": inv_oid, "status": "draft"},
+            {"$set": {
+                "status": "sent",
+                "sentAt": now_utc,
+                "sentVia": "manual",
+                "updatedAt": now_utc
+            }}
+        )
+
+        return {"message": "Invoice marked as sent", "status": "sent", "sentAt": now_utc.isoformat()}
 
     # ==========================================
     # SELLER BUSINESS PROFILE
