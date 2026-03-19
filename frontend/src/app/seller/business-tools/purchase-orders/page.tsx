@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
+import { useNetworkContext } from '@/context/NetworkContext';
+import { toast } from 'sonner';
 import {
   FileText, Loader2, X, Download, Send,
   CheckCircle2, Package2, Truck, AlertTriangle, ClipboardList
@@ -54,6 +56,7 @@ const statusLabels: Record<string, string> = {
 export default function PurchaseOrdersPage() {
   const { getIdToken } = useAuth();
   const { hasPermission } = usePermissions();
+  const { isOnline } = useNetworkContext();
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('');
@@ -109,6 +112,10 @@ export default function PurchaseOrdersPage() {
   };
 
   const sendWhatsApp = async (poId: string) => {
+    if (!isOnline) {
+      toast.error('Cannot send WhatsApp in offline mode');
+      return;
+    }
     setWhatsappSending(poId);
     try {
       const h = await authHeaders();

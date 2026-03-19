@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
+import { useNetworkContext } from '@/context/NetworkContext';
+import { toast } from 'sonner';
 import {
   AlertTriangle, Loader2, X, Package2, Phone, Download,
   CheckCircle2, XCircle, ShoppingCart, Send
@@ -57,6 +59,7 @@ function timeAgo(dateStr: string) {
 export default function LowStockAlertsPage() {
   const { getIdToken } = useAuth();
   const { hasPermission, isAdmin } = usePermissions();
+  const { isOnline } = useNetworkContext();
   const [alerts, setAlerts] = useState<LowStockAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
@@ -185,6 +188,10 @@ export default function LowStockAlertsPage() {
 
   const sendPOWhatsApp = async () => {
     if (!createdPO) return;
+    if (!isOnline) {
+      toast.error('Cannot send WhatsApp in offline mode');
+      return;
+    }
     try {
       const h = await authHeaders();
       const res = await fetch(`${API_URL}/api/business-tools/purchase-orders/${createdPO.id}/whatsapp-link`, { headers: h });
