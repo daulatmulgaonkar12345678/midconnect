@@ -39,6 +39,18 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Service Worker Registration — auto-register on app load
     - Backend Sync Endpoint — POST /api/business-tools/invoices/sync-offline-draft (server generates real ID/number)
     - **Bug Fix (Feb 2026)**: Fixed SW TypeError by skipping RSC requests and proper Response fallbacks. Fixed sync URL. Fixed deprecated meta tag.
+16. **Refer & Earn System (Feb 2026)**:
+    - Referral code generation (FIRSTNAME + 4 random digits, unique)
+    - Referral link: `https://www.udyogconnect.in/register?ref=CODE`
+    - WhatsApp sharing with pre-filled message
+    - Signup tracking: `?ref=` captured in localStorage on register, sent to `/api/referral/track-signup` after profile completion
+    - Activation-based rewards: 2 of 3 criteria (5+ products, 3+ non-zero invoices, 1+ buyer AND 1+ supplier) within 7 days
+    - Tier-based rewards (NON-cumulative): 1 ref→1 month, 5 refs→3 months, 10 refs→6 months
+    - Anti-abuse: self-referral block, same phone check, ₹0 invoice exclusion
+    - Dashboard widget with progress bar + quick copy/share actions
+    - Header "Refer & Earn" button opening full modal with stats, tier table, referred users list
+    - Subscription extension: `referral_premium` plan type, extends endDate based on highest tier
+    - Background activation check on dashboard load (`POST /api/referral/check-activation`)
 
 ## Report Tabs (15 total)
 Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | GST Report | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
