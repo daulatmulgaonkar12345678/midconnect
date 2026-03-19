@@ -15,8 +15,33 @@ import {
 } from 'lucide-react';
 import { uploadPaymentReceipt } from '@/lib/cloudinary';
 import { INDIAN_STATES, calcGstBreakdown } from '@/lib/indian-states';
+import Select, { StylesConfig, SingleValue } from 'react-select';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+// ── React-Select shared styles ──
+interface SelectOption { value: string; label: string; }
+interface ProductOption extends SelectOption { stock: number; reserved: number; desc: string; }
+
+const selectStyles: StylesConfig<SelectOption, false> = {
+  control: (base, state) => ({ ...base, minHeight: '38px', borderRadius: '0.5rem', borderColor: state.isFocused ? '#6366f1' : '#d1d5db', boxShadow: state.isFocused ? '0 0 0 1px #6366f1' : 'none', fontSize: '0.875rem', '&:hover': { borderColor: '#6366f1' } }),
+  menu: (base) => ({ ...base, zIndex: 50, fontSize: '0.875rem' }),
+  option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#6366f1' : state.isFocused ? '#eef2ff' : 'white', color: state.isSelected ? 'white' : '#1f2937', padding: '8px 12px', cursor: 'pointer' }),
+  placeholder: (base) => ({ ...base, color: '#9ca3af' }),
+  singleValue: (base) => ({ ...base, color: '#1f2937' }),
+  input: (base) => ({ ...base, color: '#1f2937' }),
+};
+
+const productSelectStyles: StylesConfig<ProductOption, false> = {
+  control: (base, state) => ({ ...base, minHeight: '32px', borderRadius: '0.25rem', borderColor: state.isFocused ? '#6366f1' : '#d1d5db', boxShadow: state.isFocused ? '0 0 0 1px #6366f1' : 'none', fontSize: '0.875rem', '&:hover': { borderColor: '#6366f1' } }),
+  menu: (base) => ({ ...base, zIndex: 50, fontSize: '0.8rem', minWidth: '320px' }),
+  option: (base, state) => ({ ...base, backgroundColor: state.isSelected ? '#6366f1' : state.isFocused ? '#eef2ff' : 'white', color: state.isSelected ? 'white' : '#1f2937', padding: '6px 10px', cursor: 'pointer' }),
+  placeholder: (base) => ({ ...base, color: '#9ca3af', fontSize: '0.8rem' }),
+  singleValue: (base) => ({ ...base, color: '#1f2937', fontSize: '0.8rem' }),
+  input: (base) => ({ ...base, color: '#1f2937', fontSize: '0.8rem' }),
+  valueContainer: (base) => ({ ...base, padding: '0 8px' }),
+  indicatorsContainer: (base) => ({ ...base, '> div': { padding: '4px' } }),
+};
 
 // ── Types ──
 
@@ -632,16 +657,23 @@ export default function InvoicesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Buyer *</label>
-                  <select value={formData.buyerId} onChange={e => {
-                    const buyerId = e.target.value;
-                    const selectedBuyer = buyers.find(b => b.id === buyerId);
-                    const defaultAddr = (selectedBuyer?.shippingAddresses || []).find(a => a.isDefault);
-                    setFormData(p => ({ ...p, buyerId, placeOfSupply: selectedBuyer?.state || p.placeOfSupply, shippingAddressId: defaultAddr?.id || '' }));
-                  }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" data-testid="buyer-select">
-                    <option value="">Select buyer</option>
-                    {buyers.map(b => <option key={b.id} value={b.id}>{b.buyerName}{b.company ? ` (${b.company})` : ''}{b.state ? ` - ${b.state}` : ''}</option>)}
-                  </select>
+                  <Select<SelectOption>
+                    options={buyers.map(b => ({ value: b.id, label: `${b.buyerName}${b.company ? ` (${b.company})` : ''}${b.state ? ` - ${b.state}` : ''}` }))}
+                    value={formData.buyerId ? { value: formData.buyerId, label: (() => { const b = buyers.find(x => x.id === formData.buyerId); return b ? `${b.buyerName}${b.company ? ` (${b.company})` : ''}${b.state ? ` - ${b.state}` : ''}` : ''; })() } : null}
+                    onChange={(opt: SingleValue<SelectOption>) => {
+                      const buyerId = opt?.value || '';
+                      const selectedBuyer = buyers.find(b => b.id === buyerId);
+                      const defaultAddr = (selectedBuyer?.shippingAddresses || []).find(a => a.isDefault);
+                      setFormData(p => ({ ...p, buyerId, placeOfSupply: selectedBuyer?.state || p.placeOfSupply, shippingAddressId: defaultAddr?.id || '' }));
+                    }}
+                    placeholder="Search buyer by name..."
+                    isSearchable
+                    isClearable
+                    styles={selectStyles}
+                    noOptionsMessage={() => 'No buyers found'}
+                    data-testid="buyer-select"
+                    inputId="buyer-select"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Payment Due (days)</label>
@@ -701,10 +733,36 @@ export default function InvoicesPage() {
                         <div className="grid grid-cols-12 gap-2 items-start">
                           <div className="col-span-3">
                             <label className="text-xs text-gray-500 mb-1 block">Product</label>
-                            <select value={item.productId} onChange={e => onProductSelect(idx, e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-product-${idx}`}>
-                              <option value="">Select / Manual</option>
-                              {listings.map(l => <option key={l.id} value={l.id}>{l.productName}{l.description ? ` — ${l.description}` : ''} (Avail: {l.availableStock}{l.reservedStock > 0 ? `, Reserved: ${l.reservedStock}` : ''})</option>)}
-                            </select>
+                            <Select<ProductOption>
+                              options={[
+                                { value: '', label: 'Manual entry', stock: 0, reserved: 0, desc: '' },
+                                ...listings.map(l => ({ value: l.id, label: l.productName, stock: l.availableStock, reserved: l.reservedStock, desc: l.description }))
+                              ]}
+                              value={item.productId ? { value: item.productId, label: listings.find(l => l.id === item.productId)?.productName || item.productName, stock: 0, reserved: 0, desc: '' } : null}
+                              onChange={(opt: SingleValue<ProductOption>) => {
+                                if (!opt || opt.value === '') {
+                                  const items = [...formData.items];
+                                  items[idx] = { ...items[idx], productId: '', productName: '', hsnCode: '', description: '', allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
+                                  setFormData(p => ({ ...p, items }));
+                                } else {
+                                  onProductSelect(idx, opt.value);
+                                }
+                              }}
+                              placeholder="Search product..."
+                              isSearchable
+                              isClearable
+                              styles={productSelectStyles}
+                              formatOptionLabel={(opt) => opt.value === '' ? (
+                                <span className="text-gray-400 italic">Manual entry</span>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="truncate">{opt.label}{opt.desc ? <span className="text-gray-400 ml-1">— {opt.desc}</span> : ''}</span>
+                                  <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">Avail: {opt.stock}{opt.reserved > 0 ? `, Res: ${opt.reserved}` : ''}</span>
+                                </div>
+                              )}
+                              noOptionsMessage={() => 'No products found'}
+                              inputId={`invoice-item-product-${idx}`}
+                            />
                             {!item.productId && <input type="text" value={item.productName} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], productName: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="Manual entry" className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-name-${idx}`} />}
                           </div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">HSN</label><input type="text" value={item.hsnCode} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], hsnCode: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="HSN" className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-hsn-${idx}`} /></div>
