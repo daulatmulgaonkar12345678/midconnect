@@ -15,16 +15,14 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
    - Auto CGST/SGST vs IGST based on state
    - Bill To (left) / Ship To (right) layout on PDF + UI
    - QR code removed from PDF
-   - **Freight** (manual Rs. amount), **TCS** (toggle + percentage 0-5%), **Auto Round Off** (nearest rupee)
-   - **Payment Terms** (free text, e.g., "100% advance")
-   - Flexible `additionalCharges` schema for future: Packing, Loading, Insurance
-   - Consistent across: Form → Detail View → PDF
-3. Inventory Management with HSN Codes
+   - Freight, TCS (toggle + %), Auto Round Off (nearest rupee)
+   - Payment Terms (free text), flexible additionalCharges schema
+   - **Product Description**: Short spec text (max 150 chars) auto-fills from inventory, shown below product name in brackets on UI + PDF
+3. Inventory Management with HSN Codes + Product Description
 4. Purchase Orders + WhatsApp sharing
 5. Buyer Management + Shipping Addresses (CRUD)
 6. Pending Orders (Backorder) with stock reservation
-7. **WhatsApp Messaging Engine (Single Source of Truth):**
-   - 8 templates, branded footer, rotating ads, `BASE_URL = "https://www.udyogconnect.in"`
+7. WhatsApp Messaging Engine (Single Source of Truth, 8 templates)
 
 ## Prioritized Backlog
 ### P1
@@ -35,12 +33,14 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 ### P2
 - Short link tracking | White-label toggle | WhatsApp Business API | Redis caching
 
-## Test Coverage: 105 tests
-- 48 WhatsApp + 15 HSN + 18 PDF address + 24 Freight/TCS/RoundOff
+## Test Coverage: 122+ tests
+- WhatsApp: 48 | HSN: 15 | PDF Address: 18 | Freight/TCS: 24 | Description: 17
 
 ## Key Files
 - `/app/backend/services/invoice_pdf_service.py` - GST invoice PDF
-- `/app/backend/utils/whatsapp_messages.py` - Centralized WhatsApp templates
-- `/app/backend/routers/invoice_router.py` - Invoice CRUD + charges
-- `/app/backend/models/business_tools.py` - AdditionalCharge, InvoiceCreate models
+- `/app/backend/utils/whatsapp_messages.py` - WhatsApp templates
+- `/app/backend/routers/invoice_router.py` - Invoice CRUD + charges + description
+- `/app/backend/routers/inventory_router.py` - Inventory with HSN + description
+- `/app/backend/models/business_tools.py` - Models (AdditionalCharge, InventoryUpdate)
 - `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Invoice UI
+- `/app/frontend/src/app/seller/business-tools/inventory/page.tsx` - Inventory UI
