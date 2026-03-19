@@ -21,18 +21,11 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 9. **Reporting Phase 2** — Buyer Ledger, Product Performance, Category Report, Low Stock Analytics
 10. **Business Insights Dashboard Widget** — 4 clickable insight cards
 11. **HSN + GST in Sales Reports** — HSN Code, Taxable Value, GST% in Products & Product Performance tabs + exports
-12. **GST Sales Report (GSTR-1 Compatible) (NEW - Feb 2026):**
-    - Invoice-level data: Invoice #, Date, Buyer, GSTIN, Invoice Type, Place of Supply, B2B/B2C, Taxable Value, CGST/SGST/IGST, Total
-    - Auto B2B/B2C classification from GSTIN validation (15-char regex)
-    - B2C Large (>2.5L + interstate) vs B2C Small
-    - CGST+SGST for intra-state, IGST for inter-state (state code from GSTIN first 2 digits)
-    - HSN Summary section: grouped by HSN code with UQC, Qty, Taxable, CGST/SGST/IGST
-    - Excel export: 2-sheet workbook (Invoice Data + HSN Summary) with formatted headers
-    - Filters: Date range, Buyer, GST Type (B2B/B2C)
-    - Excludes cancelled/draft invoices
+12. **GST Sales Report (GSTR-1 Compatible)** — B2B/B2C auto-classification, GSTIN validation, Place of Supply, CGST/SGST/IGST split, HSN Summary, 2-sheet Excel export
+13. **Bug Fix: Invoice Number Format Consistency** — Fixed pending_orders_router.py generating `INV-XXXX` instead of standard `INV{Abbr}-{Code}-XXXX` format
 
 ## Report Tabs (15 total)
-Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | **GST Report** | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
+Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | GST Report | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
 
 ## Prioritized Backlog
 ### P1
@@ -40,15 +33,13 @@ Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Categor
 2. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
 
 ### P2
-- GSTR-1 JSON export for direct GST portal upload
-- Amendment tracking for GST
-- Custom Material Report | Short link tracking | White-label toggle | WhatsApp Business API
+- GSTR-1 JSON export | Amendment tracking | Custom Material Report | Short link tracking | White-label toggle | WhatsApp Business API
 
 ## Test Coverage: 249+ tests
-- WhatsApp: 48 | HSN: 15 | PDF: 18 | Freight/TCS: 24 | Description: 17 | Reports P1: 27 | Reports P2: 32 | Insights: 22 | HSN Reports: 25 | GST Report: 21
 
 ## Key Files
-- `/app/backend/routers/reports_router.py` - All reports (16 endpoints incl. GST report)
-- `/app/backend/routers/export_import_router.py` - 13 export endpoints (incl. GST 2-sheet Excel)
-- `/app/frontend/src/app/seller/business-tools/page.tsx` - Dashboard with Business Insights
+- `/app/backend/routers/reports_router.py` - All reports (16 endpoints)
+- `/app/backend/routers/export_import_router.py` - 13 export endpoints
+- `/app/backend/routers/pending_orders_router.py` - Fixed: now uses get_next_invoice_number()
+- `/app/backend/routers/invoice_router.py` - Invoice CRUD + get_next_invoice_number()
 - `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (15 tabs)

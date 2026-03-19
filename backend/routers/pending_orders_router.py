@@ -39,6 +39,48 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
     async def require_permission(user, permission):
         return await require_user_permission(db, user, permission)
 
+    async def get_next_invoice_number(seller_id: str) -> str:
+        """Generate next invoice number using seller_invoice_counters (same logic as invoice_router)."""
+        seller_oid = ObjectId(seller_id)
+        counter = await db.seller_invoice_counters.find_one({"sellerId": seller_oid})
+        if not counter:
+            business_name = None
+            user_doc = await db.users.find_one({"_id": seller_oid})
+            if user_doc:
+                profile = user_doc.get("profile")
+                if isinstance(profile, dict):
+                    business_name = profile.get("businessName")
+                if not business_name:
+                    seller_doc = await db.sellers.find_one({"email": user_doc.get("email")})
+                    if seller_doc:
+                        business_name = seller_doc.get("businessName")
+            if not business_name:
+                business_name = f"Seller-{seller_id[-6:]}"
+            words = business_name.split()
+            abbreviation = ''.join(w[0].upper() for w in words if w and w[0].isalpha()) or 'XX'
+            seller_code = seller_id[-6:].upper()
+            await db.seller_invoice_counters.update_one(
+                {"sellerId": seller_oid},
+                {"$setOnInsert": {
+                    "sellerId": seller_oid,
+                    "sellerAbbreviation": abbreviation,
+                    "sellerCode": seller_code,
+                    "businessName": business_name,
+                    "lastSequence": 0,
+                    "createdAt": datetime.now(timezone.utc)
+                }},
+                upsert=True
+            )
+        result = await db.seller_invoice_counters.find_one_and_update(
+            {"sellerId": seller_oid},
+            {"$inc": {"lastSequence": 1}},
+            return_document=True
+        )
+        seq = result["lastSequence"]
+        abbr = result["sellerAbbreviation"]
+        code = result["sellerCode"]
+        return f"INV{abbr}-{code}-{seq:04d}"
+
     def normalize_doc(doc):
         """Ensure _id is mapped to id for frontend compatibility."""
         d = serialize_doc(doc)
@@ -283,9 +325,8 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
         # Create a new invoice for the fulfilled quantity
         buyer = await db.seller_buyers.find_one({"_id": order.get("buyerId")})
         if buyer:
-            # Get next invoice number
-            inv_count = await db.invoices.count_documents({"sellerId": ObjectId(order_seller_id)})
-            inv_number = f"INV-{inv_count + 1:04d}"
+            # Get next invoice number using standard format
+            inv_number = await get_next_invoice_number(order_seller_id)
 
             price = order.get("price", 0)
             gst_pct = order.get("gstPercent", 0)
