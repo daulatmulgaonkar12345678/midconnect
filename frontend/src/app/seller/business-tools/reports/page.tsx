@@ -12,7 +12,7 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-type Tab = "sales" | "profit" | "product-profit" | "inventory-value" | "products" | "inventory" | "buyers" | "outstanding" | "purchase" | "stock-movement" | "buyer-ledger" | "product-perf" | "category" | "low-stock";
+type Tab = "sales" | "profit" | "product-profit" | "inventory-value" | "products" | "inventory" | "buyers" | "outstanding" | "purchase" | "stock-movement" | "buyer-ledger" | "product-perf" | "category" | "low-stock" | "gst-report";
 
 interface SalesPeriod { label: string; totalSales: number; totalGst: number; invoiceCount: number; avgInvoiceValue: number; }
 interface ProfitPeriod { label: string; revenue: number; cost: number; profit: number; margin: number; invoiceCount: number; totalQuantity: number; }
@@ -59,6 +59,17 @@ interface LowStockItem {
   timesHitLow: number; avgConsumption: number; totalSold: number;
   isLowStock: boolean; isOutOfStock: boolean; daysOfStock: number;
 }
+interface GstInvoiceItem {
+  invoiceId: string; invoiceNumber: string; invoiceDate: string;
+  buyerName: string; company: string; buyerGstin: string; gstinValid: boolean;
+  invoiceType: string; placeOfSupply: string; isB2B: boolean; b2cType: string;
+  taxableValue: number; gstRate: number; cgst: number; sgst: number; igst: number;
+  totalInvoiceValue: number; status: string;
+}
+interface HsnSummaryItem {
+  hsnCode: string; description: string; uqc: string; quantity: number;
+  taxableValue: number; cgst: number; sgst: number; igst: number;
+}
 
 const TAB_EXPORT_MAP: Record<Tab, string> = {
   sales: "sales", profit: "profit", "product-profit": "profit",
@@ -67,7 +78,8 @@ const TAB_EXPORT_MAP: Record<Tab, string> = {
   outstanding: "outstanding", purchase: "purchase-orders",
   "stock-movement": "stock-movement",
   "buyer-ledger": "buyer-ledger", "product-perf": "product-performance",
-  category: "category-report", "low-stock": "low-stock"
+  category: "category-report", "low-stock": "low-stock",
+  "gst-report": "gst-report"
 };
 
 type ImportType = "products" | "inventory" | "suppliers" | "buyers";
@@ -122,6 +134,14 @@ export default function ReportsPage() {
   const [lowStockData, setLowStockData] = useState<{ summary: Record<string, number>; items: LowStockItem[]; pagination: Pagination }>({
     summary: {}, items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
   });
+  const [gstData, setGstData] = useState<{
+    summary: { b2b: Record<string, number>; b2c: Record<string, number>; totalInvoices: number; totalTaxable: number; totalGst: number; totalValue: number };
+    hsnSummary: HsnSummaryItem[]; items: GstInvoiceItem[]; pagination: Pagination;
+  }>({
+    summary: { b2b: {}, b2c: {}, totalInvoices: 0, totalTaxable: 0, totalGst: 0, totalValue: 0 },
+    hsnSummary: [], items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
+  });
+  const [gstTypeFilter, setGstTypeFilter] = useState("");
 
   const [startDate, setStartDate] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split("T")[0]; });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -192,10 +212,15 @@ export default function ReportsPage() {
       } else if (tab === "low-stock") {
         const res = await fetch(`${API_URL}/api/business-tools/reports/low-stock-analytics?${dateParams}&page=${reportPage}&limit=100`, { headers: h });
         setLowStockData(await res.json());
+      } else if (tab === "gst-report") {
+        const gstParam = gstTypeFilter ? `&gstType=${gstTypeFilter}` : "";
+        const buyerParam = buyerFilter ? `&buyerId=${buyerFilter}` : "";
+        const res = await fetch(`${API_URL}/api/business-tools/reports/gst-report?${dateParams}&page=${reportPage}&limit=100${gstParam}${buyerParam}`, { headers: h });
+        setGstData(await res.json());
       }
     } catch { /* empty */ }
     setLoading(false);
-  }, [token, tab, period, startDate, endDate, reportPage, buyerFilter, supplierFilter, productFilter]);
+  }, [token, tab, period, startDate, endDate, reportPage, buyerFilter, supplierFilter, productFilter, gstTypeFilter]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -320,6 +345,7 @@ export default function ReportsPage() {
     { key: "product-perf", label: "Product Perf.", icon: Zap },
     { key: "category", label: "Category", icon: FolderOpen },
     { key: "low-stock", label: "Low Stock", icon: AlertTriangle },
+    { key: "gst-report", label: "GST Report", icon: FileText },
     { key: "sales", label: "Sales", icon: TrendingUp },
     { key: "profit", label: "Profit", icon: DollarSign },
     { key: "product-profit", label: "Product Profit", icon: PieChart },
@@ -335,7 +361,7 @@ export default function ReportsPage() {
 
   const needsDateFilter = !["inventory", "inventory-value"].includes(tab);
   const needsPeriodFilter = ["sales", "profit"].includes(tab);
-  const needsEntityFilter = ["outstanding", "purchase", "stock-movement", "buyer-ledger"].includes(tab);
+  const needsEntityFilter = ["outstanding", "purchase", "stock-movement", "buyer-ledger", "gst-report"].includes(tab);
 
   return (
     <div className="space-y-6" data-testid="reports-page">
@@ -409,6 +435,21 @@ export default function ReportsPage() {
                   <option value="">All Buyers</option>
                   {buyerOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
+              )}
+              {tab === "gst-report" && (
+                <>
+                  <select value={gstTypeFilter} onChange={e => { setGstTypeFilter(e.target.value); setReportPage(1); }}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" data-testid="gst-type-filter">
+                    <option value="">All (B2B + B2C)</option>
+                    <option value="b2b">B2B Only</option>
+                    <option value="b2c">B2C Only</option>
+                  </select>
+                  <select value={buyerFilter} onChange={e => { setBuyerFilter(e.target.value); setReportPage(1); }}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" data-testid="gst-buyer-filter">
+                    <option value="">All Buyers</option>
+                    {buyerOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </>
               )}
               {tab === "purchase" && (
                 <select value={supplierFilter} onChange={e => { setSupplierFilter(e.target.value); setReportPage(1); }}
@@ -1332,6 +1373,153 @@ export default function ReportsPage() {
                   )}
                 </div>
               ) : <div className="text-center py-8 text-gray-400 text-sm">No stock data available</div>}
+            </div>
+          )}
+
+          {/* ═══ GST SALES REPORT (GSTR-1) TAB ═══ */}
+          {tab === "gst-report" && (
+            <div className="space-y-6" data-testid="gst-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Invoices", value: gstData.summary?.totalInvoices || 0, color: "text-gray-900", prefix: false },
+                  { label: "Taxable Value", value: gstData.summary?.totalTaxable || 0, color: "text-gray-900", prefix: true },
+                  { label: "Total GST", value: gstData.summary?.totalGst || 0, color: "text-indigo-600", prefix: true },
+                  { label: "Total Value", value: gstData.summary?.totalValue || 0, color: "text-green-600", prefix: true }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`gst-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 flex items-center gap-1 ${card.color}`}>
+                      {card.prefix && <IndianRupee className="w-4 h-4" />}
+                      {typeof card.value === "number" ? card.value.toLocaleString("en-IN", card.prefix ? { minimumFractionDigits: 2 } : {}) : card.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* B2B/B2C Split */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-xl border border-gray-100 p-4" data-testid="gst-b2b-summary">
+                  <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">B2B Transactions</h3>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div><p className="text-gray-400">Invoices</p><p className="font-bold text-gray-900">{gstData.summary?.b2b?.count || 0}</p></div>
+                    <div><p className="text-gray-400">Taxable</p><p className="font-bold flex items-center"><IndianRupee className="w-3 h-3" />{(gstData.summary?.b2b?.taxable || 0).toLocaleString("en-IN")}</p></div>
+                    <div><p className="text-gray-400">GST</p><p className="font-bold flex items-center"><IndianRupee className="w-3 h-3" />{(gstData.summary?.b2b?.gst || 0).toLocaleString("en-IN")}</p></div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-100 p-4" data-testid="gst-b2c-summary">
+                  <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">B2C Transactions</h3>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div><p className="text-gray-400">Invoices</p><p className="font-bold text-gray-900">{gstData.summary?.b2c?.count || 0}</p></div>
+                    <div><p className="text-gray-400">Taxable</p><p className="font-bold flex items-center"><IndianRupee className="w-3 h-3" />{(gstData.summary?.b2c?.taxable || 0).toLocaleString("en-IN")}</p></div>
+                    <div><p className="text-gray-400">GST</p><p className="font-bold flex items-center"><IndianRupee className="w-3 h-3" />{(gstData.summary?.b2c?.gst || 0).toLocaleString("en-IN")}</p></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoice Data Table */}
+              {(gstData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700">Invoice Data</h3>
+                    <span className="text-xs text-gray-400">{gstData.pagination?.total || 0} invoices</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-[10px] uppercase border-b border-gray-100">
+                          <th className="text-left px-3 py-2">Invoice #</th>
+                          <th className="text-left px-3 py-2">Date</th>
+                          <th className="text-left px-3 py-2">Buyer</th>
+                          <th className="text-left px-3 py-2">GSTIN</th>
+                          <th className="text-center px-3 py-2">Type</th>
+                          <th className="text-left px-3 py-2">Place of Supply</th>
+                          <th className="text-right px-3 py-2">Taxable</th>
+                          <th className="text-right px-3 py-2">GST %</th>
+                          <th className="text-right px-3 py-2">CGST</th>
+                          <th className="text-right px-3 py-2">SGST</th>
+                          <th className="text-right px-3 py-2">IGST</th>
+                          <th className="text-right px-3 py-2">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gstData.items.map((inv, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-3 py-2 font-mono text-xs text-indigo-600">{inv.invoiceNumber}</td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString("en-IN") : "-"}</td>
+                            <td className="px-3 py-2 text-xs">
+                              <p className="font-medium text-gray-700">{inv.buyerName}</p>
+                            </td>
+                            <td className="px-3 py-2 text-xs font-mono">{inv.buyerGstin || <span className="text-gray-300 italic">B2C</span>}</td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${inv.isB2B ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"}`}>
+                                {inv.isB2B ? "B2B" : inv.b2cType || "B2C"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{inv.placeOfSupply}</td>
+                            <td className="px-3 py-2 text-right text-xs">{inv.taxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-3 py-2 text-right text-xs text-gray-500">{inv.gstRate}%</td>
+                            <td className="px-3 py-2 text-right text-xs">{inv.cgst > 0 ? inv.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
+                            <td className="px-3 py-2 text-right text-xs">{inv.sgst > 0 ? inv.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
+                            <td className="px-3 py-2 text-right text-xs">{inv.igst > 0 ? inv.igst.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
+                            <td className="px-3 py-2 text-right font-medium text-xs text-gray-900">{inv.totalInvoiceValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {gstData.pagination?.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+                      <span>Page {gstData.pagination.page} of {gstData.pagination.pages}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setReportPage(p => Math.max(1, p - 1))} disabled={reportPage <= 1}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setReportPage(p => Math.min(gstData.pagination.pages, p + 1))} disabled={reportPage >= gstData.pagination.pages}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No invoice data for the selected period</div>}
+
+              {/* HSN Summary Table */}
+              {(gstData.hsnSummary?.length || 0) > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden" data-testid="hsn-summary-table">
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-700">HSN Summary</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-[10px] uppercase border-b border-gray-100">
+                          <th className="text-left px-3 py-2">HSN Code</th>
+                          <th className="text-left px-3 py-2">Description</th>
+                          <th className="text-center px-3 py-2">UQC</th>
+                          <th className="text-right px-3 py-2">Qty</th>
+                          <th className="text-right px-3 py-2">Taxable Value</th>
+                          <th className="text-right px-3 py-2">CGST</th>
+                          <th className="text-right px-3 py-2">SGST</th>
+                          <th className="text-right px-3 py-2">IGST</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gstData.hsnSummary.map((h, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-3 py-2 font-mono text-xs text-indigo-600">{h.hsnCode || <span className="text-gray-300 italic">N/A</span>}</td>
+                            <td className="px-3 py-2 text-xs text-gray-700">{h.description}</td>
+                            <td className="px-3 py-2 text-center text-xs text-gray-500">{h.uqc}</td>
+                            <td className="px-3 py-2 text-right text-xs">{h.quantity}</td>
+                            <td className="px-3 py-2 text-right text-xs">{h.taxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-3 py-2 text-right text-xs">{h.cgst > 0 ? h.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
+                            <td className="px-3 py-2 text-right text-xs">{h.sgst > 0 ? h.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
+                            <td className="px-3 py-2 text-right text-xs">{h.igst > 0 ? h.igst.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>

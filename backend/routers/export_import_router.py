@@ -760,6 +760,228 @@ def init_export_import_router(db, verify_token_func):
             return make_excel_response(rows, headers, f"{filename}.xlsx", "Low Stock Analytics")
         return make_csv_response(rows, headers, f"{filename}.csv")
 
+    @router.get("/export/gst-report")
+    async def export_gst_report(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        gstType: Optional[str] = None
+    ):
+        """Export GSTR-1 compatible Excel with 2 sheets: Invoice Data + HSN Summary."""
+        import re
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        GSTIN_RE = re.compile(r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}Z[A-Z\d]{1}$")
+        STATE_CODES = {
+            "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab",
+            "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana",
+            "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
+            "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
+            "13": "Nagaland", "14": "Manipur", "15": "Mizoram",
+            "16": "Tripura", "17": "Meghalaya", "18": "Assam",
+            "19": "West Bengal", "20": "Jharkhand", "21": "Odisha",
+            "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+            "27": "Maharashtra", "29": "Karnataka", "32": "Kerala",
+            "33": "Tamil Nadu", "36": "Telangana", "37": "Andhra Pradesh (New)"
+        }
+        REV_STATE = {}
+        for c, n in STATE_CODES.items():
+            REV_STATE[n.lower()] = c
+
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        start = parse_date(startDate) or month_start
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        seller_oid = ObjectId(seller_id)
+        seller = await db.sellers.find_one({"_id": seller_oid}) or {}
+        seller_gstin = seller.get("gstNumber", "") or seller.get("gstin", "") or ""
+        seller_sc = seller_gstin[:2] if seller_gstin and len(seller_gstin) >= 2 and seller_gstin[:2].isdigit() else ""
+        if not seller_sc:
+            s_state = (seller.get("state", "") or "").lower().strip()
+            seller_sc = REV_STATE.get(s_state, "")
+
+        gst_statuses = ["sent", "viewed", "partially_paid", "paid", "overdue"]
+        match_stage: dict = {
+            "sellerId": seller_oid,
+            "status": {"$in": gst_statuses},
+            "createdAt": {"$gte": start, "$lt": end}
+        }
+
+        invoices = await db.invoices.find(match_stage).sort("date", -1).to_list(5000)
+        buyer_ids = list(set(i.get("buyerId") for i in invoices if i.get("buyerId")))
+        buyers_list = await db.seller_buyers.find({"_id": {"$in": buyer_ids}}).to_list(len(buyer_ids))
+        bmap = {b["_id"]: b for b in buyers_list}
+
+        # HSN map
+        hsn_ls = await db.sellerListings.aggregate([
+            {"$match": {"sellerId": seller_oid}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {"productName": "$prod.name", "hsnCode": 1}}
+        ]).to_list(500)
+        hmap = {}
+        for h in hsn_ls:
+            nm = h.get("productName")
+            hc = h.get("hsnCode")
+            if nm and hc:
+                hmap[nm] = hc
+
+        # Sheet 1: Invoice Data
+        inv_headers = ["Invoice Number", "Invoice Date", "Buyer Name", "Buyer GSTIN",
+                       "Invoice Type", "Place of Supply", "Is B2B", "B2C Type",
+                       "Taxable Value", "GST Rate %", "CGST", "SGST", "IGST",
+                       "Total Invoice Value", "Status"]
+        inv_rows = []
+        hsn_agg: dict = {}
+
+        for inv in invoices:
+            buyer = bmap.get(inv.get("buyerId"), {})
+            bg = (buyer.get("gstNumber", "") or "").strip().upper()
+            valid_g = bool(bg and GSTIN_RE.match(bg))
+            is_b2b = valid_g
+
+            # supply state
+            sc = ""
+            sn = ""
+            if valid_g and len(bg) >= 2:
+                sc = bg[:2]
+                sn = STATE_CODES.get(sc, "")
+            elif buyer.get("state"):
+                sn = buyer["state"]
+                sc = REV_STATE.get(sn.lower().strip(), "")
+
+            is_inter = bool(seller_sc and sc and seller_sc != sc)
+            place = f"{sn} ({sc})" if sc else (sn or "N/A")
+
+            inv_taxable = 0
+            inv_cgst = inv_sgst = inv_igst = 0
+            gst_rate = 0
+
+            for it in (inv.get("items") or []):
+                ga = it.get("gstAmount", 0) or 0
+                tax = (it.get("total", 0) or 0) - ga
+                if tax < 0:
+                    tax = 0
+                if is_inter:
+                    c = s = 0
+                    ig = ga
+                else:
+                    c = round(ga / 2, 2)
+                    s = round(ga - c, 2)
+                    ig = 0
+                inv_taxable += tax
+                inv_cgst += c
+                inv_sgst += s
+                inv_igst += ig
+                gst_rate = it.get("gstPercent", 0)
+
+                pn = it.get("productName", "")
+                hc = hmap.get(pn, "")
+                hk = hc or f"_no_{pn}"
+                if hk not in hsn_agg:
+                    hsn_agg[hk] = {"hsnCode": hc, "description": pn, "uqc": "NOS", "qty": 0, "taxable": 0, "cgst": 0, "sgst": 0, "igst": 0}
+                hsn_agg[hk]["qty"] += it.get("quantity", 0) or 0
+                hsn_agg[hk]["taxable"] += tax
+                hsn_agg[hk]["cgst"] += c
+                hsn_agg[hk]["sgst"] += s
+                hsn_agg[hk]["igst"] += ig
+
+            inv_total = inv.get("total", 0) or 0
+            b2c_type = ""
+            if not is_b2b:
+                b2c_type = "B2C Large" if (inv_total > 250000 and is_inter) else "B2C Small"
+
+            if gstType == "b2b" and not is_b2b:
+                continue
+            if gstType == "b2c" and is_b2b:
+                continue
+
+            inv_date = inv.get("date") or inv.get("createdAt")
+            inv_rows.append([
+                inv.get("invoiceNumber", ""),
+                inv_date.strftime("%d/%m/%Y") if isinstance(inv_date, datetime) else str(inv_date or ""),
+                buyer.get("buyerName", "Unknown"),
+                bg if valid_g else "",
+                "Tax Invoice",
+                place,
+                "Yes" if is_b2b else "No",
+                b2c_type,
+                round(inv_taxable, 2),
+                gst_rate,
+                round(inv_cgst, 2),
+                round(inv_sgst, 2),
+                round(inv_igst, 2),
+                round(inv_total, 2),
+                inv.get("status", "")
+            ])
+
+        # Sheet 2: HSN Summary
+        hsn_headers = ["HSN Code", "Description", "UQC", "Total Quantity",
+                       "Total Taxable Value", "CGST", "SGST", "IGST"]
+        hsn_rows = []
+        for entry in sorted(hsn_agg.values(), key=lambda x: x["taxable"], reverse=True):
+            hsn_rows.append([
+                entry["hsnCode"],
+                entry["description"],
+                entry["uqc"],
+                entry["qty"],
+                round(entry["taxable"], 2),
+                round(entry["cgst"], 2),
+                round(entry["sgst"], 2),
+                round(entry["igst"], 2)
+            ])
+
+        # Build multi-sheet Excel
+        wb = openpyxl.Workbook()
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_align = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin")
+        )
+
+        def write_sheet(ws, headers, rows):
+            for ci, h in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=ci, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_align
+                cell.border = thin_border
+            for ri, row in enumerate(rows, 2):
+                for ci, val in enumerate(row, 1):
+                    cell = ws.cell(row=ri, column=ci, value=val)
+                    cell.border = thin_border
+            for ci in range(1, len(headers) + 1):
+                mx = len(str(headers[ci - 1]))
+                for ri in range(2, len(rows) + 2):
+                    cv = ws.cell(row=ri, column=ci).value
+                    if cv:
+                        mx = max(mx, len(str(cv)))
+                ws.column_dimensions[openpyxl.utils.get_column_letter(ci)].width = min(mx + 4, 40)
+
+        ws1 = wb.active
+        ws1.title = "Invoice Data"
+        write_sheet(ws1, inv_headers, inv_rows)
+
+        ws2 = wb.create_sheet("HSN Summary")
+        write_sheet(ws2, hsn_headers, hsn_rows)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        filename = f"GST-Sales-Report-{start.strftime('%b%Y')}.xlsx"
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
     # ─── IMPORT TEMPLATES ───
 
     IMPORT_TEMPLATES = {

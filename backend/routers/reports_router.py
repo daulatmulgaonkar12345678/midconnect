@@ -1563,4 +1563,272 @@ def init_reports_router(db, verify_token_func):
             }
         }
 
+    # ─── GST SALES REPORT (GSTR-1 COMPATIBLE) ───
+
+    import re
+    GSTIN_REGEX = re.compile(r"^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}Z[A-Z\d]{1}$")
+    STATE_CODE_MAP = {
+        "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab",
+        "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana",
+        "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
+        "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
+        "13": "Nagaland", "14": "Manipur", "15": "Mizoram",
+        "16": "Tripura", "17": "Meghalaya", "18": "Assam",
+        "19": "West Bengal", "20": "Jharkhand", "21": "Odisha",
+        "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+        "25": "Daman & Diu", "26": "Dadra & Nagar Haveli", "27": "Maharashtra",
+        "28": "Andhra Pradesh", "29": "Karnataka", "30": "Goa",
+        "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry",
+        "35": "Andaman & Nicobar", "36": "Telangana", "37": "Andhra Pradesh (New)",
+        "38": "Ladakh", "97": "Other Territory"
+    }
+    REVERSE_STATE = {}
+    for code, name in STATE_CODE_MAP.items():
+        REVERSE_STATE[name.lower()] = code
+
+    def _gstin_state_code(gstin: str) -> str:
+        """Extract 2-digit state code from GSTIN."""
+        if gstin and len(gstin) >= 2 and gstin[:2].isdigit():
+            return gstin[:2]
+        return ""
+
+    def _validate_gstin(gstin: str) -> bool:
+        return bool(gstin and GSTIN_REGEX.match(gstin.strip().upper()))
+
+    def _resolve_state(buyer: dict, gstin: str) -> tuple:
+        """Returns (state_code, state_name)."""
+        # Priority: GSTIN → buyer.state
+        if gstin:
+            code = _gstin_state_code(gstin)
+            if code in STATE_CODE_MAP:
+                return code, STATE_CODE_MAP[code]
+        state = buyer.get("state", "") or ""
+        code = REVERSE_STATE.get(state.lower().strip(), "")
+        return code, state
+
+    def _get_seller_state_code(seller: dict) -> str:
+        """Get seller state code from GSTIN or state field."""
+        gstin = seller.get("gstNumber", "") or seller.get("gstin", "") or ""
+        if gstin:
+            code = _gstin_state_code(gstin)
+            if code:
+                return code
+        state = seller.get("state", "") or ""
+        return REVERSE_STATE.get(state.lower().strip(), "")
+
+    GST_REPORT_STATUSES = ["sent", "viewed", "partially_paid", "paid", "overdue"]
+
+    @router.get("/reports/gst-report")
+    async def gst_sales_report(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        buyerId: Optional[str] = None,
+        gstType: Optional[str] = None,
+        page: int = 1,
+        limit: int = 100
+    ):
+        """GSTR-1 compatible invoice-level GST report."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        start = parse_date(startDate) or month_start
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        seller_oid = ObjectId(seller_id)
+        match_stage: dict = {
+            "sellerId": seller_oid,
+            "status": {"$in": GST_REPORT_STATUSES},
+            "createdAt": {"$gte": start, "$lt": end}
+        }
+        if buyerId:
+            try:
+                match_stage["buyerId"] = ObjectId(buyerId)
+            except Exception:
+                pass
+
+        # Get seller info for state comparison
+        seller = await db.sellers.find_one({"_id": seller_oid}) or {}
+        seller_state_code = _get_seller_state_code(seller)
+
+        # Fetch invoices
+        invoices = await db.invoices.find(
+            match_stage,
+            {"_id": 1, "invoiceNumber": 1, "date": 1, "createdAt": 1, "buyerId": 1,
+             "subtotal": 1, "total": 1, "gst": 1, "items": 1, "status": 1}
+        ).sort("date", -1).to_list(5000)
+
+        # Batch lookup buyers
+        buyer_ids = list(set(inv.get("buyerId") for inv in invoices if inv.get("buyerId")))
+        buyers_cursor = await db.seller_buyers.find({"_id": {"$in": buyer_ids}}).to_list(len(buyer_ids))
+        buyers_map = {b["_id"]: b for b in buyers_cursor}
+
+        # HSN map
+        hsn_pipeline = [
+            {"$match": {"sellerId": seller_oid}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {"productName": "$prod.name", "hsnCode": 1}}
+        ]
+        hsn_listings = await db.sellerListings.aggregate(hsn_pipeline).to_list(500)
+        hsn_map = {}
+        for ls in hsn_listings:
+            name = ls.get("productName")
+            hsn = ls.get("hsnCode")
+            if name and hsn:
+                hsn_map[name] = hsn
+
+        items = []
+        summary_b2b = {"count": 0, "taxable": 0, "gst": 0, "total": 0}
+        summary_b2c = {"count": 0, "taxable": 0, "gst": 0, "total": 0}
+        hsn_agg: dict = {}  # hsn_code → aggregated data
+
+        for inv in invoices:
+            buyer = buyers_map.get(inv.get("buyerId"), {})
+            buyer_gstin = (buyer.get("gstNumber", "") or "").strip().upper()
+            is_valid_gstin = _validate_gstin(buyer_gstin)
+            is_b2b = is_valid_gstin
+            supply_code, supply_state = _resolve_state(buyer, buyer_gstin if is_valid_gstin else "")
+            is_interstate = bool(seller_state_code and supply_code and seller_state_code != supply_code)
+
+            # Calculate per-item GST split
+            inv_taxable = 0
+            inv_cgst = 0
+            inv_sgst = 0
+            inv_igst = 0
+            inv_gst_total = 0
+
+            for it in (inv.get("items") or []):
+                gst_amt = it.get("gstAmount", 0) or 0
+                taxable = (it.get("total", 0) or 0) - gst_amt
+                if taxable < 0:
+                    taxable = 0
+
+                if is_interstate:
+                    igst = gst_amt
+                    cgst = sgst = 0
+                else:
+                    cgst = round(gst_amt / 2, 2)
+                    sgst = round(gst_amt - cgst, 2)
+                    igst = 0
+
+                inv_taxable += taxable
+                inv_cgst += cgst
+                inv_sgst += sgst
+                inv_igst += igst
+                inv_gst_total += gst_amt
+
+                # HSN aggregation
+                product_name = it.get("productName", "")
+                hsn_code = hsn_map.get(product_name, "")
+                qty = it.get("quantity", 0) or 0
+                hsn_key = hsn_code or f"_no_hsn_{product_name}"
+                if hsn_key not in hsn_agg:
+                    hsn_agg[hsn_key] = {
+                        "hsnCode": hsn_code,
+                        "description": product_name,
+                        "uqc": "NOS",
+                        "quantity": 0,
+                        "taxableValue": 0,
+                        "cgst": 0, "sgst": 0, "igst": 0
+                    }
+                hsn_agg[hsn_key]["quantity"] += qty
+                hsn_agg[hsn_key]["taxableValue"] += taxable
+                hsn_agg[hsn_key]["cgst"] += cgst
+                hsn_agg[hsn_key]["sgst"] += sgst
+                hsn_agg[hsn_key]["igst"] += igst
+                # Use first product name as description if grouped by HSN
+                if hsn_code and hsn_agg[hsn_key]["description"] != product_name:
+                    pass  # keep first description
+
+            inv_total = inv.get("total", 0) or 0
+
+            # B2C classification
+            b2c_type = ""
+            if not is_b2b:
+                if inv_total > 250000 and is_interstate:
+                    b2c_type = "B2C Large"
+                else:
+                    b2c_type = "B2C Small"
+
+            place_of_supply = f"{supply_state} ({supply_code})" if supply_code else (supply_state or "N/A")
+            inv_date = inv.get("date") or inv.get("createdAt")
+
+            row = {
+                "invoiceId": str(inv["_id"]),
+                "invoiceNumber": inv.get("invoiceNumber", ""),
+                "invoiceDate": inv_date.isoformat() if isinstance(inv_date, datetime) else str(inv_date or ""),
+                "buyerName": buyer.get("buyerName", "Unknown"),
+                "company": buyer.get("company", ""),
+                "buyerGstin": buyer_gstin if is_valid_gstin else "",
+                "gstinValid": is_valid_gstin,
+                "invoiceType": "Tax Invoice",
+                "placeOfSupply": place_of_supply,
+                "supplyStateCode": supply_code,
+                "isB2B": is_b2b,
+                "b2cType": b2c_type,
+                "taxableValue": round(inv_taxable, 2),
+                "gstRate": (inv.get("items") or [{}])[0].get("gstPercent", 0) if inv.get("items") else 0,
+                "cgst": round(inv_cgst, 2),
+                "sgst": round(inv_sgst, 2),
+                "igst": round(inv_igst, 2),
+                "totalInvoiceValue": round(inv_total, 2),
+                "status": inv.get("status", "")
+            }
+
+            # Filter by gstType
+            if gstType == "b2b" and not is_b2b:
+                continue
+            if gstType == "b2c" and is_b2b:
+                continue
+
+            items.append(row)
+
+            # Summary
+            bucket = summary_b2b if is_b2b else summary_b2c
+            bucket["count"] += 1
+            bucket["taxable"] += inv_taxable
+            bucket["gst"] += inv_gst_total
+            bucket["total"] += inv_total
+
+        # Round HSN aggregation
+        hsn_items = []
+        for entry in hsn_agg.values():
+            hsn_items.append({
+                "hsnCode": entry["hsnCode"],
+                "description": entry["description"],
+                "uqc": entry["uqc"],
+                "quantity": entry["quantity"],
+                "taxableValue": round(entry["taxableValue"], 2),
+                "cgst": round(entry["cgst"], 2),
+                "sgst": round(entry["sgst"], 2),
+                "igst": round(entry["igst"], 2)
+            })
+        hsn_items.sort(key=lambda x: x["taxableValue"], reverse=True)
+
+        total_count = len(items)
+        start_idx = (page - 1) * limit
+        paginated = items[start_idx:start_idx + limit]
+
+        return {
+            "summary": {
+                "b2b": {k: round(v, 2) if isinstance(v, float) else v for k, v in summary_b2b.items()},
+                "b2c": {k: round(v, 2) if isinstance(v, float) else v for k, v in summary_b2c.items()},
+                "totalInvoices": summary_b2b["count"] + summary_b2c["count"],
+                "totalTaxable": round(summary_b2b["taxable"] + summary_b2c["taxable"], 2),
+                "totalGst": round(summary_b2b["gst"] + summary_b2c["gst"], 2),
+                "totalValue": round(summary_b2b["total"] + summary_b2c["total"], 2)
+            },
+            "hsnSummary": hsn_items,
+            "items": paginated,
+            "pagination": {
+                "page": page, "limit": limit, "total": total_count,
+                "pages": (total_count + limit - 1) // limit if limit > 0 else 1
+            }
+        }
+
     return router
