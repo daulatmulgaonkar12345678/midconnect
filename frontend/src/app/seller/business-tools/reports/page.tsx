@@ -5,12 +5,13 @@ import { usePermissions } from "../layout";
 import {
   BarChart3, TrendingUp, Package, Users, Calendar, Filter,
   IndianRupee, DollarSign, PieChart, Download, Upload, FileSpreadsheet,
-  FileText, X, CheckCircle2, AlertCircle, Loader2, FileDown, Eye
+  FileText, X, CheckCircle2, AlertCircle, Loader2, FileDown, Eye,
+  Clock, ShoppingCart, ArrowLeftRight, ChevronLeft, ChevronRight, Search
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-type Tab = "sales" | "profit" | "product-profit" | "inventory-value" | "products" | "inventory" | "buyers";
+type Tab = "sales" | "profit" | "product-profit" | "inventory-value" | "products" | "inventory" | "buyers" | "outstanding" | "purchase" | "stock-movement";
 
 interface SalesPeriod { label: string; totalSales: number; totalGst: number; invoiceCount: number; avgInvoiceValue: number; }
 interface ProfitPeriod { label: string; revenue: number; cost: number; profit: number; margin: number; invoiceCount: number; totalQuantity: number; }
@@ -20,10 +21,27 @@ interface ProductSale { productName: string; totalQuantity: number; totalRevenue
 interface InventoryItem { id: string; productName: string; stock: number; lowStockAlert: number; isLowStock: boolean; sku?: string; }
 interface TopBuyer { buyerId: string; buyerName: string; company: string; totalSpent: number; invoiceCount: number; lastInvoiceDate?: string; }
 
+interface OutstandingItem {
+  invoiceId: string; invoiceNumber: string; buyerId: string; buyerName: string; company: string;
+  invoiceDate: string; dueDate: string; totalAmount: number; paidAmount: number;
+  pendingAmount: number; daysOverdue: number; agingBucket: string; status: string;
+}
+interface PurchaseItem {
+  poId: string; poNumber: string; supplierId: string; supplierName: string; supplierPhone: string;
+  status: string; totalAmount: number; itemCount: number; createdAt: string; productNames: string;
+}
+interface StockMovementItem {
+  listingId: string; productName: string; openingStock: number; inward: number;
+  outward: number; adjustment: number; closingStock: number; logCount: number;
+}
+interface Pagination { page: number; limit: number; total: number; pages: number; }
+
 const TAB_EXPORT_MAP: Record<Tab, string> = {
   sales: "sales", profit: "profit", "product-profit": "profit",
   "inventory-value": "inventory", products: "sales",
-  inventory: "inventory", buyers: "buyers"
+  inventory: "inventory", buyers: "buyers",
+  outstanding: "outstanding", purchase: "purchase-orders",
+  "stock-movement": "stock-movement"
 };
 
 type ImportType = "products" | "inventory" | "suppliers" | "buyers";
@@ -42,6 +60,25 @@ export default function ReportsPage() {
   const [productData, setProductData] = useState<ProductSale[]>([]);
   const [inventoryData, setInventoryData] = useState<{ summary: Record<string, number>; items: InventoryItem[] }>({ summary: {}, items: [] });
   const [buyerData, setBuyerData] = useState<TopBuyer[]>([]);
+
+  // New report states
+  const [outstandingData, setOutstandingData] = useState<{ summary: Record<string, number>; aging: { buckets: Record<string, number>; counts: Record<string, number> }; items: OutstandingItem[]; pagination: Pagination }>({
+    summary: {}, aging: { buckets: {}, counts: {} }, items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
+  });
+  const [purchaseData, setPurchaseData] = useState<{ summary: Record<string, number>; items: PurchaseItem[]; pagination: Pagination }>({
+    summary: {}, items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
+  });
+  const [stockMovementData, setStockMovementData] = useState<{ summary: Record<string, number>; items: StockMovementItem[]; pagination: Pagination }>({
+    summary: {}, items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
+  });
+  const [reportPage, setReportPage] = useState(1);
+  const [buyerFilter, setBuyerFilter] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [productFilter, setProductFilter] = useState("");
+  // Filter option lists
+  const [buyerOptions, setBuyerOptions] = useState<{ id: string; name: string }[]>([]);
+  const [supplierOptions, setSupplierOptions] = useState<{ id: string; name: string }[]>([]);
+  const [productOptions, setProductOptions] = useState<{ id: string; name: string }[]>([]);
 
   const [startDate, setStartDate] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split("T")[0]; });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -86,12 +123,48 @@ export default function ReportsPage() {
       } else if (tab === "buyers") {
         const res = await fetch(`${API_URL}/api/business-tools/reports/top-buyers?${dateParams}`, { headers: h });
         setBuyerData((await res.json()).buyers || []);
+      } else if (tab === "outstanding") {
+        const buyerParam = buyerFilter ? `&buyerId=${buyerFilter}` : "";
+        const res = await fetch(`${API_URL}/api/business-tools/reports/outstanding?${dateParams}&page=${reportPage}&limit=100${buyerParam}`, { headers: h });
+        setOutstandingData(await res.json());
+      } else if (tab === "purchase") {
+        const supplierParam = supplierFilter ? `&supplierId=${supplierFilter}` : "";
+        const res = await fetch(`${API_URL}/api/business-tools/reports/purchase?${dateParams}&page=${reportPage}&limit=100${supplierParam}`, { headers: h });
+        setPurchaseData(await res.json());
+      } else if (tab === "stock-movement") {
+        const productParam = productFilter ? `&listingId=${productFilter}` : "";
+        const res = await fetch(`${API_URL}/api/business-tools/reports/stock-movement?${dateParams}&page=${reportPage}&limit=100${productParam}`, { headers: h });
+        setStockMovementData(await res.json());
       }
     } catch { /* empty */ }
     setLoading(false);
-  }, [token, tab, period, startDate, endDate]);
+  }, [token, tab, period, startDate, endDate, reportPage, buyerFilter, supplierFilter, productFilter]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
+
+  // Fetch filter options for new reports
+  useEffect(() => {
+    if (!token) return;
+    const h = { Authorization: `Bearer ${token}` };
+    // Fetch buyers for outstanding filter
+    fetch(`${API_URL}/api/business-tools/buyers?limit=200`, { headers: h })
+      .then(r => r.json()).then(d => {
+        const list = (d.buyers || d || []).map((b: Record<string, string>) => ({ id: b._id || b.id, name: b.buyerName || b.company || "Unknown" }));
+        setBuyerOptions(list);
+      }).catch(() => {});
+    // Fetch suppliers for purchase filter
+    fetch(`${API_URL}/api/business-tools/suppliers?limit=200`, { headers: h })
+      .then(r => r.json()).then(d => {
+        const list = (d.suppliers || d || []).map((s: Record<string, string>) => ({ id: s._id || s.id, name: s.name || s.supplierName || "Unknown" }));
+        setSupplierOptions(list);
+      }).catch(() => {});
+    // Fetch products for stock movement filter
+    fetch(`${API_URL}/api/business-tools/inventory?limit=200`, { headers: h })
+      .then(r => r.json()).then(d => {
+        const list = (d.listings || d || []).map((p: Record<string, string>) => ({ id: p._id || p.id, name: p.productName || "Unknown" }));
+        setProductOptions(list);
+      }).catch(() => {});
+  }, [token]);
 
   // ── Export handler ──
   const handleExport = async (format: "csv" | "xlsx") => {
@@ -168,6 +241,9 @@ export default function ReportsPage() {
   const maxProductRev = Math.max(...(productData.map(p => p.totalRevenue) || [1]), 1);
 
   const tabs: { key: Tab; label: string; icon: typeof BarChart3 }[] = [
+    { key: "outstanding", label: "Outstanding", icon: Clock },
+    { key: "purchase", label: "Purchase", icon: ShoppingCart },
+    { key: "stock-movement", label: "Stock Movement", icon: ArrowLeftRight },
     { key: "sales", label: "Sales", icon: TrendingUp },
     { key: "profit", label: "Profit", icon: DollarSign },
     { key: "product-profit", label: "Product Profit", icon: PieChart },
@@ -183,6 +259,7 @@ export default function ReportsPage() {
 
   const needsDateFilter = !["inventory", "inventory-value"].includes(tab);
   const needsPeriodFilter = ["sales", "profit"].includes(tab);
+  const needsEntityFilter = ["outstanding", "purchase", "stock-movement"].includes(tab);
 
   return (
     <div className="space-y-6" data-testid="reports-page">
@@ -211,7 +288,7 @@ export default function ReportsPage() {
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg overflow-x-auto">
         {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
+          <button key={t.key} onClick={() => { setTab(t.key); setReportPage(1); }}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${tab === t.key ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             data-testid={`tab-${t.key}`}>
             <t.icon className="w-4 h-4" /> {t.label}
@@ -238,6 +315,32 @@ export default function ReportsPage() {
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
               </select>
+            </div>
+          )}
+          {needsEntityFilter && (
+            <div className="flex items-center gap-2">
+              <Search className="w-4 h-4 text-gray-400" />
+              {tab === "outstanding" && (
+                <select value={buyerFilter} onChange={e => { setBuyerFilter(e.target.value); setReportPage(1); }}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" data-testid="buyer-filter">
+                  <option value="">All Buyers</option>
+                  {buyerOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              )}
+              {tab === "purchase" && (
+                <select value={supplierFilter} onChange={e => { setSupplierFilter(e.target.value); setReportPage(1); }}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" data-testid="supplier-filter">
+                  <option value="">All Suppliers</option>
+                  {supplierOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              )}
+              {tab === "stock-movement" && (
+                <select value={productFilter} onChange={e => { setProductFilter(e.target.value); setReportPage(1); }}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" data-testid="product-filter">
+                  <option value="">All Products</option>
+                  {productOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
             </div>
           )}
           {exporting && <span className="text-xs text-blue-600 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Exporting...</span>}
@@ -533,6 +636,257 @@ export default function ReportsPage() {
                   </table>
                 </div>
               ) : <div className="text-center py-8 text-gray-400 text-sm">No buyer data for the selected period</div>}
+            </div>
+          )}
+
+          {/* ═══ OUTSTANDING / RECEIVABLES TAB ═══ */}
+          {tab === "outstanding" && (
+            <div className="space-y-6" data-testid="outstanding-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Receivable", value: outstandingData.summary?.totalReceivable || 0, color: "text-red-600", prefix: true },
+                  { label: "Overdue Amount", value: outstandingData.summary?.overdueAmount || 0, color: "text-amber-600", prefix: true },
+                  { label: "Total Buyers", value: outstandingData.summary?.totalBuyers || 0, color: "text-gray-900", prefix: false },
+                  { label: "Unpaid Invoices", value: outstandingData.summary?.totalInvoices || 0, color: "text-gray-900", prefix: false }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`outstanding-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 flex items-center gap-1 ${card.color}`}>
+                      {card.prefix && <IndianRupee className="w-4 h-4" />}
+                      {typeof card.value === "number" ? card.value.toLocaleString("en-IN", card.prefix ? { minimumFractionDigits: 2 } : {}) : card.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Aging Buckets */}
+              {outstandingData.aging?.buckets && Object.keys(outstandingData.aging.buckets).length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-5">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Aging Analysis</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {[
+                      { key: "current", label: "Current", color: "bg-green-50 text-green-700 border-green-200" },
+                      { key: "0-30", label: "0-30 Days", color: "bg-blue-50 text-blue-700 border-blue-200" },
+                      { key: "31-60", label: "31-60 Days", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+                      { key: "61-90", label: "61-90 Days", color: "bg-orange-50 text-orange-700 border-orange-200" },
+                      { key: "90+", label: "90+ Days", color: "bg-red-50 text-red-700 border-red-200" }
+                    ].map(b => (
+                      <div key={b.key} className={`rounded-lg border p-3 ${b.color}`} data-testid={`aging-${b.key}`}>
+                        <p className="text-xs font-medium opacity-75">{b.label}</p>
+                        <p className="text-lg font-bold flex items-center gap-0.5">
+                          <IndianRupee className="w-3.5 h-3.5" />
+                          {(outstandingData.aging.buckets[b.key] || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[10px] opacity-60">{outstandingData.aging.counts?.[b.key] || 0} invoices</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Table */}
+              {(outstandingData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">Invoice #</th>
+                          <th className="text-left px-4 py-3">Buyer</th>
+                          <th className="text-right px-4 py-3">Invoice Date</th>
+                          <th className="text-right px-4 py-3">Due Date</th>
+                          <th className="text-right px-4 py-3">Total</th>
+                          <th className="text-right px-4 py-3">Paid</th>
+                          <th className="text-right px-4 py-3">Pending</th>
+                          <th className="text-right px-4 py-3">Overdue</th>
+                          <th className="text-center px-4 py-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {outstandingData.items.map((item, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3 font-mono text-xs text-indigo-600">{item.invoiceNumber}</td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-gray-700 text-xs">{item.buyerName}</p>
+                              {item.company && <p className="text-[10px] text-gray-400">{item.company}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-500 text-xs">{item.invoiceDate ? new Date(item.invoiceDate).toLocaleDateString("en-IN") : "-"}</td>
+                            <td className="px-4 py-3 text-right text-gray-500 text-xs">{item.dueDate ? new Date(item.dueDate).toLocaleDateString("en-IN") : "-"}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">{item.totalAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right text-green-600">{item.paidAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right font-medium text-red-600">{item.pendingAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={`text-xs font-medium ${item.daysOverdue > 60 ? "text-red-600" : item.daysOverdue > 30 ? "text-amber-600" : item.daysOverdue > 0 ? "text-blue-600" : "text-green-600"}`}>
+                                {item.daysOverdue > 0 ? `${item.daysOverdue}d` : "On time"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.status === "Partial" ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"}`}>
+                                {item.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination */}
+                  {outstandingData.pagination?.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+                      <span>Page {outstandingData.pagination.page} of {outstandingData.pagination.pages} ({outstandingData.pagination.total} items)</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setReportPage(p => Math.max(1, p - 1))} disabled={reportPage <= 1}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" data-testid="outstanding-prev-page"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setReportPage(p => Math.min(outstandingData.pagination.pages, p + 1))} disabled={reportPage >= outstandingData.pagination.pages}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" data-testid="outstanding-next-page"><ChevronRight className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No outstanding receivables found</div>}
+            </div>
+          )}
+
+          {/* ═══ PURCHASE REPORT TAB ═══ */}
+          {tab === "purchase" && (
+            <div className="space-y-6" data-testid="purchase-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Purchase Value", value: purchaseData.summary?.totalPurchaseValue || 0, color: "text-gray-900", prefix: true },
+                  { label: "Total Items Ordered", value: purchaseData.summary?.totalQuantity || 0, color: "text-indigo-600", prefix: false },
+                  { label: "Avg Order Value", value: purchaseData.summary?.avgOrderValue || 0, color: "text-blue-600", prefix: true },
+                  { label: "Total Suppliers", value: purchaseData.summary?.totalSuppliers || 0, color: "text-gray-900", prefix: false }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`purchase-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 flex items-center gap-1 ${card.color}`}>
+                      {card.prefix && <IndianRupee className="w-4 h-4" />}
+                      {typeof card.value === "number" ? card.value.toLocaleString("en-IN", card.prefix ? { minimumFractionDigits: 2 } : {}) : card.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Table */}
+              {(purchaseData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">PO Number</th>
+                          <th className="text-left px-4 py-3">Supplier</th>
+                          <th className="text-left px-4 py-3">Products</th>
+                          <th className="text-center px-4 py-3">Status</th>
+                          <th className="text-right px-4 py-3">Amount</th>
+                          <th className="text-right px-4 py-3">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {purchaseData.items.map((item, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3 font-mono text-xs text-indigo-600">{item.poNumber}</td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-gray-700 text-xs">{item.supplierName}</p>
+                              {item.supplierPhone && <p className="text-[10px] text-gray-400">{item.supplierPhone}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-500 max-w-[200px] truncate">{item.productNames || "-"}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                item.status === "received" ? "bg-green-50 text-green-600" :
+                                item.status === "sent" ? "bg-blue-50 text-blue-600" :
+                                "bg-amber-50 text-amber-600"
+                              }`}>{item.status}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-medium text-gray-700">{item.totalAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right text-gray-500 text-xs">{item.createdAt ? new Date(item.createdAt).toLocaleDateString("en-IN") : "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination */}
+                  {purchaseData.pagination?.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+                      <span>Page {purchaseData.pagination.page} of {purchaseData.pagination.pages} ({purchaseData.pagination.total} items)</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setReportPage(p => Math.max(1, p - 1))} disabled={reportPage <= 1}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" data-testid="purchase-prev-page"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setReportPage(p => Math.min(purchaseData.pagination.pages, p + 1))} disabled={reportPage >= purchaseData.pagination.pages}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" data-testid="purchase-next-page"><ChevronRight className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No purchase orders found for the selected period</div>}
+            </div>
+          )}
+
+          {/* ═══ STOCK MOVEMENT TAB ═══ */}
+          {tab === "stock-movement" && (
+            <div className="space-y-6" data-testid="stock-movement-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Inward", value: stockMovementData.summary?.totalInward || 0, color: "text-green-600", prefix: false },
+                  { label: "Total Outward", value: stockMovementData.summary?.totalOutward || 0, color: "text-red-600", prefix: false },
+                  { label: "Net Movement", value: stockMovementData.summary?.netMovement || 0, color: (stockMovementData.summary?.netMovement || 0) >= 0 ? "text-green-600" : "text-red-600", prefix: false },
+                  { label: "Products Tracked", value: stockMovementData.summary?.totalProducts || 0, color: "text-gray-900", prefix: false }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`stock-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 ${card.color}`}>{typeof card.value === "number" ? card.value.toLocaleString("en-IN") : card.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Table */}
+              {(stockMovementData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">Product Name</th>
+                          <th className="text-right px-4 py-3">Opening</th>
+                          <th className="text-right px-4 py-3">Inward</th>
+                          <th className="text-right px-4 py-3">Outward</th>
+                          <th className="text-right px-4 py-3">Adjustment</th>
+                          <th className="text-right px-4 py-3">Closing</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stockMovementData.items.map((item, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3 font-medium text-gray-700">{item.productName}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{item.openingStock}</td>
+                            <td className="px-4 py-3 text-right text-green-600 font-medium">{item.inward > 0 ? `+${item.inward}` : item.inward}</td>
+                            <td className="px-4 py-3 text-right text-red-600 font-medium">{item.outward > 0 ? `-${item.outward}` : item.outward}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${item.adjustment >= 0 ? "text-blue-600" : "text-amber-600"}`}>
+                              {item.adjustment > 0 ? `+${item.adjustment}` : item.adjustment}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-gray-900">{item.closingStock}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination */}
+                  {stockMovementData.pagination?.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+                      <span>Page {stockMovementData.pagination.page} of {stockMovementData.pagination.pages} ({stockMovementData.pagination.total} items)</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setReportPage(p => Math.max(1, p - 1))} disabled={reportPage <= 1}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" data-testid="stock-prev-page"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setReportPage(p => Math.min(stockMovementData.pagination.pages, p + 1))} disabled={reportPage >= stockMovementData.pagination.pages}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30" data-testid="stock-next-page"><ChevronRight className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No stock movement data for the selected period</div>}
             </div>
           )}
         </>

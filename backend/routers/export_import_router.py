@@ -315,6 +315,198 @@ def init_export_import_router(db, verify_token_func):
             return make_excel_response(rows, headers, f"{filename}.xlsx", "Invoice List")
         return make_csv_response(rows, headers, f"{filename}.csv")
 
+    # ─── NEW REPORT EXPORTS ───
+
+    @router.get("/export/outstanding")
+    async def export_outstanding(
+        authorization: str = Header(...),
+        format: str = "csv",
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+
+        outstanding_statuses = ["sent", "viewed", "partially_paid", "overdue"]
+        match_stage: dict = {
+            "sellerId": ObjectId(seller_id),
+            "status": {"$in": outstanding_statuses}
+        }
+        start = parse_date(startDate)
+        end = parse_date(endDate)
+        if start or end:
+            date_filter = {}
+            if start:
+                date_filter["$gte"] = start
+            if end:
+                date_filter["$lt"] = end + timedelta(days=1)
+            match_stage["date"] = date_filter
+
+        invoices = await db.invoices.find(match_stage).sort("date", -1).to_list(5000)
+
+        headers = ["Invoice No", "Buyer Name", "Company", "Invoice Date", "Due Date",
+                    "Total Amount", "Paid Amount", "Pending Amount", "Days Overdue", "Status", "Aging Bucket"]
+        rows = []
+        for inv in invoices:
+            buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
+            inv_date = inv.get("date") or inv.get("createdAt")
+            due_date = inv_date + timedelta(days=30) if inv_date else None
+            days_overdue = max(0, (now - due_date).days) if due_date else 0
+            paid = inv.get("totalPaid", 0)
+            pending = inv.get("pendingAmount", inv.get("total", 0))
+            status_label = "Partial" if inv.get("status") == "partially_paid" else "Unpaid"
+
+            if days_overdue <= 0:
+                bucket = "Current"
+            elif days_overdue <= 30:
+                bucket = "0-30 days"
+            elif days_overdue <= 60:
+                bucket = "31-60 days"
+            elif days_overdue <= 90:
+                bucket = "61-90 days"
+            else:
+                bucket = "90+ days"
+
+            rows.append([
+                inv.get("invoiceNumber", ""),
+                buyer.get("buyerName", "Unknown") if buyer else "Unknown",
+                buyer.get("company", "") if buyer else "",
+                inv_date.strftime("%d/%m/%Y") if inv_date else "",
+                due_date.strftime("%d/%m/%Y") if due_date else "",
+                round(inv.get("total", 0), 2),
+                round(paid, 2),
+                round(pending, 2),
+                days_overdue,
+                status_label,
+                bucket
+            ])
+
+        filename = f"outstanding-report-{datetime.now().strftime('%Y%m%d')}"
+        if format == "xlsx":
+            return make_excel_response(rows, headers, f"{filename}.xlsx", "Outstanding Report")
+        return make_csv_response(rows, headers, f"{filename}.csv")
+
+    @router.get("/export/purchase-orders")
+    async def export_purchase_orders(
+        authorization: str = Header(...),
+        format: str = "csv",
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=30))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        purchase_statuses = ["sent", "confirmed", "partially_received", "received"]
+        pos = await db.purchase_orders.find({
+            "sellerId": ObjectId(seller_id),
+            "status": {"$in": purchase_statuses},
+            "createdAt": {"$gte": start, "$lt": end}
+        }).sort("createdAt", -1).to_list(5000)
+
+        headers = ["PO Number", "Supplier Name", "Phone", "Status", "Total Amount", "Items", "Date"]
+        rows = []
+        for po in pos:
+            item_names = ", ".join(it.get("productName", "") for it in (po.get("items") or []))
+            rows.append([
+                po.get("poNumber", ""),
+                po.get("supplierName", ""),
+                po.get("supplierPhone", ""),
+                po.get("status", ""),
+                round(po.get("totalAmount", 0), 2),
+                item_names,
+                po.get("createdAt", "").strftime("%d/%m/%Y") if po.get("createdAt") else ""
+            ])
+
+        filename = f"purchase-report-{datetime.now().strftime('%Y%m%d')}"
+        if format == "xlsx":
+            return make_excel_response(rows, headers, f"{filename}.xlsx", "Purchase Report")
+        return make_csv_response(rows, headers, f"{filename}.csv")
+
+    @router.get("/export/stock-movement")
+    async def export_stock_movement(
+        authorization: str = Header(...),
+        format: str = "csv",
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=30))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        seller_oid = ObjectId(seller_id)
+        pipeline = [
+            {"$match": {"sellerId": seller_oid}},
+            {"$facet": {
+                "opening": [
+                    {"$match": {"createdAt": {"$lt": start}}},
+                    {"$sort": {"createdAt": -1}},
+                    {"$group": {"_id": "$listingId", "productName": {"$first": "$productName"}, "openingStock": {"$first": "$newStock"}}}
+                ],
+                "firstInRange": [
+                    {"$match": {"createdAt": {"$gte": start, "$lt": end}}},
+                    {"$sort": {"createdAt": 1}},
+                    {"$group": {"_id": "$listingId", "productName": {"$first": "$productName"}, "firstPreviousStock": {"$first": "$previousStock"}}}
+                ],
+                "movements": [
+                    {"$match": {"createdAt": {"$gte": start, "$lt": end}}},
+                    {"$group": {
+                        "_id": "$listingId",
+                        "productName": {"$first": "$productName"},
+                        "inward": {"$sum": {"$cond": [{"$in": ["$changeType", ["purchase", "purchase_receipt"]]}, {"$abs": "$quantity"}, 0]}},
+                        "outward": {"$sum": {"$cond": [{"$eq": ["$changeType", "sale"]}, {"$abs": "$quantity"}, 0]}},
+                        "adjPos": {"$sum": {"$cond": [{"$and": [{"$in": ["$changeType", ["adjustment", "damage"]]}, {"$gt": ["$quantity", 0]}]}, "$quantity", 0]}},
+                        "adjNeg": {"$sum": {"$cond": [{"$and": [{"$in": ["$changeType", ["adjustment", "damage"]]}, {"$lt": ["$quantity", 0]}]}, "$quantity", 0]}}
+                    }}
+                ]
+            }}
+        ]
+
+        result = await db.inventory_logs.aggregate(pipeline).to_list(1)
+        if not result:
+            headers = ["Product Name", "Opening Stock", "Inward", "Outward", "Adjustment", "Closing Stock"]
+            filename = f"stock-movement-{datetime.now().strftime('%Y%m%d')}"
+            if format == "xlsx":
+                return make_excel_response([], headers, f"{filename}.xlsx", "Stock Movement")
+            return make_csv_response([], headers, f"{filename}.csv")
+
+        data = result[0]
+        opening_map = {str(o["_id"]): o for o in data.get("opening", [])}
+        first_map = {str(f["_id"]): f for f in data.get("firstInRange", [])}
+        movement_map = {str(m["_id"]): m for m in data.get("movements", [])}
+
+        all_ids = set(opening_map.keys()) | set(first_map.keys()) | set(movement_map.keys())
+
+        headers = ["Product Name", "Opening Stock", "Inward", "Outward", "Adjustment", "Closing Stock"]
+        rows = []
+        for pid in all_ids:
+            o = opening_map.get(pid)
+            f = first_map.get(pid)
+            m = movement_map.get(pid, {})
+
+            opening = o["openingStock"] if o else (f["firstPreviousStock"] if f else 0)
+            name = m.get("productName") or (o.get("productName") if o else None) or (f.get("productName") if f else "Unknown")
+            inward = m.get("inward", 0)
+            outward = m.get("outward", 0)
+            adj = m.get("adjPos", 0) + m.get("adjNeg", 0)
+            closing = opening + inward - outward + adj
+
+            rows.append([name, opening, inward, outward, adj, closing])
+
+        rows.sort(key=lambda x: x[3], reverse=True)
+
+        filename = f"stock-movement-{datetime.now().strftime('%Y%m%d')}"
+        if format == "xlsx":
+            return make_excel_response(rows, headers, f"{filename}.xlsx", "Stock Movement")
+        return make_csv_response(rows, headers, f"{filename}.csv")
+
     # ─── IMPORT TEMPLATES ───
 
     IMPORT_TEMPLATES = {
