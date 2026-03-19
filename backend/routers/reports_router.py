@@ -902,4 +902,511 @@ def init_reports_router(db, verify_token_func):
             }
         }
 
+    # ─── BUYER LEDGER REPORT ───
+
+    @router.get("/reports/buyer-ledger")
+    async def buyer_ledger(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        buyerId: Optional[str] = None,
+        page: int = 1,
+        limit: int = 100
+    ):
+        """Buyer ledger: aggregated sales, payments, pending per buyer."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        match_stage: dict = {
+            "sellerId": ObjectId(seller_id),
+            "createdAt": {"$gte": start, "$lt": end},
+            "status": {"$in": REPORT_STATUSES}
+        }
+        if buyerId:
+            try:
+                match_stage["buyerId"] = ObjectId(buyerId)
+            except Exception:
+                pass
+
+        pipeline = [
+            {"$match": match_stage},
+            {"$group": {
+                "_id": "$buyerId",
+                "totalSales": {"$sum": "$total"},
+                "totalPaid": {"$sum": {"$ifNull": ["$totalPaid", 0]}},
+                "totalPending": {"$sum": {"$ifNull": ["$pendingAmount", "$total"]}},
+                "invoiceCount": {"$sum": 1},
+                "lastInvoiceDate": {"$max": "$createdAt"},
+                "lastPaymentDate": {"$max": {"$cond": [
+                    {"$gt": [{"$ifNull": ["$totalPaid", 0]}, 0]},
+                    "$updatedAt",
+                    None
+                ]}}
+            }},
+            {"$sort": {"totalSales": -1}}
+        ]
+
+        all_results = await db.invoices.aggregate(pipeline).to_list(5000)
+
+        # Enrich with buyer info - batch lookup
+        buyer_ids = [r["_id"] for r in all_results if r.get("_id")]
+        buyers_map = {}
+        if buyer_ids:
+            buyers = await db.seller_buyers.find({"_id": {"$in": buyer_ids}}).to_list(len(buyer_ids))
+            buyers_map = {b["_id"]: b for b in buyers}
+
+        items = []
+        total_sales = 0
+        total_paid = 0
+        total_pending = 0
+        for r in all_results:
+            buyer = buyers_map.get(r["_id"], {})
+            entry = {
+                "buyerId": str(r["_id"]) if r.get("_id") else "",
+                "buyerName": buyer.get("buyerName", "Unknown"),
+                "company": buyer.get("company", ""),
+                "totalSales": round(r["totalSales"], 2),
+                "totalPaid": round(r["totalPaid"], 2),
+                "pendingAmount": round(r["totalPending"], 2),
+                "invoiceCount": r["invoiceCount"],
+                "lastInvoiceDate": r["lastInvoiceDate"].isoformat() if r.get("lastInvoiceDate") else None,
+                "lastPaymentDate": r["lastPaymentDate"].isoformat() if r.get("lastPaymentDate") else None
+            }
+            items.append(entry)
+            total_sales += r["totalSales"]
+            total_paid += r["totalPaid"]
+            total_pending += r["totalPending"]
+
+        total_count = len(items)
+        start_idx = (page - 1) * limit
+        paginated = items[start_idx:start_idx + limit]
+
+        return {
+            "summary": {
+                "totalSales": round(total_sales, 2),
+                "totalPaid": round(total_paid, 2),
+                "totalPending": round(total_pending, 2),
+                "totalBuyers": total_count
+            },
+            "items": paginated,
+            "pagination": {
+                "page": page, "limit": limit, "total": total_count,
+                "pages": (total_count + limit - 1) // limit if limit > 0 else 1
+            }
+        }
+
+    @router.get("/reports/buyer-ledger/{buyer_id}/transactions")
+    async def buyer_transactions(
+        buyer_id: str,
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50
+    ):
+        """Detailed transaction history for a single buyer."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        try:
+            buyer_oid = ObjectId(buyer_id)
+        except Exception:
+            raise HTTPException(400, "Invalid buyer ID")
+
+        match_stage = {
+            "sellerId": ObjectId(seller_id),
+            "buyerId": buyer_oid,
+            "createdAt": {"$gte": start, "$lt": end},
+            "status": {"$in": REPORT_STATUSES}
+        }
+
+        total_count = await db.invoices.count_documents(match_stage)
+        invoices = await db.invoices.find(
+            match_stage,
+            {"_id": 1, "invoiceNumber": 1, "date": 1, "createdAt": 1,
+             "total": 1, "totalPaid": 1, "pendingAmount": 1, "status": 1, "items": 1}
+        ).sort("createdAt", -1).skip((page - 1) * limit).limit(limit).to_list(limit)
+
+        buyer = await db.seller_buyers.find_one({"_id": buyer_oid})
+
+        transactions = []
+        for inv in invoices:
+            item_names = ", ".join(it.get("productName", "") for it in (inv.get("items") or []))
+            transactions.append({
+                "invoiceId": str(inv["_id"]),
+                "invoiceNumber": inv.get("invoiceNumber", ""),
+                "date": inv.get("date", inv.get("createdAt", "")).isoformat() if isinstance(inv.get("date", inv.get("createdAt")), datetime) else str(inv.get("date", "")),
+                "totalAmount": round(inv.get("total", 0), 2),
+                "paidAmount": round(inv.get("totalPaid", 0), 2),
+                "pendingAmount": round(inv.get("pendingAmount", inv.get("total", 0)), 2),
+                "status": inv.get("status", ""),
+                "products": item_names
+            })
+
+        return {
+            "buyer": {
+                "buyerId": buyer_id,
+                "buyerName": buyer.get("buyerName", "Unknown") if buyer else "Unknown",
+                "company": buyer.get("company", "") if buyer else ""
+            },
+            "transactions": transactions,
+            "pagination": {
+                "page": page, "limit": limit, "total": total_count,
+                "pages": (total_count + limit - 1) // limit if limit > 0 else 1
+            }
+        }
+
+    # ─── PRODUCT PERFORMANCE REPORT ───
+
+    @router.get("/reports/product-performance")
+    async def product_performance(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        page: int = 1,
+        limit: int = 100
+    ):
+        """Product performance: qty sold, revenue, profit, margin. Includes top & slow movers."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        pipeline = [
+            {"$match": {
+                "sellerId": ObjectId(seller_id),
+                "createdAt": {"$gte": start, "$lt": end},
+                "status": {"$in": REPORT_STATUSES}
+            }},
+            {"$unwind": "$items"},
+            {"$group": {
+                "_id": "$items.productName",
+                "quantitySold": {"$sum": "$items.quantity"},
+                "revenue": {"$sum": "$items.total"},
+                "cost": {"$sum": {"$multiply": [
+                    {"$ifNull": ["$items.purchase_price", 0]},
+                    "$items.quantity"
+                ]}},
+                "invoiceCount": {"$sum": 1}
+            }},
+            {"$addFields": {
+                "profit": {"$subtract": ["$revenue", "$cost"]},
+                "profitPercent": {"$cond": [
+                    {"$gt": ["$revenue", 0]},
+                    {"$multiply": [{"$divide": [{"$subtract": ["$revenue", "$cost"]}, "$revenue"]}, 100]},
+                    0
+                ]}
+            }},
+            {"$sort": {"revenue": -1}}
+        ]
+
+        all_items = await db.invoices.aggregate(pipeline).to_list(5000)
+
+        # Summary
+        total_revenue = sum(i.get("revenue", 0) for i in all_items)
+        total_profit = sum(i.get("profit", 0) for i in all_items)
+        total_qty = sum(i.get("quantitySold", 0) for i in all_items)
+
+        products = []
+        for r in all_items:
+            products.append({
+                "productName": r["_id"] or "Unknown",
+                "quantitySold": r["quantitySold"],
+                "revenue": round(r["revenue"], 2),
+                "profit": round(r["profit"], 2),
+                "profitPercent": round(r.get("profitPercent", 0), 1),
+                "invoiceCount": r["invoiceCount"]
+            })
+
+        # Top 5 selling (by revenue)
+        top_selling = products[:5] if products else []
+        # Slow moving (bottom 5 by qty, exclude zero)
+        by_qty = sorted([p for p in products if p["quantitySold"] > 0], key=lambda x: x["quantitySold"])
+        slow_moving = by_qty[:5] if by_qty else []
+
+        total_count = len(products)
+        start_idx = (page - 1) * limit
+        paginated = products[start_idx:start_idx + limit]
+
+        return {
+            "summary": {
+                "totalProducts": total_count,
+                "totalRevenue": round(total_revenue, 2),
+                "totalProfit": round(total_profit, 2),
+                "totalQuantitySold": total_qty,
+                "avgProfitPercent": round((total_profit / total_revenue * 100) if total_revenue > 0 else 0, 1)
+            },
+            "topSelling": top_selling,
+            "slowMoving": slow_moving,
+            "items": paginated,
+            "pagination": {
+                "page": page, "limit": limit, "total": total_count,
+                "pages": (total_count + limit - 1) // limit if limit > 0 else 1
+            }
+        }
+
+    # ─── CATEGORY REPORT ───
+
+    @router.get("/reports/category-report")
+    async def category_report(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        """Sales, revenue, and profit grouped by product category."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        # Get all invoice items in range
+        pipeline = [
+            {"$match": {
+                "sellerId": ObjectId(seller_id),
+                "createdAt": {"$gte": start, "$lt": end},
+                "status": {"$in": REPORT_STATUSES}
+            }},
+            {"$unwind": "$items"},
+            {"$project": {
+                "productId": "$items.productId",
+                "productName": "$items.productName",
+                "quantity": "$items.quantity",
+                "revenue": "$items.total",
+                "cost": {"$multiply": [
+                    {"$ifNull": ["$items.purchase_price", 0]},
+                    "$items.quantity"
+                ]}
+            }}
+        ]
+        items = await db.invoices.aggregate(pipeline).to_list(10000)
+
+        # Build product → category map
+        product_ids = set()
+        for item in items:
+            pid = item.get("productId")
+            if pid and pid != "none" and pid != "None":
+                try:
+                    product_ids.add(ObjectId(pid))
+                except Exception:
+                    pass
+
+        category_map = {}  # productId (str) → categoryName
+        if product_ids:
+            products = await db.products.find(
+                {"_id": {"$in": list(product_ids)}},
+                {"_id": 1, "categoryName": 1, "categoryId": 1}
+            ).to_list(len(product_ids))
+
+            # Get category names for those without categoryName
+            cat_ids_to_resolve = set()
+            for p in products:
+                if p.get("categoryName"):
+                    category_map[str(p["_id"])] = p["categoryName"]
+                elif p.get("categoryId"):
+                    cat_ids_to_resolve.add(p["categoryId"])
+                    category_map[str(p["_id"])] = str(p["categoryId"])  # temp
+
+            if cat_ids_to_resolve:
+                cats = await db.categories.find(
+                    {"_id": {"$in": list(cat_ids_to_resolve)}},
+                    {"_id": 1, "name": 1}
+                ).to_list(len(cat_ids_to_resolve))
+                cat_name_map = {str(c["_id"]): c["name"] for c in cats}
+                for pid, cval in category_map.items():
+                    if cval in cat_name_map:
+                        category_map[pid] = cat_name_map[cval]
+
+        # Group by category
+        cat_data: dict = {}
+        for item in items:
+            pid = item.get("productId")
+            cat_name = "Uncategorized"
+            if pid and str(pid) in category_map:
+                cat_name = category_map[str(pid)]
+
+            if cat_name not in cat_data:
+                cat_data[cat_name] = {"totalSales": 0, "revenue": 0, "cost": 0, "itemCount": 0}
+            cat_data[cat_name]["totalSales"] += item.get("quantity", 0)
+            cat_data[cat_name]["revenue"] += item.get("revenue", 0)
+            cat_data[cat_name]["cost"] += item.get("cost", 0)
+            cat_data[cat_name]["itemCount"] += 1
+
+        categories = []
+        total_revenue = 0
+        total_profit = 0
+        for name, data in cat_data.items():
+            profit = data["revenue"] - data["cost"]
+            categories.append({
+                "categoryName": name,
+                "totalSales": data["totalSales"],
+                "revenue": round(data["revenue"], 2),
+                "profit": round(profit, 2),
+                "profitPercent": round((profit / data["revenue"] * 100) if data["revenue"] > 0 else 0, 1),
+                "itemCount": data["itemCount"]
+            })
+            total_revenue += data["revenue"]
+            total_profit += profit
+
+        categories.sort(key=lambda x: x["revenue"], reverse=True)
+
+        return {
+            "summary": {
+                "totalCategories": len(categories),
+                "totalRevenue": round(total_revenue, 2),
+                "totalProfit": round(total_profit, 2),
+                "topCategory": categories[0]["categoryName"] if categories else "N/A"
+            },
+            "items": categories
+        }
+
+    # ─── LOW STOCK ANALYTICS ───
+
+    @router.get("/reports/low-stock-analytics")
+    async def low_stock_analytics(
+        authorization: str = Header(...),
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None,
+        page: int = 1,
+        limit: int = 100
+    ):
+        """Low stock analytics: current stock, consumption rate, times hit low."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.VIEW_REPORTS.value)
+        seller_id = await get_seller_id(user)
+
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=30))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        days_in_range = max(1, (end - start).days)
+        seller_oid = ObjectId(seller_id)
+
+        # Get all active listings with product names
+        listings_pipeline = [
+            {"$match": {"sellerId": seller_oid, "status": "active"}},
+            {"$lookup": {
+                "from": "products",
+                "localField": "productId",
+                "foreignField": "_id",
+                "as": "prod"
+            }},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {
+                "productName": {"$ifNull": ["$prod.name", "Unknown"]},
+                "stock": {"$ifNull": ["$stock", 0]},
+                "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]}
+            }}
+        ]
+        listings = await db.sellerListings.aggregate(listings_pipeline).to_list(500)
+        listing_map = {str(ls["_id"]): ls for ls in listings}
+
+        # Get consumption (sale logs) in date range per listing
+        consumption_pipeline = [
+            {"$match": {
+                "sellerId": seller_oid,
+                "changeType": "sale",
+                "createdAt": {"$gte": start, "$lt": end}
+            }},
+            {"$group": {
+                "_id": "$listingId",
+                "totalSold": {"$sum": {"$abs": "$quantity"}},
+                "logCount": {"$sum": 1}
+            }}
+        ]
+        consumption = await db.inventory_logs.aggregate(consumption_pipeline).to_list(1000)
+        consumption_map = {str(c["_id"]): c for c in consumption}
+
+        # Count times stock hit low per listing (newStock <= lowStockAlert)
+        # We need per-listing lowStockAlert; do it in Python for correctness
+        low_hit_pipeline = [
+            {"$match": {
+                "sellerId": seller_oid,
+                "createdAt": {"$gte": start, "$lt": end}
+            }},
+            {"$group": {
+                "_id": "$listingId",
+                "logs": {"$push": {"newStock": "$newStock"}}
+            }}
+        ]
+        low_hit_raw = await db.inventory_logs.aggregate(low_hit_pipeline).to_list(1000)
+        low_hit_map = {}
+        for entry in low_hit_raw:
+            lid = str(entry["_id"])
+            threshold = listing_map.get(lid, {}).get("lowStockAlert", 10)
+            times = sum(1 for log in entry.get("logs", []) if (log.get("newStock") or 0) <= threshold)
+            low_hit_map[lid] = times
+
+        # Build results
+        items = []
+        total_low_stock = 0
+        total_out_of_stock = 0
+        for lid, listing in listing_map.items():
+            cons = consumption_map.get(lid, {})
+            total_sold = cons.get("totalSold", 0)
+            avg_consumption = round(total_sold / days_in_range, 2)
+            current_stock = listing.get("stock", 0)
+            min_stock = listing.get("lowStockAlert", 10)
+            is_low = current_stock <= min_stock
+            is_out = current_stock == 0
+
+            if is_low:
+                total_low_stock += 1
+            if is_out:
+                total_out_of_stock += 1
+
+            items.append({
+                "listingId": lid,
+                "productName": listing.get("productName", "Unknown"),
+                "minStock": min_stock,
+                "currentStock": current_stock,
+                "timesHitLow": low_hit_map.get(lid, 0),
+                "avgConsumption": avg_consumption,
+                "totalSold": total_sold,
+                "isLowStock": is_low,
+                "isOutOfStock": is_out,
+                "daysOfStock": round(current_stock / avg_consumption, 0) if avg_consumption > 0 else 999
+            })
+
+        # Sort: out of stock first, then low stock, then by daysOfStock ascending
+        items.sort(key=lambda x: (0 if x["isOutOfStock"] else (1 if x["isLowStock"] else 2), x["daysOfStock"]))
+
+        total_count = len(items)
+        start_idx = (page - 1) * limit
+        paginated = items[start_idx:start_idx + limit]
+
+        return {
+            "summary": {
+                "totalProducts": total_count,
+                "lowStockCount": total_low_stock,
+                "outOfStockCount": total_out_of_stock,
+                "healthyCount": total_count - total_low_stock
+            },
+            "items": paginated,
+            "pagination": {
+                "page": page, "limit": limit, "total": total_count,
+                "pages": (total_count + limit - 1) // limit if limit > 0 else 1
+            }
+        }
+
     return router

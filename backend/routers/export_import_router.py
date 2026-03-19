@@ -507,6 +507,224 @@ def init_export_import_router(db, verify_token_func):
             return make_excel_response(rows, headers, f"{filename}.xlsx", "Stock Movement")
         return make_csv_response(rows, headers, f"{filename}.csv")
 
+    @router.get("/export/buyer-ledger")
+    async def export_buyer_ledger(
+        authorization: str = Header(...),
+        format: str = "csv",
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lt": end}, "status": {"$in": REPORT_STATUSES}}},
+            {"$group": {
+                "_id": "$buyerId",
+                "totalSales": {"$sum": "$total"},
+                "totalPaid": {"$sum": {"$ifNull": ["$totalPaid", 0]}},
+                "totalPending": {"$sum": {"$ifNull": ["$pendingAmount", "$total"]}},
+                "invoiceCount": {"$sum": 1},
+                "lastInvoiceDate": {"$max": "$createdAt"}
+            }},
+            {"$sort": {"totalSales": -1}}
+        ]
+        results = await db.invoices.aggregate(pipeline).to_list(5000)
+
+        headers = ["Buyer Name", "Company", "Total Sales", "Total Paid", "Pending Amount", "Invoices", "Last Invoice Date"]
+        rows = []
+        for r in results:
+            buyer = await db.seller_buyers.find_one({"_id": r["_id"]}) if r.get("_id") else {}
+            buyer = buyer or {}
+            rows.append([
+                buyer.get("buyerName", "Unknown"),
+                buyer.get("company", ""),
+                round(r["totalSales"], 2),
+                round(r["totalPaid"], 2),
+                round(r["totalPending"], 2),
+                r["invoiceCount"],
+                r["lastInvoiceDate"].strftime("%d/%m/%Y") if r.get("lastInvoiceDate") else ""
+            ])
+
+        filename = f"buyer-ledger-{datetime.now().strftime('%Y%m%d')}"
+        if format == "xlsx":
+            return make_excel_response(rows, headers, f"{filename}.xlsx", "Buyer Ledger")
+        return make_csv_response(rows, headers, f"{filename}.csv")
+
+    @router.get("/export/product-performance")
+    async def export_product_performance(
+        authorization: str = Header(...),
+        format: str = "csv",
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lt": end}, "status": {"$in": REPORT_STATUSES}}},
+            {"$unwind": "$items"},
+            {"$group": {
+                "_id": "$items.productName",
+                "quantitySold": {"$sum": "$items.quantity"},
+                "revenue": {"$sum": "$items.total"},
+                "cost": {"$sum": {"$multiply": [{"$ifNull": ["$items.purchase_price", 0]}, "$items.quantity"]}}
+            }},
+            {"$addFields": {"profit": {"$subtract": ["$revenue", "$cost"]}}},
+            {"$sort": {"revenue": -1}}
+        ]
+        results = await db.invoices.aggregate(pipeline).to_list(5000)
+
+        headers = ["Product Name", "Quantity Sold", "Revenue", "Profit", "Profit %"]
+        rows = []
+        for r in results:
+            rev = r.get("revenue", 0)
+            profit = r.get("profit", 0)
+            rows.append([
+                r["_id"] or "Unknown",
+                r["quantitySold"],
+                round(rev, 2),
+                round(profit, 2),
+                f"{round((profit / rev * 100) if rev > 0 else 0, 1)}%"
+            ])
+
+        filename = f"product-performance-{datetime.now().strftime('%Y%m%d')}"
+        if format == "xlsx":
+            return make_excel_response(rows, headers, f"{filename}.xlsx", "Product Performance")
+        return make_csv_response(rows, headers, f"{filename}.csv")
+
+    @router.get("/export/category-report")
+    async def export_category_report(
+        authorization: str = Header(...),
+        format: str = "csv",
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=365))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        # Same logic as the report endpoint but simplified for export
+        pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lt": end}, "status": {"$in": REPORT_STATUSES}}},
+            {"$unwind": "$items"},
+            {"$project": {
+                "productId": "$items.productId", "quantity": "$items.quantity",
+                "revenue": "$items.total",
+                "cost": {"$multiply": [{"$ifNull": ["$items.purchase_price", 0]}, "$items.quantity"]}
+            }}
+        ]
+        items = await db.invoices.aggregate(pipeline).to_list(10000)
+
+        product_ids = set()
+        for item in items:
+            pid = item.get("productId")
+            if pid and pid not in ("none", "None", None):
+                try:
+                    product_ids.add(ObjectId(pid))
+                except Exception:
+                    pass
+
+        category_map = {}
+        if product_ids:
+            products = await db.products.find({"_id": {"$in": list(product_ids)}}, {"_id": 1, "categoryName": 1, "categoryId": 1}).to_list(len(product_ids))
+            cat_ids_needed = set()
+            for p in products:
+                if p.get("categoryName"):
+                    category_map[str(p["_id"])] = p["categoryName"]
+                elif p.get("categoryId"):
+                    cat_ids_needed.add(p["categoryId"])
+                    category_map[str(p["_id"])] = str(p["categoryId"])
+            if cat_ids_needed:
+                cats = await db.categories.find({"_id": {"$in": list(cat_ids_needed)}}, {"_id": 1, "name": 1}).to_list(len(cat_ids_needed))
+                cmap = {str(c["_id"]): c["name"] for c in cats}
+                for pid, cv in category_map.items():
+                    if cv in cmap:
+                        category_map[pid] = cmap[cv]
+
+        cat_data: dict = {}
+        for item in items:
+            pid = item.get("productId")
+            cat_name = category_map.get(str(pid), "Uncategorized") if pid else "Uncategorized"
+            if cat_name not in cat_data:
+                cat_data[cat_name] = {"qty": 0, "revenue": 0, "cost": 0}
+            cat_data[cat_name]["qty"] += item.get("quantity", 0)
+            cat_data[cat_name]["revenue"] += item.get("revenue", 0)
+            cat_data[cat_name]["cost"] += item.get("cost", 0)
+
+        headers = ["Category Name", "Total Sales (Qty)", "Revenue", "Profit", "Profit %"]
+        rows = []
+        for name, d in sorted(cat_data.items(), key=lambda x: x[1]["revenue"], reverse=True):
+            profit = d["revenue"] - d["cost"]
+            rows.append([
+                name, d["qty"], round(d["revenue"], 2), round(profit, 2),
+                f"{round((profit / d['revenue'] * 100) if d['revenue'] > 0 else 0, 1)}%"
+            ])
+
+        filename = f"category-report-{datetime.now().strftime('%Y%m%d')}"
+        if format == "xlsx":
+            return make_excel_response(rows, headers, f"{filename}.xlsx", "Category Report")
+        return make_csv_response(rows, headers, f"{filename}.csv")
+
+    @router.get("/export/low-stock")
+    async def export_low_stock(
+        authorization: str = Header(...),
+        format: str = "csv",
+        startDate: Optional[str] = None,
+        endDate: Optional[str] = None
+    ):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        now = datetime.now(timezone.utc)
+        start = parse_date(startDate) or (now - timedelta(days=30))
+        end = parse_date(endDate)
+        end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        days_in_range = max(1, (end - start).days)
+        seller_oid = ObjectId(seller_id)
+
+        listings = await db.sellerListings.aggregate([
+            {"$match": {"sellerId": seller_oid, "status": "active"}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {"productName": {"$ifNull": ["$prod.name", "Unknown"]}, "stock": {"$ifNull": ["$stock", 0]}, "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]}}}
+        ]).to_list(500)
+        listing_map = {str(ls["_id"]): ls for ls in listings}
+
+        consumption = await db.inventory_logs.aggregate([
+            {"$match": {"sellerId": seller_oid, "changeType": "sale", "createdAt": {"$gte": start, "$lt": end}}},
+            {"$group": {"_id": "$listingId", "totalSold": {"$sum": {"$abs": "$quantity"}}}}
+        ]).to_list(1000)
+        cons_map = {str(c["_id"]): c.get("totalSold", 0) for c in consumption}
+
+        headers = ["Product Name", "Min Stock", "Current Stock", "Avg Consumption/Day", "Total Sold", "Status"]
+        rows = []
+        for lid, ls in listing_map.items():
+            sold = cons_map.get(lid, 0)
+            avg = round(sold / days_in_range, 2)
+            stock = ls.get("stock", 0)
+            min_s = ls.get("lowStockAlert", 10)
+            status = "Out of Stock" if stock == 0 else ("Low Stock" if stock <= min_s else "Healthy")
+            rows.append([ls.get("productName", "Unknown"), min_s, stock, avg, sold, status])
+
+        rows.sort(key=lambda x: (0 if x[5] == "Out of Stock" else (1 if x[5] == "Low Stock" else 2), x[2]))
+
+        filename = f"low-stock-analytics-{datetime.now().strftime('%Y%m%d')}"
+        if format == "xlsx":
+            return make_excel_response(rows, headers, f"{filename}.xlsx", "Low Stock Analytics")
+        return make_csv_response(rows, headers, f"{filename}.csv")
+
     # ─── IMPORT TEMPLATES ───
 
     IMPORT_TEMPLATES = {

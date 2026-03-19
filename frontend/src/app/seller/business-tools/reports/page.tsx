@@ -6,12 +6,13 @@ import {
   BarChart3, TrendingUp, Package, Users, Calendar, Filter,
   IndianRupee, DollarSign, PieChart, Download, Upload, FileSpreadsheet,
   FileText, X, CheckCircle2, AlertCircle, Loader2, FileDown, Eye,
-  Clock, ShoppingCart, ArrowLeftRight, ChevronLeft, ChevronRight, Search
+  Clock, ShoppingCart, ArrowLeftRight, ChevronLeft, ChevronRight, Search,
+  BookOpen, Zap, FolderOpen, AlertTriangle
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-type Tab = "sales" | "profit" | "product-profit" | "inventory-value" | "products" | "inventory" | "buyers" | "outstanding" | "purchase" | "stock-movement";
+type Tab = "sales" | "profit" | "product-profit" | "inventory-value" | "products" | "inventory" | "buyers" | "outstanding" | "purchase" | "stock-movement" | "buyer-ledger" | "product-perf" | "category" | "low-stock";
 
 interface SalesPeriod { label: string; totalSales: number; totalGst: number; invoiceCount: number; avgInvoiceValue: number; }
 interface ProfitPeriod { label: string; revenue: number; cost: number; profit: number; margin: number; invoiceCount: number; totalQuantity: number; }
@@ -36,12 +37,37 @@ interface StockMovementItem {
 }
 interface Pagination { page: number; limit: number; total: number; pages: number; }
 
+interface BuyerLedgerItem {
+  buyerId: string; buyerName: string; company: string; totalSales: number;
+  totalPaid: number; pendingAmount: number; invoiceCount: number;
+  lastInvoiceDate: string | null; lastPaymentDate: string | null;
+}
+interface BuyerTransaction {
+  invoiceId: string; invoiceNumber: string; date: string; totalAmount: number;
+  paidAmount: number; pendingAmount: number; status: string; products: string;
+}
+interface ProductPerfItem {
+  productName: string; quantitySold: number; revenue: number; profit: number;
+  profitPercent: number; invoiceCount: number;
+}
+interface CategoryItem {
+  categoryName: string; totalSales: number; revenue: number; profit: number;
+  profitPercent: number; itemCount: number;
+}
+interface LowStockItem {
+  listingId: string; productName: string; minStock: number; currentStock: number;
+  timesHitLow: number; avgConsumption: number; totalSold: number;
+  isLowStock: boolean; isOutOfStock: boolean; daysOfStock: number;
+}
+
 const TAB_EXPORT_MAP: Record<Tab, string> = {
   sales: "sales", profit: "profit", "product-profit": "profit",
   "inventory-value": "inventory", products: "sales",
   inventory: "inventory", buyers: "buyers",
   outstanding: "outstanding", purchase: "purchase-orders",
-  "stock-movement": "stock-movement"
+  "stock-movement": "stock-movement",
+  "buyer-ledger": "buyer-ledger", "product-perf": "product-performance",
+  category: "category-report", "low-stock": "low-stock"
 };
 
 type ImportType = "products" | "inventory" | "suppliers" | "buyers";
@@ -79,6 +105,21 @@ export default function ReportsPage() {
   const [buyerOptions, setBuyerOptions] = useState<{ id: string; name: string }[]>([]);
   const [supplierOptions, setSupplierOptions] = useState<{ id: string; name: string }[]>([]);
   const [productOptions, setProductOptions] = useState<{ id: string; name: string }[]>([]);
+
+  // Phase 2 report states
+  const [buyerLedgerData, setBuyerLedgerData] = useState<{ summary: Record<string, number>; items: BuyerLedgerItem[]; pagination: Pagination }>({
+    summary: {}, items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
+  });
+  const [selectedBuyer, setSelectedBuyer] = useState<string | null>(null);
+  const [buyerTransactions, setBuyerTransactions] = useState<{ buyer: Record<string, string>; transactions: BuyerTransaction[]; pagination: Pagination } | null>(null);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [productPerfData, setProductPerfData] = useState<{ summary: Record<string, number>; topSelling: ProductPerfItem[]; slowMoving: ProductPerfItem[]; items: ProductPerfItem[]; pagination: Pagination }>({
+    summary: {}, topSelling: [], slowMoving: [], items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
+  });
+  const [categoryData, setCategoryData] = useState<{ summary: Record<string, number>; items: CategoryItem[] }>({ summary: {}, items: [] });
+  const [lowStockData, setLowStockData] = useState<{ summary: Record<string, number>; items: LowStockItem[]; pagination: Pagination }>({
+    summary: {}, items: [], pagination: { page: 1, limit: 100, total: 0, pages: 1 }
+  });
 
   const [startDate, setStartDate] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().split("T")[0]; });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -135,6 +176,20 @@ export default function ReportsPage() {
         const productParam = productFilter ? `&listingId=${productFilter}` : "";
         const res = await fetch(`${API_URL}/api/business-tools/reports/stock-movement?${dateParams}&page=${reportPage}&limit=100${productParam}`, { headers: h });
         setStockMovementData(await res.json());
+      } else if (tab === "buyer-ledger") {
+        const buyerParam = buyerFilter ? `&buyerId=${buyerFilter}` : "";
+        const res = await fetch(`${API_URL}/api/business-tools/reports/buyer-ledger?${dateParams}&page=${reportPage}&limit=100${buyerParam}`, { headers: h });
+        setBuyerLedgerData(await res.json());
+        setSelectedBuyer(null); setBuyerTransactions(null);
+      } else if (tab === "product-perf") {
+        const res = await fetch(`${API_URL}/api/business-tools/reports/product-performance?${dateParams}&page=${reportPage}&limit=100`, { headers: h });
+        setProductPerfData(await res.json());
+      } else if (tab === "category") {
+        const res = await fetch(`${API_URL}/api/business-tools/reports/category-report?${dateParams}`, { headers: h });
+        setCategoryData(await res.json());
+      } else if (tab === "low-stock") {
+        const res = await fetch(`${API_URL}/api/business-tools/reports/low-stock-analytics?${dateParams}&page=${reportPage}&limit=100`, { headers: h });
+        setLowStockData(await res.json());
       }
     } catch { /* empty */ }
     setLoading(false);
@@ -165,6 +220,21 @@ export default function ReportsPage() {
         setProductOptions(list);
       }).catch(() => {});
   }, [token]);
+
+  // Fetch buyer transactions (buyer ledger drill-down)
+  const fetchBuyerTransactions = async (bId: string) => {
+    if (!token) return;
+    setLoadingTransactions(true);
+    setSelectedBuyer(bId);
+    try {
+      const dateParams = `startDate=${new Date(startDate).toISOString()}&endDate=${new Date(endDate).toISOString()}`;
+      const res = await fetch(`${API_URL}/api/business-tools/reports/buyer-ledger/${bId}/transactions?${dateParams}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setBuyerTransactions(await res.json());
+    } catch { setBuyerTransactions(null); }
+    setLoadingTransactions(false);
+  };
 
   // ── Export handler ──
   const handleExport = async (format: "csv" | "xlsx") => {
@@ -244,6 +314,10 @@ export default function ReportsPage() {
     { key: "outstanding", label: "Outstanding", icon: Clock },
     { key: "purchase", label: "Purchase", icon: ShoppingCart },
     { key: "stock-movement", label: "Stock Movement", icon: ArrowLeftRight },
+    { key: "buyer-ledger", label: "Buyer Ledger", icon: BookOpen },
+    { key: "product-perf", label: "Product Perf.", icon: Zap },
+    { key: "category", label: "Category", icon: FolderOpen },
+    { key: "low-stock", label: "Low Stock", icon: AlertTriangle },
     { key: "sales", label: "Sales", icon: TrendingUp },
     { key: "profit", label: "Profit", icon: DollarSign },
     { key: "product-profit", label: "Product Profit", icon: PieChart },
@@ -259,7 +333,7 @@ export default function ReportsPage() {
 
   const needsDateFilter = !["inventory", "inventory-value"].includes(tab);
   const needsPeriodFilter = ["sales", "profit"].includes(tab);
-  const needsEntityFilter = ["outstanding", "purchase", "stock-movement"].includes(tab);
+  const needsEntityFilter = ["outstanding", "purchase", "stock-movement", "buyer-ledger"].includes(tab);
 
   return (
     <div className="space-y-6" data-testid="reports-page">
@@ -323,6 +397,13 @@ export default function ReportsPage() {
               {tab === "outstanding" && (
                 <select value={buyerFilter} onChange={e => { setBuyerFilter(e.target.value); setReportPage(1); }}
                   className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" data-testid="buyer-filter">
+                  <option value="">All Buyers</option>
+                  {buyerOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              )}
+              {tab === "buyer-ledger" && (
+                <select value={buyerFilter} onChange={e => { setBuyerFilter(e.target.value); setReportPage(1); }}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" data-testid="buyer-ledger-filter">
                   <option value="">All Buyers</option>
                   {buyerOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
@@ -887,6 +968,353 @@ export default function ReportsPage() {
                   )}
                 </div>
               ) : <div className="text-center py-8 text-gray-400 text-sm">No stock movement data for the selected period</div>}
+            </div>
+          )}
+
+          {/* ═══ BUYER LEDGER TAB ═══ */}
+          {tab === "buyer-ledger" && (
+            <div className="space-y-6" data-testid="buyer-ledger-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Sales", value: buyerLedgerData.summary?.totalSales || 0, color: "text-gray-900", prefix: true },
+                  { label: "Total Paid", value: buyerLedgerData.summary?.totalPaid || 0, color: "text-green-600", prefix: true },
+                  { label: "Total Pending", value: buyerLedgerData.summary?.totalPending || 0, color: "text-red-600", prefix: true },
+                  { label: "Total Buyers", value: buyerLedgerData.summary?.totalBuyers || 0, color: "text-gray-900", prefix: false }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`ledger-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 flex items-center gap-1 ${card.color}`}>
+                      {card.prefix && <IndianRupee className="w-4 h-4" />}
+                      {typeof card.value === "number" ? card.value.toLocaleString("en-IN", card.prefix ? { minimumFractionDigits: 2 } : {}) : card.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Transaction Detail Modal */}
+              {selectedBuyer && buyerTransactions && (
+                <div className="bg-white rounded-xl border-2 border-indigo-200 p-5 space-y-4" data-testid="buyer-transactions">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700">Transaction History: {buyerTransactions.buyer?.buyerName}</h3>
+                      {buyerTransactions.buyer?.company && <p className="text-xs text-gray-400">{buyerTransactions.buyer.company}</p>}
+                    </div>
+                    <button onClick={() => { setSelectedBuyer(null); setBuyerTransactions(null); }}
+                      className="text-gray-400 hover:text-gray-600 p-1" data-testid="close-transactions"><X className="w-4 h-4" /></button>
+                  </div>
+                  {loadingTransactions ? <div className="text-center py-4 text-gray-400 text-sm">Loading...</div> : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                            <th className="text-left px-3 py-2">Invoice #</th><th className="text-right px-3 py-2">Date</th>
+                            <th className="text-right px-3 py-2">Amount</th><th className="text-right px-3 py-2">Paid</th>
+                            <th className="text-right px-3 py-2">Pending</th><th className="text-center px-3 py-2">Status</th>
+                            <th className="text-left px-3 py-2">Products</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(buyerTransactions.transactions || []).map((t, i) => (
+                            <tr key={i} className="border-b border-gray-50">
+                              <td className="px-3 py-2 font-mono text-xs text-indigo-600">{t.invoiceNumber}</td>
+                              <td className="px-3 py-2 text-right text-xs text-gray-500">{t.date ? new Date(t.date).toLocaleDateString("en-IN") : "-"}</td>
+                              <td className="px-3 py-2 text-right">{t.totalAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                              <td className="px-3 py-2 text-right text-green-600">{t.paidAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                              <td className="px-3 py-2 text-right text-red-600">{t.pendingAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${t.status === "paid" ? "bg-green-50 text-green-600" : t.status === "partially_paid" ? "bg-amber-50 text-amber-600" : "bg-gray-100 text-gray-600"}`}>{t.status}</span>
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-500 max-w-[150px] truncate">{t.products || "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Buyer Ledger Table */}
+              {(buyerLedgerData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">Buyer</th>
+                          <th className="text-right px-4 py-3">Total Sales</th>
+                          <th className="text-right px-4 py-3">Total Paid</th>
+                          <th className="text-right px-4 py-3">Pending</th>
+                          <th className="text-right px-4 py-3">Invoices</th>
+                          <th className="text-right px-4 py-3">Last Invoice</th>
+                          <th className="text-right px-4 py-3">Last Payment</th>
+                          <th className="text-center px-4 py-3">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {buyerLedgerData.items.map((item, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-gray-700 text-xs">{item.buyerName}</p>
+                              {item.company && <p className="text-[10px] text-gray-400">{item.company}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-right font-medium text-gray-700">{item.totalSales?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right text-green-600">{item.totalPaid?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right font-medium text-red-600">{item.pendingAmount?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{item.invoiceCount}</td>
+                            <td className="px-4 py-3 text-right text-gray-500 text-xs">{item.lastInvoiceDate ? new Date(item.lastInvoiceDate).toLocaleDateString("en-IN") : "-"}</td>
+                            <td className="px-4 py-3 text-right text-gray-500 text-xs">{item.lastPaymentDate ? new Date(item.lastPaymentDate).toLocaleDateString("en-IN") : "-"}</td>
+                            <td className="px-4 py-3 text-center">
+                              <button onClick={() => fetchBuyerTransactions(item.buyerId)}
+                                className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-medium" data-testid={`view-transactions-${i}`}>
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {buyerLedgerData.pagination?.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+                      <span>Page {buyerLedgerData.pagination.page} of {buyerLedgerData.pagination.pages} ({buyerLedgerData.pagination.total} items)</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setReportPage(p => Math.max(1, p - 1))} disabled={reportPage <= 1}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setReportPage(p => Math.min(buyerLedgerData.pagination.pages, p + 1))} disabled={reportPage >= buyerLedgerData.pagination.pages}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No buyer ledger data for the selected period</div>}
+            </div>
+          )}
+
+          {/* ═══ PRODUCT PERFORMANCE TAB ═══ */}
+          {tab === "product-perf" && (
+            <div className="space-y-6" data-testid="product-perf-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Products", value: productPerfData.summary?.totalProducts || 0, color: "text-gray-900", prefix: false },
+                  { label: "Total Revenue", value: productPerfData.summary?.totalRevenue || 0, color: "text-indigo-600", prefix: true },
+                  { label: "Total Profit", value: productPerfData.summary?.totalProfit || 0, color: "text-green-600", prefix: true },
+                  { label: "Avg Profit %", value: `${productPerfData.summary?.avgProfitPercent || 0}%`, color: "text-blue-600", prefix: false }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`perf-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 flex items-center gap-1 ${card.color}`}>
+                      {card.prefix && <IndianRupee className="w-4 h-4" />}
+                      {typeof card.value === "number" ? card.value.toLocaleString("en-IN", card.prefix ? { minimumFractionDigits: 2 } : {}) : card.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Top Selling & Slow Moving */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {productPerfData.topSelling?.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-100 p-4" data-testid="top-selling">
+                    <h3 className="text-sm font-semibold text-green-700 mb-3 flex items-center gap-1.5"><TrendingUp className="w-4 h-4" /> Top Selling</h3>
+                    <div className="space-y-2">
+                      {productPerfData.topSelling.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-gray-700 font-medium truncate max-w-[60%]">{i + 1}. {p.productName}</span>
+                          <span className="text-green-600 font-medium">{p.revenue.toLocaleString("en-IN")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {productPerfData.slowMoving?.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-100 p-4" data-testid="slow-moving">
+                    <h3 className="text-sm font-semibold text-amber-700 mb-3 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Slow Moving</h3>
+                    <div className="space-y-2">
+                      {productPerfData.slowMoving.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-gray-700 font-medium truncate max-w-[60%]">{i + 1}. {p.productName}</span>
+                          <span className="text-amber-600 font-medium">{p.quantitySold} sold</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Full Table */}
+              {(productPerfData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">#</th>
+                          <th className="text-left px-4 py-3">Product Name</th>
+                          <th className="text-right px-4 py-3">Qty Sold</th>
+                          <th className="text-right px-4 py-3">Revenue</th>
+                          <th className="text-right px-4 py-3">Profit</th>
+                          <th className="text-right px-4 py-3">Profit %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productPerfData.items.map((p, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3 text-gray-400">{i + 1}</td>
+                            <td className="px-4 py-3 font-medium text-gray-700">{p.productName}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">{p.quantitySold}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">{p.revenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${p.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{p.profit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className={`px-4 py-3 text-right ${p.profitPercent >= 0 ? "text-green-600" : "text-red-600"}`}>{p.profitPercent}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {productPerfData.pagination?.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+                      <span>Page {productPerfData.pagination.page} of {productPerfData.pagination.pages}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setReportPage(p => Math.max(1, p - 1))} disabled={reportPage <= 1}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setReportPage(p => Math.min(productPerfData.pagination.pages, p + 1))} disabled={reportPage >= productPerfData.pagination.pages}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No product performance data for the selected period</div>}
+            </div>
+          )}
+
+          {/* ═══ CATEGORY REPORT TAB ═══ */}
+          {tab === "category" && (
+            <div className="space-y-6" data-testid="category-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Categories", value: categoryData.summary?.totalCategories || 0, color: "text-gray-900", prefix: false },
+                  { label: "Total Revenue", value: categoryData.summary?.totalRevenue || 0, color: "text-indigo-600", prefix: true },
+                  { label: "Total Profit", value: categoryData.summary?.totalProfit || 0, color: "text-green-600", prefix: true },
+                  { label: "Top Category", value: categoryData.summary?.topCategory || "N/A", color: "text-blue-600", prefix: false }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`cat-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 flex items-center gap-1 ${card.color}`}>
+                      {card.prefix && <IndianRupee className="w-4 h-4" />}
+                      {typeof card.value === "number" ? card.value.toLocaleString("en-IN", card.prefix ? { minimumFractionDigits: 2 } : {}) : card.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Table */}
+              {(categoryData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">#</th>
+                          <th className="text-left px-4 py-3">Category Name</th>
+                          <th className="text-right px-4 py-3">Total Sales (Qty)</th>
+                          <th className="text-right px-4 py-3">Revenue</th>
+                          <th className="text-right px-4 py-3">Profit</th>
+                          <th className="text-right px-4 py-3">Profit %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {categoryData.items.map((c, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3 text-gray-400">{i + 1}</td>
+                            <td className="px-4 py-3 font-medium text-gray-700">
+                              <span className={c.categoryName === "Uncategorized" ? "italic text-gray-400" : ""}>{c.categoryName}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-700">{c.totalSales}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">{c.revenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${c.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{c.profit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className={`px-4 py-3 text-right ${c.profitPercent >= 0 ? "text-green-600" : "text-red-600"}`}>{c.profitPercent}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No category data for the selected period</div>}
+            </div>
+          )}
+
+          {/* ═══ LOW STOCK ANALYTICS TAB ═══ */}
+          {tab === "low-stock" && (
+            <div className="space-y-6" data-testid="low-stock-report">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Products", value: lowStockData.summary?.totalProducts || 0, color: "text-gray-900" },
+                  { label: "Low Stock", value: lowStockData.summary?.lowStockCount || 0, color: "text-amber-600" },
+                  { label: "Out of Stock", value: lowStockData.summary?.outOfStockCount || 0, color: "text-red-600" },
+                  { label: "Healthy", value: lowStockData.summary?.healthyCount || 0, color: "text-green-600" }
+                ].map((card, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-gray-100 p-4" data-testid={`lowstock-stat-${i}`}>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">{card.label}</p>
+                    <p className={`text-xl font-bold mt-1 ${card.color}`}>{card.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Table */}
+              {(lowStockData.items?.length || 0) > 0 ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">Product Name</th>
+                          <th className="text-right px-4 py-3">Min Stock</th>
+                          <th className="text-right px-4 py-3">Current Stock</th>
+                          <th className="text-right px-4 py-3">Times Hit Low</th>
+                          <th className="text-right px-4 py-3">Avg Consumption/Day</th>
+                          <th className="text-right px-4 py-3">Days of Stock</th>
+                          <th className="text-center px-4 py-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lowStockData.items.map((item, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3 font-medium text-gray-700">{item.productName}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{item.minStock}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${item.isOutOfStock ? "text-red-600" : item.isLowStock ? "text-amber-600" : "text-gray-700"}`}>{item.currentStock}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{item.timesHitLow}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{item.avgConsumption}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{item.daysOfStock >= 999 ? "∞" : item.daysOfStock}</td>
+                            <td className="px-4 py-3 text-center">
+                              {item.isOutOfStock ? (
+                                <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">Out of Stock</span>
+                              ) : item.isLowStock ? (
+                                <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full font-medium">Low Stock</span>
+                              ) : (
+                                <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full font-medium">Healthy</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {lowStockData.pagination?.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+                      <span>Page {lowStockData.pagination.page} of {lowStockData.pagination.pages}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setReportPage(p => Math.max(1, p - 1))} disabled={reportPage <= 1}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={() => setReportPage(p => Math.min(lowStockData.pagination.pages, p + 1))} disabled={reportPage >= lowStockData.pagination.pages}
+                          className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-center py-8 text-gray-400 text-sm">No stock data available</div>}
             </div>
           )}
         </>
