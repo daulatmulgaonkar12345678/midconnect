@@ -104,7 +104,7 @@ export default function CompleteProfilePage() {
       // Track referral if user signed up via referral link
       try {
         const refCode = localStorage.getItem('referralCode');
-        if (refCode) {
+        if (refCode && user) {
           const token = await user.getIdToken();
           await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/referral/track-signup`, {
             method: 'POST',
