@@ -424,7 +424,7 @@ export default function InventoryPage() {
                     </td>
                     {/* HSN Code */}
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {isEditingThis(item) && !isComposite(item) ? (
+                      {isEditingThis(item) ? (
                         <input type="text" value={editState.hsnCode ?? ''} onChange={(e) => setEditState(s => ({ ...s, hsnCode: e.target.value }))}
                           className="w-24 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" placeholder="HSN" data-testid={`hsn-input-${item.listingId}`} />
                       ) : (
@@ -433,7 +433,7 @@ export default function InventoryPage() {
                     </td>
                     {/* Description */}
                     <td className="px-6 py-4">
-                      {isEditingThis(item) && !isComposite(item) ? (
+                      {isEditingThis(item) ? (
                         <input type="text" value={editState.description ?? ''} onChange={(e) => setEditState(s => ({ ...s, description: e.target.value.slice(0, 150) }))}
                           className="w-40 px-2 py-1 border border-blue-300 rounded text-sm focus:ring-1 focus:ring-blue-500" placeholder="e.g. ISI Mark, Size 10" maxLength={150} data-testid={`desc-input-${item.listingId}`} />
                       ) : (
