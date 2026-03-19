@@ -17,13 +17,14 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 5. Buyer Management + Shipping Addresses (CRUD)
 6. Pending Orders (Backorder) with stock reservation
 7. WhatsApp Messaging Engine (Single Source of Truth, 8 templates)
-8. **Reporting Phase 1** — Outstanding/Receivables, Purchase, Stock Movement reports
-9. **Reporting Phase 2** — Buyer Ledger (with drill-down transactions), Product Performance (top/slow movers), Category Report, Low Stock Analytics
-10. **Business Insights Dashboard Widget (NEW - Feb 2026):**
-    - GET /reports/overview — lightweight aggregation returning 8 key metrics
-    - 4 clickable insight cards on Business Tools homepage: Outstanding Alerts, Low Stock Alerts, Top Product, Monthly Sales + Growth %
-    - Color-coded (red=urgent, amber=warning, green=good), links to respective report tabs via ?tab= query param
-    - Reports page reads ?tab= URL param for deep linking
+8. **Reporting Phase 1** — Outstanding/Receivables, Purchase, Stock Movement
+9. **Reporting Phase 2** — Buyer Ledger, Product Performance, Category Report, Low Stock Analytics
+10. **Business Insights Dashboard Widget** — 4 clickable insight cards (Outstanding, Low Stock, Top Product, Monthly Sales + Growth %)
+11. **HSN + GST in Sales Reports (NEW - Feb 2026):**
+    - Product Sales (Products tab): HSN Code, Taxable Value, GST %, GST Amount columns
+    - Product Performance tab: HSN Code column
+    - CSV/Excel exports: Sales export has 15 columns (incl. HSN, GSTIN, GST %, CGST/SGST/IGST), Product Performance export has HSN Code
+    - HSN lookup via sellerListings → products join pipeline
 
 ## Report Tabs (14 total)
 Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
@@ -36,14 +37,12 @@ Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Categor
 
 ### P2
 - Custom Material Report | Short link tracking | White-label toggle | WhatsApp Business API | Redis caching
-- Extend insights widget: Profit summary, Cash flow alerts, Purchase alerts
 
-## Test Coverage: 203+ tests
-- WhatsApp: 48 | HSN: 15 | PDF Address: 18 | Freight/TCS: 24 | Description: 17 | Reports P1: 27 | Reports P2: 32 | Insights Overview: 22
+## Test Coverage: 228+ tests
+- WhatsApp: 48 | HSN: 15 | PDF Address: 18 | Freight/TCS: 24 | Description: 17 | Reports P1: 27 | Reports P2: 32 | Insights: 22 | HSN Reports: 25
 
 ## Key Files
-- `/app/backend/routers/reports_router.py` - All reports (15 endpoints incl. overview)
+- `/app/backend/routers/reports_router.py` - All reports (15 endpoints)
 - `/app/backend/routers/export_import_router.py` - 12 export endpoints
-- `/app/backend/routers/home_router.py` - Dashboard home summary/charts
 - `/app/frontend/src/app/seller/business-tools/page.tsx` - Dashboard with Business Insights
-- `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (14 tabs, ?tab= deep link)
+- `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (14 tabs)
