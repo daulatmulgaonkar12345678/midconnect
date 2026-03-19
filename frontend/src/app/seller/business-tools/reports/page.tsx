@@ -18,7 +18,7 @@ interface SalesPeriod { label: string; totalSales: number; totalGst: number; inv
 interface ProfitPeriod { label: string; revenue: number; cost: number; profit: number; margin: number; invoiceCount: number; totalQuantity: number; }
 interface ProductProfit { productName: string; totalQuantity: number; totalRevenue: number; totalCost: number; profit: number; margin: number; invoiceCount: number; }
 interface InventoryValueItem { id: string; productName: string; productType: string; stock: number; purchase_price: number; selling_price: number; stockValue: number; potentialRevenue: number; }
-interface ProductSale { productName: string; totalQuantity: number; totalRevenue: number; invoiceCount: number; }
+interface ProductSale { productName: string; hsnCode?: string; totalQuantity: number; taxableValue?: number; gstPercent?: number; totalGst?: number; totalRevenue: number; invoiceCount: number; }
 interface InventoryItem { id: string; productName: string; stock: number; lowStockAlert: number; isLowStock: boolean; sku?: string; }
 interface TopBuyer { buyerId: string; buyerName: string; company: string; totalSpent: number; invoiceCount: number; lastInvoiceDate?: string; }
 
@@ -47,7 +47,7 @@ interface BuyerTransaction {
   paidAmount: number; pendingAmount: number; status: string; products: string;
 }
 interface ProductPerfItem {
-  productName: string; quantitySold: number; revenue: number; profit: number;
+  productName: string; hsnCode?: string; quantitySold: number; revenue: number; profit: number;
   profitPercent: number; invoiceCount: number;
 }
 interface CategoryItem {
@@ -610,31 +610,44 @@ export default function ReportsPage() {
             <div data-testid="products-report">
               {productData.length > 0 ? (
                 <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
-                        <th className="text-left px-4 py-3">#</th><th className="text-left px-4 py-3">Product</th>
-                        <th className="text-right px-4 py-3">Qty Sold</th><th className="text-right px-4 py-3">Revenue</th><th className="px-4 py-3">Chart</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {productData.map((p, i) => (
-                        <tr key={i} className="border-b border-gray-50">
-                          <td className="px-4 py-3 text-gray-400">{i + 1}</td>
-                          <td className="px-4 py-3 font-medium text-gray-700">{p.productName}</td>
-                          <td className="px-4 py-3 text-right text-gray-700">{p.totalQuantity}</td>
-                          <td className="px-4 py-3 text-right font-medium flex items-center justify-end gap-0.5">
-                            <IndianRupee className="w-3.5 h-3.5" />{p.totalRevenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="bg-gray-100 rounded-full h-3 w-full">
-                              <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${(p.totalRevenue / maxProductRev) * 100}%` }} />
-                            </div>
-                          </td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
+                          <th className="text-left px-4 py-3">#</th>
+                          <th className="text-left px-4 py-3">Product</th>
+                          <th className="text-left px-4 py-3">HSN</th>
+                          <th className="text-right px-4 py-3">Qty</th>
+                          <th className="text-right px-4 py-3">Taxable</th>
+                          <th className="text-right px-4 py-3">GST %</th>
+                          <th className="text-right px-4 py-3">GST Amt</th>
+                          <th className="text-right px-4 py-3">Total</th>
+                          <th className="px-4 py-3 w-24">Chart</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {productData.map((p, i) => (
+                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                            <td className="px-4 py-3 text-gray-400">{i + 1}</td>
+                            <td className="px-4 py-3 font-medium text-gray-700">{p.productName}</td>
+                            <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.hsnCode || "-"}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">{p.totalQuantity}</td>
+                            <td className="px-4 py-3 text-right text-gray-600">{(p.taxableValue ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">{p.gstPercent ?? 0}%</td>
+                            <td className="px-4 py-3 text-right text-gray-600">{(p.totalGst ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-right font-medium flex items-center justify-end gap-0.5">
+                              <IndianRupee className="w-3.5 h-3.5" />{p.totalRevenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="bg-gray-100 rounded-full h-3 w-full">
+                                <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${(p.totalRevenue / maxProductRev) * 100}%` }} />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : <div className="text-center py-8 text-gray-400 text-sm">No product sales data for the selected period</div>}
             </div>
@@ -1154,6 +1167,7 @@ export default function ReportsPage() {
                         <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-100">
                           <th className="text-left px-4 py-3">#</th>
                           <th className="text-left px-4 py-3">Product Name</th>
+                          <th className="text-left px-4 py-3">HSN</th>
                           <th className="text-right px-4 py-3">Qty Sold</th>
                           <th className="text-right px-4 py-3">Revenue</th>
                           <th className="text-right px-4 py-3">Profit</th>
@@ -1165,6 +1179,7 @@ export default function ReportsPage() {
                           <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
                             <td className="px-4 py-3 text-gray-400">{i + 1}</td>
                             <td className="px-4 py-3 font-medium text-gray-700">{p.productName}</td>
+                            <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.hsnCode || "-"}</td>
                             <td className="px-4 py-3 text-right text-gray-700">{p.quantitySold}</td>
                             <td className="px-4 py-3 text-right text-gray-700">{p.revenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                             <td className={`px-4 py-3 text-right font-medium ${p.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{p.profit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>

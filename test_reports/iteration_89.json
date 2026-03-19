@@ -1,0 +1,156 @@
+{
+  "summary": "HSN Code feature in Sales Reports - All 25 backend tests pass. Backend APIs return hsnCode, gstPercent, totalGst, taxableValue fields. CSV exports include HSN Code columns. Frontend code verified with correct table columns. Regression tests pass for all existing report endpoints.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Reports page access",
+        "issue": "Firebase Auth required for UI integration testing - cannot access /seller/business-tools/reports without login",
+        "affected_selectors": ["products-report", "product-perf-report"]
+      }
+    ],
+    "design_issues": []
+  },
+
+  "features_tested": {
+    "1_product_sales_api_hsn": {
+      "status": "PASS",
+      "endpoint": "GET /api/business-tools/reports/product-sales",
+      "fields_verified": ["hsnCode", "gstPercent", "totalGst", "taxableValue"],
+      "description": "All 4 new fields present in response for each product"
+    },
+    "2_product_sales_taxable_calculation": {
+      "status": "PASS",
+      "description": "taxableValue = totalRevenue - totalGst formula verified"
+    },
+    "3_product_performance_api_hsn": {
+      "status": "PASS", 
+      "endpoint": "GET /api/business-tools/reports/product-performance",
+      "fields_verified": ["hsnCode"],
+      "description": "hsnCode field present in items, topSelling, slowMoving arrays"
+    },
+    "4_export_sales_hsn_column": {
+      "status": "PASS",
+      "endpoint": "GET /api/business-tools/export/sales",
+      "columns_verified": ["Invoice No", "Date", "Buyer Name", "GSTIN", "Product", "HSN", "Qty", "Rate", "Taxable Amount", "GST %", "CGST", "SGST", "IGST", "Total Amount", "Payment Status"],
+      "description": "CSV export has all 15 expected columns including HSN and GST %"
+    },
+    "5_export_product_performance_hsn": {
+      "status": "PASS",
+      "endpoint": "GET /api/business-tools/export/product-performance", 
+      "columns_verified": ["Product Name", "HSN Code", "Quantity Sold", "Revenue", "Profit", "Profit %"],
+      "description": "CSV export has HSN Code column"
+    },
+    "6_frontend_products_tab_columns": {
+      "status": "CODE VERIFIED",
+      "file": "/app/frontend/src/app/seller/business-tools/reports/page.tsx",
+      "lines": "619-637",
+      "columns": ["#", "Product", "HSN", "Qty", "Taxable", "GST %", "GST Amt", "Total", "Chart"],
+      "description": "Products tab table has all HSN and GST columns"
+    },
+    "7_frontend_product_perf_tab_columns": {
+      "status": "CODE VERIFIED",
+      "file": "/app/frontend/src/app/seller/business-tools/reports/page.tsx",
+      "lines": "1170-1182", 
+      "columns": ["#", "Product Name", "HSN", "Qty Sold", "Revenue", "Profit", "Profit %"],
+      "description": "Product Perf tab table has HSN column"
+    },
+    "8_frontend_interfaces": {
+      "status": "CODE VERIFIED",
+      "interfaces": {
+        "ProductSale": "hsnCode?: string; taxableValue?: number; gstPercent?: number; totalGst?: number",
+        "ProductPerfItem": "hsnCode?: string"
+      },
+      "description": "TypeScript interfaces include all new optional fields"
+    },
+    "9_typescript_compilation": {
+      "status": "PASS",
+      "verification": "yarn tsc --noEmit completed with 0 errors"
+    },
+    "10_regression_outstanding": {
+      "status": "PASS",
+      "description": "Outstanding report endpoint working"
+    },
+    "11_regression_purchase": {
+      "status": "PASS",
+      "description": "Purchase report endpoint working"
+    },
+    "12_regression_stock_movement": {
+      "status": "PASS",
+      "description": "Stock movement report endpoint working"
+    },
+    "13_regression_buyer_ledger": {
+      "status": "PASS",
+      "description": "Buyer ledger report endpoint working"
+    },
+    "14_regression_category": {
+      "status": "PASS",
+      "description": "Category report endpoint working"
+    },
+    "15_regression_low_stock": {
+      "status": "PASS",
+      "description": "Low stock analytics endpoint working"
+    },
+    "16_regression_overview": {
+      "status": "PASS",
+      "description": "Overview widget endpoint working with all 8 fields"
+    },
+    "17_auth_required": {
+      "status": "PASS",
+      "description": "All HSN endpoints return 401/422 without auth"
+    }
+  },
+
+  "test_results": {
+    "total_tests": 25,
+    "passed": 25,
+    "failed": 0,
+    "test_files": [
+      "/app/backend/tests/test_hsn_code_reports.py (25 tests)"
+    ]
+  },
+
+  "test_report_links": [
+    "/app/backend/tests/test_hsn_code_reports.py",
+    "/app/test_reports/pytest/hsn_code_reports_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "CORRECT: HSN lookup pipeline in product_sales() joins sellerListings→products to get productName, builds hsn_map",
+    "CORRECT: HSN lookup pipeline in product_performance() uses same pattern",
+    "CORRECT: export_sales() builds same hsn_map and includes HSN column in CSV (line 136)",
+    "CORRECT: export_product_performance() includes HSN Code column (line 619)",
+    "CORRECT: Frontend ProductSale interface has hsnCode, taxableValue, gstPercent, totalGst optional fields",
+    "CORRECT: Frontend ProductPerfItem interface has hsnCode optional field",
+    "CORRECT: Products tab table has HSN, Taxable, GST %, GST Amt columns (lines 619-637)",
+    "CORRECT: Product Perf tab table has HSN column (lines 1170-1182)",
+    "NOTE: Currently 0/10 sellerListings have HSN codes set - hsnCode fields return empty string as expected"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_hsn_code_reports.py (new file - 25 tests)"
+  ],
+
+  "success_rate": {
+    "backend": "100% (25/25 tests passed)",
+    "frontend": "Code verified (TypeScript compiles, Firebase Auth required for UI integration testing)"
+  },
+
+  "mocked_integrations": {
+    "Firebase Auth": "dev-test-token used for backend API testing"
+  },
+
+  "seed_data_creation": "None - testing with dev-test-token seller data. Note: sellerListings have no HSN codes set, so hsnCode returns empty string",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "HSN Code feature in Sales Reports fully implemented and verified. Backend endpoints /api/business-tools/reports/product-sales and /api/business-tools/reports/product-performance return hsnCode field. Exports /api/business-tools/export/sales and /api/business-tools/export/product-performance include HSN columns. Frontend Products tab shows HSN, Taxable, GST %, GST Amt columns. Product Perf tab shows HSN column. Currently sellerListings have no HSN codes set (all return empty string), but field structure is correct. Firebase Auth required for UI testing."
+}

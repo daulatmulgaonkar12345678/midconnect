@@ -270,7 +270,7 @@ def init_reports_router(db, verify_token_func):
         endDate: Optional[str] = None,
         limit: int = 20
     ):
-        """Top selling products from invoice items."""
+        """Top selling products from invoice items, with HSN and GST for CA accounting."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.VIEW_REPORTS.value)
         seller_id = await get_seller_id(user)
@@ -280,6 +280,21 @@ def init_reports_router(db, verify_token_func):
         end = parse_date(endDate)
         end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
 
+        # Build productName → hsnCode map from sellerListings
+        hsn_pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id)}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {"productName": "$prod.name", "hsnCode": 1}}
+        ]
+        listings = await db.sellerListings.aggregate(hsn_pipeline).to_list(500)
+        hsn_map = {}
+        for ls in listings:
+            name = ls.get("productName")
+            hsn = ls.get("hsnCode")
+            if name and hsn:
+                hsn_map[name] = hsn
+
         pipeline = [
             {"$match": {"sellerId": ObjectId(seller_id), "createdAt": {"$gte": start, "$lt": end}, "status": {"$in": REPORT_STATUSES}}},
             {"$unwind": "$items"},
@@ -287,6 +302,8 @@ def init_reports_router(db, verify_token_func):
                 "_id": "$items.productName",
                 "totalQuantity": {"$sum": "$items.quantity"},
                 "totalRevenue": {"$sum": "$items.total"},
+                "totalGst": {"$sum": {"$ifNull": ["$items.gstAmount", 0]}},
+                "gstPercent": {"$first": {"$ifNull": ["$items.gstPercent", 0]}},
                 "invoiceCount": {"$sum": 1}
             }},
             {"$sort": {"totalRevenue": -1}},
@@ -294,7 +311,22 @@ def init_reports_router(db, verify_token_func):
         ]
 
         results = await db.invoices.aggregate(pipeline).to_list(limit)
-        products = [{"productName": r["_id"], "totalQuantity": r["totalQuantity"], "totalRevenue": round(r["totalRevenue"], 2), "invoiceCount": r["invoiceCount"]} for r in results]
+        products = []
+        for r in results:
+            name = r["_id"] or "Unknown"
+            revenue = round(r["totalRevenue"], 2)
+            gst = round(r["totalGst"], 2)
+            taxable = round(revenue - gst, 2)
+            products.append({
+                "productName": name,
+                "hsnCode": hsn_map.get(name, ""),
+                "totalQuantity": r["totalQuantity"],
+                "taxableValue": taxable,
+                "gstPercent": r["gstPercent"],
+                "totalGst": gst,
+                "totalRevenue": revenue,
+                "invoiceCount": r["invoiceCount"]
+            })
 
         return {"products": products}
 
@@ -1183,7 +1215,7 @@ def init_reports_router(db, verify_token_func):
         page: int = 1,
         limit: int = 100
     ):
-        """Product performance: qty sold, revenue, profit, margin. Includes top & slow movers."""
+        """Product performance: qty sold, revenue, profit, margin, HSN. Includes top & slow movers."""
         user = await get_current_user(authorization)
         await require_permission(user, Permission.VIEW_REPORTS.value)
         seller_id = await get_seller_id(user)
@@ -1192,6 +1224,21 @@ def init_reports_router(db, verify_token_func):
         start = parse_date(startDate) or (now - timedelta(days=365))
         end = parse_date(endDate)
         end = (end + timedelta(days=1)) if end else (now + timedelta(days=1))
+
+        # Build productName → hsnCode map
+        hsn_pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id)}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {"productName": "$prod.name", "hsnCode": 1}}
+        ]
+        listings = await db.sellerListings.aggregate(hsn_pipeline).to_list(500)
+        hsn_map = {}
+        for ls in listings:
+            name = ls.get("productName")
+            hsn = ls.get("hsnCode")
+            if name and hsn:
+                hsn_map[name] = hsn
 
         pipeline = [
             {"$match": {
@@ -1230,8 +1277,10 @@ def init_reports_router(db, verify_token_func):
 
         products = []
         for r in all_items:
+            name = r["_id"] or "Unknown"
             products.append({
-                "productName": r["_id"] or "Unknown",
+                "productName": name,
+                "hsnCode": hsn_map.get(name, ""),
                 "quantitySold": r["quantitySold"],
                 "revenue": round(r["revenue"], 2),
                 "profit": round(r["profit"], 2),

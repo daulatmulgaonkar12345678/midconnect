@@ -118,7 +118,22 @@ def init_export_import_router(db, verify_token_func):
             "status": {"$in": REPORT_STATUSES}
         }).sort("createdAt", -1).to_list(5000)
 
-        headers = ["Invoice No", "Date", "Buyer Name", "GSTIN", "Product", "HSN", "Qty", "Rate", "Taxable Amount", "CGST", "SGST", "IGST", "Total Amount", "Payment Status"]
+        # Build productName → hsnCode map from inventory
+        hsn_pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id)}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {"productName": "$prod.name", "hsnCode": 1}}
+        ]
+        hsn_listings = await db.sellerListings.aggregate(hsn_pipeline).to_list(500)
+        hsn_map = {}
+        for ls in hsn_listings:
+            name = ls.get("productName")
+            hsn = ls.get("hsnCode")
+            if name and hsn:
+                hsn_map[name] = hsn
+
+        headers = ["Invoice No", "Date", "Buyer Name", "GSTIN", "Product", "HSN", "Qty", "Rate", "Taxable Amount", "GST %", "CGST", "SGST", "IGST", "Total Amount", "Payment Status"]
         rows = []
 
         for inv in invoices:
@@ -128,16 +143,19 @@ def init_export_import_router(db, verify_token_func):
             inv_date = inv.get("createdAt", "").strftime("%d/%m/%Y") if inv.get("createdAt") else ""
 
             for item in inv.get("items", []):
+                product_name = item.get("productName", "")
+                hsn_code = item.get("hsn", "") or item.get("hsnCode", "") or hsn_map.get(product_name, "")
                 rows.append([
                     inv.get("invoiceNumber", ""),
                     inv_date,
                     buyer_name,
                     buyer_gstin,
-                    item.get("productName", ""),
-                    item.get("hsn", ""),
+                    product_name,
+                    hsn_code,
                     item.get("quantity", 0),
                     round(item.get("price", 0), 2),
                     round(item.get("taxableAmount", item.get("total", 0)), 2),
+                    item.get("gstPercent", 0),
                     round(item.get("cgst", 0), 2),
                     round(item.get("sgst", 0), 2),
                     round(item.get("igst", 0), 2),
@@ -583,13 +601,30 @@ def init_export_import_router(db, verify_token_func):
         ]
         results = await db.invoices.aggregate(pipeline).to_list(5000)
 
-        headers = ["Product Name", "Quantity Sold", "Revenue", "Profit", "Profit %"]
+        # HSN lookup
+        hsn_pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id)}},
+            {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
+            {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
+            {"$project": {"productName": "$prod.name", "hsnCode": 1}}
+        ]
+        hsn_listings = await db.sellerListings.aggregate(hsn_pipeline).to_list(500)
+        hsn_map = {}
+        for ls in hsn_listings:
+            name = ls.get("productName")
+            hsn = ls.get("hsnCode")
+            if name and hsn:
+                hsn_map[name] = hsn
+
+        headers = ["Product Name", "HSN Code", "Quantity Sold", "Revenue", "Profit", "Profit %"]
         rows = []
         for r in results:
+            name = r["_id"] or "Unknown"
             rev = r.get("revenue", 0)
             profit = r.get("profit", 0)
             rows.append([
-                r["_id"] or "Unknown",
+                name,
+                hsn_map.get(name, ""),
                 r["quantitySold"],
                 round(rev, 2),
                 round(profit, 2),
