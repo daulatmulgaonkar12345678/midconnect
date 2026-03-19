@@ -228,19 +228,57 @@ def init_referral_router(db, verify_token_func):
         current_tier = _get_tier(successful)
         next_tier = _get_next_tier(successful)
 
-        # Get list of referred users
+        # Get list of referred users with live activation progress
         referred_users = []
-        cursor = db.users.find(
-            {"referredBy": user.get("referralCode")},
-            {"_id": 0, "profile.businessName": 1, "createdAt": 1, "referralActivated": 1, "referralRewarded": 1}
-        ).sort("createdAt", -1).limit(20)
-        async for u in cursor:
-            referred_users.append({
-                "name": u.get("profile", {}).get("businessName", "Unknown"),
-                "joinedAt": u.get("createdAt", "").isoformat() if hasattr(u.get("createdAt", ""), "isoformat") else str(u.get("createdAt", "")),
-                "activated": u.get("referralActivated", False),
-                "rewarded": u.get("referralRewarded", False),
-            })
+        ref_code = user.get("referralCode")
+        if ref_code:
+            cursor = db.users.find(
+                {"referredBy": ref_code},
+                {"_id": 1, "profile.businessName": 1, "createdAt": 1, "referralActivated": 1, "referralRewarded": 1, "referralActivationDeadline": 1}
+            ).sort("createdAt", -1).limit(15)
+            async for u in cursor:
+                uid = u["_id"]
+                # Fetch live progress for each referred user
+                products = await db.sellerListings.count_documents({"sellerId": uid})
+                invoices = await db.invoices.count_documents({"sellerId": uid, "total": {"$gt": 0}})
+                buyers_count = await db.seller_buyers.count_documents({"sellerId": uid})
+                suppliers_count = await db.suppliers.count_documents({"sellerId": uid})
+                has_buyer_supplier = buyers_count >= 1 and suppliers_count >= 1
+
+                # Determine status
+                activated = u.get("referralActivated", False)
+                if activated:
+                    status = "completed"
+                elif products > 0 or invoices > 0 or buyers_count > 0 or suppliers_count > 0:
+                    status = "partial"
+                else:
+                    status = "pending"
+
+                name = u.get("profile", {}).get("businessName", "")
+                if not name:
+                    name = u.get("profile", {}).get("fullName", "New User")
+
+                joined = u.get("createdAt")
+                joined_str = joined.isoformat() if hasattr(joined, "isoformat") else str(joined or "")
+
+                referred_users.append({
+                    "name": name or "New User",
+                    "joinedAt": joined_str,
+                    "status": status,
+                    "activated": activated,
+                    "rewarded": u.get("referralRewarded", False),
+                    "progress": {
+                        "products": min(products, 5),
+                        "productsRequired": 5,
+                        "invoices": min(invoices, 3),
+                        "invoicesRequired": 3,
+                        "buyerSupplier": has_buyer_supplier,
+                    }
+                })
+
+        # Sort: completed first, then partial, then pending
+        status_order = {"completed": 0, "partial": 1, "pending": 2}
+        referred_users.sort(key=lambda x: status_order.get(x["status"], 3))
 
         return {
             "referralCode": user.get("referralCode", ""),

@@ -19,7 +19,20 @@ interface ReferralStats {
   currentTier: ReferralTier | null;
   nextTier: ReferralTier | null;
   referralsToNextTier: number;
-  referredUsers: Array<{ name: string; joinedAt: string; activated: boolean; rewarded: boolean }>;
+  referredUsers: Array<{
+    name: string;
+    joinedAt: string;
+    status: 'pending' | 'partial' | 'completed';
+    activated: boolean;
+    rewarded: boolean;
+    progress: {
+      products: number;
+      productsRequired: number;
+      invoices: number;
+      invoicesRequired: number;
+      buyerSupplier: boolean;
+    };
+  }>;
   rewardTier: string | null;
   tiers: ReferralTier[];
 }
@@ -177,14 +190,33 @@ export default function ReferralModal({ isOpen, onClose, token }: { isOpen: bool
             {/* Referred Users List */}
             {(stats?.referredUsers || []).length > 0 && (
               <div>
-                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Recent Referrals</h3>
-                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Your Referrals</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {stats?.referredUsers.map((u, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm">
-                      <span className="text-gray-700">{u.name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.activated ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {u.activated ? 'Activated' : 'Pending'}
-                      </span>
+                    <div key={i} className="px-3 py-2.5 bg-gray-50 rounded-lg" data-testid={`referral-user-${i}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-800">{u.name}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          u.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          u.status === 'partial' ? 'bg-amber-100 text-amber-700' :
+                          'bg-gray-200 text-gray-600'
+                        }`}>
+                          {u.status === 'completed' ? 'Completed' : u.status === 'partial' ? 'In Progress' : 'Pending'}
+                        </span>
+                      </div>
+                      {u.status !== 'completed' && u.progress && (
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                          <span className={u.progress.products >= u.progress.productsRequired ? 'text-green-600' : ''}>
+                            {u.progress.products}/{u.progress.productsRequired} products
+                          </span>
+                          <span className={u.progress.invoices >= u.progress.invoicesRequired ? 'text-green-600' : ''}>
+                            {u.progress.invoices}/{u.progress.invoicesRequired} invoices
+                          </span>
+                          <span className={u.progress.buyerSupplier ? 'text-green-600' : ''}>
+                            {u.progress.buyerSupplier ? 'Buyer+Supplier' : 'No buyer/supplier'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
