@@ -19,30 +19,36 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 7. WhatsApp Messaging Engine (Single Source of Truth, 8 templates)
 8. **Reporting Phase 1** — Outstanding/Receivables, Purchase, Stock Movement
 9. **Reporting Phase 2** — Buyer Ledger, Product Performance, Category Report, Low Stock Analytics
-10. **Business Insights Dashboard Widget** — 4 clickable insight cards (Outstanding, Low Stock, Top Product, Monthly Sales + Growth %)
-11. **HSN + GST in Sales Reports (NEW - Feb 2026):**
-    - Product Sales (Products tab): HSN Code, Taxable Value, GST %, GST Amount columns
-    - Product Performance tab: HSN Code column
-    - CSV/Excel exports: Sales export has 15 columns (incl. HSN, GSTIN, GST %, CGST/SGST/IGST), Product Performance export has HSN Code
-    - HSN lookup via sellerListings → products join pipeline
+10. **Business Insights Dashboard Widget** — 4 clickable insight cards
+11. **HSN + GST in Sales Reports** — HSN Code, Taxable Value, GST% in Products & Product Performance tabs + exports
+12. **GST Sales Report (GSTR-1 Compatible) (NEW - Feb 2026):**
+    - Invoice-level data: Invoice #, Date, Buyer, GSTIN, Invoice Type, Place of Supply, B2B/B2C, Taxable Value, CGST/SGST/IGST, Total
+    - Auto B2B/B2C classification from GSTIN validation (15-char regex)
+    - B2C Large (>2.5L + interstate) vs B2C Small
+    - CGST+SGST for intra-state, IGST for inter-state (state code from GSTIN first 2 digits)
+    - HSN Summary section: grouped by HSN code with UQC, Qty, Taxable, CGST/SGST/IGST
+    - Excel export: 2-sheet workbook (Invoice Data + HSN Summary) with formatted headers
+    - Filters: Date range, Buyer, GST Type (B2B/B2C)
+    - Excludes cancelled/draft invoices
 
-## Report Tabs (14 total)
-Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
+## Report Tabs (15 total)
+Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | **GST Report** | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
 
 ## Prioritized Backlog
 ### P1
 1. Seller Reminder Controls (configurable schedules)
-2. GST Summary Report (GSTR-1)
-3. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
+2. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
 
 ### P2
-- Custom Material Report | Short link tracking | White-label toggle | WhatsApp Business API | Redis caching
+- GSTR-1 JSON export for direct GST portal upload
+- Amendment tracking for GST
+- Custom Material Report | Short link tracking | White-label toggle | WhatsApp Business API
 
-## Test Coverage: 228+ tests
-- WhatsApp: 48 | HSN: 15 | PDF Address: 18 | Freight/TCS: 24 | Description: 17 | Reports P1: 27 | Reports P2: 32 | Insights: 22 | HSN Reports: 25
+## Test Coverage: 249+ tests
+- WhatsApp: 48 | HSN: 15 | PDF: 18 | Freight/TCS: 24 | Description: 17 | Reports P1: 27 | Reports P2: 32 | Insights: 22 | HSN Reports: 25 | GST Report: 21
 
 ## Key Files
-- `/app/backend/routers/reports_router.py` - All reports (15 endpoints)
-- `/app/backend/routers/export_import_router.py` - 12 export endpoints
+- `/app/backend/routers/reports_router.py` - All reports (16 endpoints incl. GST report)
+- `/app/backend/routers/export_import_router.py` - 13 export endpoints (incl. GST 2-sheet Excel)
 - `/app/frontend/src/app/seller/business-tools/page.tsx` - Dashboard with Business Insights
-- `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (14 tabs)
+- `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (15 tabs)
