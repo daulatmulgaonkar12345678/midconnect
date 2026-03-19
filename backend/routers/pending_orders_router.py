@@ -84,33 +84,60 @@ def init_pending_orders_router(db, verify_token_func, serialize_doc):
 
         enriched = []
         for order in orders:
-            doc = normalize_doc(order)
-            # Enrich with buyer name
-            buyer = await db.seller_buyers.find_one({"_id": order.get("buyerId")})
-            doc["buyerName"] = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
-            doc["buyerPhone"] = buyer.get("phone", "") if buyer else ""
-            doc["buyerId"] = str(order.get("buyerId")) if order.get("buyerId") else ""
-            # Get product name from listing
-            listing = await db.sellerListings.find_one({"_id": order.get("listingId")})
-            if listing:
-                prod = await db.products.find_one({"_id": listing.get("productId")})
-                doc["productName"] = prod.get("name", doc.get("productName", "Unknown")) if prod else doc.get("productName", "Unknown")
-                doc["currentStock"] = listing.get("stock", 0)
-                reserved = await get_reserved_stock(str(order.get("sellerId")), str(order.get("listingId")))
-                doc["availableStock"] = max(0, listing.get("stock", 0) - reserved)
-                doc["listingId"] = str(order.get("listingId"))
-            else:
+            try:
+                doc = normalize_doc(order)
+                # Enrich with buyer name
+                buyer_oid = order.get("buyerId")
+                if buyer_oid:
+                    buyer = await db.seller_buyers.find_one({"_id": buyer_oid})
+                    doc["buyerName"] = buyer.get("buyerName", "Unknown") if buyer else "Unknown"
+                    doc["buyerPhone"] = buyer.get("phone", "") if buyer else ""
+                    doc["buyerId"] = str(buyer_oid)
+                else:
+                    doc["buyerName"] = "Unknown"
+                    doc["buyerPhone"] = ""
+                    doc["buyerId"] = ""
+                # Get product name from listing
+                listing_oid = order.get("listingId")
+                seller_oid = order.get("sellerId")
+                if listing_oid:
+                    listing = await db.sellerListings.find_one({"_id": listing_oid})
+                    if listing:
+                        prod = await db.products.find_one({"_id": listing.get("productId")})
+                        doc["productName"] = prod.get("name", doc.get("productName", "Unknown")) if prod else doc.get("productName", "Unknown")
+                        doc["currentStock"] = listing.get("stock", 0)
+                        if seller_oid and listing_oid:
+                            reserved = await get_reserved_stock(str(seller_oid), str(listing_oid))
+                            doc["availableStock"] = max(0, listing.get("stock", 0) - reserved)
+                        else:
+                            doc["availableStock"] = listing.get("stock", 0)
+                        doc["listingId"] = str(listing_oid)
+                    else:
+                        doc["currentStock"] = 0
+                        doc["availableStock"] = 0
+                        doc["listingId"] = str(listing_oid)
+                else:
+                    doc["currentStock"] = 0
+                    doc["availableStock"] = 0
+                    doc["listingId"] = ""
+                # Include price/gst for invoice prefill
+                doc["price"] = order.get("price", 0)
+                doc["gstPercent"] = order.get("gstPercent", 0)
+                # Invoice reference
+                if order.get("invoiceId"):
+                    inv = await db.invoices.find_one({"_id": order.get("invoiceId")})
+                    doc["invoiceNumber"] = inv.get("invoiceNumber", "") if inv else ""
+                enriched.append(doc)
+            except Exception as e:
+                logger.error(f"Error enriching pending order {order.get('_id')}: {e}")
+                doc = normalize_doc(order)
+                doc["buyerName"] = "Unknown"
+                doc["buyerPhone"] = ""
+                doc["buyerId"] = ""
                 doc["currentStock"] = 0
                 doc["availableStock"] = 0
                 doc["listingId"] = ""
-            # Include price/gst for invoice prefill
-            doc["price"] = order.get("price", 0)
-            doc["gstPercent"] = order.get("gstPercent", 0)
-            # Invoice reference
-            if order.get("invoiceId"):
-                inv = await db.invoices.find_one({"_id": order.get("invoiceId")})
-                doc["invoiceNumber"] = inv.get("invoiceNumber", "") if inv else ""
-            enriched.append(doc)
+                enriched.append(doc)
 
         # Counts by status
         pending_count = await db.pending_orders.count_documents({**({} if is_admin else {"sellerId": ObjectId(seller_id)}), "status": "pending"})
