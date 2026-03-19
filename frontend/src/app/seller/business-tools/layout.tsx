@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { NetworkProvider, useNetworkContext } from '@/context/NetworkContext';
+import NetworkStatusBanner from '@/components/NetworkStatusBanner';
+import { Toaster } from 'sonner';
 import Link from 'next/link';
 import { 
   Package2,
@@ -25,7 +28,9 @@ import {
   Home,
   LineChart,
   Bell,
-  Clock
+  Clock,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 // Permission context for access control
@@ -164,6 +169,39 @@ const navItems = [
     color: 'indigo'
   }
 ];
+
+// Compact network indicator for header
+function NetworkIndicator() {
+  const { isOnline, syncState } = useNetworkContext();
+  return (
+    <div
+      data-testid="network-indicator"
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+        isOnline
+          ? 'bg-emerald-50 text-emerald-700'
+          : 'bg-red-50 text-red-700'
+      }`}
+    >
+      {isOnline ? (
+        <>
+          <Wifi className="h-3 w-3" />
+          <span className="hidden sm:inline">Online</span>
+        </>
+      ) : (
+        <>
+          <WifiOff className="h-3 w-3" />
+          <span className="hidden sm:inline">Offline</span>
+        </>
+      )}
+      {syncState.pendingCount > 0 && (
+        <span className="bg-amber-500 text-white rounded-full min-w-[16px] h-4 flex items-center justify-center text-[10px] ml-0.5">
+          {syncState.pendingCount}
+        </span>
+      )}
+    </div>
+  );
+}
+
 
 export default function BusinessToolsLayout({
   children,
@@ -322,7 +360,11 @@ export default function BusinessToolsLayout({
 
   return (
     <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, loading, token }}>
+      <NetworkProvider>
+      <Toaster position="top-right" richColors closeButton />
       <div className="min-h-screen bg-gray-50">
+        {/* Network Status Banner */}
+        <NetworkStatusBanner />
         {/* Header */}
         <header className="bg-white border-b sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -339,13 +381,17 @@ export default function BusinessToolsLayout({
                 <h1 className="text-lg font-semibold text-gray-900">Business Tools</h1>
               </div>
               
-              {/* Mobile menu button */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-2 text-gray-600 hover:text-gray-900"
-              >
-                {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Network Status Indicator */}
+                <NetworkIndicator />
+                {/* Mobile menu button */}
+                <button
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  className="lg:hidden p-2 text-gray-600 hover:text-gray-900"
+                >
+                  {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -432,7 +478,7 @@ export default function BusinessToolsLayout({
           </div>
         </div>
 
-        {/* Onboarding Modal */}
+        {/* Onboarding Modal – inside NetworkProvider */}
         {showOnboarding && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4" data-testid="onboarding-modal">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
@@ -500,6 +546,7 @@ export default function BusinessToolsLayout({
           </div>
         )}
       </div>
+      </NetworkProvider>
     </PermissionContext.Provider>
   );
 }

@@ -6,6 +6,7 @@ import IndustrialHeader from '@/components/IndustrialHeader';
 import Footer from '@/components/Footer';
 import { SEO, APP_KEYWORDS } from '@/lib/config';
 import ServerWarmUp from '@/components/ServerWarmUp';
+import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 
 // Use Inter font for industrial/corporate look
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] });
@@ -42,10 +43,16 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
         <link rel="shortcut icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/favicon.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#4f46e5" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="UdyogConnect" />
       </head>
       <body className={`${inter.className} antialiased bg-gray-50`}>
         <AuthProvider>
           <ServerWarmUp />
+          <ServiceWorkerRegister />
           <div className="min-h-screen flex flex-col">
             <IndustrialHeader />
             <main className="flex-1">{children}</main>

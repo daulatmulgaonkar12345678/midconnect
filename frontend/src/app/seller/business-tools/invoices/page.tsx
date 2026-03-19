@@ -4,11 +4,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '../layout';
+import { useNetworkContext } from '@/context/NetworkContext';
+import { useOfflineInvoices } from '@/hooks/useOfflineInvoices';
+import { toast } from 'sonner';
 import {
   FileText, Plus, X, Download, Eye, Trash2, Send, CreditCard,
   IndianRupee, ChevronDown, ChevronUp, Clock, CheckCircle2,
   AlertCircle, AlertTriangle, Banknote, Calendar, MessageCircle, Upload, Image as ImageIcon,
-  FileDown, Bell, Settings, ExternalLink, Paperclip, Loader2
+  FileDown, Bell, Settings, ExternalLink, Paperclip, Loader2, WifiOff, CloudOff
 } from 'lucide-react';
 import { uploadPaymentReceipt } from '@/lib/cloudinary';
 import { INDIAN_STATES, calcGstBreakdown } from '@/lib/indian-states';
@@ -69,8 +72,9 @@ function isReceiptRequired(method: string) { return RECEIPT_REQUIRED_METHODS.inc
 // ── Main Component ──
 
 export default function InvoicesPage() {
-  const { getIdToken } = useAuth();
+  const { getIdToken, user } = useAuth();
   const { hasPermission } = usePermissions();
+  const { isOnline } = useNetworkContext();
   const searchParams = useSearchParams();
   const prefillApplied = useRef(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -135,12 +139,36 @@ export default function InvoicesPage() {
     tcsPercent: 0.1,
   });
 
+  // Offline invoices hook
+  const userId = user?.uid || null;
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  useEffect(() => {
+    getIdToken().then(t => setAuthToken(t));
+  }, [getIdToken]);
+  const { offlineDrafts, saveDraftOffline, deleteDraftOffline } = useOfflineInvoices(userId, authToken);
+
   const authHeaders = useCallback(async () => {
     const t = await getIdToken();
     return { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' };
   }, [getIdToken]);
 
   const fetchAll = useCallback(async () => {
+    // If offline, try loading from IndexedDB cache
+    if (!isOnline) {
+      try {
+        const { getCachedData } = await import('@/lib/offlineStore');
+        const cachedInvoices = await getCachedData<Invoice[]>('invoices');
+        const cachedBuyers = await getCachedData<Buyer[]>('buyers');
+        const cachedListings = await getCachedData<InvoiceListing[]>('listings');
+        const cachedState = await getCachedData<string>('sellerState');
+        if (cachedInvoices) setInvoices(cachedInvoices);
+        if (cachedBuyers) setBuyers(cachedBuyers);
+        if (cachedListings) setListings(cachedListings);
+        if (cachedState) setSellerState(cachedState);
+      } catch { /* empty */ }
+      setLoading(false);
+      return;
+    }
     try {
       const h = await authHeaders();
       const [invR, buyR, listR, profileR] = await Promise.all([
@@ -149,16 +177,32 @@ export default function InvoicesPage() {
         fetch(`${API_URL}/api/business-tools/invoice-products`, { headers: h }),
         fetch(`${API_URL}/api/business-tools/seller-profile`, { headers: h }),
       ]);
-      if (invR.ok) setInvoices((await invR.json()).invoices || []);
-      if (buyR.ok) setBuyers((await buyR.json()).buyers || []);
-      if (listR.ok) setListings((await listR.json()).products || []);
+      const invoicesData = invR.ok ? (await invR.json()).invoices || [] : [];
+      const buyersData = buyR.ok ? (await buyR.json()).buyers || [] : [];
+      const listingsData = listR.ok ? (await listR.json()).products || [] : [];
+      let state = '';
       if (profileR.ok) {
         const pData = await profileR.json();
-        setSellerState(pData?.profile?.state || '');
+        state = pData?.profile?.state || '';
       }
+      setInvoices(invoicesData);
+      setBuyers(buyersData);
+      setListings(listingsData);
+      setSellerState(state);
+
+      // Cache data in IndexedDB for offline access
+      try {
+        const { cacheData } = await import('@/lib/offlineStore');
+        await Promise.all([
+          cacheData('invoices', invoicesData),
+          cacheData('buyers', buyersData),
+          cacheData('listings', listingsData),
+          cacheData('sellerState', state),
+        ]);
+      } catch { /* cache failed silently */ }
     } catch { /* empty */ }
     setLoading(false);
-  }, [authHeaders]);
+  }, [authHeaders, isOnline]);
 
   const fetchReminders = useCallback(async () => {
     try {
@@ -283,6 +327,19 @@ export default function InvoicesPage() {
   };
 
   const submitInvoice = async (payload: any) => {
+    // If offline, save as draft locally
+    if (!isOnline) {
+      await saveDraftOffline(payload);
+      setShowForm(false);
+      setFormData({
+        buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7,
+        poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
+        shippingAddressId: '',
+        transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
+        paymentTerms: '', freight: 0, tcsEnabled: false, tcsPercent: 0.1,
+      });
+      return;
+    }
     const h = await authHeaders();
     const res = await fetch(`${API_URL}/api/business-tools/invoices`, { method: 'POST', headers: h, body: JSON.stringify(payload) });
     const data = await res.json();
@@ -307,8 +364,8 @@ export default function InvoicesPage() {
     if (formData.items.some(i => !i.productName && !i.productId)) { alert('All items need a product'); return; }
     const payload = buildPayload();
 
-    // Check stock before creating
-    if (payload.deductStock) {
+    // Skip stock check when offline
+    if (isOnline && payload.deductStock) {
       const h = await authHeaders();
       const checkRes = await fetch(`${API_URL}/api/business-tools/invoices/check-stock`, { method: 'POST', headers: h, body: JSON.stringify(payload) });
       if (checkRes.ok) {
@@ -389,6 +446,10 @@ export default function InvoicesPage() {
 
   // ── WhatsApp ──
   const openWhatsApp = async (inv: Invoice, type: 'followup' | 'overdue' | 'send_invoice' = 'followup') => {
+    if (!isOnline) {
+      toast.error('Cannot send WhatsApp in offline mode');
+      return;
+    }
     const phone = inv.buyerPhone || '';
     if (!phone) { alert('Buyer phone number not available'); return; }
 
@@ -756,7 +817,10 @@ export default function InvoicesPage() {
             </div>
             <div className="flex gap-3 mt-6 justify-end">
               <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800" data-testid="cancel-invoice-btn">Cancel</button>
-              <button onClick={handleSubmit} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium" data-testid="submit-invoice-btn">Create Invoice</button>
+              <button onClick={handleSubmit} className={`px-4 py-2 text-sm rounded-lg font-medium flex items-center gap-2 ${isOnline ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`} data-testid="submit-invoice-btn">
+                {!isOnline && <WifiOff className="w-3.5 h-3.5" />}
+                {isOnline ? 'Create Invoice' : 'Save Draft (Offline)'}
+              </button>
             </div>
           </div>
         </div>
@@ -1111,6 +1175,50 @@ export default function InvoicesPage() {
             <a href={previewImage} target="_blank" rel="noopener noreferrer" className="absolute bottom-3 right-3 flex items-center gap-1 bg-white/90 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-700 hover:bg-white">
               <ExternalLink className="w-3.5 h-3.5" /> Open Full Size
             </a>
+          </div>
+        </div>
+      )}
+
+      {/* ──── Offline Drafts Section ──── */}
+      {offlineDrafts.length > 0 && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-4" data-testid="offline-drafts-section">
+          <div className="flex items-center gap-2 mb-3">
+            <CloudOff className="w-4 h-4 text-amber-600" />
+            <h3 className="text-sm font-semibold text-amber-800">Offline Drafts ({offlineDrafts.length})</h3>
+            <span className="text-xs text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">Will sync when online</span>
+          </div>
+          <div className="space-y-2">
+            {offlineDrafts.map(draft => {
+              const d = draft.data as Record<string, unknown>;
+              const buyerName = buyers.find(b => b.id === d.buyerId)?.buyerName || 'Unknown Buyer';
+              const items = (d.items as Array<Record<string, unknown>>) || [];
+              const itemCount = items.length;
+              return (
+                <div key={draft.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-amber-100" data-testid={`offline-draft-${draft.id}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-amber-600">
+                      <WifiOff className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium bg-amber-100 px-2 py-0.5 rounded">Draft (Offline)</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{buyerName}</p>
+                      <p className="text-xs text-gray-500">{itemCount} item{itemCount !== 1 ? 's' : ''} &middot; {new Date(draft.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {draft.status === 'failed' && (
+                      <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded" title={draft.lastError}>Sync failed</span>
+                    )}
+                    {draft.status === 'syncing' && (
+                      <span className="text-xs text-blue-600 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Syncing...</span>
+                    )}
+                    <button onClick={() => deleteDraftOffline(draft.id)} className="text-gray-400 hover:text-red-500 p-1" data-testid={`delete-offline-draft-${draft.id}`} title="Delete draft">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

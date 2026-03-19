@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from './layout';
+import { useNetworkContext } from '@/context/NetworkContext';
 import Link from 'next/link';
 import {
   Package2, Truck, FileText, Layers, BarChart3,
   IndianRupee, AlertTriangle, TrendingUp, Clock,
   ArrowRight, ShoppingCart, LineChart as LineChartIcon, Loader2,
-  ArrowUpRight, ArrowDownRight, PackageX, Zap
+  ArrowUpRight, ArrowDownRight, PackageX, Zap, CloudOff, RefreshCw
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -85,6 +86,8 @@ export default function BusinessToolsHomePage() {
     { href: '/seller/business-tools/reports', label: 'Reports', desc: 'View sales reports', icon: BarChart3, color: 'bg-amber-50 text-amber-600' },
   ];
 
+  const { isOnline, syncState, triggerSync } = useNetworkContext();
+
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
 
   return (
@@ -93,6 +96,29 @@ export default function BusinessToolsHomePage() {
         <h1 className="text-2xl font-bold text-gray-900" data-testid="home-heading">Business Dashboard</h1>
         <p className="text-gray-600 mt-1">Overview of your business operations</p>
       </div>
+
+      {/* Sync Status Widget */}
+      {(syncState.pendingCount > 0 || !isOnline) && (
+        <div className={`rounded-xl border p-4 flex items-center justify-between ${isOnline ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`} data-testid="sync-status-widget">
+          <div className="flex items-center gap-3">
+            <CloudOff className={`w-5 h-5 ${isOnline ? 'text-amber-600' : 'text-red-600'}`} />
+            <div>
+              <p className={`text-sm font-medium ${isOnline ? 'text-amber-800' : 'text-red-800'}`}>
+                {!isOnline ? 'You are offline' : `${syncState.pendingCount} item${syncState.pendingCount > 1 ? 's' : ''} pending sync`}
+              </p>
+              {syncState.lastSyncTime && (
+                <p className="text-xs text-gray-500">Last synced: {syncState.lastSyncTime.toLocaleTimeString('en-IN')}</p>
+              )}
+            </div>
+          </div>
+          {isOnline && syncState.pendingCount > 0 && (
+            <button onClick={triggerSync} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700" data-testid="dashboard-sync-btn">
+              <RefreshCw className={`w-3.5 h-3.5 ${syncState.isSyncing ? 'animate-spin' : ''}`} />
+              {syncState.isSyncing ? 'Syncing...' : 'Sync Now'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Summary Widgets */}
       {summary && (

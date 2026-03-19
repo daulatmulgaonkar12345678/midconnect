@@ -750,6 +750,183 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             response["message"] = f"Invoice created with {len(pending_orders_created)} pending order(s)"
         return response
 
+    # ==========================================
+    # OFFLINE DRAFT SYNC ENDPOINT
+    # ==========================================
+
+    @router.post("/invoices/sync-offline-draft")
+    async def sync_offline_draft(data: InvoiceCreate, authorization: str = Header(...)):
+        """
+        Sync an offline-created draft invoice to the server.
+        Server always creates a NEW invoice with real ID and invoice number.
+        Client temp IDs are completely ignored.
+        """
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.CREATE_INVOICE.value)
+        seller_id = await get_seller_id(user)
+
+        buyer = await db.seller_buyers.find_one({"_id": ObjectId(data.buyerId), "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+
+        # Get seller and buyer states for GST calculation
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        seller_state = (seller_user or {}).get("profile", {}).get("state", "")
+        buyer_state = buyer.get("state", "")
+        gst_enabled = (seller_user or {}).get("gst", {}).get("status") != "disabled"
+        place_of_supply = data.placeOfSupply or buyer_state
+
+        invoice_items = []
+        subtotal = 0.0
+        total_cgst = 0.0
+        total_sgst = 0.0
+        total_igst = 0.0
+
+        for item in data.items:
+            product_name = item.productName or "Item"
+            item_hsn = item.hsnCode or ""
+            item_description = ""
+            if item.productId:
+                try:
+                    listing = await db.sellerListings.find_one({
+                        "_id": ObjectId(item.productId),
+                        "sellerId": ObjectId(seller_id)
+                    })
+                    if listing:
+                        prod = await db.products.find_one({"_id": listing.get("productId")})
+                        if prod:
+                            product_name = prod.get("name", product_name)
+                        if not item_hsn:
+                            item_hsn = listing.get("hsnCode", "")
+                        item_description = listing.get("description", "")
+                except Exception:
+                    pass
+
+            line_subtotal = round(item.price * item.quantity - item.discount, 2)
+            gst_breakdown = calculate_gst(line_subtotal, item.gstPercent, seller_state, place_of_supply, gst_enabled)
+
+            item_purchase_price = 0
+            if item.productId:
+                try:
+                    pp_listing = await db.sellerListings.find_one({"_id": ObjectId(item.productId), "sellerId": ObjectId(seller_id)})
+                    if pp_listing:
+                        item_purchase_price = pp_listing.get("purchase_price") or 0
+                except Exception:
+                    pass
+
+            invoice_items.append({
+                "productId": item.productId,
+                "productName": product_name,
+                "description": item_description,
+                "hsnCode": item_hsn,
+                "quantity": item.quantity,
+                "price": item.price,
+                "discount": item.discount,
+                "purchase_price": round(item_purchase_price, 2),
+                "gstPercent": item.gstPercent,
+                "taxableAmount": gst_breakdown["taxableAmount"],
+                "cgst": gst_breakdown["cgst"],
+                "cgstRate": gst_breakdown["cgstRate"],
+                "sgst": gst_breakdown["sgst"],
+                "sgstRate": gst_breakdown["sgstRate"],
+                "igst": gst_breakdown["igst"],
+                "igstRate": gst_breakdown["igstRate"],
+                "gstAmount": gst_breakdown["totalTax"],
+                "total": gst_breakdown["totalAmount"],
+                "selected_specifications": item.selected_specifications or []
+            })
+            subtotal += line_subtotal
+            total_cgst += gst_breakdown["cgst"]
+            total_sgst += gst_breakdown["sgst"]
+            total_igst += gst_breakdown["igst"]
+
+        subtotal = round(subtotal, 2)
+        total_gst = round(total_cgst + total_sgst + total_igst, 2)
+
+        additional_charges = []
+        freight_amount = 0.0
+        other_charges_total = 0.0
+        for ch in (data.additionalCharges or []):
+            if ch.type == "fixed":
+                amt = round(ch.value, 2)
+            else:
+                amt = round((subtotal + total_gst) * ch.value / 100, 2)
+            additional_charges.append({"name": ch.name, "type": ch.type, "value": ch.value, "amount": amt})
+            if ch.name.lower() == "freight":
+                freight_amount = amt
+            else:
+                other_charges_total += amt
+
+        tcs_amount = 0.0
+        tcs_percent = 0.0
+        if data.tcsEnabled and data.tcsPercent > 0:
+            tcs_percent = round(data.tcsPercent, 2)
+            tcs_amount = round((subtotal + total_gst) * tcs_percent / 100, 2)
+
+        pre_round_total = subtotal + total_gst + freight_amount + other_charges_total + tcs_amount
+        rounded_total = round(pre_round_total)
+        round_off = round(rounded_total - pre_round_total, 2)
+        grand_total = rounded_total
+
+        # Server generates the REAL invoice number
+        invoice_number = await get_next_invoice_number(seller_id)
+
+        seller_state_norm = seller_state.strip().lower() if seller_state else ""
+        pos_norm = place_of_supply.strip().lower() if place_of_supply else ""
+        tax_type = "intra" if seller_state_norm and pos_norm and seller_state_norm == pos_norm else "inter"
+
+        now = datetime.now(timezone.utc)
+        invoice_doc = {
+            "invoiceNumber": invoice_number,
+            "sellerId": ObjectId(seller_id),
+            "buyerId": ObjectId(data.buyerId),
+            "date": now,
+            "dueDays": data.dueDays,
+            "items": invoice_items,
+            "subtotal": subtotal,
+            "cgst": round(total_cgst, 2),
+            "sgst": round(total_sgst, 2),
+            "igst": round(total_igst, 2),
+            "gst": total_gst,
+            "total": grand_total,
+            "totalPaid": 0,
+            "pendingAmount": grand_total,
+            "status": "draft",
+            "notes": data.notes,
+            "poNumber": data.poNumber or "",
+            "challanNumber": data.challanNumber or "",
+            "placeOfSupply": place_of_supply,
+            "sellerState": seller_state,
+            "buyerState": buyer_state,
+            "taxType": tax_type,
+            "transport": data.transport.model_dump() if data.transport else {},
+            "termsAndConditions": data.termsAndConditions or "",
+            "shippingAddress": data.shippingAddress.model_dump() if data.shippingAddress else {},
+            "paymentTerms": data.paymentTerms or "",
+            "additionalCharges": additional_charges,
+            "freight": freight_amount,
+            "tcsEnabled": data.tcsEnabled,
+            "tcsPercent": tcs_percent,
+            "tcsAmount": tcs_amount,
+            "roundOff": round_off,
+            "offlineSynced": True,
+            "createdBy": str(user["_id"]),
+            "createdAt": now,
+            "updatedAt": now
+        }
+
+        result = await db.invoices.insert_one(invoice_doc)
+        invoice_doc["_id"] = result.inserted_id
+        invoice_doc["buyerName"] = buyer.get("buyerName", "Unknown")
+
+        # Stock deduction is skipped for offline synced invoices for safety
+        # The seller should manually review stock after sync
+
+        logger.info(f"Offline draft synced → {invoice_number} for seller {seller_id}")
+        return {"message": "Offline draft synced successfully", "invoice": serialize_doc(invoice_doc)}
+
+
+
     @router.get("/invoices/{invoice_id}")
     async def get_invoice(invoice_id: str, authorization: str = Header(...)):
         user = await get_current_user(authorization)
