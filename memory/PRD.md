@@ -37,7 +37,8 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Dashboard Sync Status Widget — shows pending count, sync button, last sync time
     - PWA Setup — manifest.json, service worker (cache-first for assets, network-first for pages)
     - Service Worker Registration — auto-register on app load
-    - Backend Sync Endpoint — POST /api/invoices/sync-offline-draft (server generates real ID/number)
+    - Backend Sync Endpoint — POST /api/business-tools/invoices/sync-offline-draft (server generates real ID/number)
+    - **Bug Fix (Feb 2026)**: Fixed SW TypeError by skipping RSC requests and proper Response fallbacks. Fixed sync URL. Fixed deprecated meta tag.
 
 ## Report Tabs (15 total)
 Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | GST Report | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
