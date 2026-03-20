@@ -43,6 +43,10 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - **EmployeeAccessContext:** canView(module), canAction(module), isFullAdmin, isDisabled helpers
     - **Nav Items:** Each nav item has module field for permission-based visibility
 
+## Recent Changes (Mar 2026)
+- Removed private `emergentintegrations==0.1.0` from `requirements.txt` to unblock Render/Vercel deployments
+- Fixed unused `firebase_app` variable lint warning in `business_tools_router.py`
+
 ## Prioritized Backlog
 ### P1
 1. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment

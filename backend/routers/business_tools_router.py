@@ -293,7 +293,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         # Create Firebase user
         try:
             # Check if Firebase is initialized
-            firebase_app = firebase_admin.get_app()
+            firebase_admin.get_app()
             firebase_user = firebase_auth.create_user(
                 email=data.email.lower(),
                 password=data.password,
