@@ -86,10 +86,13 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
     if (!access?.userId) return;
 
     const socket = io(API_URL, {
-      path: '/api/socket.io',
-      transports: ['websocket', 'polling'],
+      path: '/api/socket.io/',
+      transports: ['polling', 'websocket'],
       reconnection: true,
-      reconnectionDelay: 2000,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 3000,
+      reconnectionDelayMax: 30000,
+      timeout: 10000,
     });
 
     socket.on('connect', () => {

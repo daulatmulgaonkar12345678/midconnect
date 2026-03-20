@@ -13107,7 +13107,7 @@ async def join_user_room(sid, data):
         logger.info(f"Socket.IO: {sid} joined room user_{user_id}")
 
 # Mount Socket.IO as a sub-application
-sio_asgi = _socketio.ASGIApp(sio)
+sio_asgi = _socketio.ASGIApp(sio, socketio_path='')
 app.mount("/api/socket.io", sio_asgi)
 
 # ── Employee Management Router (Enhanced) ──
