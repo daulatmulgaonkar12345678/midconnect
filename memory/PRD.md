@@ -32,12 +32,13 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - EmployeeAccessContext: canView(module), canAction(module), isFullAdmin, isDisabled helpers
 16. **Company Banner in Business Tools (Mar 2026)**: Displays company name + logo in sidebar
 17. **RBAC Fix (Mar 2026)**: Fixed critical architectural bug where useEmployeeAccess() hook was called outside EmployeeAccessProvider. Refactored layout.tsx into outer (BusinessToolsLayout) and inner (BusinessToolsInner) components. Admin = full access, Employee = filtered by canView/canAction. Added loading fallback for employee permission resolution.
+18. **Employee Pending Tab Fix (Mar 2026)**: Fixed active employees appearing in Pending tab. Backend query now explicitly excludes active/disabled/unlinked statuses and users with unlinkedFrom field. Frontend clears employee list on tab switch to prevent stale data.
 
 ## Recent Changes (Mar 2026)
-- **Critical Fix:** Refactored `/app/frontend/src/app/seller/business-tools/layout.tsx` — split into `BusinessToolsLayout` (renders providers) and `BusinessToolsInner` (renders UI inside providers). This ensures `useEmployeeAccess()` hook receives correct React context.
+- **Critical Fix:** Refactored `/app/frontend/src/app/seller/business-tools/layout.tsx` — split into `BusinessToolsLayout` (renders providers) and `BusinessToolsInner` (renders UI inside providers). Ensures `useEmployeeAccess()` hook receives correct React context.
+- **Bug Fix:** Active employees no longer show in Pending tab — tightened MongoDB query + frontend state reset on tab switch
 - **Improved NoAccess component** — now shows "Access Restricted" with custom message support
-- **Fixed unused `paid` variable** lint error in `invoice_router.py` (line 1531)
-- Fixed Socket.IO duplicate CORS header: switched from `app.mount()` to `ASGIApp` wrapper pattern
+- **Fixed unused `paid` variable** lint error in `invoice_router.py`
 
 ## Prioritized Backlog
 ### P1

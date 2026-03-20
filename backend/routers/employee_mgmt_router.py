@@ -208,15 +208,16 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         if tab == "active":
             query = {"companyId": ObjectId(seller_id), "employeeStatus": {"$in": ["active", "disabled"]}}
         elif tab == "pending":
-            # Users who have registered but never linked to any company
-            query = {"companyId": {"$exists": False}, "employeeStatus": {"$exists": False}}
-            # Also check for users with companyId=null
-            query = {"$or": [
-                {"companyId": {"$exists": False}},
-                {"companyId": None}
-            ], "employeeStatus": {"$nin": ["active", "disabled"]}}
-            # Don't return sellers
-            query["accountType"] = {"$nin": ["seller", "admin"]}
+            # Users who registered but are NOT linked to any company and NOT active/disabled/unlinked
+            query = {
+                "$or": [
+                    {"companyId": {"$exists": False}},
+                    {"companyId": None}
+                ],
+                "employeeStatus": {"$nin": ["active", "disabled", "unlinked"]},
+                "accountType": {"$nin": ["seller", "admin"]},
+                "unlinkedFrom": {"$exists": False},
+            }
         elif tab == "unlinked":
             query = {"unlinkedFrom": ObjectId(seller_id), "employeeStatus": "unlinked"}
         else:

@@ -69,6 +69,7 @@ export default function EmployeeManagementPage() {
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true);
+    setEmployees([]);
     try {
       const h = await authHeaders();
       const res = await fetch(`${API_URL}/api/business-tools/employee-mgmt/list?tab=${tab}`, { headers: h });
