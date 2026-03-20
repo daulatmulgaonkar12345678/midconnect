@@ -13086,6 +13086,36 @@ from routers.quotation_router import init_quotation_router
 quotation_router = init_quotation_router(db, verify_firebase_token)
 app.include_router(quotation_router, prefix="/api/business-tools")
 
+# ── Socket.IO for real-time access sync ──
+import socketio as _socketio
+sio = _socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*', logger=False, engineio_logger=False)
+
+@sio.event
+async def connect(sid, environ):
+    logger.info(f"Socket.IO client connected: {sid}")
+
+@sio.event
+async def disconnect(sid):
+    logger.info(f"Socket.IO client disconnected: {sid}")
+
+@sio.event
+async def join_user_room(sid, data):
+    """Client sends their user ID to join a personal room for access updates."""
+    user_id = data.get("userId", "")
+    if user_id:
+        sio.enter_room(sid, f"user_{user_id}")
+        logger.info(f"Socket.IO: {sid} joined room user_{user_id}")
+
+# Mount Socket.IO as a sub-application
+sio_asgi = _socketio.ASGIApp(sio)
+app.mount("/api/socket.io", sio_asgi)
+
+# ── Employee Management Router (Enhanced) ──
+from routers.employee_mgmt_router import init_employee_mgmt_router
+from utils.permissions import resolve_seller_id as _resolve_seller_id
+employee_mgmt_router = init_employee_mgmt_router(db, verify_firebase_token, _resolve_seller_id, sio)
+app.include_router(employee_mgmt_router, prefix="/api/business-tools")
+
 
 
 

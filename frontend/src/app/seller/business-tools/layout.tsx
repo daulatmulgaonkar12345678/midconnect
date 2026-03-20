@@ -7,6 +7,7 @@ import { NetworkProvider, useNetworkContext } from '@/context/NetworkContext';
 import NetworkStatusBanner from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
 import ReferralModal from '@/components/ReferralModal';
+import { EmployeeAccessProvider } from '@/context/EmployeeAccessContext';
 import Link from 'next/link';
 import { 
   Package2,
@@ -61,6 +62,7 @@ const navItems = [
     label: 'Home',
     icon: Home,
     permission: 'create_invoice',
+    module: 'dashboard',
     color: 'indigo',
     exact: true
   },
@@ -69,6 +71,7 @@ const navItems = [
     label: 'Notifications',
     icon: Bell,
     permission: 'create_invoice',
+    module: 'dashboard',
     color: 'red',
     showBadge: true
   },
@@ -77,6 +80,7 @@ const navItems = [
     label: 'Inventory', 
     icon: Package2,
     permission: 'manage_inventory',
+    module: 'inventory',
     color: 'blue'
   },
   { 
@@ -84,6 +88,7 @@ const navItems = [
     label: 'Low Stock Alerts', 
     icon: AlertTriangle,
     permission: 'manage_inventory',
+    module: 'inventory',
     color: 'orange'
   },
   { 
@@ -91,6 +96,7 @@ const navItems = [
     label: 'Buyers', 
     icon: Users,
     permission: 'manage_buyers',
+    module: 'buyers',
     color: 'green'
   },
   { 
@@ -98,6 +104,7 @@ const navItems = [
     label: 'Suppliers', 
     icon: Truck,
     permission: 'manage_suppliers',
+    module: 'suppliers',
     color: 'purple'
   },
   { 
@@ -105,6 +112,7 @@ const navItems = [
     label: 'Invoices', 
     icon: FileText,
     permission: 'create_invoice',
+    module: 'invoices',
     color: 'orange'
   },
   {
@@ -112,6 +120,7 @@ const navItems = [
     label: 'Pending Orders',
     icon: Clock,
     permission: 'create_invoice',
+    module: 'invoices',
     color: 'amber'
   },
   {
@@ -119,6 +128,7 @@ const navItems = [
     label: 'Quotations',
     icon: Layers,
     permission: 'create_invoice',
+    module: 'quotations',
     color: 'violet'
   },
   {
@@ -126,6 +136,7 @@ const navItems = [
     label: 'Charts & Graphs',
     icon: LineChart,
     permission: 'manage_inventory',
+    module: 'reports',
     color: 'cyan'
   },
   { 
@@ -133,6 +144,7 @@ const navItems = [
     label: 'Product Analytics', 
     icon: BarChart3,
     permission: 'manage_inventory',
+    module: 'reports',
     color: 'blue'
   },
   { 
@@ -140,6 +152,7 @@ const navItems = [
     label: 'Composite Products', 
     icon: Layers,
     permission: 'manage_inventory',
+    module: 'inventory',
     color: 'pink'
   },
   { 
@@ -147,6 +160,7 @@ const navItems = [
     label: 'Reports', 
     icon: BarChart3,
     permission: 'view_reports',
+    module: 'reports',
     color: 'cyan'
   },
   { 
@@ -154,6 +168,7 @@ const navItems = [
     label: 'Employees', 
     icon: UserCog,
     permission: 'manage_employees',
+    module: 'employees',
     color: 'amber'
   },
   { 
@@ -161,6 +176,7 @@ const navItems = [
     label: 'Roles & Permissions', 
     icon: Shield,
     permission: 'manage_roles',
+    module: 'employees',
     color: 'red'
   },
   { 
@@ -168,6 +184,7 @@ const navItems = [
     label: 'Activity Logs', 
     icon: Activity,
     permission: 'manage_roles',
+    module: 'settings',
     color: 'slate'
   },
   { 
@@ -175,6 +192,7 @@ const navItems = [
     label: 'Business Settings', 
     icon: Settings,
     permission: 'create_invoice',
+    module: 'settings',
     color: 'indigo'
   }
 ];
@@ -370,6 +388,7 @@ export default function BusinessToolsLayout({
 
   return (
     <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, loading, token }}>
+      <EmployeeAccessProvider>
       <NetworkProvider>
       <Toaster position="top-right" richColors closeButton />
       <div className="min-h-screen bg-gray-50">
@@ -568,6 +587,7 @@ export default function BusinessToolsLayout({
       <ReferralModal isOpen={showReferral} onClose={() => setShowReferral(false)} token={token} />
       </div>
       </NetworkProvider>
+      </EmployeeAccessProvider>
     </PermissionContext.Provider>
   );
 }
