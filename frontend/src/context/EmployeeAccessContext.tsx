@@ -118,18 +118,20 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
   const isFullAdmin = access?.isAdmin === true;
 
   const canView = useCallback((module: string) => {
-    if (!access) return false;
+    if (loading) return true; // Optimistic while loading
+    if (!access) return true; // No access data yet - allow (admins/sellers)
     if (access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
     return access.permissions[module]?.view === true;
-  }, [access]);
+  }, [access, loading]);
 
   const canAction = useCallback((module: string) => {
-    if (!access) return false;
+    if (loading) return true; // Optimistic while loading
+    if (!access) return true; // No access data yet - allow (admins/sellers)
     if (access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
     return access.permissions[module]?.view === true && access.permissions[module]?.action === true;
-  }, [access]);
+  }, [access, loading]);
 
   const isDisabled = access?.status === 'disabled';
   const isUnlinked = access?.status === 'unlinked' || (!access?.isAdmin && !access?.companyId);

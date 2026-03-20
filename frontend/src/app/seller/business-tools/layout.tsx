@@ -429,7 +429,7 @@ export default function BusinessToolsLayout({
   const requiredModule = ROUTE_MODULE_MAP[pathname] || null;
   const routeBlocked = requiredModule ? !canView(requiredModule) : false;
 
-  if (authLoading || loading || empLoading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
