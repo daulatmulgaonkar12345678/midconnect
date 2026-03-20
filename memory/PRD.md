@@ -27,36 +27,23 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 13. **Advanced Offline Business System - Quotation Module (Mar 2026)**
 14. **Enhancement: Pricing + Sharing (Mar 2026)** — Auto product rate, Per-item discount (% / Rs), WhatsApp PDF sharing with public token-based links, "Powered by UdyogConnect" branding
 15. **Employee System with Live Access Control (Mar 2026)**:
-    - **3-Tab Management:** Active, Pending, Unlinked employees
-    - **Link via Email:** Admin searches by email, validates buyer status, assigns role + permissions
-    - **Module-Based Permissions:** 10 modules (Dashboard, Inventory, Invoices, Quotations, Purchase Orders, Reports, Buyers, Suppliers, Employees, Settings) with View + Action per module
-    - **6 Role Templates:** Admin (full), Manager (no employee/settings action), Sales Executive, Inventory Manager, Accountant, Viewer (read-only)
-    - **Flexible Roles:** Templates pre-fill permissions but admin can customize any combination
-    - **Real-Time Access Sync:** Socket.IO (python-socketio + socket.io-client) pushes access_updated events. No logout required — UI updates instantly
-    - **Self-Protection:** Admin cannot modify their own access or unlink themselves
-    - **Soft Disable:** active/disabled status. Disabled = login allowed, no system access
-    - **Audit Logging:** employee_logs collection tracks all link/unlink/permission changes
-    - **Unlink Employee:** Instant access revocation, moves to "Unlinked" tab
-    - **Re-link:** Previously unlinked employees can be re-linked with new role/permissions
-    - **Company Delete Impact:** POST /unlink-all endpoint revokes all employee access when company deleted
-    - **Permission Grid UI:** Visual checkbox grid for View/Action per module
-    - **EmployeeAccessContext:** canView(module), canAction(module), isFullAdmin, isDisabled helpers
-    - **Nav Items:** Each nav item has module field for permission-based visibility
-
-16. **Company Banner in Business Tools (Mar 2026)**: Displays company name + logo at the top of the sidebar for both admins and employees. Shows role label. Falls back to Building icon when no logo is set.
-- Fixed Socket.IO duplicate CORS header: switched from `app.mount()` to `ASGIApp` wrapper pattern — Socket.IO handles own CORS for `/api/socket.io/*`, FastAPI CORSMiddleware handles the rest
+    - 3-Tab Management, Link via Email, Module-Based Permissions (10 modules), 6 Role Templates
+    - Real-Time Access Sync via Socket.IO, Self-Protection, Soft Disable, Audit Logging
+    - EmployeeAccessContext: canView(module), canAction(module), isFullAdmin, isDisabled helpers
+16. **Company Banner in Business Tools (Mar 2026)**: Displays company name + logo in sidebar
+17. **RBAC Fix (Mar 2026)**: Fixed critical architectural bug where useEmployeeAccess() hook was called outside EmployeeAccessProvider. Refactored layout.tsx into outer (BusinessToolsLayout) and inner (BusinessToolsInner) components. Admin = full access, Employee = filtered by canView/canAction. Added loading fallback for employee permission resolution.
 
 ## Recent Changes (Mar 2026)
-- Set explicit `cors_allowed_origins` on Socket.IO matching production domains
-- Reassigned `app` at end of server.py so `server:app` works on Render without start command changes
-- Frontend Socket.IO client: polling-first transport, reconnection cap (10 attempts), backoff (3s→30s)
-- Removed private `emergentintegrations==0.1.0` from `requirements.txt` to unblock Render/Vercel deployments
-- Fixed unused `firebase_app` variable lint warning in `business_tools_router.py`
+- **Critical Fix:** Refactored `/app/frontend/src/app/seller/business-tools/layout.tsx` — split into `BusinessToolsLayout` (renders providers) and `BusinessToolsInner` (renders UI inside providers). This ensures `useEmployeeAccess()` hook receives correct React context.
+- **Improved NoAccess component** — now shows "Access Restricted" with custom message support
+- **Fixed unused `paid` variable** lint error in `invoice_router.py` (line 1531)
+- Fixed Socket.IO duplicate CORS header: switched from `app.mount()` to `ASGIApp` wrapper pattern
 
 ## Prioritized Backlog
 ### P1
 1. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
 2. Seller Reminder Controls (configurable schedules)
+3. Quotation/Employee Activity Dashboards
 
 ### P2
 - GSTR-1 JSON export | Custom Material Report
@@ -68,11 +55,12 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 - Offline sync queue panel | Conflict resolution UI
 
 ## Key Files
-- `/app/backend/routers/employee_mgmt_router.py` - Enhanced employee management (link/unlink/permissions/audit)
+- `/app/frontend/src/app/seller/business-tools/layout.tsx` - RBAC layout (BusinessToolsLayout + BusinessToolsInner)
 - `/app/frontend/src/context/EmployeeAccessContext.tsx` - Real-time access context with Socket.IO
+- `/app/frontend/src/components/NoAccess.tsx` - Access restricted component
+- `/app/backend/routers/employee_mgmt_router.py` - Employee management (link/unlink/permissions/audit)
 - `/app/frontend/src/app/seller/business-tools/employees/page.tsx` - 3-tab employee management UI
-- `/app/frontend/src/app/seller/business-tools/layout.tsx` - Updated with EmployeeAccessProvider + module nav
 - `/app/backend/routers/quotation_router.py` - Quotation CRUD + PDF + share-link + conversion
-- `/app/backend/services/quotation_pdf_service.py` - Quotation PDF with discount + DRAFT watermark
 - `/app/backend/routers/invoice_router.py` - Invoice CRUD with discountType support
 - `/app/frontend/src/lib/syncEngine.ts` - Priority-ordered offline sync
+- `/app/backend/utils/permissions.py` - Backend permission resolution
