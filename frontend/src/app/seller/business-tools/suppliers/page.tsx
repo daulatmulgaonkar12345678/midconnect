@@ -41,7 +41,8 @@ interface InventoryItem {
 
 export default function SuppliersPage() {
   const { getIdToken } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, canAction: canActionPerm } = usePermissions();
+  const canManageSuppliers = canActionPerm('suppliers');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,16 +196,6 @@ export default function SuppliersPage() {
     }
   };
 
-  if (!hasPermission('manage_suppliers')) {
-    return (
-      <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-        <Truck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900">Access Denied</h3>
-        <p className="text-gray-500 mt-1">You don&apos;t have permission to manage suppliers.</p>
-      </div>
-    );
-  }
-
   if (loading && suppliers.length === 0) {
     return (<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>);
   }
@@ -223,7 +214,9 @@ export default function SuppliersPage() {
           <p className="text-gray-600 mt-1">Manage your supplier network and product mappings</p>
         </div>
         <button onClick={openCreateModal} data-testid="add-supplier-btn"
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
+          disabled={!canManageSuppliers}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${canManageSuppliers ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+          title={!canManageSuppliers ? 'No permission to add suppliers' : ''}>
           <Plus className="h-5 w-5" /> Add Supplier
         </button>
       </div>

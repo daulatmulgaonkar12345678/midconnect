@@ -59,7 +59,8 @@ interface Recipient {
 
 export default function InventoryPage() {
   const { getIdToken } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, canAction: canActionPerm } = usePermissions();
+  const canManageInventory = canActionPerm('inventory');
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -284,16 +285,6 @@ export default function InventoryPage() {
   };
 
   const closeShareModal = () => { setShowShareModal(false); setShareStep('products'); setShareResult(null); };
-
-  if (!hasPermission('manage_inventory')) {
-    return (
-      <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-        <Package2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900">Access Denied</h3>
-        <p className="text-gray-500 mt-1">You don&apos;t have permission to manage inventory.</p>
-      </div>
-    );
-  }
 
   if (loading && inventory.length === 0) {
     return (<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>);
@@ -530,12 +521,14 @@ export default function InventoryPage() {
                           </>
                         ) : (
                           <>
-                            {!isComposite(item) && (
+                            {!isComposite(item) && canManageInventory && (
                               <button onClick={() => setAdjustModal(item)} className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" data-testid={`adjust-btn-${item.listingId}`}>Adjust</button>
                             )}
+                            {canManageInventory && (
                             <button onClick={() => startEditing(item)} className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg" data-testid={`edit-btn-${item.listingId}`}>
                               <Pencil className="h-3 w-3" /> Edit
                             </button>
+                            )}
                           </>
                         )}
                       </div>

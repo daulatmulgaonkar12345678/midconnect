@@ -161,10 +161,6 @@ export default function CompositeProductsPage() {
   const addComponent = () => setForm(prev => ({ ...prev, components: [...prev.components, { listingId: "", quantity: 1 }] }));
   const removeComponent = (idx: number) => setForm(prev => ({ ...prev, components: prev.components.filter((_, i) => i !== idx) }));
 
-  if (!hasPermission("manage_inventory")) {
-    return <div className="p-6 text-center text-gray-500" data-testid="no-permission">You do not have permission to manage composite products.</div>;
-  }
-
   const currentCatProducts = catProducts[form.categoryId] || [];
 
   return (

@@ -216,15 +216,6 @@ export default function PurchaseOrdersPage() {
     setGrnSubmitting(false);
   };
 
-  if (!hasPermission('manage_inventory')) {
-    return (
-      <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-        <Package2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900">Access Denied</h3>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6" data-testid="purchase-orders-page">
       {/* Header */}

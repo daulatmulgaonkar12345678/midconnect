@@ -355,10 +355,6 @@ export default function ReportsPage() {
     { key: "buyers", label: "Top Buyers", icon: Users }
   ];
 
-  if (!hasPermission("view_reports")) {
-    return <div className="p-6 text-center text-gray-500" data-testid="no-permission">You do not have permission to view reports.</div>;
-  }
-
   const needsDateFilter = !["inventory", "inventory-value"].includes(tab);
   const needsPeriodFilter = ["sales", "profit"].includes(tab);
   const needsEntityFilter = ["outstanding", "purchase", "stock-movement", "buyer-ledger", "gst-report"].includes(tab);

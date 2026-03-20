@@ -98,7 +98,8 @@ function isReceiptRequired(method: string) { return RECEIPT_REQUIRED_METHODS.inc
 
 export default function InvoicesPage() {
   const { getIdToken, user } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, canAction: canActionPerm } = usePermissions();
+  const canCreateInvoice = canActionPerm('invoices');
   const { isOnline } = useNetworkContext();
   const searchParams = useSearchParams();
   const prefillApplied = useRef(false);
@@ -648,10 +649,6 @@ export default function InvoicesPage() {
 
   const filteredInvoices = statusFilter === 'all' ? invoices : invoices.filter(i => i.status === statusFilter);
 
-  if (!hasPermission('create_invoice')) {
-    return <div className="text-center py-12 bg-white rounded-xl border" data-testid="no-permission"><FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" /><p className="text-gray-500">No permission to manage invoices.</p></div>;
-  }
-
   return (
     <div className="space-y-6" data-testid="invoices-page">
       {/* Header */}
@@ -671,7 +668,7 @@ export default function InvoicesPage() {
           <button onClick={() => setShowReminderSettings(true)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" title="Reminder Settings" data-testid="reminder-settings-btn">
             <Settings className="w-4 h-4" />
           </button>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium" data-testid="create-invoice-btn">
+          <button onClick={() => setShowForm(true)} disabled={!canCreateInvoice} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${canCreateInvoice ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`} data-testid="create-invoice-btn" title={!canCreateInvoice ? 'No permission to create invoices' : ''}>
             <Plus className="w-4 h-4" /> New Invoice
           </button>
         </div>

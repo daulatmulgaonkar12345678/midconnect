@@ -993,6 +993,41 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         
         account_type = user.get("accountType", "seller")
         
+        # Check if user is a linked employee (new system via companyId)
+        company_id = user.get("companyId")
+        emp_status = user.get("employeeStatus")
+        emp_perms = user.get("employeePermissions")
+        
+        if company_id and emp_status in ("active", "disabled") and emp_perms:
+            # Linked employee - map module permissions to old string permissions
+            perm_to_module = {
+                "create_invoice": ("invoices", "action"),
+                "manage_buyers": ("buyers", "action"),
+                "manage_suppliers": ("suppliers", "action"),
+                "manage_inventory": ("inventory", "action"),
+                "manage_listings": ("inventory", "action"),
+                "view_reports": ("reports", "view"),
+                "view_enquiries": ("dashboard", "view"),
+                "view_purchase_price": ("inventory", "view"),
+                "manage_employees": ("employees", "action"),
+                "manage_roles": ("employees", "action"),
+            }
+            permissions = []
+            for perm_str, (module, level) in perm_to_module.items():
+                mod_perm = emp_perms.get(module, {})
+                if level == "view" and mod_perm.get("view", False):
+                    permissions.append(perm_str)
+                elif level == "action" and mod_perm.get("view", False) and mod_perm.get("action", False):
+                    permissions.append(perm_str)
+            
+            return {
+                "accountType": "employee",
+                "isAdmin": False,
+                "permissions": permissions,
+                "modulePermissions": emp_perms,
+                "role": user.get("employeeRole")
+            }
+        
         if account_type == "seller":
             # Seller Admin has all permissions
             return {
@@ -1002,7 +1037,7 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
                 "role": None
             }
         
-        # Employee - get role permissions
+        # Legacy employee - get role permissions
         role_id = user.get("roleId")
         role = None
         permissions = []

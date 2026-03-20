@@ -55,7 +55,8 @@ const emptyAddr = (): ShippingAddress => ({
 
 export default function BuyersPage() {
   const { getIdToken } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, canAction: canActionPerm } = usePermissions();
+  const canManageBuyers = canActionPerm('buyers');
   const [buyers, setBuyers] = useState<Buyer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -262,16 +263,6 @@ export default function BuyersPage() {
     } catch { setError('Failed to generate sales push'); }
   };
 
-  if (!hasPermission('manage_buyers')) {
-    return (
-      <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-        <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900">Access Denied</h3>
-        <p className="text-gray-500 mt-1">You don&apos;t have permission to manage buyers.</p>
-      </div>
-    );
-  }
-
   if (loading && buyers.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -290,8 +281,10 @@ export default function BuyersPage() {
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+          disabled={!canManageBuyers}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${canManageBuyers ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
           data-testid="add-buyer-btn"
+          title={!canManageBuyers ? 'No permission to add buyers' : ''}
         >
           <Plus className="h-5 w-5" />
           Add Buyer

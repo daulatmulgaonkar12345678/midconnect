@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from './layout';
+import { useEmployeeAccess } from '@/context/EmployeeAccessContext';
 import { useNetworkContext } from '@/context/NetworkContext';
 import ReferralWidget from '@/components/ReferralWidget';
 import ReferralModal from '@/components/ReferralModal';
@@ -44,7 +45,7 @@ function fmtCurrency(n: number) { return n.toLocaleString('en-IN', { minimumFrac
 
 export default function BusinessToolsHomePage() {
   const { getIdToken } = useAuth();
-  const { hasPermission, token, loading: permLoading } = usePermissions();
+  const { hasPermission, canAction: canActionPerm, token, loading: permLoading } = usePermissions();
   const [charts, setCharts] = useState<HomeCharts | null>(null);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,15 +70,16 @@ export default function BusinessToolsHomePage() {
   }, [token, permLoading]);
 
   const quickLinks = [
-    { href: '/seller/business-tools/inventory', label: 'Inventory', desc: 'Manage stock and products', icon: Package2, color: 'bg-blue-50 text-blue-600' },
-    { href: '/seller/business-tools/invoices', label: 'Invoices', desc: 'Create and manage invoices', icon: FileText, color: 'bg-indigo-50 text-indigo-600' },
-    { href: '/seller/business-tools/charts', label: 'Charts & Graphs', desc: 'Detailed analytics', icon: LineChartIcon, color: 'bg-cyan-50 text-cyan-600' },
-    { href: '/seller/business-tools/suppliers', label: 'Suppliers', desc: 'Track supplier details', icon: Truck, color: 'bg-violet-50 text-violet-600' },
-    { href: '/seller/business-tools/purchase-orders', label: 'Purchase Orders', desc: 'Track purchasing', icon: ShoppingCart, color: 'bg-green-50 text-green-600' },
-    { href: '/seller/business-tools/reports', label: 'Reports', desc: 'View sales reports', icon: BarChart3, color: 'bg-amber-50 text-amber-600' },
+    { href: '/seller/business-tools/inventory', label: 'Inventory', desc: 'Manage stock and products', icon: Package2, color: 'bg-blue-50 text-blue-600', module: 'inventory' },
+    { href: '/seller/business-tools/invoices', label: 'Invoices', desc: 'Create and manage invoices', icon: FileText, color: 'bg-indigo-50 text-indigo-600', module: 'invoices' },
+    { href: '/seller/business-tools/charts', label: 'Charts & Graphs', desc: 'Detailed analytics', icon: LineChartIcon, color: 'bg-cyan-50 text-cyan-600', module: 'reports' },
+    { href: '/seller/business-tools/suppliers', label: 'Suppliers', desc: 'Track supplier details', icon: Truck, color: 'bg-violet-50 text-violet-600', module: 'suppliers' },
+    { href: '/seller/business-tools/purchase-orders', label: 'Purchase Orders', desc: 'Track purchasing', icon: ShoppingCart, color: 'bg-green-50 text-green-600', module: 'purchase_orders' },
+    { href: '/seller/business-tools/reports', label: 'Reports', desc: 'View sales reports', icon: BarChart3, color: 'bg-amber-50 text-amber-600', module: 'reports' },
   ];
 
   const { isOnline, syncState, triggerSync } = useNetworkContext();
+  const { canView } = useEmployeeAccess();
   const [showReferralModal, setShowReferralModal] = useState(false);
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
@@ -327,7 +329,7 @@ export default function BusinessToolsHomePage() {
       <div>
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Access</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="nav-grid">
-          {quickLinks.filter(n => hasPermission('create_invoice') || hasPermission('manage_inventory')).map(item => {
+          {quickLinks.filter(n => canView(n.module)).map(item => {
             const Icon = item.icon;
             return (
               <Link key={item.href} href={item.href}

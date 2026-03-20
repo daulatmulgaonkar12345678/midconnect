@@ -8,6 +8,7 @@ import NetworkStatusBanner from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
 import ReferralModal from '@/components/ReferralModal';
 import { EmployeeAccessProvider, useEmployeeAccess } from '@/context/EmployeeAccessContext';
+import NoAccess from '@/components/NoAccess';
 import Link from 'next/link';
 import { 
   Package2,
@@ -41,6 +42,7 @@ interface PermissionContextType {
   permissions: string[];
   isAdmin: boolean;
   hasPermission: (permission: string) => boolean;
+  canAction: (module: string) => boolean;
   loading: boolean;
   token: string | null;
 }
@@ -49,11 +51,34 @@ const PermissionContext = createContext<PermissionContextType>({
   permissions: [],
   isAdmin: false,
   hasPermission: () => false,
+  canAction: () => false,
   loading: true,
   token: null
 });
 
 export const usePermissions = () => useContext(PermissionContext);
+
+// Map URL paths to their required module for route-level protection
+const ROUTE_MODULE_MAP: Record<string, string> = {
+  '/seller/business-tools': 'dashboard',
+  '/seller/business-tools/inventory': 'inventory',
+  '/seller/business-tools/low-stock-alerts': 'inventory',
+  '/seller/business-tools/composite-products': 'inventory',
+  '/seller/business-tools/buyers': 'buyers',
+  '/seller/business-tools/suppliers': 'suppliers',
+  '/seller/business-tools/invoices': 'invoices',
+  '/seller/business-tools/pending-orders': 'invoices',
+  '/seller/business-tools/quotations': 'quotations',
+  '/seller/business-tools/purchase-orders': 'purchase_orders',
+  '/seller/business-tools/charts': 'reports',
+  '/seller/business-tools/analytics': 'reports',
+  '/seller/business-tools/reports': 'reports',
+  '/seller/business-tools/employees': 'employees',
+  '/seller/business-tools/roles': 'employees',
+  '/seller/business-tools/activity-logs': 'settings',
+  '/seller/business-tools/settings': 'settings',
+  '/seller/business-tools/notifications': 'dashboard',
+};
 
 // Business Tools navigation items
 const navItems = [
@@ -396,10 +421,15 @@ export default function BusinessToolsLayout({
     return isAdmin || permissions.includes(permission);
   }, [isAdmin, permissions]);
 
-  // Filter nav items based on permissions
-  const visibleNavItems = navItems.filter(item => hasPermission(item.permission));
+  // Filter nav items based on module permissions from EmployeeAccessContext
+  const { canView, canAction, loading: empLoading } = useEmployeeAccess();
+  const visibleNavItems = navItems.filter(item => canView(item.module));
 
-  if (authLoading || loading) {
+  // Route-level protection: check if current path requires a module the user can't view
+  const requiredModule = ROUTE_MODULE_MAP[pathname] || null;
+  const routeBlocked = requiredModule ? !canView(requiredModule) : false;
+
+  if (authLoading || loading || empLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -424,7 +454,7 @@ export default function BusinessToolsLayout({
   };
 
   return (
-    <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, loading, token }}>
+    <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, canAction, loading, token }}>
       <EmployeeAccessProvider>
       <NetworkProvider>
       <Toaster position="top-right" richColors closeButton />
@@ -550,7 +580,7 @@ export default function BusinessToolsLayout({
 
             {/* Main Content */}
             <main className="flex-1 min-w-0">
-              {children}
+              {routeBlocked ? <NoAccess /> : children}
             </main>
           </div>
         </div>

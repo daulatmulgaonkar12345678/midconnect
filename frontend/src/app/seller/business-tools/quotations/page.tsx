@@ -66,7 +66,8 @@ function calcItemTotals(item: QuotationItem) {
 export default function QuotationsPage() {
   const router = useRouter();
   const { getIdToken, user } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, canAction: canActionPerm } = usePermissions();
+  const canCreateQuotation = canActionPerm('quotations');
   const { isOnline } = useNetworkContext();
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [buyers, setBuyers] = useState<Buyer[]>([]);
@@ -254,7 +255,7 @@ export default function QuotationsPage() {
           <h2 className="text-xl font-bold text-gray-900" data-testid="quotations-heading">Quotations</h2>
           <p className="text-sm text-gray-500">{quotations.length} quotation{quotations.length !== 1 ? 's' : ''}{!isOnline && <span className="ml-2 text-amber-600 inline-flex items-center gap-1"><WifiOff className="w-3 h-3" /> Offline</span>}</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors" data-testid="create-quotation-btn">
+        <button onClick={() => setShowForm(true)} disabled={!canCreateQuotation} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${canCreateQuotation ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`} data-testid="create-quotation-btn" title={!canCreateQuotation ? 'No permission to create quotations' : ''}>
           <Plus className="w-4 h-4" /> New Quotation
         </button>
       </div>

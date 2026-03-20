@@ -147,15 +147,6 @@ export default function ChartsGraphsPage() {
     loadCharts();
   }, [selectedProduct, period, customStart, customEnd, selectedSupplier, selectedCategory, selectedSeller, isAdmin, getAuthHeaders, token]);
 
-  if (!hasPermission('manage_inventory')) {
-    return (
-      <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-        <Package2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900">Access Denied</h3>
-      </div>
-    );
-  }
-
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
 
   // Build unified price trend data for multi-line chart
