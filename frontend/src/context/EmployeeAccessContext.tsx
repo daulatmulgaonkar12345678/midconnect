@@ -18,6 +18,8 @@ interface EmployeeAccess {
   permissions: Record<string, ModulePermission>;
   companyId: string | null;
   isAdmin: boolean;
+  companyName: string;
+  companyLogoUrl: string;
 }
 
 interface EmployeeAccessContextType {
@@ -34,6 +36,7 @@ interface EmployeeAccessContextType {
 const defaultAccess: EmployeeAccess = {
   userId: '', role: 'unassigned', status: 'pending',
   permissions: {}, companyId: null, isAdmin: false,
+  companyName: '', companyLogoUrl: '',
 };
 
 const EmployeeAccessContext = createContext<EmployeeAccessContextType>({

@@ -373,12 +373,37 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         doc = await db.users.find_one(
             {"_id": user["_id"]},
             {"_id": 0, "employeeRole": 1, "employeeStatus": 1, "employeePermissions": 1,
-             "companyId": 1, "accountType": 1, "roles": 1}
+             "companyId": 1, "accountType": 1, "roles": 1, "profile": 1}
         )
         if not doc:
             return {"role": "unassigned", "status": "pending", "permissions": {}, "isAdmin": False}
 
         is_admin = doc.get("accountType") == "seller" or "seller" in (doc.get("roles") or [])
+
+        # Fetch company info (name + logo)
+        company_name = ""
+        company_logo_url = ""
+        company_id = doc.get("companyId")
+
+        if is_admin:
+            # Admin IS the seller — use their own profile
+            profile = doc.get("profile") or {}
+            company_name = profile.get("businessName", "")
+            company_logo_url = profile.get("sellerLogoUrl", "")
+        elif company_id:
+            # Employee — look up the seller's profile
+            seller = await db.users.find_one(
+                {"_id": company_id},
+                {"_id": 0, "profile.businessName": 1, "profile.sellerLogoUrl": 1,
+                 "billingSettings.companyLogoUrl": 1}
+            )
+            if seller:
+                sp = seller.get("profile") or {}
+                company_name = sp.get("businessName", "")
+                company_logo_url = sp.get("sellerLogoUrl", "")
+                if not company_logo_url:
+                    company_logo_url = (seller.get("billingSettings") or {}).get("companyLogoUrl", "")
+
         return {
             "userId": uid,
             "role": doc.get("employeeRole", "unassigned"),
@@ -386,6 +411,8 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
             "permissions": doc.get("employeePermissions", {}),
             "companyId": str(doc["companyId"]) if doc.get("companyId") else None,
             "isAdmin": is_admin,
+            "companyName": company_name,
+            "companyLogoUrl": company_logo_url,
         }
 
     # ── AUDIT LOGS ──

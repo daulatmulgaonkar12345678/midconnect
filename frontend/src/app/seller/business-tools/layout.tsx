@@ -7,7 +7,7 @@ import { NetworkProvider, useNetworkContext } from '@/context/NetworkContext';
 import NetworkStatusBanner from '@/components/NetworkStatusBanner';
 import { Toaster } from 'sonner';
 import ReferralModal from '@/components/ReferralModal';
-import { EmployeeAccessProvider } from '@/context/EmployeeAccessContext';
+import { EmployeeAccessProvider, useEmployeeAccess } from '@/context/EmployeeAccessContext';
 import Link from 'next/link';
 import { 
   Package2,
@@ -230,6 +230,43 @@ function NetworkIndicator() {
 }
 
 
+// Company Banner Component
+function CompanyBanner() {
+  const { access, loading } = useEmployeeAccess();
+  if (loading || !access) return null;
+
+  const name = access.companyName || 'No Company Linked';
+  const logo = access.companyLogoUrl;
+  const role = access.isAdmin ? 'Admin' : (access.role && access.role !== 'unassigned' ? access.role : '');
+
+  return (
+    <div data-testid="company-banner" className="flex items-center gap-3 px-3 py-3 mb-3 rounded-lg bg-gradient-to-r from-slate-50 to-blue-50 border border-slate-200/80">
+      {logo ? (
+        <img
+          src={logo}
+          alt={name}
+          className="w-10 h-10 rounded-lg object-cover border border-slate-200 flex-shrink-0"
+          data-testid="company-banner-logo"
+        />
+      ) : (
+        <div className="w-10 h-10 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center flex-shrink-0" data-testid="company-banner-logo-placeholder">
+          <Building2 className="h-5 w-5 text-blue-600" />
+        </div>
+      )}
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-gray-900 truncate" data-testid="company-banner-name">
+          {name}
+        </p>
+        {role && (
+          <p className="text-xs text-gray-500 truncate" data-testid="company-banner-role">
+            {role}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function BusinessToolsLayout({
   children,
 }: {
@@ -439,6 +476,7 @@ export default function BusinessToolsLayout({
             {/* Sidebar Navigation - Desktop */}
             <aside className="hidden lg:block w-64 flex-shrink-0">
               <nav className="bg-white rounded-xl shadow-sm border p-4 sticky top-24">
+                <CompanyBanner />
                 <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
                   Modules
                 </h2>
@@ -476,7 +514,8 @@ export default function BusinessToolsLayout({
               <div className="lg:hidden fixed inset-0 z-50 bg-black/50" onClick={() => setMobileMenuOpen(false)}>
                 <div className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl" onClick={e => e.stopPropagation()}>
                   <div className="p-4 border-b">
-                    <h2 className="text-lg font-semibold text-gray-900">Business Tools</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 mb-3">Business Tools</h2>
+                    <CompanyBanner />
                   </div>
                   <nav className="p-4 space-y-1">
                     {visibleNavItems.map((item) => {

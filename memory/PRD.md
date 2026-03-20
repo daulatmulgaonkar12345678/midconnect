@@ -43,8 +43,10 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - **EmployeeAccessContext:** canView(module), canAction(module), isFullAdmin, isDisabled helpers
     - **Nav Items:** Each nav item has module field for permission-based visibility
 
-## Recent Changes (Mar 2026)
+16. **Company Banner in Business Tools (Mar 2026)**: Displays company name + logo at the top of the sidebar for both admins and employees. Shows role label. Falls back to Building icon when no logo is set.
 - Fixed Socket.IO duplicate CORS header: switched from `app.mount()` to `ASGIApp` wrapper pattern — Socket.IO handles own CORS for `/api/socket.io/*`, FastAPI CORSMiddleware handles the rest
+
+## Recent Changes (Mar 2026)
 - Set explicit `cors_allowed_origins` on Socket.IO matching production domains
 - Reassigned `app` at end of server.py so `server:app` works on Render without start command changes
 - Frontend Socket.IO client: polling-first transport, reconnection cap (10 attempts), backoff (3s→30s)
