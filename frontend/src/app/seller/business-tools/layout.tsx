@@ -115,6 +115,13 @@ const navItems = [
     color: 'amber'
   },
   {
+    href: '/seller/business-tools/quotations',
+    label: 'Quotations',
+    icon: Layers,
+    permission: 'create_invoice',
+    color: 'violet'
+  },
+  {
     href: '/seller/business-tools/charts',
     label: 'Charts & Graphs',
     icon: LineChart,

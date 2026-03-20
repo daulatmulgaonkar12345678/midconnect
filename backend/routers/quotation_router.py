@@ -1,443 +1,387 @@
 """
-QUOTATION API ROUTER
-====================
-
-Enterprise quotation endpoints for B2B marketplace.
+QUOTATION SYSTEM ROUTER
+========================
+Full quotation lifecycle: Create, Edit, List, PDF, WhatsApp, Convert to Invoice.
 
 Endpoints:
-- POST /quotes/create - Create quote (seller)
-- GET /quotes/{quoteId} - View quote (buyer)
-- POST /quotes/{quoteId}/accept - Accept quote (buyer)
-- POST /quotes/{quoteId}/reject - Reject quote (buyer)
-- GET /quotes/seller - List seller quotes
-- GET /quotes/buyer - List buyer quotes
-- GET /quotes/analytics - Quote analytics
-- POST /quotes/{quoteId}/whatsapp-preview - Get WhatsApp message
+- GET    /quotations              → List quotations
+- POST   /quotations              → Create quotation
+- GET    /quotations/{id}         → Get single quotation
+- PUT    /quotations/{id}         → Update quotation
+- DELETE /quotations/{id}         → Delete quotation
+- POST   /quotations/{id}/convert → Convert quotation to invoice
+- POST   /quotations/sync-offline → Sync offline-created quotation
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends, Request
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, List as PyList
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
 
-class CreateQuoteRequest(BaseModel):
-    """Request to create a quote."""
-    inquiryId: str
-    unitPrice: float = Field(..., gt=0)
-    moq: int = Field(..., ge=1)
-    leadTimeDays: int = Field(..., ge=1, le=365)
-    validityDays: int = Field(default=7, ge=1, le=30)
-    packagingCharges: float = Field(default=0, ge=0)
-    terms: Optional[str] = Field(default=None, max_length=2000)
-    customMessage: Optional[str] = Field(default=None, max_length=1000)
+class QuotationItemCreate(BaseModel):
+    productId: str = ""
+    productName: str = ""
+    description: str = ""
+    hsnCode: str = ""
+    quantity: float = 1
+    price: float = 0
+    discount: float = 0
+    gstPercent: float = 0
+    selected_specifications: PyList[dict] = []
 
 
-class RejectQuoteRequest(BaseModel):
-    """Request to reject a quote."""
-    reason: Optional[str] = Field(default=None, max_length=500)
+class QuotationCreate(BaseModel):
+    buyerId: str
+    items: PyList[QuotationItemCreate]
+    notes: str = ""
+    validityDays: int = 15
+    termsAndConditions: str = ""
+    placeOfSupply: str = ""
 
 
-def create_quotation_router(db, get_current_user):
-    """
-    Create quotation router with database dependency.
-    """
-    router = APIRouter(prefix="/quotes", tags=["quotes"])
-    
-    from services.quotation_service import QuotationService, QuoteCreateRequest
-    
-    # ==========================================
-    # SELLER ENDPOINTS
-    # ==========================================
-    
-    @router.post("/create")
-    async def create_quote(
-        request: CreateQuoteRequest,
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        Create a quote for an accepted inquiry.
-        
-        Seller must have accepted the inquiry first.
-        Only one active quote per inquiry allowed.
-        """
-        if "seller" not in current_user.get("roles", []):
-            raise HTTPException(status_code=403, detail="Only sellers can create quotes")
-        
-        service = QuotationService(db)
-        
-        try:
-            quote_request = QuoteCreateRequest(
-                inquiryId=request.inquiryId,
-                unitPrice=request.unitPrice,
-                moq=request.moq,
-                leadTimeDays=request.leadTimeDays,
-                validityDays=request.validityDays,
-                packagingCharges=request.packagingCharges,
-                terms=request.terms,
-                customMessage=request.customMessage
-            )
-            
-            result = await service.create_quote(
-                seller_id=current_user["_id"],
-                request=quote_request
-            )
-            
-            # ==== SEND EMAIL NOTIFICATION TO BUYER ====
-            try:
-                from services.email_service import get_inquiry_email_service
-                email_service = get_inquiry_email_service(db)
-                
-                # Get inquiry details
-                inquiry = await db.inquiries.find_one({"_id": ObjectId(request.inquiryId)})
-                if inquiry:
-                    buyer = await db.users.find_one({"_id": inquiry.get("buyerId")})
-                    if buyer and buyer.get("email"):
-                        buyer_name = buyer.get("businessName") or buyer.get("name") or buyer.get("email", "").split("@")[0]
-                        seller_name = current_user.get("businessName") or current_user.get("name") or "Seller"
-                        product_name = inquiry.get("productName") or "Product"
-                        
-                        await email_service.send_buyer_quote_received(
-                            to_email=buyer.get("email"),
-                            buyer_name=buyer_name,
-                            seller_name=seller_name,
-                            product_name=product_name,
-                            quoted_price=request.unitPrice,
-                            moq=request.moq,
-                            lead_time_days=request.leadTimeDays,
-                            validity_days=request.validityDays,
-                            quote_id=result.get("quote", {}).get("quoteId", "")
-                        )
-            except Exception as e:
-                logger.warning(f"Failed to send quote notification email: {e}")
-            
+class QuotationUpdate(BaseModel):
+    buyerId: Optional[str] = None
+    items: Optional[PyList[QuotationItemCreate]] = None
+    notes: Optional[str] = None
+    validityDays: Optional[int] = None
+    termsAndConditions: Optional[str] = None
+    status: Optional[str] = None
+    placeOfSupply: Optional[str] = None
+
+
+def init_quotation_router(db, verify_token_func):
+    router = APIRouter()
+
+    async def get_current_user(authorization: str):
+        from utils.permissions import authenticate_user
+        return await authenticate_user(db, verify_token_func, authorization)
+
+    async def get_seller_id(user):
+        seller_id = user.get("sellerId") or str(user.get("_id", ""))
+        return seller_id
+
+    def serialize_doc(doc):
+        if doc is None:
+            return None
+        if isinstance(doc, list):
+            return [serialize_doc(d) for d in doc]
+        if isinstance(doc, dict):
+            result = {}
+            for key, value in doc.items():
+                if key == "_id":
+                    result["id"] = str(value)
+                elif isinstance(value, ObjectId):
+                    result[key] = str(value)
+                elif isinstance(value, datetime):
+                    result[key] = value.isoformat()
+                elif isinstance(value, dict):
+                    result[key] = serialize_doc(value)
+                elif isinstance(value, list):
+                    result[key] = serialize_doc(value)
+                else:
+                    result[key] = value
             return result
-            
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
-            logger.error(f"Error creating quote: {e}")
-            raise HTTPException(status_code=500, detail="Failed to create quote")
-    
-    @router.get("/seller")
-    async def get_seller_quotes(
-        status: Optional[Literal["sent", "viewed", "accepted", "rejected", "expired"]] = None,
-        page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=100),
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        Get quotes created by the current seller.
-        """
-        if "seller" not in current_user.get("roles", []):
-            raise HTTPException(status_code=403, detail="Only sellers can access this")
-        
-        service = QuotationService(db)
-        return await service.get_seller_quotes(
-            seller_id=current_user["_id"],
-            status=status,
-            page=page,
-            limit=limit
-        )
-    
-    @router.post("/{quote_id}/whatsapp-redirect")
-    async def get_whatsapp_redirect(
-        quote_id: str,
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        Generate WhatsApp redirect link for a quote.
-        
-        Per spec:
-        - Returns structured message with secure quote link
-        - Marks quote as whatsappRedirectUsed = true
-        - Returns wa.me link with buyer phone if available
-        
-        Security:
-        - Only the seller who created the quote can access
-        - No contact details leaked in message
-        """
-        if "seller" not in current_user.get("roles", []):
-            raise HTTPException(status_code=403, detail="Only sellers can access this")
-        
-        service = QuotationService(db)
-        
-        quote = await service.get_quote_by_id(quote_id)
-        if not quote:
-            raise HTTPException(status_code=404, detail="Quote not found")
-        
-        if str(quote.get("sellerId")) != str(current_user["_id"]):
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        # Get buyer phone for WhatsApp link
-        buyer_phone = quote.get("buyerPhone")
-        
-        # If not in quote, try to fetch from inquiry/user
-        if not buyer_phone:
-            inquiry = await db.inquiries.find_one({"_id": quote.get("inquiryId")})
-            if inquiry and inquiry.get("status") == "accepted":
-                buyer = await db.users.find_one({"_id": quote.get("buyerId")})
-                if buyer:
-                    buyer_phone = buyer.get("profile", {}).get("phone") or buyer.get("phone")
-        
-        # Generate base URL
-        from utils.whatsapp_messages import BASE_URL
-        base_url = BASE_URL
-        
-        preview = service.generate_whatsapp_preview(quote, base_url)
-        
-        # Mark as WhatsApp redirect used
-        await service.mark_whatsapp_redirect_used(quote_id)
-        
-        # Generate WhatsApp link if phone available
-        whatsapp_link = None
-        if buyer_phone:
-            # Clean phone number
-            phone_clean = buyer_phone.replace(" ", "").replace("-", "").replace("+", "")
-            if not phone_clean.startswith("91"):
-                phone_clean = "91" + phone_clean
-            
-            # URL encode message
-            from urllib.parse import quote as url_quote
-            encoded_message = url_quote(preview["message"])
-            whatsapp_link = f"https://wa.me/{phone_clean}?text={encoded_message}"
-        
-        return {
-            "message": preview["message"],
-            "secureUrl": preview["secureUrl"],
-            "quoteId": quote_id,
-            "whatsappLink": whatsapp_link,
-            "buyerPhoneAvailable": buyer_phone is not None
-        }
-    
-    @router.get("/analytics")
-    async def get_quote_analytics(
-        days: int = Query(30, ge=1, le=365),
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        Get quote analytics for the current seller.
-        """
-        if "seller" not in current_user.get("roles", []):
-            raise HTTPException(status_code=403, detail="Only sellers can access this")
-        
-        service = QuotationService(db)
-        return await service.get_quote_analytics(
-            seller_id=current_user["_id"],
-            days=days
-        )
-    
-    # ==========================================
-    # BUYER ENDPOINTS
-    # ==========================================
-    
-    @router.get("/buyer")
-    async def get_buyer_quotes(
-        status: Optional[Literal["sent", "viewed", "accepted", "rejected", "expired"]] = None,
-        page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=100),
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        Get quotes received by the current buyer.
-        """
-        service = QuotationService(db)
-        return await service.get_buyer_quotes(
-            buyer_id=current_user["_id"],
-            status=status,
-            page=page,
-            limit=limit
-        )
-    
-    @router.get("/{quote_id}")
-    async def view_quote(
-        quote_id: str,
-        token: Optional[str] = Query(None, description="Secure access token"),
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        View a quote.
-        
-        Validates buyer access.
-        Marks as viewed on first access.
-        Returns full quote details.
-        """
-        service = QuotationService(db)
-        
-        try:
-            quote = await service.view_quote(
-                quote_id=quote_id,
-                buyer_id=current_user["_id"],
-                access_token=token
+        return doc
+
+    async def get_next_quotation_number(seller_id: str) -> str:
+        seller_oid = ObjectId(seller_id)
+        counter = await db.seller_quotation_counters.find_one({"sellerId": seller_oid})
+
+        if not counter:
+            seller_user = await db.users.find_one({"_id": seller_oid})
+            business_name = (seller_user or {}).get("profile", {}).get("businessName", "")
+            if not business_name:
+                business_name = f"Seller-{seller_id[-6:]}"
+            words = business_name.split()
+            abbreviation = ''.join(w[0].upper() for w in words if w and w[0].isalpha()) or 'XX'
+            seller_code = seller_id[-6:].upper()
+
+            await db.seller_quotation_counters.update_one(
+                {"sellerId": seller_oid},
+                {"$setOnInsert": {
+                    "sellerId": seller_oid,
+                    "sellerAbbreviation": abbreviation,
+                    "sellerCode": seller_code,
+                    "lastSequence": 0,
+                    "createdAt": datetime.now(timezone.utc)
+                }},
+                upsert=True
             )
-            
-            return {
-                "quote": quote,
-                "canAccept": quote.get("status") in ["sent", "viewed"],
-                "isExpired": quote.get("status") == "expired",
-                "paymentComingSoon": True  # Banner flag
-            }
-            
-        except ValueError as e:
-            raise HTTPException(status_code=403, detail=str(e))
-        except Exception as e:
-            logger.error(f"Error viewing quote: {e}")
-            raise HTTPException(status_code=500, detail="Failed to view quote")
-    
-    @router.post("/{quote_id}/accept")
-    async def accept_quote(
-        quote_id: str,
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        Accept a quote.
-        
-        Only the buyer who received the quote can accept.
-        Quote must not be expired.
-        Unlocks seller contact information.
-        """
-        service = QuotationService(db)
-        
-        try:
-            result = await service.accept_quote(
-                quote_id=quote_id,
-                buyer_id=current_user["_id"]
-            )
-            
-            return result
-            
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
-            logger.error(f"Error accepting quote: {e}")
-            raise HTTPException(status_code=500, detail="Failed to accept quote")
-    
-    @router.post("/{quote_id}/reject")
-    async def reject_quote(
-        quote_id: str,
-        request: RejectQuoteRequest,
-        current_user: dict = Depends(get_current_user)
-    ):
-        """
-        Reject a quote.
-        
-        Optionally provide a reason.
-        """
-        service = QuotationService(db)
-        
-        try:
-            result = await service.reject_quote(
-                quote_id=quote_id,
-                buyer_id=current_user["_id"],
-                reason=request.reason
-            )
-            
-            return result
-            
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
-            logger.error(f"Error rejecting quote: {e}")
-            raise HTTPException(status_code=500, detail="Failed to reject quote")
-    
-    # ==========================================
-    # PUBLIC ENDPOINTS (with token)
-    # ==========================================
-    
-    @router.get("/public/{quote_id}")
-    async def view_quote_public(
-        quote_id: str,
-        token: str = Query(..., description="Secure access token")
-    ):
-        """
-        View a quote via secure public link (from WhatsApp).
-        
-        Requires valid access token.
-        Does not require authentication.
-        Redirects to login if accepting.
-        """
-        service = QuotationService(db)
-        
-        quote = await service.get_quote_by_id(quote_id, access_token=token)
-        
-        if not quote:
-            raise HTTPException(status_code=404, detail="Quote not found or invalid token")
-        
-        # Check expiry
-        validity_date = quote.get("validityDate")
-        is_expired = False
-        if validity_date:
-            if isinstance(validity_date, datetime):
-                if validity_date.tzinfo is None:
-                    validity_date = validity_date.replace(tzinfo=timezone.utc)
-                is_expired = validity_date < datetime.now(timezone.utc)
-        
-        # Return limited public view
-        # Format createdAt for public view
-        created_at = quote.get("createdAt")
-        if isinstance(created_at, datetime):
-            created_at_str = created_at.isoformat()
+
+        result = await db.seller_quotation_counters.find_one_and_update(
+            {"sellerId": seller_oid},
+            {"$inc": {"lastSequence": 1}},
+            return_document=True
+        )
+        seq = result["lastSequence"]
+        abbr = result["sellerAbbreviation"]
+        code = result["sellerCode"]
+        return f"QUO{abbr}-{code}-{seq:04d}"
+
+    def calculate_gst(taxable, gst_pct, seller_state, place_of_supply, enabled=True):
+        if not enabled or gst_pct <= 0:
+            return {"taxableAmount": round(taxable, 2), "cgst": 0, "cgstRate": 0, "sgst": 0, "sgstRate": 0, "igst": 0, "igstRate": 0, "totalTax": 0, "totalAmount": round(taxable, 2)}
+        ss = (seller_state or "").strip().lower()
+        ps = (place_of_supply or "").strip().lower()
+        is_intra = ss and ps and ss == ps
+        if is_intra:
+            half = round(gst_pct / 2, 2)
+            cgst = round(taxable * half / 100, 2)
+            sgst = round(taxable * half / 100, 2)
+            return {"taxableAmount": round(taxable, 2), "cgst": cgst, "cgstRate": half, "sgst": sgst, "sgstRate": half, "igst": 0, "igstRate": 0, "totalTax": round(cgst + sgst, 2), "totalAmount": round(taxable + cgst + sgst, 2)}
         else:
-            created_at_str = str(created_at) if created_at else None
-        
-        return {
-            "quote": {
-                "quoteId": quote.get("quoteId"),
-                "productName": quote.get("productName"),
-                "sellerName": quote.get("sellerName"),
-                "requestedQuantity": quote.get("requestedQuantity"),
-                "unitPrice": quote.get("unitPrice"),
-                "moq": quote.get("moq"),
-                "packagingCharges": quote.get("packagingCharges", 0),
-                "transportChargesIncluded": False,
-                "totalPrice": quote.get("totalPrice"),
-                "leadTimeDays": quote.get("leadTimeDays"),
-                "validityDate": quote.get("validityDate").isoformat() if isinstance(quote.get("validityDate"), datetime) else quote.get("validityDate"),
-                "terms": quote.get("terms"),
-                "customMessage": quote.get("customMessage"),
-                "status": quote.get("status"),
-                "createdAt": created_at_str
-            },
-            "isExpired": is_expired,
-            "requiresLogin": True,  # Flag to show login prompt for accepting
-            "paymentComingSoon": True
+            igst = round(taxable * gst_pct / 100, 2)
+            return {"taxableAmount": round(taxable, 2), "cgst": 0, "cgstRate": 0, "sgst": 0, "sgstRate": 0, "igst": igst, "igstRate": gst_pct, "totalTax": igst, "totalAmount": round(taxable + igst, 2)}
+
+    async def build_quotation_items(items, seller_id, seller_state, place_of_supply, gst_enabled):
+        q_items = []
+        subtotal = total_cgst = total_sgst = total_igst = 0.0
+
+        for item in items:
+            product_name = item.productName or "Item"
+            hsn = item.hsnCode or ""
+            desc = item.description or ""
+
+            if item.productId:
+                try:
+                    listing = await db.sellerListings.find_one({"_id": ObjectId(item.productId), "sellerId": ObjectId(seller_id)})
+                    if listing:
+                        prod = await db.products.find_one({"_id": listing.get("productId")})
+                        if prod:
+                            product_name = prod.get("name", product_name)
+                        if not hsn:
+                            hsn = listing.get("hsnCode", "")
+                        if not desc:
+                            desc = listing.get("description", "")
+                except Exception:
+                    pass
+
+            line_sub = round(item.price * item.quantity - item.discount, 2)
+            gst = calculate_gst(line_sub, item.gstPercent, seller_state, place_of_supply, gst_enabled)
+
+            q_items.append({
+                "productId": item.productId, "productName": product_name,
+                "description": desc, "hsnCode": hsn,
+                "quantity": item.quantity, "price": item.price, "discount": item.discount,
+                "gstPercent": item.gstPercent,
+                "taxableAmount": gst["taxableAmount"],
+                "cgst": gst["cgst"], "cgstRate": gst["cgstRate"],
+                "sgst": gst["sgst"], "sgstRate": gst["sgstRate"],
+                "igst": gst["igst"], "igstRate": gst["igstRate"],
+                "gstAmount": gst["totalTax"], "total": gst["totalAmount"],
+                "selected_specifications": item.selected_specifications or []
+            })
+            subtotal += line_sub
+            total_cgst += gst["cgst"]
+            total_sgst += gst["sgst"]
+            total_igst += gst["igst"]
+
+        total_gst = round(total_cgst + total_sgst + total_igst, 2)
+        grand_total = round(subtotal + total_gst)
+        round_off = round(grand_total - (subtotal + total_gst), 2)
+        return q_items, round(subtotal, 2), round(total_cgst, 2), round(total_sgst, 2), round(total_igst, 2), total_gst, grand_total, round_off
+
+    # ── LIST ──
+    @router.get("/quotations")
+    async def list_quotations(authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        pipeline = [
+            {"$match": {"sellerId": ObjectId(seller_id)}},
+            {"$lookup": {"from": "seller_buyers", "localField": "buyerId", "foreignField": "_id", "as": "buyer"}},
+            {"$unwind": {"path": "$buyer", "preserveNullAndEmptyArrays": True}},
+            {"$sort": {"createdAt": -1}},
+            {"$limit": 200},
+            {"$project": {
+                "quotationNumber": 1, "date": 1, "status": 1, "subtotal": 1, "gst": 1, "total": 1,
+                "validityDays": 1, "notes": 1, "items": 1, "convertedToInvoice": 1, "convertedInvoiceNumber": 1,
+                "buyerName": {"$ifNull": ["$buyer.buyerName", "Unknown"]},
+                "buyerPhone": {"$ifNull": ["$buyer.phone", ""]},
+                "buyerId": 1, "createdAt": 1, "updatedAt": 1,
+                "placeOfSupply": 1, "termsAndConditions": 1,
+                "cgst": 1, "sgst": 1, "igst": 1, "roundOff": 1,
+            }}
+        ]
+        results = []
+        async for doc in db.quotations.aggregate(pipeline):
+            results.append(serialize_doc(doc))
+        return {"quotations": results}
+
+    # ── CREATE ──
+    @router.post("/quotations")
+    async def create_quotation(data: QuotationCreate, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        buyer = await db.seller_buyers.find_one({"_id": ObjectId(data.buyerId), "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        seller_state = (seller_user or {}).get("profile", {}).get("state", "")
+        gst_enabled = (seller_user or {}).get("gst", {}).get("status") != "disabled"
+        pos = data.placeOfSupply or buyer.get("state", "")
+
+        q_items, subtotal, cgst, sgst, igst, total_gst, grand_total, round_off = await build_quotation_items(
+            data.items, seller_id, seller_state, pos, gst_enabled
+        )
+
+        q_number = await get_next_quotation_number(seller_id)
+        now = datetime.now(timezone.utc)
+
+        doc = {
+            "quotationNumber": q_number, "sellerId": ObjectId(seller_id),
+            "buyerId": ObjectId(data.buyerId), "date": now,
+            "validityDays": data.validityDays, "items": q_items,
+            "subtotal": subtotal, "cgst": cgst, "sgst": sgst, "igst": igst,
+            "gst": total_gst, "total": grand_total, "roundOff": round_off,
+            "status": "draft", "notes": data.notes,
+            "termsAndConditions": data.termsAndConditions or "",
+            "placeOfSupply": pos, "convertedToInvoice": False,
+            "createdBy": str(user["_id"]), "createdAt": now, "updatedAt": now,
         }
-    
-    # ==========================================
-    # ADMIN/CRON ENDPOINTS
-    # ==========================================
-    
-    @router.post("/admin/expire-quotes")
-    async def run_expiry_job():
-        """
-        Run quote expiry job.
-        Called by cron or admin.
-        """
-        # In production, add admin auth
-        service = QuotationService(db)
-        
-        expired_count = await service.expire_quotes()
-        
+        result = await db.quotations.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        doc["buyerName"] = buyer.get("buyerName", "")
+        logger.info(f"Quotation created: {q_number}")
+        return {"message": "Quotation created", "quotation": serialize_doc(doc)}
+
+    # ── GET SINGLE ──
+    @router.get("/quotations/{quotation_id}")
+    async def get_quotation(quotation_id: str, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        doc = await db.quotations.find_one({"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        buyer = await db.seller_buyers.find_one({"_id": doc.get("buyerId")})
+        doc["buyerName"] = buyer.get("buyerName", "") if buyer else ""
+        doc["buyerPhone"] = buyer.get("phone", "") if buyer else ""
+        return {"quotation": serialize_doc(doc)}
+
+    # ── UPDATE ──
+    @router.put("/quotations/{quotation_id}")
+    async def update_quotation(quotation_id: str, data: QuotationUpdate, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        existing = await db.quotations.find_one({"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        if existing.get("convertedToInvoice"):
+            raise HTTPException(status_code=400, detail="Cannot edit a converted quotation")
+
+        update_fields = {"updatedAt": datetime.now(timezone.utc)}
+        if data.status is not None:
+            update_fields["status"] = data.status
+        if data.notes is not None:
+            update_fields["notes"] = data.notes
+        if data.validityDays is not None:
+            update_fields["validityDays"] = data.validityDays
+        if data.termsAndConditions is not None:
+            update_fields["termsAndConditions"] = data.termsAndConditions
+
+        if data.items is not None:
+            seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+            seller_state = (seller_user or {}).get("profile", {}).get("state", "")
+            gst_enabled = (seller_user or {}).get("gst", {}).get("status") != "disabled"
+            buyer_id = data.buyerId or str(existing.get("buyerId", ""))
+            pos = data.placeOfSupply or existing.get("placeOfSupply", "")
+
+            q_items, subtotal, cgst, sgst, igst, total_gst, grand_total, round_off = await build_quotation_items(
+                data.items, seller_id, seller_state, pos, gst_enabled
+            )
+            update_fields.update({
+                "items": q_items, "subtotal": subtotal, "cgst": cgst, "sgst": sgst, "igst": igst,
+                "gst": total_gst, "total": grand_total, "roundOff": round_off,
+            })
+            if data.buyerId:
+                update_fields["buyerId"] = ObjectId(data.buyerId)
+            if data.placeOfSupply:
+                update_fields["placeOfSupply"] = data.placeOfSupply
+
+        await db.quotations.update_one({"_id": ObjectId(quotation_id)}, {"$set": update_fields})
+        return {"message": "Quotation updated"}
+
+    # ── DELETE ──
+    @router.delete("/quotations/{quotation_id}")
+    async def delete_quotation(quotation_id: str, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        result = await db.quotations.delete_one({"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        return {"message": "Quotation deleted"}
+
+    # ── CONVERT TO INVOICE ──
+    @router.post("/quotations/{quotation_id}/convert")
+    async def convert_to_invoice(quotation_id: str, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        quo = await db.quotations.find_one({"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)})
+        if not quo:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        if quo.get("convertedToInvoice"):
+            raise HTTPException(status_code=400, detail="Already converted to invoice")
+
+        items = []
+        for item in quo.get("items", []):
+            items.append({
+                "productId": item.get("productId", ""), "productName": item.get("productName", ""),
+                "description": item.get("description", ""), "hsnCode": item.get("hsnCode", ""),
+                "quantity": item.get("quantity", 1), "price": item.get("price", 0),
+                "discount": item.get("discount", 0), "gstPercent": item.get("gstPercent", 0),
+                "selected_specifications": item.get("selected_specifications", []),
+            })
         return {
-            "success": True,
-            "expiredCount": expired_count,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "prefill": {
+                "buyerId": str(quo.get("buyerId", "")),
+                "items": items,
+                "notes": quo.get("notes", ""),
+                "termsAndConditions": quo.get("termsAndConditions", ""),
+                "placeOfSupply": quo.get("placeOfSupply", ""),
+                "sourceQuotationId": quotation_id,
+                "sourceQuotationNumber": quo.get("quotationNumber", ""),
+            }
         }
-    
-    @router.get("/admin/analytics")
-    async def get_platform_analytics(
-        days: int = Query(30, ge=1, le=365)
-    ):
-        """
-        Get platform-wide quote analytics.
-        """
-        # In production, add admin auth
-        service = QuotationService(db)
-        return await service.get_quote_analytics(seller_id=None, days=days)
-    
+
+    # ── SYNC OFFLINE ──
+    @router.post("/quotations/sync-offline")
+    async def sync_offline_quotation(data: QuotationCreate, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        buyer = await db.seller_buyers.find_one({"_id": ObjectId(data.buyerId), "sellerId": ObjectId(seller_id)})
+        if not buyer:
+            raise HTTPException(status_code=404, detail="Buyer not found")
+
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        seller_state = (seller_user or {}).get("profile", {}).get("state", "")
+        gst_enabled = (seller_user or {}).get("gst", {}).get("status") != "disabled"
+        pos = data.placeOfSupply or buyer.get("state", "")
+
+        q_items, subtotal, cgst, sgst, igst, total_gst, grand_total, round_off = await build_quotation_items(
+            data.items, seller_id, seller_state, pos, gst_enabled
+        )
+
+        q_number = await get_next_quotation_number(seller_id)
+        now = datetime.now(timezone.utc)
+        doc = {
+            "quotationNumber": q_number, "sellerId": ObjectId(seller_id),
+            "buyerId": ObjectId(data.buyerId), "date": now, "validityDays": data.validityDays,
+            "items": q_items, "subtotal": subtotal, "cgst": cgst, "sgst": sgst, "igst": igst,
+            "gst": total_gst, "total": grand_total, "roundOff": round_off,
+            "status": "draft", "notes": data.notes, "termsAndConditions": data.termsAndConditions or "",
+            "placeOfSupply": pos, "convertedToInvoice": False, "offlineSynced": True,
+            "createdBy": str(user["_id"]), "createdAt": now, "updatedAt": now,
+        }
+        result = await db.quotations.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        logger.info(f"Offline quotation synced → {q_number}")
+        return {"message": "Offline quotation synced", "quotation": serialize_doc(doc)}
+
     return router

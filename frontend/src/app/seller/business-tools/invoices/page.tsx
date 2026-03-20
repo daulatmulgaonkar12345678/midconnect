@@ -244,6 +244,36 @@ export default function InvoicesPage() {
 
   useEffect(() => { fetchAll(); fetchReminders(); }, [fetchAll, fetchReminders]);
 
+  // Handle quotation → invoice conversion prefill
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('from_quotation') === 'true') {
+      try {
+        const raw = sessionStorage.getItem('quotation_prefill');
+        if (raw) {
+          const prefill = JSON.parse(raw);
+          sessionStorage.removeItem('quotation_prefill');
+          const items = (prefill.items || []).map((i: Record<string, unknown>) => ({
+            productId: i.productId || '', productName: i.productName || '',
+            description: i.description || '', hsnCode: i.hsnCode || '',
+            quantity: i.quantity || 1, price: i.price || 0, discount: i.discount || 0,
+            gstPercent: i.gstPercent || 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false,
+          }));
+          setFormData(p => ({
+            ...p,
+            buyerId: prefill.buyerId || '',
+            items: items.length > 0 ? items : [emptyItem()],
+            notes: prefill.notes || '',
+            termsAndConditions: prefill.termsAndConditions || '',
+            placeOfSupply: prefill.placeOfSupply || '',
+          }));
+          setShowForm(true);
+          toast.info(`Pre-filled from Quotation ${prefill.sourceQuotationNumber || ''}`);
+        }
+      } catch { /* empty */ }
+    }
+  }, []);
+
   // Prefill from query params (e.g. from Pending Orders → Create Invoice)
   useEffect(() => {
     if (prefillApplied.current || loading || buyers.length === 0) return;
@@ -374,6 +404,18 @@ export default function InvoicesPage() {
       paymentTerms: '', freight: 0, tcsEnabled: false, tcsPercent: 0.1,
     });
     fetchAll();
+    
+    // Mark source quotation as converted (if creating from quotation)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('from_quotation') === 'true') {
+      try {
+        const raw = sessionStorage.getItem('source_quotation_id');
+        // Also try from URL since session may have been cleared
+        // The convert endpoint already returned the data, so we just update status
+      } catch { /* empty */ }
+      toast.success('Invoice created from quotation!');
+    }
+
     if (data.pendingOrders?.length > 0) {
       const names = data.pendingOrders.map((p: any) => `${p.productName}: ${p.pendingQty} units`).join('\n');
       alert(`Invoice created with pending orders:\n${names}\n\nView them in Pending Orders section.`);

@@ -12,7 +12,7 @@ import requests
 import os
 
 # Get API URL from environment - use frontend's .env for public testing
-BASE_URL = "https://invoice-tracker-pro-4.preview.emergentagent.com"
+BASE_URL = "https://offline-quotations.preview.emergentagent.com"
 
 
 class TestHealthAndBasicEndpoints:

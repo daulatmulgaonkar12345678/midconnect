@@ -9,7 +9,7 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://invoice-tracker-pro-4.preview.emergentagent.com"
+    BASE_URL = "https://offline-quotations.preview.emergentagent.com"
 
 
 class TestRawMaterialShapes:

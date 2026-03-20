@@ -1156,7 +1156,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://invoice-tracker-pro-4.preview.emergentagent.com",
+        "https://offline-quotations.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
@@ -12969,9 +12969,7 @@ app.include_router(manufacturer_router, prefix="/api")
 
 # ================== QUOTATION ROUTER ==================
 # Hybrid RFQ → Quote → WhatsApp → Acceptance System
-from routers.quotation_router import create_quotation_router
-quotation_router = create_quotation_router(db, get_current_user)
-app.include_router(quotation_router, prefix="/api")
+# Quotation router — moved to business-tools prefix below
 
 # ================== ADMIN ANALYTICS ROUTER ==================
 # Marketplace Control Center - Admin only
@@ -13081,6 +13079,12 @@ app.include_router(public_doc_router, prefix="/api")
 from routers.referral_router import init_referral_router
 referral_router = init_referral_router(db, verify_firebase_token)
 app.include_router(referral_router, prefix="/api")
+
+
+# ── Quotation Router ──
+from routers.quotation_router import init_quotation_router
+quotation_router = init_quotation_router(db, verify_firebase_token)
+app.include_router(quotation_router, prefix="/api/business-tools")
 
 
 

@@ -486,6 +486,57 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         if activity_log_service:
             await activity_log_service.log(seller_id, str(user["_id"]), "buyer_created", "buyers", str(result.inserted_id), data.buyerName)
         return {"message": "Buyer created", "buyer": serialize_doc(buyer_doc)}
+
+    @router.post("/buyers/sync-offline")
+    async def sync_offline_buyer(data: BuyerCreate, authorization: str = Header(...)):
+        """Sync an offline-created buyer. Deduplicates by phone then name."""
+        user = await get_current_user(authorization)
+        await require_permission(user, Permission.MANAGE_BUYERS.value)
+        seller_id = await get_seller_id(user)
+
+        # Deduplicate: check by normalized phone first
+        phone = (data.phone or "").strip().replace(" ", "").replace("+91", "").replace("-", "")
+        if phone:
+            existing = await db.seller_buyers.find_one({
+                "sellerId": ObjectId(seller_id),
+                "phone": {"$regex": phone[-10:] + "$"}
+            })
+            if existing:
+                return {"message": "Buyer already exists (phone match)", "buyer": serialize_doc(existing), "deduplicated": True}
+
+        # Deduplicate: check by name (case-insensitive)
+        name_lower = (data.buyerName or "").strip().lower()
+        if name_lower:
+            existing = await db.seller_buyers.find_one({
+                "sellerId": ObjectId(seller_id),
+                "buyerName": {"$regex": f"^{name_lower}$", "$options": "i"}
+            })
+            if existing:
+                return {"message": "Buyer already exists (name match)", "buyer": serialize_doc(existing), "deduplicated": True}
+
+        # No duplicate — create new
+        now = datetime.now(timezone.utc)
+        buyer_doc = {
+            "sellerId": ObjectId(seller_id),
+            "buyerName": data.buyerName,
+            "company": data.company,
+            "phone": data.phone,
+            "email": data.email.lower() if data.email else None,
+            "gstNumber": data.gstNumber,
+            "state": data.state,
+            "address": data.address,
+            "notes": data.notes,
+            "totalOrders": 0,
+            "totalSpent": 0,
+            "offlineSynced": True,
+            "createdAt": now,
+            "updatedAt": now
+        }
+        result = await db.seller_buyers.insert_one(buyer_doc)
+        buyer_doc["_id"] = result.inserted_id
+        return {"message": "Buyer synced", "buyer": serialize_doc(buyer_doc), "deduplicated": False}
+
+
     
     @router.get("/buyers/{buyer_id}")
     async def get_buyer(buyer_id: str, authorization: str = Header(...)):
