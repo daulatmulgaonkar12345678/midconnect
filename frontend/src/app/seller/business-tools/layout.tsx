@@ -422,12 +422,15 @@ export default function BusinessToolsLayout({
   }, [isAdmin, permissions]);
 
   // Filter nav items based on module permissions from EmployeeAccessContext
-  const { canView, canAction, loading: empLoading } = useEmployeeAccess();
-  const visibleNavItems = navItems.filter(item => canView(item.module));
+  // Combined: admin (old system) always has full access, employees checked via new system
+  const { canView, canAction: empCanAction, loading: empLoading } = useEmployeeAccess();
+  const effectiveCanView = useCallback((module: string) => isAdmin || canView(module), [isAdmin, canView]);
+  const effectiveCanAction = useCallback((module: string) => isAdmin || empCanAction(module), [isAdmin, empCanAction]);
+  const visibleNavItems = navItems.filter(item => effectiveCanView(item.module));
 
   // Route-level protection: check if current path requires a module the user can't view
   const requiredModule = ROUTE_MODULE_MAP[pathname] || null;
-  const routeBlocked = requiredModule ? !canView(requiredModule) : false;
+  const routeBlocked = requiredModule ? !effectiveCanView(requiredModule) : false;
 
   if (authLoading || loading) {
     return (
@@ -454,7 +457,7 @@ export default function BusinessToolsLayout({
   };
 
   return (
-    <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, canAction, loading, token }}>
+    <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, canAction: effectiveCanAction, loading, token }}>
       <EmployeeAccessProvider>
       <NetworkProvider>
       <Toaster position="top-right" richColors closeButton />
