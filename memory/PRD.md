@@ -21,51 +21,23 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 8. **Reporting Phase 1** — Outstanding/Receivables, Purchase, Stock Movement
 9. **Reporting Phase 2** — Buyer Ledger, Product Performance, Category Report, Low Stock Analytics
 10. **Business Insights Dashboard Widget** — 4 clickable insight cards
-11. **HSN + GST in Sales Reports** — HSN Code, Taxable Value, GST% in Products & Product Performance tabs + exports
-12. **GST Sales Report (GSTR-1 Compatible)** — B2B/B2C auto-classification, GSTIN validation, Place of Supply, CGST/SGST/IGST split, HSN Summary, 2-sheet Excel export
-13. **Bug Fix: Invoice Number Format Consistency** — Fixed pending_orders_router.py generating `INV-XXXX` instead of standard `INV{Abbr}-{Code}-XXXX` format
-14. **Invoice "Sent" Status Handling** — Auto-mark sent on WhatsApp share + manual Mark as Sent button
-15. **Hybrid Offline Mode + Draft Invoice System (Feb 2026)**:
-    - Network Detection (navigator.onLine + event listeners)
-    - Global Network Status Indicator (Online/Offline badge in Business Tools header)
-    - Smart Toast Notifications (sonner) for network changes and sync progress
-    - IndexedDB Offline Storage (via `idb` library) — unified queue for drafts
-    - Offline Draft Invoice Creation — saves locally with temp ID, syncs when online
-    - Sync Engine — auto-sync on reconnect, sequential queue processing, retry with backoff
-    - WhatsApp Offline Guard — blocks WhatsApp actions when offline across all pages
-    - Data Caching — invoices, buyers, listings cached in IndexedDB for offline access
-    - Dashboard Sync Status Widget — shows pending count, sync button, last sync time
-    - PWA Setup — manifest.json, service worker (cache-first for assets, network-first for pages)
-    - Service Worker Registration — auto-register on app load
-    - Backend Sync Endpoint — POST /api/business-tools/invoices/sync-offline-draft (server generates real ID/number)
-    - **Bug Fix (Feb 2026)**: Fixed SW TypeError by skipping RSC requests and proper Response fallbacks. Fixed sync URL. Fixed deprecated meta tag.
-16. **Refer & Earn System (Feb 2026)**:
-    - Referral code generation (FIRSTNAME + 4 random digits, unique)
-    - Referral link: `https://www.udyogconnect.in/register?ref=CODE`
-    - WhatsApp sharing with pre-filled message
-    - Signup tracking: `?ref=` captured in localStorage on register, sent to `/api/referral/track-signup` after profile completion
-    - Activation-based rewards: 2 of 3 criteria (5+ products, 3+ non-zero invoices, 1+ buyer AND 1+ supplier) within 7 days
-    - Tier-based rewards (NON-cumulative): 1 ref→1 month, 5 refs→3 months, 10 refs→6 months
-    - Anti-abuse: self-referral block, same phone check, ₹0 invoice exclusion
-    - Dashboard widget with progress bar + quick copy/share actions
-    - Header "Refer & Earn" button opening full modal with stats, tier table, referred users list
-    - Subscription extension: `referral_premium` plan type, extends endDate based on highest tier
-    - Background activation check on dashboard load (`POST /api/referral/check-activation`)
+11. **HSN + GST in Sales Reports**
+12. **GST Sales Report (GSTR-1 Compatible)**
+13. **Bug Fix: Invoice Number Format Consistency**
+14. **Invoice "Sent" Status Handling**
+15. **Hybrid Offline Mode + Draft Invoice System (Feb 2026)**
+16. **Refer & Earn System (Feb 2026)**
 17. **Advanced Offline Business System - Quotation Module (Mar 2026)**:
-    - Full Quotation CRUD: Create, List, Get, Update, Delete
-    - Quotation PDF Generation — same layout as invoice, "QUOTATION" title, validity info, DRAFT (OFFLINE) watermark
-    - Convert Quotation to Invoice — dual storage (sessionStorage + server-side prefill) for refresh resilience
-    - Server-side prefill store/retrieve endpoints for conversion data persistence
-    - Mark Converted endpoint — marks quotation as converted after invoice creation
-    - Offline Quotation Creation — saves to IndexedDB, syncs when online
-    - Offline Buyer Sync with Deduplication — phone-first, name-second matching
-    - Sync Engine Priority Ordering — Buyers → Quotations → Invoices → Inventory → POs
-    - Idempotency + retry with exponential backoff
-    - WhatsApp sharing for quotations + Mark Sent status
-    - Searchable buyer & product dropdowns (react-select)
-
-## Report Tabs (15 total)
-Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | GST Report | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
+    - Full Quotation CRUD, PDF Generation, Convert to Invoice with dual storage
+    - Offline Quotation + Buyer Sync with Deduplication, Priority-ordered Sync Engine
+18. **Enhancement: Quotation & Invoice Pricing + Sharing (Mar 2026)**:
+    - **Auto Product Rate:** On product select, auto-fills price, GST%, HSN from inventory
+    - **Per-Item Discount System:** Toggle between % and Rs. Calculation: Base Rate → Discount → Tax → Total
+    - **WhatsApp PDF Sharing:** Time-limited public PDF download links (3-day expiry, token-based, no auth needed for buyer)
+    - **Clean WhatsApp Branding:** "Powered by UdyogConnect" in all shared messages
+    - **Public PDF Endpoint:** Quotation doc type added to existing public document sharing infrastructure
+    - **PDF Discount Display:** Shows "5% (amount)" for percentage or flat Rs amount
+    - Applied to BOTH quotation and invoice systems
 
 ## Prioritized Backlog
 ### P1
@@ -73,28 +45,24 @@ Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Categor
 2. Seller Reminder Controls (configurable schedules)
 
 ### P2
-- GSTR-1 JSON export | Amendment tracking | Custom Material Report | Short link tracking | White-label toggle | WhatsApp Business API
-- Enhanced Business Insights (Profit summary, Cash flow alerts, Purchase alerts)
+- GSTR-1 JSON export | Amendment tracking | Custom Material Report
+- Short link tracking + click analytics
+- White-label toggle | WhatsApp Business API
+- Enhanced Business Insights (Profit summary, Cash flow alerts)
 
 ### P3 — Offline Enhancements
 - Sync queue panel (pending / failed items details)
 - Offline support for inventory updates and purchase orders (full CRUD)
 - Conflict resolution UI for inventory mismatches
 
-## Test Coverage: 280+ tests
-
 ## Key Files
-- `/app/backend/routers/quotation_router.py` - Quotation CRUD + PDF + conversion + offline sync
-- `/app/backend/services/quotation_pdf_service.py` - Quotation PDF generation with DRAFT watermark
-- `/app/backend/routers/reports_router.py` - All reports (16 endpoints)
-- `/app/backend/routers/export_import_router.py` - 13 export endpoints
-- `/app/backend/routers/pending_orders_router.py` - Fixed: now uses get_next_invoice_number()
-- `/app/backend/routers/invoice_router.py` - Invoice CRUD + sync-offline-draft + mark-sent
-- `/app/backend/routers/business_tools_router.py` - Buyer CRUD + sync-offline with dedup
-- `/app/frontend/src/app/seller/business-tools/quotations/page.tsx` - Quotation UI with offline + PDF
-- `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (15 tabs)
-- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Invoice UI with quotation conversion
-- `/app/frontend/src/app/seller/business-tools/layout.tsx` - NetworkProvider + Toaster + NetworkIndicator
-- `/app/frontend/src/context/NetworkContext.tsx` - Global network state + sync triggers
-- `/app/frontend/src/lib/offlineStore.ts` - IndexedDB service (quotation + buyer types added)
-- `/app/frontend/src/lib/syncEngine.ts` - Sync queue processor with priority ordering
+- `/app/backend/routers/quotation_router.py` - Quotation CRUD + PDF + conversion + share-link + offline sync
+- `/app/backend/services/quotation_pdf_service.py` - Quotation PDF with discount + DRAFT watermark
+- `/app/backend/services/invoice_pdf_service.py` - Invoice PDF with discount display
+- `/app/backend/routers/invoice_router.py` - Invoice CRUD with discountType support
+- `/app/backend/routers/product_share_router.py` - Public doc serving (catalog/invoice/po/quotation)
+- `/app/backend/models/business_tools.py` - InvoiceItemCreate with discountType field
+- `/app/frontend/src/app/seller/business-tools/quotations/page.tsx` - Quotation UI with discount + auto-pricing + WhatsApp PDF sharing
+- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Invoice UI with discount toggle
+- `/app/frontend/src/lib/offlineStore.ts` - IndexedDB with quotation + buyer types
+- `/app/frontend/src/lib/syncEngine.ts` - Priority-ordered sync (Buyers → Quotations → Invoices)
