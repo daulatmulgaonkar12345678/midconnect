@@ -51,6 +51,18 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Header "Refer & Earn" button opening full modal with stats, tier table, referred users list
     - Subscription extension: `referral_premium` plan type, extends endDate based on highest tier
     - Background activation check on dashboard load (`POST /api/referral/check-activation`)
+17. **Advanced Offline Business System - Quotation Module (Mar 2026)**:
+    - Full Quotation CRUD: Create, List, Get, Update, Delete
+    - Quotation PDF Generation — same layout as invoice, "QUOTATION" title, validity info, DRAFT (OFFLINE) watermark
+    - Convert Quotation to Invoice — dual storage (sessionStorage + server-side prefill) for refresh resilience
+    - Server-side prefill store/retrieve endpoints for conversion data persistence
+    - Mark Converted endpoint — marks quotation as converted after invoice creation
+    - Offline Quotation Creation — saves to IndexedDB, syncs when online
+    - Offline Buyer Sync with Deduplication — phone-first, name-second matching
+    - Sync Engine Priority Ordering — Buyers → Quotations → Invoices → Inventory → POs
+    - Idempotency + retry with exponential backoff
+    - WhatsApp sharing for quotations + Mark Sent status
+    - Searchable buyer & product dropdowns (react-select)
 
 ## Report Tabs (15 total)
 Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Category | Low Stock | GST Report | Sales | Profit | Product Profit | Inventory Value | Products | Stock Status | Top Buyers
@@ -69,21 +81,20 @@ Outstanding | Purchase | Stock Movement | Buyer Ledger | Product Perf. | Categor
 - Offline support for inventory updates and purchase orders (full CRUD)
 - Conflict resolution UI for inventory mismatches
 
-## Test Coverage: 260+ tests
+## Test Coverage: 280+ tests
 
 ## Key Files
+- `/app/backend/routers/quotation_router.py` - Quotation CRUD + PDF + conversion + offline sync
+- `/app/backend/services/quotation_pdf_service.py` - Quotation PDF generation with DRAFT watermark
 - `/app/backend/routers/reports_router.py` - All reports (16 endpoints)
 - `/app/backend/routers/export_import_router.py` - 13 export endpoints
 - `/app/backend/routers/pending_orders_router.py` - Fixed: now uses get_next_invoice_number()
 - `/app/backend/routers/invoice_router.py` - Invoice CRUD + sync-offline-draft + mark-sent
+- `/app/backend/routers/business_tools_router.py` - Buyer CRUD + sync-offline with dedup
+- `/app/frontend/src/app/seller/business-tools/quotations/page.tsx` - Quotation UI with offline + PDF
 - `/app/frontend/src/app/seller/business-tools/reports/page.tsx` - Reports UI (15 tabs)
+- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Invoice UI with quotation conversion
 - `/app/frontend/src/app/seller/business-tools/layout.tsx` - NetworkProvider + Toaster + NetworkIndicator
 - `/app/frontend/src/context/NetworkContext.tsx` - Global network state + sync triggers
-- `/app/frontend/src/hooks/useNetwork.ts` - Network detection hook
-- `/app/frontend/src/hooks/useOfflineInvoices.ts` - Offline invoice management hook
-- `/app/frontend/src/lib/offlineStore.ts` - IndexedDB service
-- `/app/frontend/src/lib/syncEngine.ts` - Sync queue processor
-- `/app/frontend/src/components/NetworkStatusBanner.tsx` - Offline/syncing banner
-- `/app/frontend/src/components/ServiceWorkerRegister.tsx` - PWA SW registration
-- `/app/frontend/public/manifest.json` - PWA manifest
-- `/app/frontend/public/sw.js` - Service worker
+- `/app/frontend/src/lib/offlineStore.ts` - IndexedDB service (quotation + buyer types added)
+- `/app/frontend/src/lib/syncEngine.ts` - Sync queue processor with priority ordering
