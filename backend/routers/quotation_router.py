@@ -65,8 +65,8 @@ def init_quotation_router(db, verify_token_func):
         return await authenticate_user(db, verify_token_func, authorization)
 
     async def get_seller_id(user):
-        seller_id = user.get("sellerId") or str(user.get("_id", ""))
-        return seller_id
+        from utils.permissions import resolve_seller_id
+        return resolve_seller_id(user)
 
     def serialize_doc(doc):
         if doc is None:

@@ -26,7 +26,7 @@ def resolve_seller_id(user: dict) -> str:
     """
     Get seller ID for the current user.
     - seller: returns own _id
-    - employee: returns linked sellerId
+    - employee (linked via companyId): returns companyId
     - admin: returns None (admin sees all)
     Raises 403 if employee is not linked.
     """
@@ -35,6 +35,13 @@ def resolve_seller_id(user: dict) -> str:
     if account_type == "admin":
         return None
 
+    # Check if user is a linked employee (has companyId + active status)
+    company_id = user.get("companyId")
+    employee_status = user.get("employeeStatus")
+    if company_id and employee_status in ("active", "disabled"):
+        return str(company_id)
+
+    # Legacy employee field
     if account_type == "employee":
         seller_id = user.get("sellerId")
         if not seller_id:
@@ -50,7 +57,8 @@ async def check_user_permission(db, user: dict, permission: str) -> bool:
     Check if user has a specific permission.
     - Platform admins: all permissions
     - Sellers: all permissions
-    - Employees: check role permissions in db.roles collection
+    - Linked employees: check employeePermissions (module-based)
+    - Legacy employees: check role permissions in db.roles collection
     """
     if is_platform_admin(user):
         return True
@@ -60,7 +68,33 @@ async def check_user_permission(db, user: dict, permission: str) -> bool:
     if account_type == "seller":
         return True
 
-    # Employee - check role permissions
+    # New employee system: check employeePermissions (module-based view/action)
+    emp_perms = user.get("employeePermissions")
+    emp_status = user.get("employeeStatus")
+    if emp_perms and emp_status == "active":
+        # Map old permission strings to new module + level
+        perm_map = {
+            "create_invoice": ("invoices", "action"),
+            "manage_buyers": ("buyers", "action"),
+            "manage_suppliers": ("suppliers", "action"),
+            "manage_inventory": ("inventory", "action"),
+            "manage_listings": ("inventory", "action"),
+            "view_reports": ("reports", "view"),
+            "view_enquiries": ("dashboard", "view"),
+            "view_purchase_price": ("inventory", "view"),
+            "manage_employees": ("employees", "action"),
+            "manage_roles": ("employees", "action"),
+        }
+        mapping = perm_map.get(permission)
+        if mapping:
+            module, level = mapping
+            mod_perm = emp_perms.get(module, {})
+            if level == "view":
+                return mod_perm.get("view", False)
+            return mod_perm.get("view", False) and mod_perm.get("action", False)
+        return False
+
+    # Legacy employee - check role permissions
     role_id = user.get("roleId")
     if not role_id:
         return False
@@ -116,5 +150,9 @@ async def authenticate_user(db, verify_token_func, authorization: str) -> dict:
 
     if user.get("accountType") == "employee" and user.get("status") != "active":
         raise HTTPException(status_code=403, detail="Employee account is inactive")
+
+    # New employee system: block disabled employees
+    if user.get("employeeStatus") == "disabled" and user.get("companyId"):
+        raise HTTPException(status_code=403, detail="Employee account is disabled")
 
     return user
