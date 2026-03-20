@@ -92,8 +92,8 @@
   "context_for_next_testing_agent": "Quotation system fully tested. Test quote QT-M24DO is in 'viewed' status (validity: 10 Mar 2026). To test accept/reject flows, need to authenticate as the buyer (userId: 699ca628c4462b3b8208ed5c). The dev-test-token authenticates as the seller. Backend endpoints all working: /quotes/create, /quotes/{id}/whatsapp-redirect, /quotes/{id}, /quotes/{id}/accept, /quotes/{id}/reject, /quotes/seller, /quotes/buyer, /quotes/analytics, /quotes/admin/expire-quotes.",
   
   "test_environment": {
-    "api_url": "https://employee-access-hub-1.preview.emergentagent.com",
-    "frontend_url": "https://employee-access-hub-1.preview.emergentagent.com/quote/QT-M24DO?token=UpYuDK9O1On3zRvtE0CcJRWOliUwRTlcZwKKD92n7Ac",
+    "api_url": "https://employee-perms-1.preview.emergentagent.com",
+    "frontend_url": "https://employee-perms-1.preview.emergentagent.com/quote/QT-M24DO?token=UpYuDK9O1On3zRvtE0CcJRWOliUwRTlcZwKKD92n7Ac",
     "backend_status": "WORKING"
   },
   

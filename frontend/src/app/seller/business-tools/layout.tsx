@@ -37,7 +37,9 @@ import {
   Gift
 } from 'lucide-react';
 
-// Permission context for access control
+// ──────────────────────────────────────
+// Permission Context (consumed by child pages)
+// ──────────────────────────────────────
 interface PermissionContextType {
   permissions: string[];
   isAdmin: boolean;
@@ -58,7 +60,9 @@ const PermissionContext = createContext<PermissionContextType>({
 
 export const usePermissions = () => useContext(PermissionContext);
 
-// Map URL paths to their required module for route-level protection
+// ──────────────────────────────────────
+// Route → Module mapping for route-level protection
+// ──────────────────────────────────────
 const ROUTE_MODULE_MAP: Record<string, string> = {
   '/seller/business-tools': 'dashboard',
   '/seller/business-tools/inventory': 'inventory',
@@ -80,7 +84,9 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   '/seller/business-tools/notifications': 'dashboard',
 };
 
-// Business Tools navigation items
+// ──────────────────────────────────────
+// Navigation items
+// ──────────────────────────────────────
 const navItems = [
   {
     href: '/seller/business-tools',
@@ -222,7 +228,26 @@ const navItems = [
   }
 ];
 
-// Compact network indicator for header
+const getColorClasses = (color: string, isActive: boolean) => {
+  const colors: Record<string, { active: string; inactive: string }> = {
+    blue: { active: 'bg-blue-100 text-blue-700 border-blue-500', inactive: 'text-gray-600 hover:bg-blue-50 hover:text-blue-600' },
+    green: { active: 'bg-green-100 text-green-700 border-green-500', inactive: 'text-gray-600 hover:bg-green-50 hover:text-green-600' },
+    purple: { active: 'bg-purple-100 text-purple-700 border-purple-500', inactive: 'text-gray-600 hover:bg-purple-50 hover:text-purple-600' },
+    orange: { active: 'bg-orange-100 text-orange-700 border-orange-500', inactive: 'text-gray-600 hover:bg-orange-50 hover:text-orange-600' },
+    pink: { active: 'bg-pink-100 text-pink-700 border-pink-500', inactive: 'text-gray-600 hover:bg-pink-50 hover:text-pink-600' },
+    cyan: { active: 'bg-cyan-100 text-cyan-700 border-cyan-500', inactive: 'text-gray-600 hover:bg-cyan-50 hover:text-cyan-600' },
+    amber: { active: 'bg-amber-100 text-amber-700 border-amber-500', inactive: 'text-gray-600 hover:bg-amber-50 hover:text-amber-600' },
+    red: { active: 'bg-red-100 text-red-700 border-red-500', inactive: 'text-gray-600 hover:bg-red-50 hover:text-red-600' },
+    slate: { active: 'bg-slate-100 text-slate-700 border-slate-500', inactive: 'text-gray-600 hover:bg-slate-50 hover:text-slate-600' },
+    indigo: { active: 'bg-indigo-100 text-indigo-700 border-indigo-500', inactive: 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600' },
+    violet: { active: 'bg-violet-100 text-violet-700 border-violet-500', inactive: 'text-gray-600 hover:bg-violet-50 hover:text-violet-600' },
+  };
+  return isActive ? colors[color]?.active || '' : colors[color]?.inactive || '';
+};
+
+// ──────────────────────────────────────
+// Small helper components
+// ──────────────────────────────────────
 function NetworkIndicator() {
   const { isOnline, syncState } = useNetworkContext();
   return (
@@ -254,8 +279,6 @@ function NetworkIndicator() {
   );
 }
 
-
-// Company Banner Component
 function CompanyBanner() {
   const { access, loading } = useEmployeeAccess();
   if (loading || !access) return null;
@@ -292,19 +315,29 @@ function CompanyBanner() {
   );
 }
 
-export default function BusinessToolsLayout({
-  children,
-}: {
+// ──────────────────────────────────────
+// Inner component – rendered INSIDE providers
+// Hooks (useEmployeeAccess) work correctly here
+// ──────────────────────────────────────
+interface BusinessToolsInnerProps {
   children: React.ReactNode;
-}) {
-  const router = useRouter();
+  permissions: string[];
+  isAdmin: boolean;
+  hasPermission: (permission: string) => boolean;
+  loading: boolean;
+  token: string | null;
+}
+
+function BusinessToolsInner({
+  children,
+  permissions,
+  isAdmin,
+  hasPermission,
+  loading,
+  token,
+}: BusinessToolsInnerProps) {
   const pathname = usePathname();
-  const { user, getIdToken, loading: authLoading } = useAuth();
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingForm, setOnboardingForm] = useState({
@@ -313,67 +346,35 @@ export default function BusinessToolsLayout({
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [showReferral, setShowReferral] = useState(false);
 
-  const loadPermissions = useCallback(async () => {
-    try {
-      const idToken = await getIdToken();
-      if (!idToken) {
-        router.push('/login');
-        return;
-      }
-      setToken(idToken);
+  // CORRECTLY inside EmployeeAccessProvider
+  const { canView, canAction: empCanAction, loading: empLoading } = useEmployeeAccess();
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/my-permissions`,
-        {
-          headers: { Authorization: `Bearer ${idToken}` }
-        }
-      );
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push('/login');
-          return;
-        }
-        throw new Error('Failed to load permissions');
-      }
-
-      const data = await response.json();
-      setPermissions(data.permissions || []);
-      setIsAdmin(data.isAdmin || false);
-    } catch (err) {
-      console.error('Error loading permissions:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [getIdToken, router]);
-
-  useEffect(() => {
-    if (!authLoading && user) {
-      loadPermissions();
-    } else if (!authLoading && !user) {
-      router.push('/login');
-    }
-  }, [authLoading, user, loadPermissions, router]);
+  // Combined: admin always has full access; employees checked via RBAC
+  const effectiveCanView = useCallback(
+    (module: string) => isAdmin || canView(module),
+    [isAdmin, canView]
+  );
+  const effectiveCanAction = useCallback(
+    (module: string) => isAdmin || empCanAction(module),
+    [isAdmin, empCanAction]
+  );
 
   // Check if seller needs onboarding
   useEffect(() => {
-    if (!loading && token) {
-      (async () => {
-        try {
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/seller-profile`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (!data.profileComplete) {
-              setShowOnboarding(true);
-            }
-          }
-        } catch { /* empty */ }
-      })();
-    }
-  }, [loading, token]);
+    if (!token) return;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/seller-profile`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.profileComplete) setShowOnboarding(true);
+        }
+      } catch { /* empty */ }
+    })();
+  }, [token]);
 
   // Fetch unread notification count for sidebar badge
   useEffect(() => {
@@ -417,49 +418,25 @@ export default function BusinessToolsLayout({
     setOnboardingSaving(false);
   };
 
-  const hasPermission = useCallback((permission: string) => {
-    return isAdmin || permissions.includes(permission);
-  }, [isAdmin, permissions]);
-
-  // Filter nav items based on module permissions from EmployeeAccessContext
-  // Combined: admin (old system) always has full access, employees checked via new system
-  const { canView, canAction: empCanAction, loading: empLoading } = useEmployeeAccess();
-  const effectiveCanView = useCallback((module: string) => isAdmin || canView(module), [isAdmin, canView]);
-  const effectiveCanAction = useCallback((module: string) => isAdmin || empCanAction(module), [isAdmin, empCanAction]);
-  const visibleNavItems = navItems.filter(item => effectiveCanView(item.module));
-
-  // Route-level protection: check if current path requires a module the user can't view
-  const requiredModule = ROUTE_MODULE_MAP[pathname] || null;
-  const routeBlocked = requiredModule ? !effectiveCanView(requiredModule) : false;
-
-  if (authLoading || loading) {
+  // Loading state: for non-admin users, wait for employee access to resolve
+  if (!isAdmin && empLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" data-testid="employee-access-loading">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm text-gray-500">Loading your permissions...</p>
+        </div>
       </div>
     );
   }
 
-  const getColorClasses = (color: string, isActive: boolean) => {
-    const colors: Record<string, { active: string; inactive: string }> = {
-      blue: { active: 'bg-blue-100 text-blue-700 border-blue-500', inactive: 'text-gray-600 hover:bg-blue-50 hover:text-blue-600' },
-      green: { active: 'bg-green-100 text-green-700 border-green-500', inactive: 'text-gray-600 hover:bg-green-50 hover:text-green-600' },
-      purple: { active: 'bg-purple-100 text-purple-700 border-purple-500', inactive: 'text-gray-600 hover:bg-purple-50 hover:text-purple-600' },
-      orange: { active: 'bg-orange-100 text-orange-700 border-orange-500', inactive: 'text-gray-600 hover:bg-orange-50 hover:text-orange-600' },
-      pink: { active: 'bg-pink-100 text-pink-700 border-pink-500', inactive: 'text-gray-600 hover:bg-pink-50 hover:text-pink-600' },
-      cyan: { active: 'bg-cyan-100 text-cyan-700 border-cyan-500', inactive: 'text-gray-600 hover:bg-cyan-50 hover:text-cyan-600' },
-      amber: { active: 'bg-amber-100 text-amber-700 border-amber-500', inactive: 'text-gray-600 hover:bg-amber-50 hover:text-amber-600' },
-      red: { active: 'bg-red-100 text-red-700 border-red-500', inactive: 'text-gray-600 hover:bg-red-50 hover:text-red-600' },
-      slate: { active: 'bg-slate-100 text-slate-700 border-slate-500', inactive: 'text-gray-600 hover:bg-slate-50 hover:text-slate-600' },
-      indigo: { active: 'bg-indigo-100 text-indigo-700 border-indigo-500', inactive: 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-600' }
-    };
-    return isActive ? colors[color]?.active : colors[color]?.inactive;
-  };
+  // Filter nav items and check route access
+  const visibleNavItems = navItems.filter(item => effectiveCanView(item.module));
+  const requiredModule = ROUTE_MODULE_MAP[pathname] || null;
+  const routeBlocked = requiredModule ? !effectiveCanView(requiredModule) : false;
 
   return (
     <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, canAction: effectiveCanAction, loading, token }}>
-      <EmployeeAccessProvider>
-      <NetworkProvider>
       <Toaster position="top-right" richColors closeButton />
       <div className="min-h-screen bg-gray-50">
         {/* Network Status Banner */}
@@ -481,7 +458,6 @@ export default function BusinessToolsLayout({
               </div>
               
               <div className="flex items-center gap-3">
-                {/* Refer & Earn Button */}
                 <button
                   onClick={() => setShowReferral(true)}
                   className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium hover:bg-indigo-100 transition-colors"
@@ -490,12 +466,11 @@ export default function BusinessToolsLayout({
                   <Gift className="h-3.5 w-3.5" />
                   Refer & Earn
                 </button>
-                {/* Network Status Indicator */}
                 <NetworkIndicator />
-                {/* Mobile menu button */}
                 <button
                   onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   className="lg:hidden p-2 text-gray-600 hover:text-gray-900"
+                  data-testid="mobile-menu-toggle"
                 >
                   {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                 </button>
@@ -508,22 +483,23 @@ export default function BusinessToolsLayout({
           <div className="flex gap-6">
             {/* Sidebar Navigation - Desktop */}
             <aside className="hidden lg:block w-64 flex-shrink-0">
-              <nav className="bg-white rounded-xl shadow-sm border p-4 sticky top-24">
+              <nav className="bg-white rounded-xl shadow-sm border p-4 sticky top-24" data-testid="desktop-sidebar">
                 <CompanyBanner />
                 <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
                   Modules
                 </h2>
                 <div className="space-y-1">
                   {visibleNavItems.map((item) => {
-                    const isActive = (item as { exact?: boolean }).exact
+                    const isActive = item.exact
                       ? pathname === item.href
                       : pathname.startsWith(item.href);
                     const Icon = item.icon;
-                    const hasBadge = (item as { showBadge?: boolean }).showBadge && unreadCount > 0;
+                    const hasBadge = item.showBadge && unreadCount > 0;
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
+                        data-testid={`nav-${item.module}-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                           getColorClasses(item.color, isActive)
                         } ${isActive ? 'border-l-4' : ''}`}
@@ -550,13 +526,13 @@ export default function BusinessToolsLayout({
                     <h2 className="text-lg font-semibold text-gray-900 mb-3">Business Tools</h2>
                     <CompanyBanner />
                   </div>
-                  <nav className="p-4 space-y-1">
+                  <nav className="p-4 space-y-1" data-testid="mobile-sidebar">
                     {visibleNavItems.map((item) => {
-                      const isActive = (item as { exact?: boolean }).exact
+                      const isActive = item.exact
                         ? pathname === item.href
                         : pathname.startsWith(item.href);
                       const Icon = item.icon;
-                      const hasBadge = (item as { showBadge?: boolean }).showBadge && unreadCount > 0;
+                      const hasBadge = item.showBadge && unreadCount > 0;
                       return (
                         <Link
                           key={item.href}
@@ -582,13 +558,17 @@ export default function BusinessToolsLayout({
             )}
 
             {/* Main Content */}
-            <main className="flex-1 min-w-0">
-              {routeBlocked ? <NoAccess /> : children}
+            <main className="flex-1 min-w-0" data-testid="main-content-area">
+              {routeBlocked ? (
+                <NoAccess message="You don't have permission to view this module. Ask your admin to enable access." />
+              ) : (
+                children
+              )}
             </main>
           </div>
         </div>
 
-        {/* Onboarding Modal – inside NetworkProvider */}
+        {/* Onboarding Modal */}
         {showOnboarding && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4" data-testid="onboarding-modal">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
@@ -655,11 +635,97 @@ export default function BusinessToolsLayout({
             </div>
           </div>
         )}
-      {/* Referral Modal */}
-      <ReferralModal isOpen={showReferral} onClose={() => setShowReferral(false)} token={token} />
+
+        {/* Referral Modal */}
+        <ReferralModal isOpen={showReferral} onClose={() => setShowReferral(false)} token={token} />
       </div>
-      </NetworkProvider>
-      </EmployeeAccessProvider>
     </PermissionContext.Provider>
+  );
+}
+
+// ──────────────────────────────────────
+// Outer Layout – providers only, no hooks that depend on providers
+// ──────────────────────────────────────
+export default function BusinessToolsLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const { user, getIdToken, loading: authLoading } = useAuth();
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
+
+  const loadPermissions = useCallback(async () => {
+    try {
+      const idToken = await getIdToken();
+      if (!idToken) {
+        router.push('/login');
+        return;
+      }
+      setToken(idToken);
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/my-permissions`,
+        {
+          headers: { Authorization: `Bearer ${idToken}` }
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/login');
+          return;
+        }
+        throw new Error('Failed to load permissions');
+      }
+
+      const data = await response.json();
+      setPermissions(data.permissions || []);
+      setIsAdmin(data.isAdmin || false);
+    } catch (err) {
+      console.error('Error loading permissions:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [getIdToken, router]);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      loadPermissions();
+    } else if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, loadPermissions, router]);
+
+  const hasPermission = useCallback(
+    (permission: string) => isAdmin || permissions.includes(permission),
+    [isAdmin, permissions]
+  );
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center" data-testid="auth-loading">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <EmployeeAccessProvider>
+      <NetworkProvider>
+        <BusinessToolsInner
+          permissions={permissions}
+          isAdmin={isAdmin}
+          hasPermission={hasPermission}
+          loading={loading}
+          token={token}
+        >
+          {children}
+        </BusinessToolsInner>
+      </NetworkProvider>
+    </EmployeeAccessProvider>
   );
 }

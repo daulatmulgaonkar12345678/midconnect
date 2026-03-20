@@ -107,7 +107,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://employee-access-hub-1.preview.emergentagent.com",
+    "api_url": "https://employee-perms-1.preview.emergentagent.com",
     "test_product_id": "699be9023cbe1a8c31591668",
     "test_product_name": "Industrial Electric Motor 5HP"
   },

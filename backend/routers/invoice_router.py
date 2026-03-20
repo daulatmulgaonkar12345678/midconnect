@@ -1528,7 +1528,6 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
 
         pending = inv.get("pendingAmount", 0)
         total = inv.get("total", 0)
-        paid = inv.get("totalPaid", 0)
         inv_num = inv.get("invoiceNumber", "")
 
         # Get seller business name
