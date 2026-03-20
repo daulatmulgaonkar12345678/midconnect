@@ -254,6 +254,7 @@ export default function InvoicesPage() {
         productId: (i.productId as string) || '', productName: (i.productName as string) || '',
         description: (i.description as string) || '', hsnCode: (i.hsnCode as string) || '',
         quantity: (i.quantity as number) || 1, price: (i.price as number) || 0, discount: (i.discount as number) || 0,
+        discountType: ((i.discountType as string) || '%') as '%' | 'Rs',
         gstPercent: (i.gstPercent as number) || 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false,
       }));
       setFormData(p => ({
