@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional, List as PyList
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from services.quotation_pdf_service import generate_quotation_pdf
 import logging
@@ -33,6 +33,7 @@ class QuotationItemCreate(BaseModel):
     quantity: float = 1
     price: float = 0
     discount: float = 0
+    discountType: str = "%"
     gstPercent: float = 0
     selected_specifications: PyList[dict] = []
 
@@ -163,13 +164,16 @@ def init_quotation_router(db, verify_token_func):
                 except Exception:
                     pass
 
-            line_sub = round(item.price * item.quantity - item.discount, 2)
+            base = round(item.price * item.quantity, 2)
+            disc_amt = round(base * item.discount / 100, 2) if item.discountType == "%" else round(item.discount, 2)
+            line_sub = max(round(base - disc_amt, 2), 0)
             gst = calculate_gst(line_sub, item.gstPercent, seller_state, place_of_supply, gst_enabled)
 
             q_items.append({
                 "productId": item.productId, "productName": product_name,
                 "description": desc, "hsnCode": hsn,
-                "quantity": item.quantity, "price": item.price, "discount": item.discount,
+                "quantity": item.quantity, "price": item.price,
+                "discount": item.discount, "discountType": item.discountType, "discountAmount": disc_amt,
                 "gstPercent": item.gstPercent,
                 "taxableAmount": gst["taxableAmount"],
                 "cgst": gst["cgst"], "cgstRate": gst["cgstRate"],
@@ -400,6 +404,67 @@ def init_quotation_router(db, verify_token_func):
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
+
+    # ── GENERATE SHARE LINK (public PDF URL for WhatsApp sharing) ──
+    @router.post("/quotations/{quotation_id}/share-link")
+    async def generate_share_link(quotation_id: str, authorization: str = Header(...)):
+        """Generate a time-limited public PDF download link for sharing via WhatsApp."""
+        import secrets as _secrets
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        quo = await db.quotations.find_one({"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)})
+        if not quo:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+
+        now = datetime.now(timezone.utc)
+        token = _secrets.token_urlsafe(32)
+        buyer = await db.seller_buyers.find_one({"_id": quo.get("buyerId")}) or {}
+        buyer_phone = buyer.get("phone", "")
+
+        await db.document_shares.insert_one({
+            "token": token,
+            "sellerId": ObjectId(seller_id),
+            "documentType": "quotation",
+            "documentId": str(quo["_id"]),
+            "recipientPhone": buyer_phone,
+            "expiresAt": now + timedelta(days=3),
+            "createdAt": now,
+        })
+
+        from utils.whatsapp_messages import build_doc_url
+        doc_url = build_doc_url(token)
+
+        # Build WhatsApp message
+        seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+        biz_name = ((seller_user or {}).get("profile") or {}).get("businessName", "Seller")
+        buyer_name = buyer.get("buyerName", "")
+        total = quo.get("total", 0)
+        quo_num = quo.get("quotationNumber", "")
+
+        greeting = f"Hello {buyer_name},\n\n" if buyer_name else "Hello,\n\n"
+        msg = (
+            f"{greeting}"
+            f"Quotation from *{biz_name}*\n\n"
+            f"Quotation: {quo_num}\n"
+            f"Amount: Rs.{total:,.0f}\n\n"
+            f"Download: {doc_url}\n\n"
+            f"— Powered by UdyogConnect"
+        )
+
+        wa_link = None
+        if buyer_phone:
+            clean_phone = buyer_phone.replace(" ", "").replace("-", "").replace("+", "")
+            if not clean_phone.startswith("91") and len(clean_phone) == 10:
+                clean_phone = "91" + clean_phone
+            import urllib.parse
+            wa_link = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(msg)}"
+
+        return {
+            "pdfUrl": doc_url,
+            "whatsappLink": wa_link,
+            "message": msg,
+            "expiresAt": (now + timedelta(days=3)).isoformat(),
+        }
 
     # ── STORE CONVERSION PREFILL (fallback for page refresh) ──
     @router.post("/quotations/{quotation_id}/store-prefill")

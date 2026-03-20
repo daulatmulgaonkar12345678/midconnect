@@ -1,0 +1,79 @@
+{
+  "summary": "Iteration 97: B2B ERP Enhancement batch testing complete. All 27 pytest tests passed. Verified: 1) discountType field ('%' or 'Rs') in QuotationItemCreate and InvoiceItemCreate models, 2) Discount calculation logic: Base Rate → Discount → Tax → Total works for both percentage and flat Rs, 3) POST /api/business-tools/quotations/{id}/share-link endpoint exists with 'Powered by UdyogConnect' branding, 4) Public doc router supports 'quotation' document type, 5) PDF services render discount correctly with format (5% with amount, or flat Rs), 6) Frontend has discount toggle buttons with data-testid attributes, 7) Auto-fill price/GST%/HSN from inventory on product select.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_discount_whatsapp_autoprice.py",
+    "/app/test_reports/pytest/discount_whatsapp_autoprice_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ QuotationItemCreate has discountType: str = '%' field - PASS",
+    "✓ InvoiceItemCreate has discountType: Optional[str] = '%' field - PASS",
+    "✓ Both models accept 'Rs' as discountType value - PASS",
+    "✓ Discount calculation: base = price * qty, discAmt = base * disc / 100 (if %) else disc (if Rs) - PASS",
+    "✓ POST /api/business-tools/quotations/{id}/share-link returns 401 without valid auth - PASS",
+    "✓ Share-link endpoint returns pdfUrl, whatsappLink, message fields - PASS",
+    "✓ WhatsApp message includes 'Powered by UdyogConnect' branding - PASS",
+    "✓ Public doc router handles 'quotation' document type (product_share_router.py line 446) - PASS",
+    "✓ Quotation PDF service has discountType logic at line 226-238 - PASS",
+    "✓ Invoice PDF service has discountType logic at line 297-310 - PASS",
+    "✓ PDF displays discount as '5% (amount)' for percentage or 'Rs.amount' for flat - PASS",
+    "✓ Quotation page has data-testid='item-discount-toggle-{idx}' - PASS",
+    "✓ Invoice page has data-testid='invoice-item-discount-toggle-{idx}' - PASS",
+    "✓ Quotation page onProductSelect auto-fills price, gstRate, hsnCode from listing - PASS",
+    "✓ Invoice page onProductSelect auto-fills price, gstPercent, hsnCode from listing - PASS",
+    "✓ Invoice router discount calculation at lines 444-447 (create) and 808-812 (sync-offline) - PASS",
+    "✓ Quotation router discount calculation at lines 167-169 - PASS",
+    "✓ Invoice stored items include discountType and discountAmount fields - PASS",
+    "✓ Quotation stored items include discountType and discountAmount fields - PASS"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_discount_whatsapp_autoprice.py"
+  ],
+  "success_rate": {
+    "backend": "100% (27/27 tests passed)",
+    "frontend": "100% (Page loads, all data-testid attributes present)"
+  },
+  "test_credentials": null,
+  "seed_data_creation": null,
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 97 tests B2B ERP enhancements: per-item discount system with % or Rs toggle, WhatsApp PDF sharing with time-limited tokens, auto-fill price/GST%/HSN from inventory. All backend endpoints require Firebase auth. The discount calculation flow is: Base = price * qty, DiscAmount = (Base * disc / 100) if type='%' else disc, Taxable = Base - DiscAmount, GST = Taxable * gstPercent / 100, Total = Taxable + GST. PDF services at quotation_pdf_service.py and invoice_pdf_service.py correctly display discount with format.",
+  "features_tested": [
+    "QuotationItemCreate model has discountType field with default '%'",
+    "QuotationItemCreate model accepts 'Rs' as discountType",
+    "InvoiceItemCreate model has discountType field",
+    "InvoiceItemCreate model accepts 'Rs' as discountType",
+    "Percentage discount calculation correct",
+    "Flat Rs discount calculation correct",
+    "Zero discount calculation correct",
+    "POST /api/business-tools/quotations/{id}/share-link returns 401 without auth",
+    "Share-link endpoint exists (not 404 route error)",
+    "Public doc router handles 'quotation' document type",
+    "Public doc endpoint /api/doc/{token} exists",
+    "Quotation PDF service imports successfully",
+    "Invoice PDF service imports successfully",
+    "Quotation PDF has discount display logic",
+    "Invoice PDF has discount display logic",
+    "Quotation PDF generation with percentage discount",
+    "Quotation PDF generation with flat Rs discount",
+    "Invoice router has discount calculation logic",
+    "Quotation router has discount calculation logic",
+    "Quotation page has discount toggle data-testid",
+    "Invoice page has discount toggle data-testid",
+    "Share-link response has pdfUrl, whatsappLink, message with UdyogConnect branding",
+    "Quotation page has auto-fill logic for price, GST%, HSN",
+    "Invoice page has auto-fill logic for price, GST%, HSN",
+    "GET /api/business-tools/quotations returns 401",
+    "GET /api/business-tools/invoices returns 401",
+    "GET /api/business-tools/invoice-products returns 401"
+  ]
+}

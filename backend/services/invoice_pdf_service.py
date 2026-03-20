@@ -294,12 +294,23 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
         qty = item.get("quantity", 0)
         price = item.get("price", 0)
         discount = item.get("discount", 0)
+        disc_type = item.get("discountType", "Rs")
         gst_pct = item.get("gstPercent", 0)
         hsn = item.get("hsnCode", "")
-        taxable = round(qty * price - discount, 2)
+        # Use pre-calculated discountAmount if available, otherwise calculate
+        base = round(qty * price, 2)
+        disc_amt = item.get("discountAmount", round(base * discount / 100, 2) if disc_type == "%" else round(discount, 2))
+        taxable = item.get("taxableAmount", max(round(base - disc_amt, 2), 0))
         gst_amt = item.get("gstAmount", round(taxable * gst_pct / 100, 2))
         line_total = item.get("total", round(taxable + gst_amt, 2))
         total_taxable += taxable
+
+        disc_display = "-"
+        if disc_amt > 0:
+            if disc_type == "%":
+                disc_display = f"{discount}%\n({disc_amt:,.2f})"
+            else:
+                disc_display = f"{disc_amt:,.2f}"
 
         product_text = f"<b>{str(item.get('productName', 'Item'))}</b>"
         description = item.get("description", "")
@@ -314,14 +325,14 @@ def generate_invoice_pdf(invoice: dict, seller: dict, buyer: dict, copy_type: st
         if is_igst:
             total_igst += gst_amt
             row = [str(i), Paragraph(product_text, s_small), str(hsn), str(qty),
-                   f"{price:,.2f}", f"{discount:,.2f}" if discount else "-",
+                   f"{price:,.2f}", disc_display,
                    f"{taxable:,.2f}", f"{gst_pct}%", f"{gst_amt:,.2f}", f"{line_total:,.2f}"]
         else:
             half_gst = round(gst_amt / 2, 2)
             total_cgst += half_gst
             total_sgst += half_gst
             row = [str(i), Paragraph(product_text, s_small), str(hsn), str(qty),
-                   f"{price:,.2f}", f"{discount:,.2f}" if discount else "-",
+                   f"{price:,.2f}", disc_display,
                    f"{taxable:,.2f}", f"{half_gst:,.2f}", f"{half_gst:,.2f}", f"{line_total:,.2f}"]
         table_data.append(row)
 

@@ -441,7 +441,10 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                     pass
 
             # Calculate GST breakdown using tax engine
-            line_subtotal = round(item.price * item.quantity - item.discount, 2)
+            base = round(item.price * item.quantity, 2)
+            disc_type = getattr(item, 'discountType', '%') or '%'
+            disc_amt = round(base * item.discount / 100, 2) if disc_type == "%" else round(item.discount, 2)
+            line_subtotal = max(round(base - disc_amt, 2), 0)
             gst_breakdown = calculate_gst(line_subtotal, item.gstPercent, seller_state, place_of_supply, gst_enabled)
 
             item_purchase_price = 0
@@ -470,6 +473,8 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "quantity": item.quantity,
                 "price": item.price,
                 "discount": item.discount,
+                "discountType": disc_type,
+                "discountAmount": disc_amt,
                 "purchase_price": round(item_purchase_price, 2),
                 "gstPercent": item.gstPercent,
                 "taxableAmount": gst_breakdown["taxableAmount"],
@@ -802,7 +807,10 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 except Exception:
                     pass
 
-            line_subtotal = round(item.price * item.quantity - item.discount, 2)
+            base2 = round(item.price * item.quantity, 2)
+            disc_type2 = getattr(item, 'discountType', '%') or '%'
+            disc_amt2 = round(base2 * item.discount / 100, 2) if disc_type2 == "%" else round(item.discount, 2)
+            line_subtotal = max(round(base2 - disc_amt2, 2), 0)
             gst_breakdown = calculate_gst(line_subtotal, item.gstPercent, seller_state, place_of_supply, gst_enabled)
 
             item_purchase_price = 0
@@ -822,6 +830,8 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
                 "quantity": item.quantity,
                 "price": item.price,
                 "discount": item.discount,
+                "discountType": disc_type2,
+                "discountAmount": disc_amt2,
                 "purchase_price": round(item_purchase_price, 2),
                 "gstPercent": item.gstPercent,
                 "taxableAmount": gst_breakdown["taxableAmount"],

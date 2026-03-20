@@ -443,6 +443,31 @@ def init_public_doc_router(db):
                 filename = f"PO-{po.get('poNumber', 'document')}.pdf"
                 return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
+            elif doc_type == "quotation":
+                from services.quotation_pdf_service import generate_quotation_pdf
+                quo = await db.quotations.find_one({"_id": ObjectId(doc_id), "sellerId": seller_id})
+                if not quo:
+                    raise HTTPException(status_code=404, detail="Quotation not found")
+                seller = await db.users.find_one({"_id": seller_id})
+                profile = (seller or {}).get("profile", {})
+                billing = (seller or {}).get("billingSettings", {})
+                gst = (seller or {}).get("gst", {})
+                bank_details = {k: billing.get(k, "") for k in ["bankName", "accountNumber", "accountName", "ifscCode", "branch"]}
+                seller_data = {
+                    "businessName": profile.get("businessName", ""), "name": profile.get("businessName", ""),
+                    "address": profile.get("address", ""), "city": profile.get("city", ""),
+                    "state": profile.get("state", ""), "phone": profile.get("phone", ""),
+                    "email": (seller or {}).get("email", ""), "gstNumber": gst.get("number", ""),
+                    "sellerLogoUrl": billing.get("companyLogoUrl", "") or profile.get("sellerLogoUrl", ""),
+                    "bankDetails": bank_details, "invoiceTerms": billing.get("invoiceTerms", ""),
+                }
+                buyer = await db.seller_buyers.find_one({"_id": quo.get("buyerId")}) or {}
+                quo_ser = serialize_doc(quo)
+                is_offline = quo.get("offlineSynced", False)
+                pdf_bytes = generate_quotation_pdf(quo_ser, seller_data, buyer, is_offline=is_offline)
+                filename = f"quotation-{quo.get('quotationNumber', 'doc')}.pdf"
+                return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
             raise HTTPException(status_code=400, detail="Unsupported document type")
 
         except HTTPException:

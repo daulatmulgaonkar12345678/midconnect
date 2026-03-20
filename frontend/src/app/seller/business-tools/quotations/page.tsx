@@ -10,13 +10,13 @@ import { toast } from 'sonner';
 import Select, { StylesConfig, SingleValue } from 'react-select';
 import {
   FileText, Plus, Trash2, Download, Send, Loader2,
-  IndianRupee, ArrowRight, Share2, ChevronDown, ChevronUp, WifiOff, CloudOff
+  IndianRupee, ArrowRight, Share2, ChevronDown, ChevronUp, WifiOff, CloudOff, Percent, MessageCircle
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface SelectOption { value: string; label: string; }
-interface ProductOption extends SelectOption { stock: number; desc: string; }
+interface ProductOption extends SelectOption { stock: number; desc: string; price: number; gst: number; hsn: string; }
 
 const selectStyles: StylesConfig<SelectOption, false> = {
   control: (base, state) => ({ ...base, minHeight: '38px', borderRadius: '0.5rem', borderColor: state.isFocused ? '#6366f1' : '#d1d5db', boxShadow: state.isFocused ? '0 0 0 1px #6366f1' : 'none', fontSize: '0.875rem', '&:hover': { borderColor: '#6366f1' } }),
@@ -39,11 +39,29 @@ const productStyles: StylesConfig<ProductOption, false> = {
 };
 
 interface Buyer { id: string; buyerName: string; company: string; phone: string; state: string; }
-interface Listing { id: string; productName: string; description: string; availableStock: number; hsnCode: string; specifications: Record<string, unknown>[]; }
-interface QuotationItem { productId: string; productName: string; description: string; hsnCode: string; quantity: number; price: number; discount: number; gstPercent: number; total?: number; }
-interface Quotation { id: string; quotationNumber: string; buyerName: string; buyerPhone: string; buyerId: string; date: string; status: string; items: QuotationItem[]; subtotal: number; gst: number; total: number; notes: string; validityDays: number; convertedToInvoice: boolean; convertedInvoiceNumber?: string; termsAndConditions: string; placeOfSupply: string; cgst?: number; sgst?: number; igst?: number; roundOff?: number; }
+interface Listing { id: string; productName: string; description: string; availableStock: number; hsnCode: string; price: number; gstRate: number; specifications: Record<string, unknown>[]; }
+interface QuotationItem {
+  productId: string; productName: string; description: string; hsnCode: string;
+  quantity: number; price: number; discount: number; discountType: '%' | 'Rs';
+  gstPercent: number; total?: number;
+}
+interface Quotation {
+  id: string; quotationNumber: string; buyerName: string; buyerPhone: string; buyerId: string;
+  date: string; status: string; items: QuotationItem[]; subtotal: number; gst: number; total: number;
+  notes: string; validityDays: number; convertedToInvoice: boolean;
+  convertedInvoiceNumber?: string; termsAndConditions: string; placeOfSupply: string;
+  cgst?: number; sgst?: number; igst?: number; roundOff?: number;
+}
 
-const emptyItem = (): QuotationItem => ({ productId: '', productName: '', description: '', hsnCode: '', quantity: 1, price: 0, discount: 0, gstPercent: 18 });
+const emptyItem = (): QuotationItem => ({ productId: '', productName: '', description: '', hsnCode: '', quantity: 1, price: 0, discount: 0, discountType: '%', gstPercent: 18 });
+
+function calcItemTotals(item: QuotationItem) {
+  const base = item.price * item.quantity;
+  const discAmt = item.discountType === '%' ? base * (item.discount / 100) : item.discount;
+  const taxable = Math.max(base - discAmt, 0);
+  const gstAmt = taxable * (item.gstPercent / 100);
+  return { base, discAmt, taxable, gstAmt, total: taxable + gstAmt };
+}
 
 export default function QuotationsPage() {
   const router = useRouter();
@@ -59,6 +77,7 @@ export default function QuotationsPage() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
+  const [sharingWa, setSharingWa] = useState<string | null>(null);
 
   const authHeaders = useCallback(async () => {
     const token = await getIdToken();
@@ -82,19 +101,30 @@ export default function QuotationsPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Auto-fill price, GST%, HSN from inventory on product select
   const onProductSelect = (idx: number, productId: string) => {
     const listing = listings.find(l => l.id === productId);
     if (!listing) return;
     const items = [...formData.items];
-    items[idx] = { ...items[idx], productId, productName: listing.productName, hsnCode: listing.hsnCode || '', description: listing.description || '', price: items[idx].price };
+    items[idx] = {
+      ...items[idx],
+      productId,
+      productName: listing.productName,
+      hsnCode: listing.hsnCode || '',
+      description: listing.description || '',
+      price: listing.price || items[idx].price,
+      gstPercent: listing.gstRate ?? items[idx].gstPercent,
+    };
     setFormData(p => ({ ...p, items }));
   };
 
   const addItem = () => setFormData(p => ({ ...p, items: [...p.items, emptyItem()] }));
   const removeItem = (idx: number) => { if (formData.items.length > 1) setFormData(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) })); };
 
-  const calcSubtotal = () => formData.items.reduce((sum, i) => sum + (i.price * i.quantity - i.discount), 0);
-  const calcGst = () => formData.items.reduce((sum, i) => sum + ((i.price * i.quantity - i.discount) * i.gstPercent / 100), 0);
+  const calcTotals = () => formData.items.reduce((acc, item) => {
+    const t = calcItemTotals(item);
+    return { subtotal: acc.subtotal + t.taxable, gst: acc.gst + t.gstAmt, total: acc.total + t.total };
+  }, { subtotal: 0, gst: 0, total: 0 });
 
   const resetForm = () => {
     setShowForm(false);
@@ -147,12 +177,9 @@ export default function QuotationsPage() {
     if (!isOnline) { toast.error('Cannot convert offline. Go online first.'); return; }
     try {
       const h = await authHeaders();
-      // Store prefill server-side for refresh resilience
       const storeRes = await fetch(`${API_URL}/api/business-tools/quotations/${id}/store-prefill`, { method: 'POST', headers: h });
       if (!storeRes.ok) { const d = await storeRes.json(); toast.error(d.detail || 'Conversion failed'); return; }
       const { prefill } = await storeRes.json();
-
-      // Also store in sessionStorage for immediate use (faster than server fetch)
       sessionStorage.setItem('quotation_prefill', JSON.stringify(prefill));
       sessionStorage.setItem('source_quotation_id', id);
       router.push(`/seller/business-tools/invoices?from_quotation=true&quotation_id=${id}`);
@@ -187,24 +214,24 @@ export default function QuotationsPage() {
     setDownloadingPdf(null);
   };
 
-  const handlePrintPdf = async (id: string) => {
-    if (!isOnline) { toast.error('Print requires internet'); return; }
+  // WhatsApp sharing with PDF link
+  const handleShareWhatsApp = async (quo: Quotation) => {
+    if (!isOnline) { toast.error('Cannot send WhatsApp in offline mode'); return; }
+    if (!quo.buyerPhone) { toast.error('Buyer phone not available'); return; }
+    setSharingWa(quo.id);
     try {
       const h = await authHeaders();
-      const res = await fetch(`${API_URL}/api/business-tools/quotations/${id}/pdf`, { headers: h });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const w = window.open(url, '_blank');
-      if (w) { w.addEventListener('load', () => { w.print(); }); }
-    } catch { toast.error('Print failed'); }
-  };
-
-  const shareWhatsApp = (quo: Quotation) => {
-    if (!isOnline) { toast.error('Cannot send WhatsApp in offline mode'); return; }
-    const msg = `Quotation: ${quo.quotationNumber}\nBuyer: ${quo.buyerName}\nTotal: ₹${quo.total?.toLocaleString('en-IN')}\nValid for ${quo.validityDays} days`;
-    window.open(`https://wa.me/${quo.buyerPhone}?text=${encodeURIComponent(msg)}`, '_blank');
-    handleMarkSent(quo.id);
+      const res = await fetch(`${API_URL}/api/business-tools/quotations/${quo.id}/share-link`, { method: 'POST', headers: h });
+      if (!res.ok) { toast.error('Failed to generate share link'); setSharingWa(null); return; }
+      const data = await res.json();
+      if (data.whatsappLink) {
+        window.open(data.whatsappLink, '_blank');
+        handleMarkSent(quo.id);
+      } else {
+        toast.error('Could not generate WhatsApp link');
+      }
+    } catch { toast.error('Share failed'); }
+    setSharingWa(null);
   };
 
   const toggleRow = (id: string) => setExpandedRows(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -216,6 +243,8 @@ export default function QuotationsPage() {
   };
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-indigo-600" data-testid="loading-spinner" /></div>;
+
+  const totals = calcTotals();
 
   return (
     <div className="space-y-4" data-testid="quotations-page">
@@ -252,56 +281,96 @@ export default function QuotationsPage() {
           {/* Items */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Items</label>
-            {formData.items.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 mb-2 items-end">
-                <div className="col-span-4">
-                  {idx === 0 && <span className="text-xs text-gray-500 block mb-1">Product</span>}
-                  <Select<ProductOption>
-                    options={[{ value: '', label: 'Manual entry', stock: 0, desc: '' }, ...listings.map(l => ({ value: l.id, label: l.productName, stock: l.availableStock, desc: l.description }))]}
-                    value={item.productId ? { value: item.productId, label: listings.find(l => l.id === item.productId)?.productName || item.productName, stock: 0, desc: '' } : null}
-                    onChange={(opt: SingleValue<ProductOption>) => {
-                      if (!opt || opt.value === '') { const items = [...formData.items]; items[idx] = { ...items[idx], productId: '', productName: '' }; setFormData(p => ({ ...p, items })); }
-                      else onProductSelect(idx, opt.value);
-                    }}
-                    placeholder="Search..." isSearchable isClearable styles={productStyles}
-                    formatOptionLabel={(o) => o.value === '' ? <span className="text-gray-400 italic">Manual</span> : <span>{o.label} <span className="text-gray-400 text-xs">({o.stock})</span></span>}
-                    inputId={`quo-item-product-${idx}`}
-                  />
-                  {!item.productId && <input type="text" value={item.productName} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], productName: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="Product name" className="w-full mt-1 px-2 py-1 border rounded text-sm" data-testid={`manual-product-name-${idx}`} />}
-                </div>
-                <div className="col-span-2">
-                  {idx === 0 && <span className="text-xs text-gray-500 block mb-1">Price</span>}
-                  <input type="number" value={item.price || ''} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: +e.target.value }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border rounded text-sm" placeholder="0" data-testid={`item-price-${idx}`} />
-                </div>
-                <div className="col-span-1">
-                  {idx === 0 && <span className="text-xs text-gray-500 block mb-1">Qty</span>}
-                  <input type="number" value={item.quantity || ''} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], quantity: +e.target.value }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border rounded text-sm" placeholder="1" min={1} data-testid={`item-qty-${idx}`} />
-                </div>
-                <div className="col-span-2">
-                  {idx === 0 && <span className="text-xs text-gray-500 block mb-1">GST %</span>}
-                  <select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: +e.target.value }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border rounded text-sm" data-testid={`item-gst-${idx}`}>
-                    <option value={0}>0%</option><option value={5}>5%</option><option value={12}>12%</option><option value={18}>18%</option><option value={28}>28%</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  {idx === 0 && <span className="text-xs text-gray-500 block mb-1">Total</span>}
-                  <div className="px-2 py-1.5 bg-gray-50 border rounded text-sm text-gray-700 flex items-center">
-                    <IndianRupee className="w-3 h-3 mr-0.5" />{((item.price * item.quantity - item.discount) * (1 + item.gstPercent / 100)).toFixed(2)}
+            <div className="space-y-3">
+              {formData.items.map((item, idx) => {
+                const t = calcItemTotals(item);
+                return (
+                  <div key={idx} className="bg-gray-50 rounded-lg p-3 space-y-2" data-testid={`quotation-item-${idx}`}>
+                    <div className="grid grid-cols-12 gap-2 items-start">
+                      {/* Product */}
+                      <div className="col-span-4">
+                        <label className="text-xs text-gray-500 mb-1 block">Product</label>
+                        <Select<ProductOption>
+                          options={[
+                            { value: '', label: 'Manual entry', stock: 0, desc: '', price: 0, gst: 18, hsn: '' },
+                            ...listings.map(l => ({ value: l.id, label: l.productName, stock: l.availableStock, desc: l.description, price: l.price, gst: l.gstRate, hsn: l.hsnCode }))
+                          ]}
+                          value={item.productId ? { value: item.productId, label: listings.find(l => l.id === item.productId)?.productName || item.productName, stock: 0, desc: '', price: 0, gst: 18, hsn: '' } : null}
+                          onChange={(opt: SingleValue<ProductOption>) => {
+                            if (!opt || opt.value === '') { const items = [...formData.items]; items[idx] = { ...items[idx], productId: '', productName: '' }; setFormData(p => ({ ...p, items })); }
+                            else onProductSelect(idx, opt.value);
+                          }}
+                          placeholder="Search..." isSearchable isClearable styles={productStyles}
+                          formatOptionLabel={(o) => o.value === '' ? <span className="text-gray-400 italic">Manual</span> : <span>{o.label} <span className="text-gray-400 text-xs">({o.stock} avail | Rs.{o.price})</span></span>}
+                          inputId={`quo-item-product-${idx}`}
+                        />
+                        {!item.productId && <input type="text" value={item.productName} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], productName: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="Product name" className="w-full mt-1 px-2 py-1.5 border rounded text-sm" data-testid={`manual-product-name-${idx}`} />}
+                      </div>
+                      {/* Rate */}
+                      <div className="col-span-1">
+                        <label className="text-xs text-gray-500 mb-1 block">Rate</label>
+                        <input type="number" value={item.price || ''} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: +e.target.value }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border rounded text-sm" placeholder="0" data-testid={`item-price-${idx}`} />
+                      </div>
+                      {/* Qty */}
+                      <div className="col-span-1">
+                        <label className="text-xs text-gray-500 mb-1 block">Qty</label>
+                        <input type="number" value={item.quantity || ''} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], quantity: +e.target.value }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border rounded text-sm" placeholder="1" min={1} data-testid={`item-qty-${idx}`} />
+                      </div>
+                      {/* Discount */}
+                      <div className="col-span-2">
+                        <label className="text-xs text-gray-500 mb-1 block">Discount</label>
+                        <div className="flex gap-1">
+                          <input type="number" value={item.discount || ''} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], discount: +e.target.value }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border rounded-l text-sm" placeholder="0" min={0} data-testid={`item-discount-${idx}`} />
+                          <button
+                            type="button"
+                            onClick={() => { const items = [...formData.items]; items[idx] = { ...items[idx], discountType: items[idx].discountType === '%' ? 'Rs' : '%' }; setFormData(p => ({ ...p, items })); }}
+                            className="px-2 py-1.5 border rounded-r text-xs font-medium bg-gray-100 hover:bg-gray-200 whitespace-nowrap min-w-[32px]"
+                            data-testid={`item-discount-toggle-${idx}`}
+                          >
+                            {item.discountType === '%' ? <Percent className="w-3 h-3" /> : <span>Rs</span>}
+                          </button>
+                        </div>
+                        {t.discAmt > 0 && <span className="text-xs text-green-600 mt-0.5 block">-Rs.{t.discAmt.toFixed(2)}</span>}
+                      </div>
+                      {/* GST */}
+                      <div className="col-span-1">
+                        <label className="text-xs text-gray-500 mb-1 block">GST%</label>
+                        <select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: +e.target.value }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border rounded text-sm" data-testid={`item-gst-${idx}`}>
+                          <option value={0}>0%</option><option value={5}>5%</option><option value={12}>12%</option><option value={18}>18%</option><option value={28}>28%</option>
+                        </select>
+                      </div>
+                      {/* Taxable */}
+                      <div className="col-span-1">
+                        <label className="text-xs text-gray-500 mb-1 block">Taxable</label>
+                        <div className="px-2 py-1.5 bg-white border rounded text-sm text-right text-gray-600">{t.taxable.toFixed(2)}</div>
+                      </div>
+                      {/* Total */}
+                      <div className="col-span-1">
+                        <label className="text-xs text-gray-500 mb-1 block">Total</label>
+                        <div className="px-2 py-1.5 bg-white border rounded text-sm font-semibold text-right flex items-center justify-end">
+                          <IndianRupee className="w-3 h-3 mr-0.5" />{t.total.toFixed(2)}
+                        </div>
+                      </div>
+                      {/* Remove */}
+                      <div className="pt-6 flex items-start justify-center">
+                        {formData.items.length > 1 && <button onClick={() => removeItem(idx)} className="text-gray-400 hover:text-red-500" data-testid={`remove-item-${idx}`}><Trash2 className="w-4 h-4" /></button>}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="col-span-1 flex items-end justify-center pb-1">
-                  {formData.items.length > 1 && <button onClick={() => removeItem(idx)} className="text-gray-400 hover:text-red-500" data-testid={`remove-item-${idx}`}><Trash2 className="w-4 h-4" /></button>}
-                </div>
-              </div>
-            ))}
-            <button onClick={addItem} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium mt-1" data-testid="add-item-btn">+ Add Item</button>
+                );
+              })}
+            </div>
+            <button onClick={addItem} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium mt-2" data-testid="add-item-btn">+ Add Item</button>
           </div>
 
           {/* Totals */}
-          <div className="flex justify-end gap-8 text-sm border-t pt-3">
-            <div><span className="text-gray-500">Subtotal:</span> <span className="font-medium ml-1" data-testid="form-subtotal">₹{calcSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-            <div><span className="text-gray-500">GST:</span> <span className="font-medium ml-1" data-testid="form-gst">₹{calcGst().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-            <div><span className="text-gray-500">Total:</span> <span className="font-bold text-lg ml-1" data-testid="form-total">₹{Math.round(calcSubtotal() + calcGst()).toLocaleString('en-IN')}</span></div>
+          <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
+            <div className="flex justify-between"><span className="text-gray-500">Taxable Amount</span><span data-testid="form-subtotal">Rs.{totals.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">GST</span><span data-testid="form-gst">Rs.{totals.gst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+            <div className="flex justify-between font-semibold text-base border-t border-gray-200 pt-2 mt-2">
+              <span>Grand Total</span>
+              <span className="flex items-center gap-1" data-testid="form-total"><IndianRupee className="w-4 h-4" />{Math.round(totals.total).toLocaleString('en-IN')}</span>
+            </div>
           </div>
 
           {/* Notes + Validity */}
@@ -369,15 +438,17 @@ export default function QuotationsPage() {
                   {/* Items */}
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm" data-testid={`quo-items-table-${q.id}`}>
-                      <thead><tr className="text-left text-xs text-gray-500 border-b"><th className="pb-1">Product</th><th className="pb-1">Qty</th><th className="pb-1">Price</th><th className="pb-1">GST</th><th className="pb-1 text-right">Total</th></tr></thead>
+                      <thead><tr className="text-left text-xs text-gray-500 border-b"><th className="pb-1">#</th><th className="pb-1">Product</th><th className="pb-1">Qty</th><th className="pb-1">Rate</th><th className="pb-1">Disc</th><th className="pb-1">GST</th><th className="pb-1 text-right">Total</th></tr></thead>
                       <tbody>
                         {q.items.map((item, i) => (
                           <tr key={i} className="border-b last:border-0">
+                            <td className="py-1.5 text-gray-400">{i + 1}</td>
                             <td className="py-1.5">{item.productName}{item.hsnCode ? <span className="text-xs text-gray-400 ml-1">[{item.hsnCode}]</span> : ''}</td>
                             <td>{item.quantity}</td>
-                            <td>₹{item.price?.toLocaleString('en-IN')}</td>
+                            <td>Rs.{item.price?.toLocaleString('en-IN')}</td>
+                            <td>{item.discount ? `${item.discount}${item.discountType === '%' ? '%' : ' Rs'}` : '-'}</td>
                             <td>{item.gstPercent}%</td>
-                            <td className="text-right font-medium">₹{item.total?.toLocaleString('en-IN')}</td>
+                            <td className="text-right font-medium">Rs.{item.total?.toLocaleString('en-IN')}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -386,9 +457,9 @@ export default function QuotationsPage() {
 
                   {/* Summary row */}
                   <div className="flex justify-end gap-6 text-sm border-t pt-2">
-                    <span className="text-gray-500">Subtotal: <span className="font-medium text-gray-700">₹{q.subtotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-                    <span className="text-gray-500">GST: <span className="font-medium text-gray-700">₹{q.gst?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
-                    <span className="text-gray-700 font-semibold">Total: ₹{q.total?.toLocaleString('en-IN')}</span>
+                    <span className="text-gray-500">Subtotal: <span className="font-medium text-gray-700">Rs.{q.subtotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                    <span className="text-gray-500">GST: <span className="font-medium text-gray-700">Rs.{q.gst?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                    <span className="text-gray-700 font-semibold">Total: Rs.{q.total?.toLocaleString('en-IN')}</span>
                   </div>
 
                   {q.notes && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2"><span className="font-medium text-gray-600">Notes:</span> {q.notes}</p>}
@@ -401,13 +472,13 @@ export default function QuotationsPage() {
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-1">
                     {/* Download PDF */}
-                    <button
-                      onClick={() => handleDownloadPdf(q.id, q.quotationNumber)}
-                      disabled={downloadingPdf === q.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs font-medium hover:bg-gray-900 disabled:opacity-50"
-                      data-testid={`download-pdf-${q.id}`}
-                    >
+                    <button onClick={() => handleDownloadPdf(q.id, q.quotationNumber)} disabled={downloadingPdf === q.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs font-medium hover:bg-gray-900 disabled:opacity-50" data-testid={`download-pdf-${q.id}`}>
                       {downloadingPdf === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
+                    </button>
+
+                    {/* WhatsApp Share with PDF link */}
+                    <button onClick={() => handleShareWhatsApp(q)} disabled={sharingWa === q.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50" data-testid={`quotation-whatsapp-${q.id}`}>
+                      {sharingWa === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />} WhatsApp
                     </button>
 
                     {/* Convert to Invoice */}
@@ -416,11 +487,6 @@ export default function QuotationsPage() {
                         <ArrowRight className="w-3.5 h-3.5" /> Convert to Invoice
                       </button>
                     )}
-
-                    {/* WhatsApp */}
-                    <button onClick={() => shareWhatsApp(q)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700" data-testid={`quotation-whatsapp-${q.id}`}>
-                      <Share2 className="w-3.5 h-3.5" /> WhatsApp
-                    </button>
 
                     {/* Mark Sent */}
                     {q.status === 'draft' && !q.convertedToInvoice && (

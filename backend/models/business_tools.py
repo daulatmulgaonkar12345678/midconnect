@@ -282,6 +282,8 @@ class InvoiceItemCreate(BaseModel):
     quantity: int = Field(..., ge=1)
     price: float = Field(..., ge=0)
     discount: float = Field(0, ge=0, description="Discount amount on this line")
+    discountType: Optional[str] = Field("%", description="Discount type: '%' for percentage, 'Rs' for flat amount")
+    description: Optional[str] = Field(None, max_length=500)
     gstPercent: float = Field(0, ge=0, le=100)
     selected_specifications: Optional[List[dict]] = Field(None, description="List of {key, value} specs")
 

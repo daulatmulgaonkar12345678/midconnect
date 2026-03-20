@@ -47,7 +47,7 @@ const productSelectStyles: StylesConfig<ProductOption, false> = {
 
 interface Spec { key: string; value: string; }
 interface InvoiceListing { id: string; productName: string; productType: string; stock: number; reservedStock: number; availableStock: number; price: number; gstRate: number; hsnCode: string; description: string; specifications: Spec[]; }
-interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; description: string; quantity: number; price: number; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
+interface InvoiceFormItem { productId: string; productName: string; hsnCode: string; description: string; quantity: number; price: number; discount: number; discountType: '%' | 'Rs'; gstPercent: number; allSpecs: Spec[]; selectedSpecs: Spec[]; customSpecs: Spec[]; showSpecs: boolean; }
 interface Buyer { id: string; buyerName: string; company?: string; phone?: string; state?: string; gstNumber?: string; address?: string; shippingAddresses?: { id: string; addressLine1: string; addressLine2?: string; city: string; state: string; pincode: string; country: string; contactPerson?: string; phone?: string; isDefault: boolean; }[]; }
 interface InvoiceItem { productName: string; description?: string; hsnCode?: string; quantity: number; price: number; gstPercent: number; taxableAmount?: number; cgst?: number; cgstRate?: number; sgst?: number; sgstRate?: number; igst?: number; igstRate?: number; gstAmount: number; total: number; selected_specifications?: Spec[]; }
 interface PaymentEntry { id: string; amount: number; paymentDate: string; paymentMethod: string; accountName?: string; referenceNumber?: string; notes?: string; receiptUrls?: string[]; createdAt: string; }
@@ -88,7 +88,7 @@ const paymentMethods = [
 const RECEIPT_REQUIRED_METHODS = ['upi', 'bank_transfer', 'cheque'];
 
 function emptyItem(): InvoiceFormItem {
-  return { productId: '', productName: '', hsnCode: '', description: '', quantity: 1, price: 0, gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
+  return { productId: '', productName: '', hsnCode: '', description: '', quantity: 1, price: 0, discount: 0, discountType: '%', gstPercent: 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false };
 }
 function fmt(n: number) { return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } }
@@ -365,7 +365,9 @@ export default function InvoicesPage() {
 
   const effectivePlaceOfSupply = formData.placeOfSupply || buyers.find(b => b.id === formData.buyerId)?.state || '';
   const formTotals = formData.items.reduce((a, it) => {
-    const taxable = it.quantity * it.price;
+    const base = it.quantity * it.price;
+    const discAmt = it.discountType === '%' ? base * (it.discount / 100) : (it.discount || 0);
+    const taxable = Math.max(base - discAmt, 0);
     const b = calcGstBreakdown(taxable, it.gstPercent, sellerState, effectivePlaceOfSupply);
     return { subtotal: a.subtotal + b.taxable, cgst: a.cgst + b.cgst, sgst: a.sgst + b.sgst, igst: a.igst + b.igst, gst: a.gst + b.totalTax, total: a.total + b.total };
   }, { subtotal: 0, cgst: 0, sgst: 0, igst: 0, gst: 0, total: 0 });
@@ -381,10 +383,11 @@ export default function InvoicesPage() {
       buyerId: formData.buyerId,
       items: formData.items.map(i => ({
         productId: i.productId || null, productName: i.productName || null,
-        hsnCode: (i as InvoiceFormItem & { hsnCode?: string }).hsnCode || null,
+        hsnCode: i.hsnCode || null,
         description: i.description || null,
         quantity: i.quantity, price: i.price,
-        discount: (i as InvoiceFormItem & { discount?: number }).discount || 0,
+        discount: i.discount || 0,
+        discountType: i.discountType || '%',
         gstPercent: i.gstPercent,
         selected_specifications: [...i.selectedSpecs, ...i.customSpecs.filter(s => s.key && s.value)]
       })),
@@ -794,7 +797,9 @@ export default function InvoicesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Items *</label>
                 <div className="space-y-3">
                   {formData.items.map((item, idx) => {
-                    const taxable = item.quantity * item.price;
+                    const base = item.quantity * item.price;
+                    const discAmt = item.discountType === '%' ? base * (item.discount / 100) : (item.discount || 0);
+                    const taxable = Math.max(base - discAmt, 0);
                     const gstLine = calcGstBreakdown(taxable, item.gstPercent, sellerState, effectivePlaceOfSupply);
                     const allFinalSpecs = [...item.selectedSpecs, ...item.customSpecs.filter(s => s.key && s.value)];
                     const isSameState = sellerState && effectivePlaceOfSupply && sellerState.trim().toLowerCase() === effectivePlaceOfSupply.trim().toLowerCase();
@@ -838,8 +843,15 @@ export default function InvoicesPage() {
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">HSN</label><input type="text" value={item.hsnCode} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], hsnCode: e.target.value }; setFormData(p => ({ ...p, items })); }} placeholder="HSN" className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-hsn-${idx}`} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Qty</label><input type="number" min={1} value={item.quantity} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], quantity: parseInt(e.target.value) || 1 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center" data-testid={`invoice-item-qty-${idx}`} /></div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Rate</label><input type="number" min={0} step={0.01} value={item.price} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], price: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-price-${idx}`} /></div>
+                          <div className="col-span-1">
+                            <label className="text-xs text-gray-500 mb-1 block">Discount</label>
+                            <div className="flex">
+                              <input type="number" min={0} step={0.01} value={item.discount || ''} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], discount: parseFloat(e.target.value) || 0 }; setFormData(p => ({ ...p, items })); }} className="w-full px-1.5 py-1.5 border border-gray-300 rounded-l text-sm" placeholder="0" data-testid={`invoice-item-discount-${idx}`} />
+                              <button type="button" onClick={() => { const items = [...formData.items]; items[idx] = { ...items[idx], discountType: items[idx].discountType === '%' ? 'Rs' : '%' }; setFormData(p => ({ ...p, items })); }} className="px-1.5 py-1.5 border border-l-0 border-gray-300 rounded-r text-xs font-medium bg-gray-100 hover:bg-gray-200 min-w-[28px]" data-testid={`invoice-item-discount-toggle-${idx}`}>{item.discountType === '%' ? '%' : 'Rs'}</button>
+                            </div>
+                            {discAmt > 0 && <span className="text-xs text-green-600 block mt-0.5">-{fmt(discAmt)}</span>}
+                          </div>
                           <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">GST%</label><select value={item.gstPercent} onChange={e => { const items = [...formData.items]; items[idx] = { ...items[idx], gstPercent: parseFloat(e.target.value) }; setFormData(p => ({ ...p, items })); }} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" data-testid={`invoice-item-gst-${idx}`}>{[0, 5, 12, 18, 28].map(g => <option key={g} value={g}>{g}%</option>)}</select></div>
-                          <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">Taxable</label><div className="px-1 py-1.5 bg-white border border-gray-200 rounded text-xs text-right">{fmt(gstLine.taxable)}</div></div>
                           {isSameState ? (
                             <>
                               <div className="col-span-1"><label className="text-xs text-gray-500 mb-1 block">CGST</label><div className="px-1 py-1.5 bg-blue-50 border border-blue-100 rounded text-xs text-right text-blue-700">{fmt(gstLine.cgst)}</div></div>
