@@ -247,30 +247,55 @@ export default function InvoicesPage() {
   // Handle quotation → invoice conversion prefill
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('from_quotation') === 'true') {
-      try {
-        const raw = sessionStorage.getItem('quotation_prefill');
-        if (raw) {
-          const prefill = JSON.parse(raw);
-          sessionStorage.removeItem('quotation_prefill');
-          const items = (prefill.items || []).map((i: Record<string, unknown>) => ({
-            productId: i.productId || '', productName: i.productName || '',
-            description: i.description || '', hsnCode: i.hsnCode || '',
-            quantity: i.quantity || 1, price: i.price || 0, discount: i.discount || 0,
-            gstPercent: i.gstPercent || 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false,
-          }));
-          setFormData(p => ({
-            ...p,
-            buyerId: prefill.buyerId || '',
-            items: items.length > 0 ? items : [emptyItem()],
-            notes: prefill.notes || '',
-            termsAndConditions: prefill.termsAndConditions || '',
-            placeOfSupply: prefill.placeOfSupply || '',
-          }));
-          setShowForm(true);
-          toast.info(`Pre-filled from Quotation ${prefill.sourceQuotationNumber || ''}`);
-        }
-      } catch { /* empty */ }
+    if (params.get('from_quotation') !== 'true') return;
+
+    const applyPrefill = (prefill: Record<string, unknown>) => {
+      const items = ((prefill.items || []) as Record<string, unknown>[]).map((i) => ({
+        productId: (i.productId as string) || '', productName: (i.productName as string) || '',
+        description: (i.description as string) || '', hsnCode: (i.hsnCode as string) || '',
+        quantity: (i.quantity as number) || 1, price: (i.price as number) || 0, discount: (i.discount as number) || 0,
+        gstPercent: (i.gstPercent as number) || 18, allSpecs: [], selectedSpecs: [], customSpecs: [], showSpecs: false,
+      }));
+      setFormData(p => ({
+        ...p,
+        buyerId: (prefill.buyerId as string) || '',
+        items: items.length > 0 ? items : [emptyItem()],
+        notes: (prefill.notes as string) || '',
+        termsAndConditions: (prefill.termsAndConditions as string) || '',
+        placeOfSupply: (prefill.placeOfSupply as string) || '',
+      }));
+      setShowForm(true);
+      toast.info(`Pre-filled from Quotation ${(prefill.sourceQuotationNumber as string) || ''}`);
+      // Store sourceQuotationId for marking as converted after invoice creation
+      if (prefill.sourceQuotationId) {
+        sessionStorage.setItem('source_quotation_id', prefill.sourceQuotationId as string);
+      }
+    };
+
+    // Try sessionStorage first
+    try {
+      const raw = sessionStorage.getItem('quotation_prefill');
+      if (raw) {
+        const prefill = JSON.parse(raw);
+        sessionStorage.removeItem('quotation_prefill');
+        applyPrefill(prefill);
+        return;
+      }
+    } catch { /* empty */ }
+
+    // Fallback: fetch from server using quotation_id from URL
+    const quotationId = params.get('quotation_id');
+    if (quotationId) {
+      (async () => {
+        try {
+          const h = await authHeaders();
+          const res = await fetch(`${API_URL}/api/business-tools/quotations/get-prefill/${quotationId}`, { headers: h });
+          if (res.ok) {
+            const data = await res.json();
+            applyPrefill(data.prefill);
+          }
+        } catch { /* empty */ }
+      })();
     }
   }, []);
 
@@ -409,9 +434,12 @@ export default function InvoicesPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('from_quotation') === 'true') {
       try {
-        const raw = sessionStorage.getItem('source_quotation_id');
-        // Also try from URL since session may have been cleared
-        // The convert endpoint already returned the data, so we just update status
+        const sourceId = sessionStorage.getItem('source_quotation_id');
+        if (sourceId) {
+          sessionStorage.removeItem('source_quotation_id');
+          const h2 = await authHeaders();
+          await fetch(`${API_URL}/api/business-tools/quotations/${sourceId}/mark-converted`, { method: 'POST', headers: h2 });
+        }
       } catch { /* empty */ }
       toast.success('Invoice created from quotation!');
     }

@@ -13,7 +13,7 @@ const DB_VERSION = 1;
 const QUEUE_STORE = 'offline_queue';
 const CACHE_STORE = 'data_cache';
 
-export type OfflineItemType = 'invoice' | 'inventory' | 'purchase_order';
+export type OfflineItemType = 'invoice' | 'inventory' | 'purchase_order' | 'quotation' | 'buyer';
 export type OfflineItemStatus = 'draft_offline' | 'pending' | 'syncing' | 'synced' | 'failed';
 
 export interface OfflineItem {

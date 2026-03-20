@@ -2,10 +2,12 @@
  * Sync Engine — processes the offline queue when back online.
  *
  * Rules:
+ *   - Sync order: Buyers → Quotations → Invoices (dependencies first)
  *   - Draft invoices → POST to server, server generates real ID & invoice number
  *   - NEVER update existing server records using temp IDs
  *   - Sequential processing to avoid race conditions
  *   - Retry with backoff on failure
+ *   - Idempotency: server-side dedup prevents duplicates on re-sync
  */
 
 import {
@@ -42,6 +44,12 @@ type SyncStateUpdater = (state: {
   lastSyncTime: Date | null;
 }) => void;
 
+/** Sort items by sync priority: buyers first, then quotations, then invoices, then rest */
+function sortByPriority(items: OfflineItem[]): OfflineItem[] {
+  const priority: Record<string, number> = { buyer: 0, quotation: 1, invoice: 2, inventory: 3, purchase_order: 4 };
+  return [...items].sort((a, b) => (priority[a.type] ?? 99) - (priority[b.type] ?? 99));
+}
+
 /**
  * Process all pending offline items sequentially.
  * Returns a SyncResult summary.
@@ -50,7 +58,7 @@ export async function processOfflineQueue(
   token: string,
   onStateChange?: SyncStateUpdater
 ): Promise<SyncResult> {
-  const items = await getPendingItems();
+  const items = sortByPriority(await getPendingItems());
   const result: SyncResult = { total: items.length, synced: 0, failed: 0, errors: [] };
 
   if (items.length === 0) {
@@ -107,6 +115,12 @@ export async function processOfflineQueue(
  */
 async function syncItem(item: OfflineItem, token: string): Promise<void> {
   switch (item.type) {
+    case 'buyer':
+      await syncBuyer(item, token);
+      break;
+    case 'quotation':
+      await syncQuotation(item, token);
+      break;
     case 'invoice':
       await syncInvoice(item, token);
       break;
@@ -118,6 +132,44 @@ async function syncItem(item: OfflineItem, token: string): Promise<void> {
       break;
     default:
       throw new Error(`Unknown item type: ${item.type}`);
+  }
+}
+
+/**
+ * Sync offline buyer — server deduplicates by phone → name.
+ */
+async function syncBuyer(item: OfflineItem, token: string): Promise<void> {
+  const payload = { ...item.data };
+  delete payload._tempId;
+  delete payload._offlineCreated;
+
+  const res = await fetch(`${API_URL}/api/business-tools/buyers/sync-offline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(body, res.status));
+  }
+}
+
+/**
+ * Sync offline quotation — server generates real ID & quotation number.
+ */
+async function syncQuotation(item: OfflineItem, token: string): Promise<void> {
+  const payload = { ...item.data };
+  delete payload._tempId;
+  delete payload._offlineCreated;
+
+  const res = await fetch(`${API_URL}/api/business-tools/quotations/sync-offline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(body, res.status));
   }
 }
 
@@ -198,8 +250,8 @@ export async function retryFailedItems(
   onStateChange?: SyncStateUpdater
 ): Promise<SyncResult> {
   const items = await getPendingItems();
-  const failedItems = items.filter(
-    (i) => i.status === 'failed' && (i.syncAttempts || 0) < maxRetries
+  const failedItems = sortByPriority(
+    items.filter((i) => i.status === 'failed' && (i.syncAttempts || 0) < maxRetries)
   );
 
   const result: SyncResult = { total: failedItems.length, synced: 0, failed: 0, errors: [] };

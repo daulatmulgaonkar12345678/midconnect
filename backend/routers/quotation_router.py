@@ -14,10 +14,12 @@ Endpoints:
 """
 
 from fastapi import APIRouter, HTTPException, Header
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional, List as PyList
 from datetime import datetime, timezone
 from bson import ObjectId
+from services.quotation_pdf_service import generate_quotation_pdf
 import logging
 
 logger = logging.getLogger(__name__)
@@ -290,7 +292,6 @@ def init_quotation_router(db, verify_token_func):
             seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
             seller_state = (seller_user or {}).get("profile", {}).get("state", "")
             gst_enabled = (seller_user or {}).get("gst", {}).get("status") != "disabled"
-            buyer_id = data.buyerId or str(existing.get("buyerId", ""))
             pos = data.placeOfSupply or existing.get("placeOfSupply", "")
 
             q_items, subtotal, cgst, sgst, igst, total_gst, grand_total, round_off = await build_quotation_items(
@@ -349,6 +350,123 @@ def init_quotation_router(db, verify_token_func):
                 "sourceQuotationNumber": quo.get("quotationNumber", ""),
             }
         }
+
+    # ── PDF DOWNLOAD ──
+    @router.get("/quotations/{quotation_id}/pdf")
+    async def get_quotation_pdf(quotation_id: str, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        try:
+            quo = await db.quotations.find_one({"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid quotation ID")
+        if not quo:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+
+        seller = await db.users.find_one({"_id": ObjectId(seller_id)}) or {}
+        profile = seller.get("profile") or {}
+        gst_info = seller.get("gst") or {}
+        billing = seller.get("billingSettings") or {}
+        bank_details = {
+            "bankName": billing.get("bankName", ""),
+            "accountNumber": billing.get("accountNumber", ""),
+            "accountName": billing.get("accountName", ""),
+            "ifscCode": billing.get("ifscCode", ""),
+            "branch": billing.get("branch", ""),
+        }
+        seller_data = {
+            "businessName": profile.get("businessName", ""),
+            "name": profile.get("businessName", seller.get("email", "")),
+            "address": profile.get("address", ""),
+            "city": profile.get("city", ""),
+            "state": profile.get("state", ""),
+            "phone": profile.get("phone", ""),
+            "email": seller.get("email", ""),
+            "gstNumber": gst_info.get("number", ""),
+            "sellerLogoUrl": billing.get("companyLogoUrl", "") or profile.get("sellerLogoUrl", ""),
+            "bankDetails": bank_details,
+            "invoiceTerms": billing.get("invoiceTerms", ""),
+        }
+
+        buyer = await db.seller_buyers.find_one({"_id": quo.get("buyerId")}) or {}
+        quo_serialized = serialize_doc(quo)
+        is_offline = quo.get("offlineSynced", False)
+
+        pdf_bytes = generate_quotation_pdf(quo_serialized, seller_data, buyer, is_offline=is_offline)
+        filename = f"quotation-{quo.get('quotationNumber', '')}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+    # ── STORE CONVERSION PREFILL (fallback for page refresh) ──
+    @router.post("/quotations/{quotation_id}/store-prefill")
+    async def store_conversion_prefill(quotation_id: str, authorization: str = Header(...)):
+        """Store quotation prefill data server-side for reliable conversion across refreshes."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        quo = await db.quotations.find_one({"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)})
+        if not quo:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        if quo.get("convertedToInvoice"):
+            raise HTTPException(status_code=400, detail="Already converted to invoice")
+
+        items = []
+        for item in quo.get("items", []):
+            items.append({
+                "productId": item.get("productId", ""), "productName": item.get("productName", ""),
+                "description": item.get("description", ""), "hsnCode": item.get("hsnCode", ""),
+                "quantity": item.get("quantity", 1), "price": item.get("price", 0),
+                "discount": item.get("discount", 0), "gstPercent": item.get("gstPercent", 0),
+                "selected_specifications": item.get("selected_specifications", []),
+            })
+        prefill = {
+            "buyerId": str(quo.get("buyerId", "")),
+            "items": items,
+            "notes": quo.get("notes", ""),
+            "termsAndConditions": quo.get("termsAndConditions", ""),
+            "placeOfSupply": quo.get("placeOfSupply", ""),
+            "sourceQuotationId": quotation_id,
+            "sourceQuotationNumber": quo.get("quotationNumber", ""),
+        }
+        now = datetime.now(timezone.utc)
+        await db.quotation_prefills.update_one(
+            {"sellerId": ObjectId(seller_id), "quotationId": ObjectId(quotation_id)},
+            {"$set": {"prefill": prefill, "updatedAt": now, "sellerId": ObjectId(seller_id), "quotationId": ObjectId(quotation_id)},
+             "$setOnInsert": {"createdAt": now}},
+            upsert=True
+        )
+        return {"message": "Prefill stored", "prefill": prefill}
+
+    @router.get("/quotations/get-prefill/{quotation_id}")
+    async def get_conversion_prefill(quotation_id: str, authorization: str = Header(...)):
+        """Retrieve stored quotation prefill data."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        doc = await db.quotation_prefills.find_one(
+            {"sellerId": ObjectId(seller_id), "quotationId": ObjectId(quotation_id)},
+            {"_id": 0, "prefill": 1}
+        )
+        if not doc:
+            raise HTTPException(status_code=404, detail="No prefill data found")
+        return {"prefill": doc["prefill"]}
+
+    # ── MARK CONVERTED (called after invoice is created) ──
+    @router.post("/quotations/{quotation_id}/mark-converted")
+    async def mark_quotation_converted(quotation_id: str, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+        result = await db.quotations.update_one(
+            {"_id": ObjectId(quotation_id), "sellerId": ObjectId(seller_id)},
+            {"$set": {"convertedToInvoice": True, "status": "converted", "updatedAt": datetime.now(timezone.utc)}}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        # Cleanup prefill
+        await db.quotation_prefills.delete_one({"sellerId": ObjectId(seller_id), "quotationId": ObjectId(quotation_id)})
+        return {"message": "Quotation marked as converted"}
 
     # ── SYNC OFFLINE ──
     @router.post("/quotations/sync-offline")
