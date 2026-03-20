@@ -60,7 +60,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://offline-quotations.preview.emergentagent.com",
+    "api_url": "https://employee-access-hub-1.preview.emergentagent.com",
     "auth_token": "dev-test-token (for admin endpoints)",
     "test_seller_id": "699cb1d8ded1c6446549c19f"
   },

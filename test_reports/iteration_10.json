@@ -74,7 +74,7 @@
   "context_for_next_testing_agent": "Enterprise data integrity migration fully tested. Key features: (1) /admin/data-integrity/migrate converts categoryId string→ObjectId for both specTemplates and products, removes orphan refs and category mismatches. (2) validate_spec_template_ids validates existence/active/category match. (3) Frontend uses strict category filter (===), validates templates before save, clears specTemplateIds on category change. No legacy fallbacks.",
 
   "test_environment": {
-    "api_url": "https://offline-quotations.preview.emergentagent.com",
+    "api_url": "https://employee-access-hub-1.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"
   },

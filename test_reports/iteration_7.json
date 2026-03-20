@@ -104,7 +104,7 @@
   "context_for_next_testing_agent": "Listing publish validation feature fully implemented and verified. No existing listings in test environment to test with actual data, but code review and endpoint existence tests confirm implementation. All 6 required fields validated: pricingTiers, moq, stock, maxCapacity, images, variantId. Both /api/seller/listings/{id}/publish and /api/seller/listings/{id}/validate endpoints working.",
 
   "test_environment": {
-    "api_url": "https://offline-quotations.preview.emergentagent.com",
+    "api_url": "https://employee-access-hub-1.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED",
     "existing_listings": "0 - no test data available"

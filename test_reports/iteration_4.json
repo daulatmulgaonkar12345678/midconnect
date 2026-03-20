@@ -72,7 +72,7 @@
   "context_for_next_testing_agent": "UNIFIED GST SCHEMA fully implemented and tested. Key findings: (1) /api/admin/gst/pending returns pending_reviews (snake_case) array, (2) All queries use roles='seller' instead of isSeller=True, (3) GST verification checks gst.status='verified', (4) Banned/suspended seller blocking implemented, (5) Frontend exposes gstStatus and sellerStatus in AuthContext, (6) Seller dashboard shows appropriate banners based on status.",
 
   "test_environment": {
-    "api_url": "https://offline-quotations.preview.emergentagent.com",
+    "api_url": "https://employee-access-hub-1.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"
   },

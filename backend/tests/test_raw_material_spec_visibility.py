@@ -15,7 +15,7 @@ import os
 from datetime import datetime
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://offline-quotations.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://employee-access-hub-1.preview.emergentagent.com').rstrip('/')
 
 
 class TestSpecTemplatesByCategoryEndpoint:

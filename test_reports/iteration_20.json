@@ -64,7 +64,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://offline-quotations.preview.emergentagent.com"
+    "api_url": "https://employee-access-hub-1.preview.emergentagent.com"
   },
   
   "seed_data_creation": "None needed",
