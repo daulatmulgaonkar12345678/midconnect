@@ -297,19 +297,19 @@ export default function EmployeeManagementPage() {
                 <span>{searchResult.message as string}</span>
               </div>
             )}
-            {searchResult.found && searchResult.alreadyLinked && (
+            {Boolean(searchResult.found) && Boolean(searchResult.alreadyLinked) && (
               <div className="flex items-center gap-2 text-sm text-blue-700">
                 <CheckCircle className="w-4 h-4" />
-                <span>{searchResult.message as string}</span>
+                <span>{String(searchResult.message || '')}</span>
               </div>
             )}
-            {searchResult.found && searchResult.linkedElsewhere && (
+            {Boolean(searchResult.found) && Boolean(searchResult.linkedElsewhere) && (
               <div className="flex items-center gap-2 text-sm text-red-700">
                 <XCircle className="w-4 h-4" />
-                <span>{searchResult.message as string}</span>
+                <span>{String(searchResult.message || '')}</span>
               </div>
             )}
-            {searchResult.found && searchResult.canLink && (
+            {Boolean(searchResult.found) && Boolean(searchResult.canLink) && (
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{(searchResult.user as Record<string, unknown>)?.name as string || 'No name'}</p>
@@ -519,7 +519,7 @@ export default function EmployeeManagementPage() {
                       </span>
                       <span className="text-gray-400">{log.timestamp ? new Date(log.timestamp as string).toLocaleString('en-IN') : ''}</span>
                     </div>
-                    {log.details && <p className="text-gray-600 mt-0.5">{log.details as string}</p>}
+                    {log.details ? <p className="text-gray-600 mt-0.5">{String(log.details)}</p> : null}
                   </div>
                 ))}
               </div>
