@@ -13088,7 +13088,22 @@ app.include_router(quotation_router, prefix="/api/business-tools")
 
 # ── Socket.IO for real-time access sync ──
 import socketio as _socketio
-sio = _socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*', logger=False, engineio_logger=False)
+sio = _socketio.AsyncServer(
+    async_mode='asgi',
+    cors_allowed_origins=[
+        "https://www.udyogconnect.in",
+        "https://udyogconnect.in",
+        "https://midconnect-ten.vercel.app",
+        "https://midconnect.vercel.app",
+        "https://midconnect.onrender.com",
+        "https://midconnect-git-main.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],
+    cors_credentials=True,
+    logger=False,
+    engineio_logger=False,
+)
 
 @sio.event
 async def connect(sid, environ):
@@ -13107,8 +13122,7 @@ async def join_user_room(sid, data):
         logger.info(f"Socket.IO: {sid} joined room user_{user_id}")
 
 # Mount Socket.IO as a sub-application
-sio_asgi = _socketio.ASGIApp(sio, socketio_path='')
-app.mount("/api/socket.io", sio_asgi)
+# Socket.IO ASGI wrapping is done at the end of the file (combined_app)
 
 # ── Employee Management Router (Enhanced) ──
 from routers.employee_mgmt_router import init_employee_mgmt_router
@@ -13336,3 +13350,12 @@ async def shutdown_db_client():
     """Close database connection on shutdown"""
     client.close()
     logger.info("Application shut down")
+
+
+# ================== SOCKET.IO ASGI WRAPPER ==================
+# Wrap FastAPI app with Socket.IO to avoid duplicate CORS headers.
+# Socket.IO handles /api/socket.io/* requests directly (with its own CORS).
+# All other requests pass through to FastAPI (with CORSMiddleware).
+# Reassign to `app` so uvicorn server:app works on all platforms (Render, etc.)
+_fastapi_app = app
+app = _socketio.ASGIApp(sio, other_asgi_app=_fastapi_app, socketio_path='api/socket.io')

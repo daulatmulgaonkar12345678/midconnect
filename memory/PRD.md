@@ -44,7 +44,9 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - **Nav Items:** Each nav item has module field for permission-based visibility
 
 ## Recent Changes (Mar 2026)
-- Fixed Socket.IO WebSocket connection failure: `socketio_path=''` on ASGIApp to match after Starlette mount-prefix stripping
+- Fixed Socket.IO duplicate CORS header: switched from `app.mount()` to `ASGIApp` wrapper pattern — Socket.IO handles own CORS for `/api/socket.io/*`, FastAPI CORSMiddleware handles the rest
+- Set explicit `cors_allowed_origins` on Socket.IO matching production domains
+- Reassigned `app` at end of server.py so `server:app` works on Render without start command changes
 - Frontend Socket.IO client: polling-first transport, reconnection cap (10 attempts), backoff (3s→30s)
 - Removed private `emergentintegrations==0.1.0` from `requirements.txt` to unblock Render/Vercel deployments
 - Fixed unused `firebase_app` variable lint warning in `business_tools_router.py`
