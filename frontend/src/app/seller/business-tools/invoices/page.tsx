@@ -469,7 +469,7 @@ export default function InvoicesPage() {
         poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
         shippingAddressId: '',
         transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
-        paymentTerms: '', freight: 0, tcsEnabled: false, tcsPercent: 0.1,
+        paymentTerms: '', freight: 0, tcsEnabled: false, tcsPercent: 0.1, linkedPanels: [],
       });
       return;
     }
@@ -483,7 +483,7 @@ export default function InvoicesPage() {
       poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
       shippingAddressId: '',
       transport: { transporterName: '', lrNumber: '', vehicleNumber: '', bookingLocation: '', numberOfPackages: '' },
-      paymentTerms: '', freight: 0, tcsEnabled: false, tcsPercent: 0.1,
+      paymentTerms: '', freight: 0, tcsEnabled: false, tcsPercent: 0.1, linkedPanels: [],
     });
     fetchAll();
     
