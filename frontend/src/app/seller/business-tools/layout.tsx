@@ -352,8 +352,12 @@ function BusinessToolsInner({
   const [customPanels, setCustomPanels] = useState<{id: string; name: string; slug: string; color: string}[]>([]);
   const accessLevel = btAccess;
 
+  // Determine sidebar panels: admin sees all fetched panels, employees see permitted panels
+  const sidebarPanels = isAdmin ? customPanels : (empAccess?.permittedPanels || []);
+  const showPanelsSection = isAdmin ? accessLevel === 'advanced' : sidebarPanels.length > 0;
+
   // CORRECTLY inside EmployeeAccessProvider
-  const { canView, canAction: empCanAction, loading: empLoading } = useEmployeeAccess();
+  const { canView, canAction: empCanAction, loading: empLoading, access: empAccess } = useEmployeeAccess();
 
   // Combined: admin always has full access; employees checked via RBAC
   const effectiveCanView = useCallback(
@@ -558,24 +562,26 @@ function BusinessToolsInner({
                   })}
                 </div>
                 {/* Custom Panels Section */}
-                {accessLevel === 'advanced' && (
+                {showPanelsSection && (
                   <>
                     <div className="mt-5 pt-4 border-t border-gray-100">
                       <div className="flex items-center justify-between mb-3">
                         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Panels</h2>
                       </div>
                       <div className="space-y-1">
-                        <Link
-                          href="/seller/business-tools/panels"
-                          data-testid="nav-panels-manage"
-                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                            getColorClasses('indigo', pathname === '/seller/business-tools/panels')
-                          } ${pathname === '/seller/business-tools/panels' ? 'border-l-4' : ''}`}
-                        >
-                          <LayoutGrid className="h-5 w-5" />
-                          <span className="flex-1">Manage Panels</span>
-                        </Link>
-                        {customPanels.map(p => {
+                        {isAdmin && (
+                          <Link
+                            href="/seller/business-tools/panels"
+                            data-testid="nav-panels-manage"
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                              getColorClasses('indigo', pathname === '/seller/business-tools/panels')
+                            } ${pathname === '/seller/business-tools/panels' ? 'border-l-4' : ''}`}
+                          >
+                            <LayoutGrid className="h-5 w-5" />
+                            <span className="flex-1">Manage Panels</span>
+                          </Link>
+                        )}
+                        {sidebarPanels.map(p => {
                           const panelPath = `/seller/business-tools/panels/${p.id}`;
                           const active = pathname === panelPath;
                           return (
@@ -632,21 +638,23 @@ function BusinessToolsInner({
                       );
                     })}
                     {/* Custom Panels - Mobile */}
-                    {accessLevel === 'advanced' && (
+                    {showPanelsSection && (
                       <>
                         <div className="mt-4 pt-3 border-t border-gray-100">
                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-3">Custom Panels</p>
-                          <Link
-                            href="/seller/business-tools/panels"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                              getColorClasses('indigo', pathname === '/seller/business-tools/panels')
-                            }`}
-                          >
-                            <LayoutGrid className="h-5 w-5" />
-                            <span>Manage Panels</span>
-                          </Link>
-                          {customPanels.map(p => (
+                          {isAdmin && (
+                            <Link
+                              href="/seller/business-tools/panels"
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                getColorClasses('indigo', pathname === '/seller/business-tools/panels')
+                              }`}
+                            >
+                              <LayoutGrid className="h-5 w-5" />
+                              <span>Manage Panels</span>
+                            </Link>
+                          )}
+                          {sidebarPanels.map(p => (
                             <Link key={p.id} href={`/seller/business-tools/panels/${p.id}`}
                               onClick={() => setMobileMenuOpen(false)}
                               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${

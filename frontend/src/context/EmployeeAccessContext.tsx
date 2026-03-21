@@ -6,20 +6,34 @@ import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
-interface ModulePermission {
-  view: boolean;
-  action: boolean;
+interface PanelPerm {
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+}
+
+interface EmployeePermissions {
+  modules: Record<string, boolean>;
+  panels: Record<string, PanelPerm>;
+}
+
+interface PermittedPanel {
+  id: string;
+  name: string;
+  color: string;
+  slug: string;
 }
 
 interface EmployeeAccess {
   userId: string;
   role: string;
   status: string;
-  permissions: Record<string, ModulePermission>;
+  permissions: EmployeePermissions;
   companyId: string | null;
   isAdmin: boolean;
   companyName: string;
   companyLogoUrl: string;
+  permittedPanels: PermittedPanel[];
 }
 
 interface EmployeeAccessContextType {
@@ -28,15 +42,17 @@ interface EmployeeAccessContextType {
   refreshAccess: () => Promise<void>;
   canView: (module: string) => boolean;
   canAction: (module: string) => boolean;
+  canViewPanel: (panelId: string) => boolean;
+  canCreatePanel: (panelId: string) => boolean;
+  canEditPanel: (panelId: string) => boolean;
   isFullAdmin: boolean;
   isDisabled: boolean;
   isUnlinked: boolean;
 }
 
-const defaultAccess: EmployeeAccess = {
-  userId: '', role: 'unassigned', status: 'pending',
-  permissions: {}, companyId: null, isAdmin: false,
-  companyName: '', companyLogoUrl: '',
+const defaultPermissions: EmployeePermissions = {
+  modules: {},
+  panels: {},
 };
 
 const EmployeeAccessContext = createContext<EmployeeAccessContextType>({
@@ -44,6 +60,9 @@ const EmployeeAccessContext = createContext<EmployeeAccessContextType>({
   refreshAccess: async () => {},
   canView: () => false,
   canAction: () => false,
+  canViewPanel: () => false,
+  canCreatePanel: () => false,
+  canEditPanel: () => false,
   isFullAdmin: false,
   isDisabled: false,
   isUnlinked: false,
@@ -66,6 +85,19 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
       });
       if (res.ok) {
         const data = await res.json();
+        // Ensure permissions has the new structure
+        const perms = data.permissions || {};
+        if (!perms.modules) {
+          // Backward compat: old format
+          const modules: Record<string, boolean> = {};
+          for (const [k, v] of Object.entries(perms)) {
+            if (k === 'modules' || k === 'panels') continue;
+            const val = v as Record<string, boolean>;
+            modules[k] = val?.view === true;
+          }
+          data.permissions = { modules, panels: {} };
+        }
+        data.permittedPanels = data.permittedPanels || [];
         setAccess(data);
       }
     } catch {
@@ -74,7 +106,6 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
     setLoading(false);
   }, [getIdToken]);
 
-  // Fetch on mount and when user changes
   useEffect(() => {
     if (user) {
       fetchAccess();
@@ -103,7 +134,6 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
     });
 
     socket.on('access_updated', () => {
-      // Re-fetch access on any change
       fetchAccess();
     });
 
@@ -118,19 +148,44 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
   const isFullAdmin = access?.isAdmin === true;
 
   const canView = useCallback((module: string) => {
-    if (loading) return true; // Optimistic while loading
-    if (!access) return true; // No access data yet - allow (admins/sellers)
+    if (loading) return true;
+    if (!access) return true;
     if (access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
-    return access.permissions[module]?.view === true;
+    return access.permissions?.modules?.[module] === true;
   }, [access, loading]);
 
   const canAction = useCallback((module: string) => {
-    if (loading) return true; // Optimistic while loading
-    if (!access) return true; // No access data yet - allow (admins/sellers)
+    if (loading) return true;
+    if (!access) return true;
     if (access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
-    return access.permissions[module]?.view === true && access.permissions[module]?.action === true;
+    // New format: module=true means full access (view+action)
+    return access.permissions?.modules?.[module] === true;
+  }, [access, loading]);
+
+  const canViewPanel = useCallback((panelId: string) => {
+    if (loading) return true;
+    if (!access) return true;
+    if (access.isAdmin) return true;
+    if (access.status === 'disabled' || access.status === 'unlinked') return false;
+    return access.permissions?.panels?.[panelId]?.canView === true;
+  }, [access, loading]);
+
+  const canCreatePanel = useCallback((panelId: string) => {
+    if (loading) return true;
+    if (!access) return true;
+    if (access.isAdmin) return true;
+    if (access.status === 'disabled' || access.status === 'unlinked') return false;
+    return access.permissions?.panels?.[panelId]?.canCreate === true;
+  }, [access, loading]);
+
+  const canEditPanel = useCallback((panelId: string) => {
+    if (loading) return true;
+    if (!access) return true;
+    if (access.isAdmin) return true;
+    if (access.status === 'disabled' || access.status === 'unlinked') return false;
+    return access.permissions?.panels?.[panelId]?.canEdit === true;
   }, [access, loading]);
 
   const isDisabled = access?.status === 'disabled';
@@ -139,7 +194,9 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
   return (
     <EmployeeAccessContext.Provider value={{
       access, loading, refreshAccess: fetchAccess,
-      canView, canAction, isFullAdmin, isDisabled, isUnlinked,
+      canView, canAction,
+      canViewPanel, canCreatePanel, canEditPanel,
+      isFullAdmin, isDisabled, isUnlinked,
     }}>
       {children}
     </EmployeeAccessContext.Provider>

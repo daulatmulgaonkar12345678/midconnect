@@ -1,8 +1,8 @@
 """
 Employee Management Router — Enhanced with:
 - 3 tabs: Pending, Active, Unlinked
-- Link via email (buyer → employee conversion)
-- Module-based view/action permissions
+- Link via email (buyer -> employee conversion)
+- Separate module and panel permissions
 - Unlink / disable / re-link
 - Self-protection (admin can't remove own access)
 - Audit logging
@@ -18,38 +18,57 @@ import logging
 
 logger = logging.getLogger("employee_mgmt")
 
-# Module list for permissions
-PERMISSION_MODULES = [
+# System modules for permissions
+SYSTEM_MODULES = [
     "dashboard", "inventory", "invoices", "quotations",
     "purchase_orders", "reports", "buyers", "suppliers",
     "employees", "settings"
 ]
 
+SYSTEM_MODULE_LABELS = {
+    "dashboard": "Dashboard",
+    "inventory": "Inventory",
+    "invoices": "Invoices",
+    "quotations": "Quotations",
+    "purchase_orders": "Purchase Orders",
+    "reports": "Reports",
+    "buyers": "Buyers",
+    "suppliers": "Suppliers",
+    "employees": "Employees",
+    "settings": "Settings",
+}
+
 DEFAULT_ROLE_TEMPLATES = {
-    "Admin": {m: {"view": True, "action": True} for m in PERMISSION_MODULES},
-    "Manager": {m: {"view": True, "action": True if m not in ["employees", "settings"] else False} for m in PERMISSION_MODULES},
-    "Sales Executive": {m: {"view": True if m in ["dashboard", "invoices", "quotations", "buyers", "reports"] else False, "action": True if m in ["invoices", "quotations", "buyers"] else False} for m in PERMISSION_MODULES},
-    "Inventory Manager": {m: {"view": True if m in ["dashboard", "inventory", "purchase_orders", "suppliers", "reports"] else False, "action": True if m in ["inventory", "purchase_orders", "suppliers"] else False} for m in PERMISSION_MODULES},
-    "Accountant": {m: {"view": True if m in ["dashboard", "invoices", "reports", "buyers"] else False, "action": True if m in ["invoices"] else False} for m in PERMISSION_MODULES},
-    "Viewer": {m: {"view": True, "action": False} for m in PERMISSION_MODULES},
+    "Admin": {"modules": {m: True for m in SYSTEM_MODULES}, "panels": {}},
+    "Manager": {"modules": {m: m not in ("employees", "settings") for m in SYSTEM_MODULES}, "panels": {}},
+    "Sales Executive": {"modules": {m: m in ("dashboard", "invoices", "quotations", "buyers", "reports") for m in SYSTEM_MODULES}, "panels": {}},
+    "Inventory Manager": {"modules": {m: m in ("dashboard", "inventory", "purchase_orders", "suppliers", "reports") for m in SYSTEM_MODULES}, "panels": {}},
+    "Accountant": {"modules": {m: m in ("dashboard", "invoices", "reports", "buyers") for m in SYSTEM_MODULES}, "panels": {}},
+    "Viewer": {"modules": {m: True for m in SYSTEM_MODULES}, "panels": {}},
 }
 
 
-class ModulePermission(BaseModel):
-    view: bool = False
-    action: bool = False
+class PanelPermission(BaseModel):
+    canView: bool = False
+    canCreate: bool = False
+    canEdit: bool = False
+
+
+class EmployeePermissions(BaseModel):
+    modules: Dict[str, bool] = Field(default_factory=dict)
+    panels: Dict[str, PanelPermission] = Field(default_factory=dict)
 
 
 class LinkEmployeeRequest(BaseModel):
     email: str = Field(..., min_length=3)
     role: str = Field(..., min_length=1)
-    permissions: Dict[str, ModulePermission] = Field(default_factory=dict)
+    permissions: EmployeePermissions = Field(default_factory=EmployeePermissions)
 
 
 class UpdateEmployeeAccessRequest(BaseModel):
     role: Optional[str] = None
-    permissions: Optional[Dict[str, ModulePermission]] = None
-    status: Optional[str] = None  # "active" or "disabled"
+    permissions: Optional[EmployeePermissions] = None
+    status: Optional[str] = None
 
 
 def serialize_doc(doc):
@@ -79,10 +98,11 @@ def serialize_doc(doc):
 
 
 def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio=None):
+    from utils.permissions import authenticate_user, normalize_permissions
+
     router = APIRouter()
 
     async def get_current_user(authorization: str = Header(...)):
-        from utils.permissions import authenticate_user
         return await authenticate_user(db, verify_token_func, authorization)
 
     async def get_seller_id(user: dict) -> str:
@@ -99,12 +119,21 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         })
 
     async def emit_access_update(user_id: str, event_data: dict):
-        """Push real-time access update via Socket.IO."""
         if sio:
             try:
                 await sio.emit("access_updated", event_data, room=f"user_{user_id}")
             except Exception as e:
                 logger.warning(f"Failed to emit access_updated: {e}")
+
+    def build_perms_dict(data_perms: EmployeePermissions) -> dict:
+        """Convert Pydantic EmployeePermissions to a plain dict for DB storage."""
+        return {
+            "modules": {k: v for k, v in data_perms.modules.items()},
+            "panels": {
+                k: {"canView": v.canView, "canCreate": v.canCreate, "canEdit": v.canEdit}
+                for k, v in data_perms.panels.items()
+            },
+        }
 
     # ── MODULES & ROLE TEMPLATES ──
     @router.get("/employee-mgmt/modules")
@@ -112,29 +141,30 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         user = await get_current_user(authorization)
         seller_id = await get_seller_id(user)
 
-        # Standard modules
-        modules = [{"key": m, "label": m.replace("_", " ").title(), "type": "system"} for m in PERMISSION_MODULES]
+        modules = [
+            {"id": m, "name": SYSTEM_MODULE_LABELS.get(m, m.replace("_", " ").title())}
+            for m in SYSTEM_MODULES
+        ]
 
-        # Fetch custom panels for this business
+        panels = []
         if seller_id:
-            panels = await db.panels.find(
+            raw = await db.panels.find(
                 {"sellerId": ObjectId(seller_id)},
                 {"_id": 1, "name": 1, "color": 1}
             ).to_list(20)
-            for p in panels:
-                modules.append({
-                    "key": f"panel_{str(p['_id'])}",
-                    "label": p.get("name", "Panel"),
-                    "type": "panel",
+            for p in raw:
+                panels.append({
+                    "id": str(p["_id"]),
+                    "name": p.get("name", "Panel"),
                     "color": p.get("color", "blue"),
                 })
 
-        return {"modules": modules}
+        return {"modules": modules, "panels": panels}
 
     @router.get("/employee-mgmt/role-templates")
     async def get_role_templates(authorization: str = Header(...)):
         await get_current_user(authorization)
-        return {"templates": {name: {k: {"view": v["view"], "action": v["action"]} for k, v in perms.items()} for name, perms in DEFAULT_ROLE_TEMPLATES.items()}}
+        return {"templates": DEFAULT_ROLE_TEMPLATES}
 
     # ── SEARCH USER BY EMAIL ──
     @router.get("/employee-mgmt/search")
@@ -150,11 +180,9 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         if not found:
             return {"found": False, "message": "No user found with this email. Ask them to register first as a buyer."}
 
-        # Check if already linked to this company
         if found.get("companyId") and str(found["companyId"]) == seller_id:
             return {"found": True, "alreadyLinked": True, "user": serialize_doc(found), "message": "This user is already linked to your company."}
 
-        # Check if linked to another company
         if found.get("companyId"):
             return {"found": True, "linkedElsewhere": True, "message": "This user is already linked to another company."}
 
@@ -191,14 +219,7 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         if target.get("companyId") and str(target["companyId"]) == seller_id and target.get("employeeStatus") == "active":
             raise HTTPException(status_code=400, detail="User is already an active employee of your company.")
 
-        # Build permissions dict
-        perms = {}
-        for mod in PERMISSION_MODULES:
-            mp = data.permissions.get(mod)
-            if mp:
-                perms[mod] = {"view": mp.view, "action": mp.action}
-            else:
-                perms[mod] = {"view": False, "action": False}
+        perms = build_perms_dict(data.permissions)
 
         now = datetime.now(timezone.utc)
         update = {
@@ -215,7 +236,7 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         await log_action(seller_id, str(admin["_id"]), "linked", target_id, f"Role: {data.role}")
         await emit_access_update(target_id, {"type": "linked", "role": data.role, "permissions": perms})
 
-        logger.info(f"Employee linked: {data.email} → seller {seller_id}, role={data.role}")
+        logger.info(f"Employee linked: {data.email} -> seller {seller_id}, role={data.role}")
         return {"message": f"Employee {data.email} linked successfully", "employeeId": target_id}
 
     # ── LIST EMPLOYEES (3 tabs) ──
@@ -227,7 +248,6 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         if tab == "active":
             query = {"companyId": ObjectId(seller_id), "employeeStatus": {"$in": ["active", "disabled"]}}
         elif tab == "pending":
-            # Users who registered but are NOT linked to any company and NOT active/disabled/unlinked
             query = {
                 "$or": [
                     {"companyId": {"$exists": False}},
@@ -253,6 +273,7 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         employees = []
         for d in docs:
             profile = d.get("profile", {})
+            raw_perms = d.get("employeePermissions", {})
             employees.append({
                 "id": str(d["_id"]),
                 "email": d.get("email", ""),
@@ -260,7 +281,7 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
                 "phone": d.get("phone") or profile.get("phone") or "",
                 "role": d.get("employeeRole", "unassigned"),
                 "status": d.get("employeeStatus", "pending"),
-                "permissions": d.get("employeePermissions", {}),
+                "permissions": normalize_permissions(raw_perms),
                 "linkedAt": d.get("linkedAt", ""),
                 "unlinkedAt": d.get("unlinkedAt", ""),
                 "createdAt": d.get("createdAt", ""),
@@ -274,7 +295,6 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         admin = await get_current_user(authorization)
         seller_id = await get_seller_id(admin)
 
-        # Self-protection
         if str(admin["_id"]) == employee_id:
             raise HTTPException(status_code=400, detail="You cannot modify your own access. Ask another admin.")
 
@@ -287,16 +307,10 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
 
         if data.role is not None:
             update_fields["employeeRole"] = data.role
-            changes.append(f"role→{data.role}")
+            changes.append(f"role->{data.role}")
 
         if data.permissions is not None:
-            perms = {}
-            for mod in PERMISSION_MODULES:
-                mp = data.permissions.get(mod)
-                if mp:
-                    perms[mod] = {"view": mp.view, "action": mp.action}
-                else:
-                    perms[mod] = {"view": False, "action": False}
+            perms = build_perms_dict(data.permissions)
             update_fields["employeePermissions"] = perms
             changes.append("permissions updated")
 
@@ -304,7 +318,7 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
             if data.status not in ["active", "disabled"]:
                 raise HTTPException(status_code=400, detail="Status must be 'active' or 'disabled'")
             update_fields["employeeStatus"] = data.status
-            changes.append(f"status→{data.status}")
+            changes.append(f"status->{data.status}")
 
         await db.users.update_one({"_id": ObjectId(employee_id)}, {"$set": update_fields})
 
@@ -325,7 +339,6 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         admin = await get_current_user(authorization)
         seller_id = await get_seller_id(admin)
 
-        # Self-protection
         if str(admin["_id"]) == employee_id:
             raise HTTPException(status_code=400, detail="You cannot unlink yourself.")
 
@@ -338,14 +351,14 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
             "companyId": None,
             "employeeRole": "unassigned",
             "employeeStatus": "unlinked",
-            "employeePermissions": {},
+            "employeePermissions": {"modules": {}, "panels": {}},
             "unlinkedFrom": ObjectId(seller_id),
             "unlinkedAt": now,
             "updatedAt": now,
         }})
 
         await log_action(seller_id, str(admin["_id"]), "unlinked", employee_id)
-        await emit_access_update(employee_id, {"type": "unlinked", "permissions": {}, "role": "unassigned"})
+        await emit_access_update(employee_id, {"type": "unlinked", "permissions": {"modules": {}, "panels": {}}, "role": "unassigned"})
 
         logger.info(f"Employee {employee_id} unlinked from seller {seller_id}")
         return {"message": "Employee unlinked. Access revoked immediately."}
@@ -362,13 +375,7 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
         if emp.get("companyId") and str(emp["companyId"]) != seller_id:
             raise HTTPException(status_code=400, detail="User linked to another company")
 
-        perms = {}
-        for mod in PERMISSION_MODULES:
-            mp = data.permissions.get(mod)
-            if mp:
-                perms[mod] = {"view": mp.view, "action": mp.action}
-            else:
-                perms[mod] = {"view": False, "action": False}
+        perms = build_perms_dict(data.permissions)
 
         now = datetime.now(timezone.utc)
         await db.users.update_one({"_id": ObjectId(employee_id)}, {"$set": {
@@ -396,22 +403,26 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
              "companyId": 1, "accountType": 1, "roles": 1, "profile": 1}
         )
         if not doc:
-            return {"role": "unassigned", "status": "pending", "permissions": {}, "isAdmin": False}
+            return {
+                "role": "unassigned", "status": "pending",
+                "permissions": {"modules": {}, "panels": {}},
+                "isAdmin": False, "permittedPanels": [],
+            }
 
         is_admin = doc.get("accountType") == "seller" or "seller" in (doc.get("roles") or [])
 
-        # Fetch company info (name + logo)
+        raw_perms = doc.get("employeePermissions", {})
+        perms = normalize_permissions(raw_perms)
+
         company_name = ""
         company_logo_url = ""
         company_id = doc.get("companyId")
 
         if is_admin:
-            # Admin IS the seller — use their own profile
             profile = doc.get("profile") or {}
             company_name = profile.get("businessName", "")
             company_logo_url = profile.get("sellerLogoUrl", "")
         elif company_id:
-            # Employee — look up the seller's profile
             seller = await db.users.find_one(
                 {"_id": company_id},
                 {"_id": 0, "profile.businessName": 1, "profile.sellerLogoUrl": 1,
@@ -424,15 +435,39 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
                 if not company_logo_url:
                     company_logo_url = (seller.get("billingSettings") or {}).get("companyLogoUrl", "")
 
+        # Fetch permitted panel details for employees
+        permitted_panels = []
+        if not is_admin and perms.get("panels"):
+            panel_ids = []
+            for pid, pp in perms["panels"].items():
+                if isinstance(pp, dict) and pp.get("canView"):
+                    try:
+                        panel_ids.append(ObjectId(pid))
+                    except Exception:
+                        pass
+            if panel_ids:
+                raw = await db.panels.find(
+                    {"_id": {"$in": panel_ids}},
+                    {"_id": 1, "name": 1, "color": 1, "slug": 1}
+                ).to_list(20)
+                for p in raw:
+                    permitted_panels.append({
+                        "id": str(p["_id"]),
+                        "name": p["name"],
+                        "color": p.get("color", "blue"),
+                        "slug": p.get("slug", ""),
+                    })
+
         return {
             "userId": uid,
             "role": doc.get("employeeRole", "unassigned"),
             "status": doc.get("employeeStatus", "pending"),
-            "permissions": doc.get("employeePermissions", {}),
+            "permissions": perms,
             "companyId": str(doc["companyId"]) if doc.get("companyId") else None,
             "isAdmin": is_admin,
             "companyName": company_name,
             "companyLogoUrl": company_logo_url,
+            "permittedPanels": permitted_panels,
         }
 
     # ── AUDIT LOGS ──
@@ -466,12 +501,13 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
                 {"_id": {"$in": emp_ids}},
                 {"$set": {
                     "companyId": None, "employeeRole": "unassigned",
-                    "employeeStatus": "unlinked", "employeePermissions": {},
+                    "employeeStatus": "unlinked",
+                    "employeePermissions": {"modules": {}, "panels": {}},
                     "unlinkedFrom": ObjectId(seller_id), "unlinkedAt": now, "updatedAt": now,
                 }}
             )
             for emp in employees:
-                await emit_access_update(str(emp["_id"]), {"type": "unlinked", "permissions": {}, "role": "unassigned"})
+                await emit_access_update(str(emp["_id"]), {"type": "unlinked", "permissions": {"modules": {}, "panels": {}}, "role": "unassigned"})
             await log_action(seller_id, str(admin["_id"]), "unlinked_all", "all", f"Unlinked {len(employees)} employees")
 
         return {"message": f"Unlinked {len(employees)} employees", "count": len(employees)}

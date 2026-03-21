@@ -84,7 +84,7 @@ class UpdateRecordRequest(BaseModel):
 
 
 def init_panel_router(db, verify_token_func):
-    from utils.permissions import authenticate_user, resolve_seller_id, is_platform_admin
+    from utils.permissions import authenticate_user, resolve_seller_id, is_platform_admin, normalize_permissions
 
     router = APIRouter(tags=["Panels"])
 
@@ -192,7 +192,7 @@ def init_panel_router(db, verify_token_func):
     @router.get("/panels/{panel_id}")
     async def get_panel(panel_id: str, authorization: str = Header(...)):
         user = await get_current_user(authorization)
-        require_advanced_access(user)
+        check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
         try:
@@ -466,12 +466,23 @@ def init_panel_router(db, verify_token_func):
     # RECORD CRUD — Phase 2
     # ═══════════════════════════════════════════
 
-    def allow_record_access(user: dict):
-        """Allow seller admin AND employees with advanced access to manage records."""
-        require_advanced_access(user)
-        # Buyers blocked
+    def check_panel_access(user: dict, panel_id: str, action: str = "view"):
+        """Unified panel access check. Admin/seller with advanced access and employees with panel permissions."""
         if user.get("accountType") == "buyer":
             raise HTTPException(status_code=403, detail="Buyers cannot access panels.")
+        if is_platform_admin(user):
+            return
+        # Employee with panel permissions
+        if user.get("companyId") and user.get("employeeStatus") == "active":
+            perms = normalize_permissions(user.get("employeePermissions", {}))
+            panel_perms = perms.get("panels", {}).get(panel_id, {})
+            perm_map = {"view": "canView", "create": "canCreate", "edit": "canEdit"}
+            perm_key = perm_map.get(action, "canView")
+            if not panel_perms.get(perm_key):
+                raise HTTPException(status_code=403, detail=f"You don't have {action} permission for this panel")
+            return
+        # Seller admin - require advanced access
+        require_advanced_access(user)
 
     async def resolve_relation_display(seller_id: str, field: dict, value):
         """Resolve a relation value to a display label."""
@@ -589,7 +600,7 @@ def init_panel_router(db, verify_token_func):
         authorization: str = Header(...)
     ):
         user = await get_current_user(authorization)
-        allow_record_access(user)
+        check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
@@ -633,7 +644,7 @@ def init_panel_router(db, verify_token_func):
     @router.get("/panels/{panel_id}/records/{record_id}")
     async def get_record(panel_id: str, record_id: str, authorization: str = Header(...)):
         user = await get_current_user(authorization)
-        allow_record_access(user)
+        check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
@@ -658,7 +669,7 @@ def init_panel_router(db, verify_token_func):
     @router.post("/panels/{panel_id}/records")
     async def create_record(panel_id: str, data: CreateRecordRequest, authorization: str = Header(...)):
         user = await get_current_user(authorization)
-        allow_record_access(user)
+        check_panel_access(user, panel_id, "create")
         seller_id = await get_seller_id(user)
 
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
@@ -691,7 +702,7 @@ def init_panel_router(db, verify_token_func):
     @router.put("/panels/{panel_id}/records/{record_id}")
     async def update_record(panel_id: str, record_id: str, data: UpdateRecordRequest, authorization: str = Header(...)):
         user = await get_current_user(authorization)
-        allow_record_access(user)
+        check_panel_access(user, panel_id, "edit")
         seller_id = await get_seller_id(user)
 
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
@@ -718,7 +729,7 @@ def init_panel_router(db, verify_token_func):
     @router.delete("/panels/{panel_id}/records/{record_id}")
     async def delete_record(panel_id: str, record_id: str, authorization: str = Header(...)):
         user = await get_current_user(authorization)
-        allow_record_access(user)
+        check_panel_access(user, panel_id, "edit")
         seller_id = await get_seller_id(user)
 
         record = await db.panel_records.find_one({"_id": ObjectId(record_id), "panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
@@ -759,7 +770,7 @@ def init_panel_router(db, verify_token_func):
         authorization: str = Header(...)
     ):
         user = await get_current_user(authorization)
-        allow_record_access(user)
+        check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
         results = []

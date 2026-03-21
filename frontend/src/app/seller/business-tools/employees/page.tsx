@@ -1,43 +1,44 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import {
   Users, Search, UserPlus, UserMinus, Shield, Loader2,
-  Mail, Phone, Clock, AlertTriangle, CheckCircle, XCircle, Settings, Eye, Pencil, History
+  Mail, Phone, Clock, AlertTriangle, CheckCircle, XCircle, Settings, Eye, Pencil, History, LayoutGrid, Plus
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-const PERMISSION_MODULES = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'inventory', label: 'Inventory' },
-  { key: 'invoices', label: 'Invoices' },
-  { key: 'quotations', label: 'Quotations' },
-  { key: 'purchase_orders', label: 'Purchase Orders' },
-  { key: 'reports', label: 'Reports' },
-  { key: 'buyers', label: 'Buyers' },
-  { key: 'suppliers', label: 'Suppliers' },
-  { key: 'employees', label: 'Employees' },
-  { key: 'settings', label: 'Settings' },
-];
-
-interface ModPerm { view: boolean; action: boolean; }
+interface PanelPerm { canView: boolean; canCreate: boolean; canEdit: boolean; }
+interface EmpPerms { modules: Record<string, boolean>; panels: Record<string, PanelPerm>; }
 interface Employee {
   id: string; email: string; name: string; phone: string;
-  role: string; status: string; permissions: Record<string, ModPerm>;
+  role: string; status: string; permissions: EmpPerms;
   linkedAt: string; unlinkedAt: string; createdAt: string;
 }
+interface ModuleItem { id: string; name: string; }
+interface PanelItem { id: string; name: string; color: string; }
 
 type Tab = 'active' | 'pending' | 'unlinked';
+
+const PANEL_COLOR_DOT: Record<string, string> = {
+  blue: 'bg-blue-500', red: 'bg-red-500', green: 'bg-green-500',
+  purple: 'bg-purple-500', orange: 'bg-orange-500', amber: 'bg-amber-500',
+  cyan: 'bg-cyan-500', pink: 'bg-pink-500', indigo: 'bg-indigo-500',
+  violet: 'bg-violet-500', slate: 'bg-slate-500',
+};
 
 export default function EmployeeManagementPage() {
   const { getIdToken } = useAuth();
   const [tab, setTab] = useState<Tab>('active');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [roleTemplates, setRoleTemplates] = useState<Record<string, Record<string, ModPerm>>>({});
+  const [roleTemplates, setRoleTemplates] = useState<Record<string, EmpPerms>>({});
+
+  // Dynamic modules & panels from API
+  const [allModules, setAllModules] = useState<ModuleItem[]>([]);
+  const [allPanels, setAllPanels] = useState<PanelItem[]>([]);
 
   // Search
   const [searchEmail, setSearchEmail] = useState('');
@@ -48,13 +49,13 @@ export default function EmployeeManagementPage() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkTarget, setLinkTarget] = useState<{ id: string; email: string; name: string } | null>(null);
   const [linkRole, setLinkRole] = useState('');
-  const [linkPerms, setLinkPerms] = useState<Record<string, ModPerm>>({});
+  const [linkPerms, setLinkPerms] = useState<EmpPerms>({ modules: {}, panels: {} });
   const [linking, setLinking] = useState(false);
 
   // Edit modal
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [editRole, setEditRole] = useState('');
-  const [editPerms, setEditPerms] = useState<Record<string, ModPerm>>({});
+  const [editPerms, setEditPerms] = useState<EmpPerms>({ modules: {}, panels: {} });
   const [editStatus, setEditStatus] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -86,15 +87,26 @@ export default function EmployeeManagementPage() {
     } catch { /* empty */ }
   }, [authHeaders]);
 
-  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
-  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+  const fetchModulesAndPanels = useCallback(async () => {
+    try {
+      const h = await authHeaders();
+      const res = await fetch(`${API_URL}/api/business-tools/employee-mgmt/modules`, { headers: h });
+      if (res.ok) {
+        const data = await res.json();
+        setAllModules(data.modules || []);
+        setAllPanels(data.panels || []);
+      }
+    } catch { /* empty */ }
+  }, [authHeaders]);
 
-  // Initialize permissions for all modules
-  const initPerms = (): Record<string, ModPerm> => {
-    const p: Record<string, ModPerm> = {};
-    PERMISSION_MODULES.forEach(m => { p[m.key] = { view: false, action: false }; });
-    return p;
-  };
+  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  useEffect(() => { fetchTemplates(); fetchModulesAndPanels(); }, [fetchTemplates, fetchModulesAndPanels]);
+
+  // Initialize permissions with all modules false and all panels default
+  const initPerms = useCallback((): EmpPerms => ({
+    modules: Object.fromEntries(allModules.map(m => [m.id, false])),
+    panels: Object.fromEntries(allPanels.map(p => [p.id, { canView: false, canCreate: false, canEdit: false }])),
+  }), [allModules, allPanels]);
 
   // Search by email
   const handleSearch = async () => {
@@ -119,12 +131,20 @@ export default function EmployeeManagementPage() {
   };
 
   // Apply role template
-  const applyTemplate = (templateName: string, setter: (p: Record<string, ModPerm>) => void, roleSetter: (r: string) => void) => {
+  const applyTemplate = (templateName: string, setter: (p: EmpPerms) => void, roleSetter: (r: string) => void) => {
     const tpl = roleTemplates[templateName];
     if (tpl) {
-      const perms: Record<string, ModPerm> = {};
-      PERMISSION_MODULES.forEach(m => {
-        perms[m.key] = tpl[m.key] || { view: false, action: false };
+      const perms: EmpPerms = {
+        modules: {},
+        panels: {},
+      };
+      // Apply template module values
+      allModules.forEach(m => {
+        perms.modules[m.id] = tpl.modules?.[m.id] || false;
+      });
+      // Panels default to false (templates don't set panel permissions)
+      allPanels.forEach(p => {
+        perms.panels[p.id] = { canView: false, canCreate: false, canEdit: false };
       });
       setter(perms);
       roleSetter(templateName);
@@ -170,9 +190,20 @@ export default function EmployeeManagementPage() {
     setEditEmployee(emp);
     setEditRole(emp.role);
     setEditStatus(emp.status);
-    const perms: Record<string, ModPerm> = {};
-    PERMISSION_MODULES.forEach(m => {
-      perms[m.key] = emp.permissions[m.key] || { view: false, action: false };
+
+    const perms: EmpPerms = { modules: {}, panels: {} };
+    const empPerms = emp.permissions || { modules: {}, panels: {} };
+
+    allModules.forEach(m => {
+      perms.modules[m.id] = empPerms.modules?.[m.id] || false;
+    });
+    allPanels.forEach(p => {
+      const pp = empPerms.panels?.[p.id];
+      perms.panels[p.id] = {
+        canView: pp?.canView || false,
+        canCreate: pp?.canCreate || false,
+        canEdit: pp?.canEdit || false,
+      };
     });
     setEditPerms(perms);
   };
@@ -221,44 +252,89 @@ export default function EmployeeManagementPage() {
     return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium" data-testid="status-pending">Pending</span>;
   };
 
-  // Permission grid component
-  const PermissionGrid = ({ perms, onChange, disabled }: { perms: Record<string, ModPerm>; onChange: (p: Record<string, ModPerm>) => void; disabled?: boolean }) => (
-    <div className="space-y-1" data-testid="permission-grid">
-      <div className="grid grid-cols-12 gap-2 text-xs text-gray-500 font-medium pb-1 border-b">
-        <div className="col-span-4">Module</div>
-        <div className="col-span-4 text-center flex items-center justify-center gap-1"><Eye className="w-3 h-3" /> View</div>
-        <div className="col-span-4 text-center flex items-center justify-center gap-1"><Pencil className="w-3 h-3" /> Action</div>
+  // Permission grid component with separate modules and panels sections
+  const PermissionGrid = ({ perms, onChange, disabled }: { perms: EmpPerms; onChange: (p: EmpPerms) => void; disabled?: boolean }) => (
+    <div className="space-y-4" data-testid="permission-grid">
+      {/* System Modules */}
+      <div>
+        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+          <Shield className="w-3 h-3" /> System Modules
+        </h4>
+        <div className="space-y-0.5">
+          {allModules.map(m => (
+            <div key={m.id} className="flex items-center justify-between py-1.5 hover:bg-gray-50 rounded px-2" data-testid={`perm-row-${m.id}`}>
+              <span className="text-sm text-gray-700">{m.name}</span>
+              <input
+                type="checkbox"
+                checked={perms.modules?.[m.id] || false}
+                disabled={disabled}
+                onChange={e => {
+                  const np = { ...perms, modules: { ...perms.modules, [m.id]: e.target.checked } };
+                  onChange(np);
+                }}
+                className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                data-testid={`perm-module-${m.id}`}
+              />
+            </div>
+          ))}
+        </div>
       </div>
-      {PERMISSION_MODULES.map(m => (
-        <div key={m.key} className="grid grid-cols-12 gap-2 items-center py-1.5 hover:bg-gray-50 rounded" data-testid={`perm-row-${m.key}`}>
-          <div className="col-span-4 text-sm text-gray-700">{m.label}</div>
-          <div className="col-span-4 flex justify-center">
-            <input type="checkbox" checked={perms[m.key]?.view || false} disabled={disabled}
-              onChange={e => {
-                const np = { ...perms };
-                np[m.key] = { ...np[m.key], view: e.target.checked };
-                if (!e.target.checked) np[m.key].action = false;
-                onChange(np);
-              }}
-              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-              data-testid={`perm-view-${m.key}`}
-            />
-          </div>
-          <div className="col-span-4 flex justify-center">
-            <input type="checkbox" checked={perms[m.key]?.action || false} disabled={disabled || !perms[m.key]?.view}
-              onChange={e => {
-                const np = { ...perms };
-                np[m.key] = { ...np[m.key], action: e.target.checked };
-                onChange(np);
-              }}
-              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 disabled:opacity-30"
-              data-testid={`perm-action-${m.key}`}
-            />
+
+      {/* Custom Panels */}
+      {allPanels.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+            <LayoutGrid className="w-3 h-3" /> Custom Panels
+          </h4>
+          <div className="space-y-2">
+            {allPanels.map(p => {
+              const pp = perms.panels?.[p.id] || { canView: false, canCreate: false, canEdit: false };
+              return (
+                <div key={p.id} className="border border-gray-200 rounded-lg p-3" data-testid={`perm-panel-${p.id}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`w-2.5 h-2.5 rounded-full ${PANEL_COLOR_DOT[p.color] || 'bg-blue-500'}`} />
+                    <span className="text-sm font-medium text-gray-800">{p.name}</span>
+                  </div>
+                  <div className="flex gap-4 ml-5">
+                    {([
+                      ['canView', 'View', Eye],
+                      ['canCreate', 'Create', Plus],
+                      ['canEdit', 'Edit', Pencil],
+                    ] as const).map(([key, label, Icon]) => (
+                      <label key={key} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={pp[key as keyof PanelPerm] || false}
+                          disabled={disabled || (key !== 'canView' && !pp.canView)}
+                          onChange={e => {
+                            const newPP = { ...pp, [key]: e.target.checked };
+                            if (key === 'canView' && !e.target.checked) {
+                              newPP.canCreate = false;
+                              newPP.canEdit = false;
+                            }
+                            const np = { ...perms, panels: { ...perms.panels, [p.id]: newPP } };
+                            onChange(np);
+                          }}
+                          className="w-3.5 h-3.5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 disabled:opacity-30"
+                          data-testid={`perm-panel-${p.id}-${key}`}
+                        />
+                        <Icon className="w-3 h-3" />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      ))}
+      )}
     </div>
   );
+
+  // Module & panel names lookup
+  const moduleNameMap = useMemo(() => Object.fromEntries(allModules.map(m => [m.id, m.name])), [allModules]);
+  const panelNameMap = useMemo(() => Object.fromEntries(allPanels.map(p => [p.id, p.name])), [allPanels]);
 
   return (
     <div className="space-y-4" data-testid="employee-mgmt-page">
@@ -397,17 +473,32 @@ export default function EmployeeManagementPage() {
               </div>
 
               {/* Permission summary for active */}
-              {tab === 'active' && emp.permissions && Object.keys(emp.permissions).length > 0 && (
+              {tab === 'active' && emp.permissions && (
                 <div className="mt-2 flex flex-wrap gap-1.5 pt-2 border-t">
-                  {PERMISSION_MODULES.map(m => {
-                    const p = emp.permissions[m.key];
-                    if (!p || !p.view) return null;
+                  {/* Module badges */}
+                  {allModules.map(m => {
+                    if (!emp.permissions.modules?.[m.id]) return null;
                     return (
-                      <span key={m.key} className={`text-xs px-2 py-0.5 rounded-full ${p.action ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`} data-testid={`perm-badge-${emp.id}-${m.key}`}>
-                        {m.label} {p.action ? '(Full)' : '(View)'}
+                      <span key={m.id} className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700" data-testid={`perm-badge-${emp.id}-${m.id}`}>
+                        {m.name}
                       </span>
                     );
                   })}
+                  {/* Panel badges */}
+                  {allPanels.map(p => {
+                    const pp = emp.permissions.panels?.[p.id];
+                    if (!pp?.canView) return null;
+                    const levels = [pp.canView && 'V', pp.canCreate && 'C', pp.canEdit && 'E'].filter(Boolean).join('');
+                    return (
+                      <span key={p.id} className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700" data-testid={`perm-badge-${emp.id}-panel-${p.id}`}>
+                        {p.name} ({levels})
+                      </span>
+                    );
+                  })}
+                  {/* Show nothing message if no perms */}
+                  {!allModules.some(m => emp.permissions.modules?.[m.id]) && !allPanels.some(p => emp.permissions.panels?.[p.id]?.canView) && (
+                    <span className="text-xs text-gray-400 italic">No permissions assigned</span>
+                  )}
                 </div>
               )}
             </div>
@@ -461,7 +552,7 @@ export default function EmployeeManagementPage() {
       {editEmployee && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" data-testid="edit-modal">
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5 space-y-4">
-            <h3 className="font-semibold text-gray-900">Edit Access — {editEmployee.name || editEmployee.email}</h3>
+            <h3 className="font-semibold text-gray-900">Edit Access &mdash; {editEmployee.name || editEmployee.email}</h3>
 
             {/* Status */}
             <div>
