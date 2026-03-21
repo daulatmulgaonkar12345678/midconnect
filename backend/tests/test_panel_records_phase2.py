@@ -10,7 +10,7 @@ import os
 import time
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://employee-perms-1.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-perms-modal.preview.emergentagent.com')
 AUTH_HEADER = {"Authorization": "Bearer dev-test-token", "Content-Type": "application/json"}
 
 # Test data tracking for cleanup

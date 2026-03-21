@@ -64,7 +64,7 @@
   },
   
   "test_credentials": {
-    "api_url": "https://employee-perms-1.preview.emergentagent.com"
+    "api_url": "https://erp-perms-modal.preview.emergentagent.com"
   },
   
   "seed_data_creation": "None needed",

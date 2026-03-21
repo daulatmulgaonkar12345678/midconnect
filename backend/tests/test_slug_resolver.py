@@ -18,7 +18,7 @@ import os
 import json
 
 # API URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://employee-perms-1.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-perms-modal.preview.emergentagent.com')
 
 # Test product data
 TEST_PRODUCT_SLUG = "industrial-electric-motor-5hp-test-category-supplier-india"
