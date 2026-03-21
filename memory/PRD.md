@@ -12,81 +12,88 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 - **Real-time:** python-socketio + socket.io-client (for employee access sync)
 
 ## Completed Features
-1. Full B2B Marketplace + Seller/Admin Dashboards
-2. **Invoice System (GST-Compliant)** — Auto CGST/SGST vs IGST, Bill To/Ship To, Per-item discount
-3. Inventory Management with HSN Codes + Product Description
-4. Purchase Orders + WhatsApp sharing
-5. Buyer Management + Shipping Addresses (CRUD)
-6. Pending Orders (Backorder) with stock reservation
-7. WhatsApp Messaging Engine (8 templates)
-8. **Reporting Phase 1 & 2** — All 15 report tabs
-9. **Business Insights Dashboard Widget**
-10. **GST Sales Report (GSTR-1 Compatible)**
-11. **Hybrid Offline Mode + Draft Invoice System (Feb 2026)**
-12. **Refer & Earn System (Feb 2026)**
-13. **Advanced Offline Business System - Quotation Module (Mar 2026)**
-14. **Enhancement: Pricing + Sharing (Mar 2026)**
-15. **Employee System with Live Access Control (Mar 2026)**
-16. **Company Banner in Business Tools (Mar 2026)**
-17. **RBAC Fix (Mar 2026)**: Refactored layout.tsx into BusinessToolsLayout + BusinessToolsInner
-18. **Employee Pending Tab Fix (Mar 2026)**: Fixed active employees in Pending tab
-19. **Custom Panel System — Phase 1 (Mar 2026)**:
-    - Panel CRUD: create, edit, delete custom panels (max 10/business)
-    - Field Builder: 8 types (text, number, date, dropdown, multiselect, boolean, longtext, relation)
-    - Max 20 fields/panel, duplicate name validation, relation with linkable targets
-    - Sidebar integration: Custom Panels section for advanced users
-    - Role restriction: only seller admin can create (not employees)
-20. **Business Tool Access Control (Mar 2026)** ← NEW:
-    - 3-tier system: None / Standard / Advanced (super admin controlled)
-    - Admin UI: Business Tool Access card in admin user profile page (/admin/users/{id})
-    - Backend: `PUT /api/admin/users/{id}/business-tool-access` endpoint
-    - `GET /api/admin/users/{id}/detail` includes businessToolAccess field
-    - `GET /api/business-tools/my-permissions` includes businessToolAccess in response
-    - Global gating in Business Tools layout: "none" → blocked page, "standard" → modules only, "advanced" → standard + panels
-    - Sidebar: Custom Panels section only shows for "advanced" users
-    - Panels page: Shows "Advanced Access Required" for non-advanced users
-    - Platform admins always have advanced access (bypasses stored field)
+1-16. (Previous features — B2B Marketplace, Invoices, Inventory, etc.)
+17. **RBAC Fix (Mar 2026)**
+18. **Employee Pending Tab Fix (Mar 2026)**
+19. **Custom Panel System — Phase 1 (Mar 2026)**: Panel CRUD, Field Builder (8 types), sidebar integration, max 10 panels/20 fields
+20. **Business Tool Access Control (Mar 2026)**: 3-tier (None/Standard/Advanced), admin-controlled, global gating
+21. **Custom Panel System — Phase 2 (Mar 2026)** ← NEW:
+    - **Record CRUD**: Create/edit/view/delete records with dynamic forms based on panel field definitions
+    - **Data Validation**: Required fields enforced, dropdown/multiselect options validated, boolean/number type checking
+    - **Relation System V1**: many→one (default) and one→one linking to Inventory, Invoices, or other custom panels
+    - **Relation Lookup API**: Searchable dropdown that fetches products, invoices, or panel records
+    - **Relation Resolution**: When viewing records, relation values auto-resolve to display labels
+    - **Safety Rules**: Block deletion of linked records, one-to-one uniqueness enforced, disabled fields skipped
+    - **Field Editing**: Update label, toggle required, update options, soft disable (disabled flag)
+    - **Field Deletion Protection**: Cannot delete field if records contain data for it
+    - **Role-Based Access**: Seller admin = full control, Employees = create/edit records only, Buyers = blocked
+    - **Pagination + Search**: Records list paginated (50/page), search across text/longtext/dropdown fields
+    - **Frontend**: Full panel detail page with records table, create/edit modal, view modal, relation lookup UI
 
 ## Panel System Architecture
 ```
-Access Tiers:
-  None     → Marketplace only (blocked from business tools)
-  Standard → Inventory, Invoice, etc. (no panels)
-  Advanced → Standard + Custom Panels + future Document Builder
+Database Collections:
+  panels          → { sellerId, name, slug, description, icon, color, fields[], createdAt, updatedAt }
+  panel_records   → { panelId, sellerId, data: {key: value}, createdBy, createdAt, updatedAt }
 
-Access Control Flow:
-  /my-permissions → returns businessToolAccess
-  Layout reads it → gates access globally
-  Sidebar reads it → shows/hides Custom Panels section
-  Panel page reads it → shows upgrade message or panel UI
+API Endpoints (all under /api/business-tools):
+  Panel CRUD:
+    GET    /panels                              → List panels
+    GET    /panels/{id}                         → Get single panel
+    POST   /panels                              → Create panel
+    PUT    /panels/{id}                         → Update panel metadata
+    DELETE /panels/{id}                         → Delete panel (if no records)
+  
+  Field Management:
+    POST   /panels/{id}/fields                  → Add field
+    PUT    /panels/{id}/fields/{key}            → Update field (label, required, options, disabled)
+    DELETE /panels/{id}/fields/{key}            → Delete field (blocked if data exists)
+    PUT    /panels/{id}/fields-order            → Reorder fields
+  
+  Record CRUD:
+    GET    /panels/{id}/records                 → List records (paginated, searchable)
+    GET    /panels/{id}/records/{rid}           → Get single record (with resolved relations)
+    POST   /panels/{id}/records                 → Create record (validated)
+    PUT    /panels/{id}/records/{rid}           → Update record
+    DELETE /panels/{id}/records/{rid}           → Delete record (blocked if linked)
+  
+  Relations:
+    GET    /panels/{id}/relation-lookup         → Search linkable entities
+    GET    /panels/linkable-targets             → List linkable modules
+  
+  Access Control:
+    GET    /access-level                        → Get user's access tier
+    PUT    /admin/set-access-level              → Set access (admin only)
 
-Admin Control:
-  /admin/users/{id} page → Business Tool Access card
-  PUT /api/admin/users/{id}/business-tool-access → saves to DB
-  Platform admins always = advanced (via is_platform_admin check)
+Field Types: text, number, date, dropdown, multiselect, boolean, longtext, relation
+Relation Types: many_to_one (default), one_to_one
+Limits: 10 panels/business, 20 fields/panel, 50 records/page
 ```
 
 ## Prioritized Backlog
 ### P0 (Next)
-1. **Panel System Phase 2**: Record entry (create/edit/view records), simple relations (many→one to Inventory/Invoice/Panels), safety rules (no circular links, delete protection)
+1. **Panel System Phase 3**: Basic document builder (templates + {{variables}} + PDF/Excel), branding, shareable links
 
 ### P1
-2. **Panel System Phase 3**: Basic document builder (templates + {{variables}} + PDF/Excel), branding, shareable links
-3. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
-4. Seller Reminder Controls (configurable schedules)
-5. Quotation/Employee Activity Dashboards
+2. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
+3. Seller Reminder Controls (configurable schedules)
+4. Quotation/Employee Activity Dashboards
 
 ### P2
 - GSTR-1 JSON export | Custom Material Report
 - Short link tracking + click analytics
 - White-label toggle | WhatsApp Business API
-- Enhanced Business Insights
+
+### Future (Post Phase 3)
+- Automation Engine (rules, triggers, IF/THEN logic)
+- Many-to-many relations
+- Deep chaining (>2 levels)
 
 ## Key Files
-- `/app/backend/server.py` - Admin endpoints incl. PUT business-tool-access (line ~9741)
-- `/app/backend/routers/panel_router.py` - Panel CRUD + field management + access control
-- `/app/backend/routers/business_tools_router.py` - /my-permissions includes businessToolAccess
-- `/app/frontend/src/app/admin/users/[id]/page.tsx` - Admin user profile with Business Tool Access card
-- `/app/frontend/src/app/seller/business-tools/layout.tsx` - RBAC layout, global access gating, sidebar panels
+- `/app/backend/routers/panel_router.py` - Panel + Record CRUD, relation lookup, validation
 - `/app/frontend/src/app/seller/business-tools/panels/page.tsx` - Panel management UI
-- `/app/backend/utils/permissions.py` - Backend permission resolution + is_platform_admin
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` - Record list + CRUD UI
+- `/app/frontend/src/app/seller/business-tools/layout.tsx` - RBAC layout, sidebar panels
+- `/app/frontend/src/app/admin/users/[id]/page.tsx` - Admin user profile with access control
+- `/app/backend/server.py` - Admin endpoints, auth
+- `/app/backend/tests/test_panel_records_phase2.py` - Phase 2 test suite (25 tests)
