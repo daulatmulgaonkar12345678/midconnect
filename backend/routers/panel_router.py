@@ -188,6 +188,73 @@ def init_panel_router(db, verify_token_func):
 
         return {"targets": targets}
 
+    # ── RELATED RECORDS (for panel data integration with modules) ──
+    @router.get("/panels/related-records")
+    async def get_related_records(
+        module: str,
+        entityId: str,
+        authorization: str = Header(...)
+    ):
+        """Find panel records related to a specific entity (e.g. inventory product)."""
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        # Find panels with relation fields pointing to this module
+        panels_with_relations = await db.panels.find({
+            "sellerId": ObjectId(seller_id),
+            "fields.type": "relation",
+            "fields.relatedPanel": module,
+        }).to_list(20)
+
+        result = []
+        for panel in panels_with_relations:
+            panel_id = str(panel["_id"])
+
+            # Check employee permission for this panel
+            if user.get("companyId") and user.get("employeeStatus") == "active":
+                perms = normalize_permissions(user.get("employeePermissions", {}))
+                panel_perms = perms.get("panels", {}).get(panel_id, {})
+                if not panel_perms.get("canView"):
+                    continue
+
+            # Find relation field keys for this module
+            relation_keys = [
+                f["key"] for f in panel.get("fields", [])
+                if f["type"] == "relation" and f.get("relatedPanel") == module
+            ]
+            if not relation_keys:
+                continue
+
+            # Find records matching the entityId
+            query = {
+                "panelId": panel["_id"],
+                "sellerId": ObjectId(seller_id),
+                "$or": [{f"data.{key}": entityId} for key in relation_keys]
+            }
+            records = await db.panel_records.find(query).limit(20).to_list(20)
+
+            if records:
+                resolved_records = []
+                for rec in records:
+                    display = {}
+                    for f in panel.get("fields", []):
+                        val = rec.get("data", {}).get(f["key"])
+                        if val is not None and f["type"] != "relation":
+                            display[f.get("label", f["key"])] = val
+                    resolved_records.append({
+                        "id": str(rec["_id"]),
+                        "data": display,
+                    })
+
+                result.append({
+                    "panelId": panel_id,
+                    "panelName": panel.get("name", "Panel"),
+                    "panelColor": panel.get("color", "blue"),
+                    "records": resolved_records,
+                })
+
+        return {"groups": result}
+
     # ── GET SINGLE PANEL ──
     @router.get("/panels/{panel_id}")
     async def get_panel(panel_id: str, authorization: str = Header(...)):

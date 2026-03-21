@@ -11,7 +11,7 @@ import {
   FileText, Plus, X, Download, Eye, Trash2, Send, CreditCard,
   IndianRupee, ChevronDown, ChevronUp, Clock, CheckCircle2,
   AlertCircle, AlertTriangle, Banknote, Calendar, MessageCircle, Upload, Image as ImageIcon,
-  FileDown, Bell, Settings, ExternalLink, Paperclip, Loader2, WifiOff, CloudOff
+  FileDown, Bell, Settings, ExternalLink, Paperclip, Loader2, WifiOff, CloudOff, LayoutGrid, Link2
 } from 'lucide-react';
 import { uploadPaymentReceipt } from '@/lib/cloudinary';
 import { INDIAN_STATES, calcGstBreakdown } from '@/lib/indian-states';
@@ -61,6 +61,8 @@ interface Invoice {
   additionalCharges?: { name: string; type: string; value: number; amount: number }[];
   freight?: number; tcsEnabled?: boolean; tcsPercent?: number; tcsAmount?: number; roundOff?: number;
   sentAt?: string; sentVia?: string;
+  linkedPanels?: { panelId: string; recordId: string }[];
+  linkedPanelData?: { panelId: string; panelName: string; panelColor: string; recordId: string; data: Record<string, unknown> }[];
 }
 interface Reminder {
   invoiceId: string; invoiceNumber: string; buyerName: string; buyerPhone: string;
@@ -154,6 +156,7 @@ export default function InvoicesPage() {
     freight: number;
     tcsEnabled: boolean;
     tcsPercent: number;
+    linkedPanels: { panelId: string; recordId: string; panelName: string; panelColor: string; data: Record<string, unknown> }[];
   }>({
     buyerId: '', items: [emptyItem()], notes: '', deductStock: true, dueDays: 7,
     poNumber: '', challanNumber: '', placeOfSupply: '', termsAndConditions: '',
@@ -163,11 +166,59 @@ export default function InvoicesPage() {
     freight: 0,
     tcsEnabled: false,
     tcsPercent: 0.1,
+    linkedPanels: [],
   });
 
   // Offline invoices hook
   const userId = user?.uid || null;
   const { offlineDrafts, saveDraftOffline, deleteDraftOffline } = useOfflineInvoices(userId);
+
+  // Panel data attachment
+  const [showPanelPicker, setShowPanelPicker] = useState(false);
+  const [panelGroups, setPanelGroups] = useState<{ panelId: string; panelName: string; panelColor: string; records: { id: string; data: Record<string, unknown> }[] }[]>([]);
+  const [panelPickerLoading, setPanelPickerLoading] = useState(false);
+
+  const fetchRelatedPanelRecords = async () => {
+    const productIds = formData.items.filter(i => i.productId).map(i => i.productId);
+    if (productIds.length === 0) { toast.error('Add products first to find related panel data'); return; }
+    setPanelPickerLoading(true);
+    try {
+      const h = await authHeaders();
+      const allGroups: typeof panelGroups = [];
+      const seenPanels = new Set<string>();
+      for (const pid of productIds) {
+        const res = await fetch(`${API_URL}/api/business-tools/panels/related-records?module=inventory&entityId=${pid}`, { headers: h });
+        if (res.ok) {
+          const data = await res.json();
+          for (const g of (data.groups || [])) {
+            if (!seenPanels.has(g.panelId)) {
+              seenPanels.add(g.panelId);
+              allGroups.push(g);
+            } else {
+              const existing = allGroups.find(x => x.panelId === g.panelId);
+              if (existing) {
+                const existingIds = new Set(existing.records.map((r: { id: string }) => r.id));
+                for (const r of g.records) { if (!existingIds.has(r.id)) existing.records.push(r); }
+              }
+            }
+          }
+        }
+      }
+      setPanelGroups(allGroups);
+      setShowPanelPicker(true);
+    } catch { toast.error('Failed to fetch panel records'); }
+    setPanelPickerLoading(false);
+  };
+
+  const togglePanelRecord = (panelId: string, recordId: string, panelName: string, panelColor: string, recordData: Record<string, unknown>) => {
+    setFormData(prev => {
+      const exists = prev.linkedPanels.some(lp => lp.panelId === panelId && lp.recordId === recordId);
+      if (exists) {
+        return { ...prev, linkedPanels: prev.linkedPanels.filter(lp => !(lp.panelId === panelId && lp.recordId === recordId)) };
+      }
+      return { ...prev, linkedPanels: [...prev.linkedPanels, { panelId, recordId, panelName, panelColor, data: recordData }] };
+    });
+  };
 
   const authHeaders = useCallback(async () => {
     const t = await getIdToken();
@@ -404,6 +455,7 @@ export default function InvoicesPage() {
       additionalCharges: formData.freight > 0 ? [{ name: "Freight", type: "fixed", value: formData.freight }] : [],
       tcsEnabled: formData.tcsEnabled,
       tcsPercent: formData.tcsEnabled ? formData.tcsPercent : 0,
+      linkedPanels: formData.linkedPanels.map(lp => ({ panelId: lp.panelId, recordId: lp.recordId })),
     };
   };
 
@@ -945,6 +997,31 @@ export default function InvoicesPage() {
                   </div>
                 )}
               </div>
+              {/* Attach Panel Data */}
+              <div className="border border-dashed border-gray-300 rounded-lg p-3 space-y-2" data-testid="panel-attach-section">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><LayoutGrid className="w-4 h-4 text-purple-600" /> Linked Panel Data</h4>
+                  <button onClick={fetchRelatedPanelRecords} disabled={panelPickerLoading} className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-100 disabled:opacity-50" data-testid="attach-panel-btn">
+                    {panelPickerLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />} Attach Panel Data
+                  </button>
+                </div>
+                {formData.linkedPanels.length > 0 && (
+                  <div className="space-y-1.5">
+                    {formData.linkedPanels.map((lp, i) => (
+                      <div key={`${lp.panelId}-${lp.recordId}`} className="flex items-center justify-between bg-purple-50 rounded-lg px-3 py-2 text-xs" data-testid={`linked-panel-${i}`}>
+                        <div>
+                          <span className="font-medium text-purple-800">{lp.panelName}</span>
+                          <span className="text-purple-600 ml-2">
+                            {Object.entries(lp.data).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(' | ')}
+                          </span>
+                        </div>
+                        <button onClick={() => togglePanelRecord(lp.panelId, lp.recordId, lp.panelName, lp.panelColor, lp.data)} className="text-purple-400 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {formData.linkedPanels.length === 0 && <p className="text-xs text-gray-400">No panel data attached. Click &quot;Attach Panel Data&quot; to link related records.</p>}
+              </div>
               {/* Terms */}
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label><textarea value={formData.termsAndConditions} onChange={e => setFormData(p => ({ ...p, termsAndConditions: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} placeholder="Payment terms, conditions..." data-testid="terms-input" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Notes</label><textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" rows={2} data-testid="invoice-notes" /></div>
@@ -955,6 +1032,59 @@ export default function InvoicesPage() {
                 {!isOnline && <WifiOff className="w-3.5 h-3.5" />}
                 {isOnline ? 'Create Invoice' : 'Save Draft (Offline)'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ──── Panel Record Picker Modal ──── */}
+      {showPanelPicker && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" data-testid="panel-picker-modal">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2"><LayoutGrid className="w-4 h-4 text-purple-600" /> Select Panel Records</h3>
+              <button onClick={() => setShowPanelPicker(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            {panelGroups.length === 0 ? (
+              <div className="text-center py-8">
+                <LayoutGrid className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">No related panel records found for the selected products.</p>
+                <p className="text-xs text-gray-400 mt-1">Make sure your panels have relation fields linked to Inventory.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {panelGroups.map(group => (
+                  <div key={group.panelId} className="border rounded-lg p-3">
+                    <h4 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full bg-${group.panelColor}-500`} />
+                      {group.panelName}
+                      <span className="text-xs text-gray-400">({group.records.length} records)</span>
+                    </h4>
+                    <div className="space-y-1.5">
+                      {group.records.map(rec => {
+                        const isSelected = formData.linkedPanels.some(lp => lp.panelId === group.panelId && lp.recordId === rec.id);
+                        return (
+                          <button key={rec.id} onClick={() => togglePanelRecord(group.panelId, rec.id, group.panelName, group.panelColor, rec.data)}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs border transition-colors ${isSelected ? 'bg-purple-50 border-purple-300 text-purple-800' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+                            data-testid={`panel-record-${rec.id}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="space-x-2">
+                                {Object.entries(rec.data).slice(0, 4).map(([k, v]) => (
+                                  <span key={k}><span className="text-gray-500">{k}:</span> <span className="font-medium">{String(v)}</span></span>
+                                ))}
+                              </div>
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end pt-2 border-t">
+              <button onClick={() => setShowPanelPicker(false)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700" data-testid="panel-picker-done">Done ({formData.linkedPanels.length} selected)</button>
             </div>
           </div>
         </div>
@@ -1065,6 +1195,29 @@ export default function InvoicesPage() {
               <div className="flex justify-between text-emerald-600 font-medium"><span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Total Paid</span><span>{fmt(viewInvoice.totalPaid || 0)}</span></div>
               <div className="flex justify-between text-amber-600 font-medium"><span className="flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" /> Pending Amount</span><span>{fmt(viewInvoice.pendingAmount ?? viewInvoice.total)}</span></div>
             </div>
+            {/* Linked Panel Data */}
+            {viewInvoice.linkedPanelData && viewInvoice.linkedPanelData.length > 0 && (
+              <div className="mb-5 border border-purple-200 rounded-lg p-4 bg-purple-50/50" data-testid="linked-panel-data">
+                <h3 className="text-sm font-semibold text-purple-800 flex items-center gap-1.5 mb-3">
+                  <LayoutGrid className="w-4 h-4" /> Linked Panel Data
+                </h3>
+                <div className="space-y-3">
+                  {viewInvoice.linkedPanelData.map((lpd, i) => (
+                    <div key={`${lpd.panelId}-${lpd.recordId}-${i}`} className="bg-white rounded-lg border border-purple-100 p-3">
+                      <div className="text-xs font-medium text-purple-700 mb-1.5">{lpd.panelName}</div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+                        {Object.entries(lpd.data).map(([key, val]) => (
+                          <div key={key} className="text-xs">
+                            <span className="text-gray-500">{key}:</span>{' '}
+                            <span className="text-gray-800 font-medium">{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Payment History */}
             <div className="mb-5" data-testid="payment-history-section">
               <div className="flex items-center justify-between mb-3">

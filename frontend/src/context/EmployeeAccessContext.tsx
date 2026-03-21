@@ -6,6 +6,11 @@ import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
+interface ModulePerm {
+  view: boolean;
+  edit: boolean;
+}
+
 interface PanelPerm {
   canView: boolean;
   canCreate: boolean;
@@ -13,7 +18,7 @@ interface PanelPerm {
 }
 
 interface EmployeePermissions {
-  modules: Record<string, boolean>;
+  modules: Record<string, ModulePerm>;
   panels: Record<string, PanelPerm>;
 }
 
@@ -50,11 +55,6 @@ interface EmployeeAccessContextType {
   isUnlinked: boolean;
 }
 
-const defaultPermissions: EmployeePermissions = {
-  modules: {},
-  panels: {},
-};
-
 const EmployeeAccessContext = createContext<EmployeeAccessContextType>({
   access: null, loading: true,
   refreshAccess: async () => {},
@@ -69,6 +69,23 @@ const EmployeeAccessContext = createContext<EmployeeAccessContextType>({
 });
 
 export const useEmployeeAccess = () => useContext(EmployeeAccessContext);
+
+function normalizeModulePerms(raw: Record<string, unknown>): Record<string, ModulePerm> {
+  const result: Record<string, ModulePerm> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'boolean') {
+      result[k] = { view: v, edit: v };
+    } else if (v && typeof v === 'object' && ('view' in v || 'edit' in v)) {
+      const obj = v as Record<string, boolean>;
+      result[k] = { view: obj.view === true, edit: obj.edit === true };
+    } else if (v && typeof v === 'object' && ('action' in v)) {
+      // Old format
+      const obj = v as Record<string, boolean>;
+      result[k] = { view: obj.view === true, edit: obj.action === true };
+    }
+  }
+  return result;
+}
 
 export function EmployeeAccessProvider({ children }: { children: React.ReactNode }) {
   const { getIdToken, user } = useAuth();
@@ -85,18 +102,24 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
       });
       if (res.ok) {
         const data = await res.json();
-        // Ensure permissions has the new structure
         const perms = data.permissions || {};
-        if (!perms.modules) {
-          // Backward compat: old format
-          const modules: Record<string, boolean> = {};
+        // Normalize modules to {view, edit} format
+        if (perms.modules) {
+          perms.modules = normalizeModulePerms(perms.modules);
+        } else {
+          // Old flat format - convert
+          const modules: Record<string, ModulePerm> = {};
           for (const [k, v] of Object.entries(perms)) {
             if (k === 'modules' || k === 'panels') continue;
-            const val = v as Record<string, boolean>;
-            modules[k] = val?.view === true;
+            if (v && typeof v === 'object') {
+              const obj = v as Record<string, boolean>;
+              modules[k] = { view: obj.view === true, edit: obj.action === true || obj.edit === true };
+            }
           }
-          data.permissions = { modules, panels: {} };
+          perms.modules = modules;
+          if (!perms.panels) perms.panels = {};
         }
+        data.permissions = perms;
         data.permittedPanels = data.permittedPanels || [];
         setAccess(data);
       }
@@ -107,83 +130,57 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
   }, [getIdToken]);
 
   useEffect(() => {
-    if (user) {
-      fetchAccess();
-    } else {
-      setAccess(null);
-      setLoading(false);
-    }
+    if (user) { fetchAccess(); } else { setAccess(null); setLoading(false); }
   }, [user, fetchAccess]);
 
-  // Socket.IO real-time listener
   useEffect(() => {
     if (!access?.userId) return;
-
     const socket = io(API_URL, {
       path: '/api/socket.io/',
       transports: ['polling', 'websocket'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 3000,
-      reconnectionDelayMax: 30000,
-      timeout: 10000,
+      reconnection: true, reconnectionAttempts: 10,
+      reconnectionDelay: 3000, reconnectionDelayMax: 30000, timeout: 10000,
     });
-
-    socket.on('connect', () => {
-      socket.emit('join_user_room', { userId: access.userId });
-    });
-
-    socket.on('access_updated', () => {
-      fetchAccess();
-    });
-
+    socket.on('connect', () => { socket.emit('join_user_room', { userId: access.userId }); });
+    socket.on('access_updated', () => { fetchAccess(); });
     socketRef.current = socket;
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
+    return () => { socket.disconnect(); socketRef.current = null; };
   }, [access?.userId, fetchAccess]);
 
   const isFullAdmin = access?.isAdmin === true;
 
   const canView = useCallback((module: string) => {
-    if (loading) return true;
-    if (!access) return true;
-    if (access.isAdmin) return true;
+    if (loading || !access || access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
-    return access.permissions?.modules?.[module] === true;
+    const mp = access.permissions?.modules?.[module];
+    if (!mp) return false;
+    if (typeof mp === 'boolean') return mp;
+    return mp.view === true;
   }, [access, loading]);
 
   const canAction = useCallback((module: string) => {
-    if (loading) return true;
-    if (!access) return true;
-    if (access.isAdmin) return true;
+    if (loading || !access || access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
-    // New format: module=true means full access (view+action)
-    return access.permissions?.modules?.[module] === true;
+    const mp = access.permissions?.modules?.[module];
+    if (!mp) return false;
+    if (typeof mp === 'boolean') return mp;
+    return mp.edit === true;
   }, [access, loading]);
 
   const canViewPanel = useCallback((panelId: string) => {
-    if (loading) return true;
-    if (!access) return true;
-    if (access.isAdmin) return true;
+    if (loading || !access || access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
     return access.permissions?.panels?.[panelId]?.canView === true;
   }, [access, loading]);
 
   const canCreatePanel = useCallback((panelId: string) => {
-    if (loading) return true;
-    if (!access) return true;
-    if (access.isAdmin) return true;
+    if (loading || !access || access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
     return access.permissions?.panels?.[panelId]?.canCreate === true;
   }, [access, loading]);
 
   const canEditPanel = useCallback((panelId: string) => {
-    if (loading) return true;
-    if (!access) return true;
-    if (access.isAdmin) return true;
+    if (loading || !access || access.isAdmin) return true;
     if (access.status === 'disabled' || access.status === 'unlinked') return false;
     return access.permissions?.panels?.[panelId]?.canEdit === true;
   }, [access, loading]);
@@ -194,8 +191,7 @@ export function EmployeeAccessProvider({ children }: { children: React.ReactNode
   return (
     <EmployeeAccessContext.Provider value={{
       access, loading, refreshAccess: fetchAccess,
-      canView, canAction,
-      canViewPanel, canCreatePanel, canEditPanel,
+      canView, canAction, canViewPanel, canCreatePanel, canEditPanel,
       isFullAdmin, isDisabled, isUnlinked,
     }}>
       {children}

@@ -312,6 +312,11 @@ class AdditionalCharge(BaseModel):
     value: float = Field(0, ge=0)
 
 
+class LinkedPanelRef(BaseModel):
+    panelId: str
+    recordId: str
+
+
 class InvoiceCreate(BaseModel):
     buyerId: str
     items: List[InvoiceItemCreate] = Field(..., min_length=1)
@@ -329,6 +334,7 @@ class InvoiceCreate(BaseModel):
     additionalCharges: Optional[List[AdditionalCharge]] = Field(default_factory=list)
     tcsEnabled: bool = Field(False, description="Apply TCS (Tax Collected at Source)")
     tcsPercent: float = Field(0.1, ge=0, le=5, description="TCS percentage (0-5%)")
+    linkedPanels: Optional[List[LinkedPanelRef]] = Field(default_factory=list)
 
 class InvoiceStatusUpdate(BaseModel):
     status: str  # draft, sent, viewed, partially_paid, paid, overdue, cancelled

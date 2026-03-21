@@ -567,6 +567,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "tcsPercent": tcs_percent,
             "tcsAmount": tcs_amount,
             "roundOff": round_off,
+            "linkedPanels": [{"panelId": lp.panelId, "recordId": lp.recordId} for lp in (data.linkedPanels or [])],
             "createdBy": str(user["_id"]),
             "createdAt": now,
             "updatedAt": now
@@ -961,6 +962,32 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         inv["payments"] = payments
         inv["totalPaid"] = inv.get("totalPaid", 0)
         inv["pendingAmount"] = inv.get("pendingAmount", inv.get("total", 0))
+
+        # Resolve linked panel data
+        linked_panel_data = []
+        for lp in inv.get("linkedPanels", []):
+            try:
+                panel = await db.panels.find_one({"_id": ObjectId(lp["panelId"])}, {"name": 1, "fields": 1, "color": 1})
+                if not panel:
+                    continue
+                record = await db.panel_records.find_one({"_id": ObjectId(lp["recordId"])})
+                if not record:
+                    continue
+                display = {}
+                for f in panel.get("fields", []):
+                    val = record.get("data", {}).get(f["key"])
+                    if val is not None and f["type"] != "relation":
+                        display[f.get("label", f["key"])] = val
+                linked_panel_data.append({
+                    "panelId": str(panel["_id"]),
+                    "panelName": panel.get("name", "Panel"),
+                    "panelColor": panel.get("color", "blue"),
+                    "recordId": str(record["_id"]),
+                    "data": display,
+                })
+            except Exception:
+                pass
+        inv["linkedPanelData"] = linked_panel_data
 
         return {"invoice": serialize_doc(inv)}
 
