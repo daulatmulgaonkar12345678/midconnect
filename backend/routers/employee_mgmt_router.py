@@ -109,8 +109,27 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
     # ── MODULES & ROLE TEMPLATES ──
     @router.get("/employee-mgmt/modules")
     async def get_modules(authorization: str = Header(...)):
-        await get_current_user(authorization)
-        return {"modules": PERMISSION_MODULES}
+        user = await get_current_user(authorization)
+        seller_id = await get_seller_id(user)
+
+        # Standard modules
+        modules = [{"key": m, "label": m.replace("_", " ").title(), "type": "system"} for m in PERMISSION_MODULES]
+
+        # Fetch custom panels for this business
+        if seller_id:
+            panels = await db.panels.find(
+                {"sellerId": ObjectId(seller_id)},
+                {"_id": 1, "name": 1, "color": 1}
+            ).to_list(20)
+            for p in panels:
+                modules.append({
+                    "key": f"panel_{str(p['_id'])}",
+                    "label": p.get("name", "Panel"),
+                    "type": "panel",
+                    "color": p.get("color", "blue"),
+                })
+
+        return {"modules": modules}
 
     @router.get("/employee-mgmt/role-templates")
     async def get_role_templates(authorization: str = Header(...)):
