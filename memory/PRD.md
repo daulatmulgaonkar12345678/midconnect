@@ -13,16 +13,26 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 ## Completed Features
 1-22. (Previous features - B2B Marketplace, Invoices, Inventory, Panel System Phase 1-2, RBAC, Employee Permissions Architecture)
 
-23. **Phase 3A: Granular Module Permissions + Panel Data Integration (Mar 2026)** - NEW:
-    - **Module permissions upgraded** from simple boolean to `{view: bool, edit: bool}` per module
-    - **PermissionGrid UI** shows [View] [Edit] checkboxes per system module, [View] [Create] [Edit] per custom panel
-    - **Role templates** updated: Admin (full), Manager (no employees/settings edit), Viewer (view-only), etc.
-    - **Panel Data Integration with Invoices**: Users can attach related panel records to invoices
-    - **New API**: `GET /panels/related-records?module=inventory&entityId={id}` discovers panel records related to products
-    - **Invoice storage**: `linkedPanels: [{panelId, recordId}]` stored in invoice documents
-    - **Invoice display**: `linkedPanelData` resolved on read with panel name, color, and field values
-    - **Frontend**: "Attach Panel Data" button in invoice form, panel picker modal, linked data display in invoice view
-    - **Bug fix**: `resolve_seller_id` no longer returns None for admin-seller users
+23. **Phase 3A: Granular Module Permissions + Panel Data Integration (Mar 2026)**:
+    - Module permissions upgraded from simple boolean to `{view, edit}` per module
+    - PermissionGrid UI with [View] [Edit] checkboxes per system module, [View] [Create] [Edit] per custom panel
+    - Role templates updated: Admin (full), Manager (no employees/settings edit), Viewer (view-only)
+    - Panel Data Integration with Invoices: attach related panel records to invoices
+    - New API: `GET /panels/related-records?module=inventory&entityId={id}`
+    - Invoice storage: `linkedPanels: [{panelId, recordId}]` stored in invoice documents
+    - Invoice display: `linkedPanelData` resolved on read with panel name, color, and field values
+    - Bug fix: `resolve_seller_id` no longer returns None for admin-seller users
+
+24. **Phase 3A (Part 2): Panel Binding UI & Controlled Linking (Mar 2026)** - LATEST:
+    - **Panel Configuration UI**: "Link This Panel To" section in create/edit modal
+    - **Module Linking**: Checkboxes for Inventory and Invoices modules
+    - **Panel Linking**: Dropdown to link up to 2 other panels with validation
+    - **Linking Rules**: No self-linking, no circular linking, max 2 linked panels
+    - **Auto-add Relation Fields**: System auto-adds required Product/Invoice relation fields when modules are linked
+    - **Unique Field Support**: "Unique" checkbox on field definitions, enforced at DB level
+    - **Activity Logging**: `PANEL_RECORD_CREATED` events logged with productId, qcNumber references
+    - **UI Badges**: Panel cards display linked modules/panels as colored badges
+    - **Backend**: `allowedPanels` added to panel schema, `validate_allowed_panels` helper for rules enforcement
 
 ## Permission Architecture
 ```
@@ -41,31 +51,32 @@ DB Schema (users.employeePermissions):
     }
   }
 }
-
-Backward Compatibility (normalize_permissions handles):
-  1. Old: {inventory: {view: true, action: true}} → {modules: {inventory: {view: true, edit: true}}}
-  2. Boolean: {modules: {inventory: true}} → {modules: {inventory: {view: true, edit: true}}}
-  3. New format passes through unchanged
-
-Backend Enforcement:
-  - check_user_permission maps permission strings to (module, level):
-    create_invoice → (invoices, edit), view_reports → (reports, view), etc.
-  - check_panel_access(user, panel_id, action) in panel_router
-  - Panel attachment: requires modules.invoices.edit + panels[panelId].canView
 ```
 
-## Panel Data Integration (Phase 3A)
+## Panel System Architecture
 ```
-Flow: Invoice Creation → Attach Panel Data → Select Related Records → Store References
+Panel Config:
+{
+  panelId, name, slug, description, icon, color,
+  fields: [{ key, label, type, required, unique, options, relatedPanel, relationType }],
+  allowedModules: ["inventory", "invoices"],
+  allowedPanels: ["<panelId1>", "<panelId2>"]
+}
 
-API: GET /panels/related-records?module=inventory&entityId={listingId}
-  → Scans panels with relation fields pointing to 'inventory'
-  → Returns records where relation field matches entityId
-  → Grouped by panel: {panelId, panelName, panelColor, records: [{id, data}]}
+Auto-generated Fields:
+- If allowedModules includes "inventory" → auto-add Product relation field (required)
+- If allowedModules includes "invoices" → auto-add Invoice relation field (required)
 
-Invoice Document:
-  linkedPanels: [{panelId: "...", recordId: "..."}]  // stored on create
-  linkedPanelData: [{panelId, panelName, panelColor, recordId, data: {field: value}}]  // resolved on read
+Linking Rules:
+- Max 2 allowedPanels per panel
+- No self-linking (panel cannot link to itself)
+- No circular linking (if A→B, then B→A is blocked)
+- Only existing panels can be linked
+
+Activity Log:
+- Collection: panel_activity_logs
+- Event: PANEL_RECORD_CREATED
+- Fields: type, panelId, panelName, recordId, sellerId, createdBy, timestamp, productId, qcNumber
 ```
 
 ## Prioritized Backlog
@@ -86,12 +97,14 @@ Invoice Document:
 - Many-to-many relations, deep chaining
 
 ## Key Files
-- `/app/backend/utils/permissions.py` - normalize_permissions (3 formats), check_user_permission (view/edit)
-- `/app/backend/routers/employee_mgmt_router.py` - ModulePermission(view,edit), EmployeePermissions, CRUD
-- `/app/backend/routers/panel_router.py` - check_panel_access, related-records API
-- `/app/backend/routers/invoice_router.py` - linkedPanels storage + linkedPanelData resolution
+- `/app/backend/utils/permissions.py` - normalize_permissions, check_user_permission
+- `/app/backend/routers/employee_mgmt_router.py` - ModulePermission, EmployeePermissions, CRUD
+- `/app/backend/routers/panel_router.py` - Panel CRUD, validate_allowed_panels, auto-add relation fields, activity logging
+- `/app/backend/routers/invoice_router.py` - linkedPanels storage + resolution
 - `/app/backend/models/business_tools.py` - LinkedPanelRef model
-- `/app/frontend/src/context/EmployeeAccessContext.tsx` - canView(mp.view), canAction(mp.edit), panel methods
-- `/app/frontend/src/app/seller/business-tools/employees/page.tsx` - PermissionGrid with View/Edit
-- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Attach Panel Data, picker modal, display
-- `/app/frontend/src/app/seller/business-tools/layout.tsx` - Sidebar with sidebarPanels, showPanelsSection
+- `/app/frontend/src/context/EmployeeAccessContext.tsx` - canView, canAction, panel methods
+- `/app/frontend/src/app/seller/business-tools/employees/page.tsx` - PermissionGrid
+- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Attach Panel Data
+- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` - Panel config with linking UI
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` - Record CRUD with relation lookup
+- `/app/frontend/src/app/seller/business-tools/layout.tsx` - Sidebar with sidebarPanels
