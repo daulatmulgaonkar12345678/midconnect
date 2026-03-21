@@ -1,4 +1,4 @@
-# PRD - B2B E-commerce & ERP Platform (UdyogConnect / Udyog Connect)
+# PRD - B2B E-commerce & ERP Platform (UdyogConnect)
 
 ## Original Problem Statement
 Build a B2B marketplace for Indian industrial products with seller tools including invoicing, inventory, purchase orders, buyer management, and a configurable Panel System for custom business workflows.
@@ -7,132 +7,91 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 - **Backend:** FastAPI, MongoDB, Python 3.11
 - **Frontend:** Next.js 16, React, TypeScript, Tailwind CSS, Shadcn/UI
 - **Auth:** Firebase Admin (email/password)
-- **Storage:** Cloudinary | **PDF:** reportlab, PyPDF2 | **Email:** Resend (MOCKED)
-- **PWA:** Service Worker + manifest.json | **Offline:** IndexedDB (via idb library)
-- **Real-time:** python-socketio + socket.io-client (for employee access sync)
+- **Real-time:** python-socketio + socket.io-client (employee access sync)
+- **Offline:** IndexedDB (idb), Service Worker
 
 ## Completed Features
-1-16. (Previous features - B2B Marketplace, Invoices, Inventory, etc.)
-17. **RBAC Fix (Mar 2026)**
-18. **Employee Pending Tab Fix (Mar 2026)**
-19. **Custom Panel System - Phase 1 (Mar 2026)**: Panel CRUD, Field Builder (8 types), sidebar integration, max 10 panels/20 fields
-20. **Business Tool Access Control (Mar 2026)**: 3-tier (None/Standard/Advanced), admin-controlled, global gating
-21. **Custom Panel System - Phase 2 (Mar 2026)**:
-    - Record CRUD, data validation, relation system (many-to-one, one-to-one)
-    - Relation lookup API, relation resolution, safety rules
-    - Field editing, deletion protection, role-based access
-    - Pagination + search, frontend CRUD UI
-22. **Employee Permissions Architecture Upgrade (Mar 2026)** - NEW:
-    - Migrated from flat `{module: {view, action}}` to separated `{modules: {module: bool}, panels: {panelId: {canView, canCreate, canEdit}}}`
-    - Dynamic modules API (`/employee-mgmt/modules`) returns system modules + custom panels
-    - Granular panel permissions: canView, canCreate, canEdit per panel per employee
-    - Backend enforcement in panel_router via `check_panel_access()`
-    - Frontend PermissionGrid with separate System Modules and Custom Panels sections
-    - Sidebar shows panels based on employee's `permittedPanels` from my-access
-    - Full backward compatibility via `normalize_permissions()` for old format data
-    - Role templates updated to new format
+1-22. (Previous features - B2B Marketplace, Invoices, Inventory, Panel System Phase 1-2, RBAC, Employee Permissions Architecture)
+
+23. **Phase 3A: Granular Module Permissions + Panel Data Integration (Mar 2026)** - NEW:
+    - **Module permissions upgraded** from simple boolean to `{view: bool, edit: bool}` per module
+    - **PermissionGrid UI** shows [View] [Edit] checkboxes per system module, [View] [Create] [Edit] per custom panel
+    - **Role templates** updated: Admin (full), Manager (no employees/settings edit), Viewer (view-only), etc.
+    - **Panel Data Integration with Invoices**: Users can attach related panel records to invoices
+    - **New API**: `GET /panels/related-records?module=inventory&entityId={id}` discovers panel records related to products
+    - **Invoice storage**: `linkedPanels: [{panelId, recordId}]` stored in invoice documents
+    - **Invoice display**: `linkedPanelData` resolved on read with panel name, color, and field values
+    - **Frontend**: "Attach Panel Data" button in invoice form, panel picker modal, linked data display in invoice view
+    - **Bug fix**: `resolve_seller_id` no longer returns None for admin-seller users
 
 ## Permission Architecture
 ```
 DB Schema (users.employeePermissions):
-  {
-    "modules": {
-      "dashboard": true,
-      "inventory": true,
-      "invoices": false,
-      ...
-    },
-    "panels": {
-      "<panelId>": {
-        "canView": true,
-        "canCreate": true,
-        "canEdit": false
-      }
+{
+  "modules": {
+    "dashboard": { "view": true, "edit": true },
+    "inventory": { "view": true, "edit": false },
+    "invoices": { "view": true, "edit": true }
+  },
+  "panels": {
+    "<panelId>": {
+      "canView": true,
+      "canCreate": true,
+      "canEdit": false
     }
   }
+}
+
+Backward Compatibility (normalize_permissions handles):
+  1. Old: {inventory: {view: true, action: true}} → {modules: {inventory: {view: true, edit: true}}}
+  2. Boolean: {modules: {inventory: true}} → {modules: {inventory: {view: true, edit: true}}}
+  3. New format passes through unchanged
 
 Backend Enforcement:
-  - System modules: check_user_permission() maps old permission strings to modules
-  - Panels: check_panel_access(user, panel_id, action) in panel_router
-    - GET records/panel: requires canView
-    - POST records: requires canCreate
-    - PUT records: requires canEdit
-    - DELETE records: requires canEdit
-    - Panel structure management: admin only (unchanged)
-
-API Endpoints:
-  GET  /employee-mgmt/modules        -> {modules: [...], panels: [...]}
-  GET  /employee-mgmt/role-templates  -> {templates: {name: {modules: {}, panels: {}}}}
-  GET  /employee-mgmt/my-access       -> {permissions: {modules, panels}, permittedPanels: [...]}
-  GET  /employee-mgmt/list            -> employees with normalized permissions
-  POST /employee-mgmt/link            -> accepts {modules, panels} permissions
-  PUT  /employee-mgmt/{id}            -> accepts {modules, panels} permissions
+  - check_user_permission maps permission strings to (module, level):
+    create_invoice → (invoices, edit), view_reports → (reports, view), etc.
+  - check_panel_access(user, panel_id, action) in panel_router
+  - Panel attachment: requires modules.invoices.edit + panels[panelId].canView
 ```
 
-## Panel System Architecture
+## Panel Data Integration (Phase 3A)
 ```
-Database Collections:
-  panels          -> { sellerId, name, slug, description, icon, color, fields[], createdAt, updatedAt }
-  panel_records   -> { panelId, sellerId, data: {key: value}, createdBy, createdAt, updatedAt }
+Flow: Invoice Creation → Attach Panel Data → Select Related Records → Store References
 
-API Endpoints (all under /api/business-tools):
-  Panel CRUD:
-    GET    /panels                              -> List panels
-    GET    /panels/{id}                         -> Get single panel (admin or employee with canView)
-    POST   /panels                              -> Create panel (admin only)
-    PUT    /panels/{id}                         -> Update panel metadata (admin only)
-    DELETE /panels/{id}                         -> Delete panel (admin only, if no records)
-  
-  Field Management:
-    POST   /panels/{id}/fields                  -> Add field (admin only)
-    PUT    /panels/{id}/fields/{key}            -> Update field
-    DELETE /panels/{id}/fields/{key}            -> Delete field
-    PUT    /panels/{id}/fields-order            -> Reorder fields
-  
-  Record CRUD (permission-enforced):
-    GET    /panels/{id}/records                 -> List records (canView)
-    GET    /panels/{id}/records/{rid}           -> Get record (canView)
-    POST   /panels/{id}/records                 -> Create record (canCreate)
-    PUT    /panels/{id}/records/{rid}           -> Update record (canEdit)
-    DELETE /panels/{id}/records/{rid}           -> Delete record (canEdit)
-  
-  Relations:
-    GET    /panels/{id}/relation-lookup         -> Search linkable entities (canView)
-    GET    /panels/linkable-targets             -> List linkable modules
+API: GET /panels/related-records?module=inventory&entityId={listingId}
+  → Scans panels with relation fields pointing to 'inventory'
+  → Returns records where relation field matches entityId
+  → Grouped by panel: {panelId, panelName, panelColor, records: [{id, data}]}
 
-Field Types: text, number, date, dropdown, multiselect, boolean, longtext, relation
-Relation Types: many_to_one (default), one_to_one
-Limits: 10 panels/business, 20 fields/panel, 50 records/page
+Invoice Document:
+  linkedPanels: [{panelId: "...", recordId: "..."}]  // stored on create
+  linkedPanelData: [{panelId, panelName, panelColor, recordId, data: {field: value}}]  // resolved on read
 ```
 
 ## Prioritized Backlog
 ### P0 (Next)
-1. **Panel System Phase 3**: Basic document builder (templates + {{variables}} + PDF/Excel), branding, shareable links
+1. **Panel System Phase 3B**: Document Builder (templates + {{variables}} + PDF/Excel export)
 
 ### P1
 2. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
 3. Seller Reminder Controls (configurable schedules)
-4. Quotation/Employee Activity Dashboards
 
 ### P2
 - GSTR-1 JSON export | Custom Material Report
-- Short link tracking + click analytics
-- White-label toggle | WhatsApp Business API
+- Short link tracking | White-label toggle | WhatsApp Business API
 - "Request Upgrade" button for sellers
 
-### Future (Post Phase 3)
-- Automation Engine (rules, triggers, IF/THEN logic)
-- Many-to-many relations
-- Deep chaining (>2 levels)
+### Future
+- Automation Engine (rules, triggers, IF/THEN logic) - Phase 4
+- Many-to-many relations, deep chaining
 
 ## Key Files
-- `/app/backend/routers/employee_mgmt_router.py` - Employee CRUD, permissions (new architecture)
-- `/app/backend/routers/panel_router.py` - Panel + Record CRUD, relation lookup, check_panel_access
-- `/app/backend/utils/permissions.py` - normalize_permissions, check_user_permission, auth
-- `/app/frontend/src/context/EmployeeAccessContext.tsx` - canView/canAction/canViewPanel/canCreatePanel/canEditPanel
-- `/app/frontend/src/app/seller/business-tools/employees/page.tsx` - Employee management UI with dynamic PermissionGrid
-- `/app/frontend/src/app/seller/business-tools/layout.tsx` - RBAC layout, sidebar with dynamic panels
-- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` - Panel management UI
-- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` - Record list + CRUD UI
-- `/app/frontend/src/app/admin/users/[id]/page.tsx` - Admin user profile with access control
-- `/app/backend/server.py` - Admin endpoints, auth
+- `/app/backend/utils/permissions.py` - normalize_permissions (3 formats), check_user_permission (view/edit)
+- `/app/backend/routers/employee_mgmt_router.py` - ModulePermission(view,edit), EmployeePermissions, CRUD
+- `/app/backend/routers/panel_router.py` - check_panel_access, related-records API
+- `/app/backend/routers/invoice_router.py` - linkedPanels storage + linkedPanelData resolution
+- `/app/backend/models/business_tools.py` - LinkedPanelRef model
+- `/app/frontend/src/context/EmployeeAccessContext.tsx` - canView(mp.view), canAction(mp.edit), panel methods
+- `/app/frontend/src/app/seller/business-tools/employees/page.tsx` - PermissionGrid with View/Edit
+- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Attach Panel Data, picker modal, display
+- `/app/frontend/src/app/seller/business-tools/layout.tsx` - Sidebar with sidebarPanels, showPanelsSection
