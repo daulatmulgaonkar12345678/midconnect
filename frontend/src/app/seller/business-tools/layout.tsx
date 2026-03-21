@@ -352,12 +352,12 @@ function BusinessToolsInner({
   const [customPanels, setCustomPanels] = useState<{id: string; name: string; slug: string; color: string}[]>([]);
   const accessLevel = btAccess;
 
+  // CORRECTLY inside EmployeeAccessProvider
+  const { canView, canAction: empCanAction, loading: empLoading, access: empAccess } = useEmployeeAccess();
+
   // Determine sidebar panels: admin sees all fetched panels, employees see permitted panels
   const sidebarPanels = isAdmin ? customPanels : (empAccess?.permittedPanels || []);
   const showPanelsSection = isAdmin ? accessLevel === 'advanced' : sidebarPanels.length > 0;
-
-  // CORRECTLY inside EmployeeAccessProvider
-  const { canView, canAction: empCanAction, loading: empLoading, access: empAccess } = useEmployeeAccess();
 
   // Combined: admin always has full access; employees checked via RBAC
   const effectiveCanView = useCallback(
