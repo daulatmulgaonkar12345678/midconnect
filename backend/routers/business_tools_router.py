@@ -982,13 +982,16 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         """Get current user's permissions."""
         user = await get_current_user(authorization)
         
+        access_level = user.get("businessToolAccess", "standard")
+        
         # Platform admin has all permissions
         if is_platform_admin(user):
             return {
                 "accountType": "admin",
                 "isAdmin": True,
                 "permissions": ALL_PERMISSIONS,
-                "role": None
+                "role": None,
+                "businessToolAccess": "advanced"
             }
         
         account_type = user.get("accountType", "seller")
@@ -1025,7 +1028,8 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
                 "isAdmin": False,
                 "permissions": permissions,
                 "modulePermissions": emp_perms,
-                "role": user.get("employeeRole")
+                "role": user.get("employeeRole"),
+                "businessToolAccess": access_level
             }
         
         if account_type == "seller":
@@ -1034,7 +1038,8 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
                 "accountType": "seller",
                 "isAdmin": True,
                 "permissions": ALL_PERMISSIONS,
-                "role": None
+                "role": None,
+                "businessToolAccess": access_level
             }
         
         # Legacy employee - get role permissions

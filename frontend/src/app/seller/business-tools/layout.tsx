@@ -34,7 +34,8 @@ import {
   Clock,
   Wifi,
   WifiOff,
-  Gift
+  Gift,
+  LayoutGrid
 } from 'lucide-react';
 
 // ──────────────────────────────────────
@@ -82,6 +83,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   '/seller/business-tools/activity-logs': 'settings',
   '/seller/business-tools/settings': 'settings',
   '/seller/business-tools/notifications': 'dashboard',
+  '/seller/business-tools/panels': 'dashboard',
 };
 
 // ──────────────────────────────────────
@@ -345,6 +347,8 @@ function BusinessToolsInner({
   });
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [showReferral, setShowReferral] = useState(false);
+  const [customPanels, setCustomPanels] = useState<{id: string; name: string; slug: string; color: string}[]>([]);
+  const [accessLevel, setAccessLevel] = useState('standard');
 
   // CORRECTLY inside EmployeeAccessProvider
   const { canView, canAction: empCanAction, loading: empLoading } = useEmployeeAccess();
@@ -394,6 +398,27 @@ function BusinessToolsInner({
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
     return () => clearInterval(interval);
+  }, [token]);
+
+  // Fetch custom panels + access level for sidebar
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const [panelsRes, accessRes] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/panels`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/access-level`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        if (accessRes.ok) {
+          const data = await accessRes.json();
+          setAccessLevel(data.level);
+        }
+        if (panelsRes.ok) {
+          const data = await panelsRes.json();
+          setCustomPanels(data.panels || []);
+        }
+      } catch { /* empty */ }
+    })();
   }, [token]);
 
   const submitOnboarding = async () => {
@@ -515,6 +540,43 @@ function BusinessToolsInner({
                     );
                   })}
                 </div>
+                {/* Custom Panels Section */}
+                {accessLevel === 'advanced' && (
+                  <>
+                    <div className="mt-5 pt-4 border-t border-gray-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Panels</h2>
+                      </div>
+                      <div className="space-y-1">
+                        <Link
+                          href="/seller/business-tools/panels"
+                          data-testid="nav-panels-manage"
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                            getColorClasses('indigo', pathname === '/seller/business-tools/panels')
+                          } ${pathname === '/seller/business-tools/panels' ? 'border-l-4' : ''}`}
+                        >
+                          <LayoutGrid className="h-5 w-5" />
+                          <span className="flex-1">Manage Panels</span>
+                        </Link>
+                        {customPanels.map(p => {
+                          const panelPath = `/seller/business-tools/panels/${p.id}`;
+                          const active = pathname === panelPath;
+                          return (
+                            <Link key={p.id} href={panelPath}
+                              data-testid={`nav-panel-${p.id}`}
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                getColorClasses(p.color || 'blue', active)
+                              } ${active ? 'border-l-4' : ''}`}
+                            >
+                              <LayoutGrid className="h-4 w-4" />
+                              <span className="flex-1 truncate">{p.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
               </nav>
             </aside>
 
@@ -552,6 +614,35 @@ function BusinessToolsInner({
                         </Link>
                       );
                     })}
+                    {/* Custom Panels - Mobile */}
+                    {accessLevel === 'advanced' && (
+                      <>
+                        <div className="mt-4 pt-3 border-t border-gray-100">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-3">Custom Panels</p>
+                          <Link
+                            href="/seller/business-tools/panels"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                              getColorClasses('indigo', pathname === '/seller/business-tools/panels')
+                            }`}
+                          >
+                            <LayoutGrid className="h-5 w-5" />
+                            <span>Manage Panels</span>
+                          </Link>
+                          {customPanels.map(p => (
+                            <Link key={p.id} href={`/seller/business-tools/panels/${p.id}`}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                getColorClasses(p.color || 'blue', pathname === `/seller/business-tools/panels/${p.id}`)
+                              }`}
+                            >
+                              <LayoutGrid className="h-4 w-4" />
+                              <span className="truncate">{p.name}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </nav>
                 </div>
               </div>
