@@ -35,7 +35,8 @@ import {
   AlertCircle,
   Star,
   Shield,
-  Award
+  Award,
+  Settings
 } from 'lucide-react';
 
 // Brand Colors
@@ -109,6 +110,7 @@ interface UserDetail {
   createdAt?: string;
   listingCount?: number;
   badgeType?: 'none' | 'choice' | 'trusted';
+  businessToolAccess?: 'none' | 'standard' | 'advanced';
 }
 
 export default function UserDetailPage() {
@@ -141,6 +143,7 @@ export default function UserDetailPage() {
   const [suspendReason, setSuspendReason] = useState('');
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [badgeUpdating, setBadgeUpdating] = useState(false);
+  const [btAccessSaving, setBtAccessSaving] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -288,6 +291,30 @@ export default function UserDetailPage() {
       setError(err instanceof Error ? err.message : 'Failed to update badge');
     } finally {
       setBadgeUpdating(false);
+    }
+  }
+
+  async function handleBusinessToolAccess(level: 'none' | 'standard' | 'advanced') {
+    try {
+      setBtAccessSaving(true);
+      setError(null);
+      const token = await getIdToken();
+      if (!token) throw new Error('Not authenticated');
+      
+      await fetchWithAuth(
+        `/admin/users/${userId}/business-tool-access`,
+        token,
+        { method: 'PUT', body: { businessToolAccess: level } }
+      );
+      
+      if (user) {
+        setUser({ ...user, businessToolAccess: level });
+      }
+      setSuccessMessage(`Business tool access updated to "${level}"`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update access level');
+    } finally {
+      setBtAccessSaving(false);
     }
   }
 
@@ -751,6 +778,46 @@ export default function UserDetailPage() {
                     <Pause className="h-4 w-4" />
                     Suspend Subscription
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Business Tool Access Control */}
+            <div className="mt-6 p-4 border border-gray-200 rounded-lg" data-testid="business-tool-access-card">
+              <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                <Settings className="h-5 w-5" style={{ color: colors.primary }} />
+                Business Tool Access
+              </h3>
+              <p className="text-xs text-gray-500 mb-4">Control which level of business tools this user can access.</p>
+
+              <div className="grid grid-cols-3 gap-2" data-testid="business-tool-access-options">
+                {([
+                  { value: 'none' as const, label: 'None', desc: 'Marketplace only', borderColor: 'border-gray-400', bgActive: 'bg-gray-50' },
+                  { value: 'standard' as const, label: 'Standard', desc: 'Default tools (Inventory, Invoice, etc.)', borderColor: 'border-blue-500', bgActive: 'bg-blue-50' },
+                  { value: 'advanced' as const, label: 'Advanced', desc: 'Standard + Custom Panels', borderColor: 'border-purple-500', bgActive: 'bg-purple-50' },
+                ]).map(opt => {
+                  const isActive = (user?.businessToolAccess || 'standard') === opt.value;
+                  return (
+                    <button key={opt.value}
+                      onClick={() => handleBusinessToolAccess(opt.value)}
+                      disabled={btAccessSaving}
+                      className={`p-3 rounded-lg border-2 text-left transition-all ${
+                        isActive ? `${opt.borderColor} ${opt.bgActive}` : 'border-gray-200 hover:border-gray-300'
+                      } ${btAccessSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+                      data-testid={`bt-access-${opt.value}`}
+                    >
+                      <p className={`text-sm font-semibold ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>{opt.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 leading-tight">{opt.desc}</p>
+                      {isActive && (
+                        <span className="inline-block mt-1.5 text-[10px] font-bold uppercase tracking-wider text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Active</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {btAccessSaving && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Saving...
                 </div>
               )}
             </div>

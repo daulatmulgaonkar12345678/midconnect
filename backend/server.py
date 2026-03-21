@@ -9735,7 +9735,35 @@ async def admin_get_user_detail(
         "subscription": subscription_obj,
         # Badge type for UdyogConnect Choice/Trusted
         "badgeType": user.get("badgeType", "none"),
+        # Business Tool Access level
+        "businessToolAccess": user.get("businessToolAccess", "standard"),
     }
+
+
+# === Admin: Business Tool Access Control ===
+@api_router.put("/admin/users/{user_id}/business-tool-access")
+async def admin_set_business_tool_access(
+    user_id: str,
+    body: dict,
+    admin: dict = Depends(require_admin)
+):
+    """Set business tool access level for a user (admin only)"""
+    level = body.get("businessToolAccess")
+    if level not in ("none", "standard", "advanced"):
+        raise HTTPException(status_code=400, detail="businessToolAccess must be 'none', 'standard', or 'advanced'")
+
+    try:
+        result = await db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"businessToolAccess": level, "updatedAt": datetime.now(timezone.utc)}}
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"message": f"Business tool access set to '{level}'", "businessToolAccess": level}
 
 
 # === Admin Subscription Management ===

@@ -328,6 +328,7 @@ interface BusinessToolsInnerProps {
   hasPermission: (permission: string) => boolean;
   loading: boolean;
   token: string | null;
+  businessToolAccess: string;
 }
 
 function BusinessToolsInner({
@@ -337,6 +338,7 @@ function BusinessToolsInner({
   hasPermission,
   loading,
   token,
+  businessToolAccess: btAccess,
 }: BusinessToolsInnerProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -348,7 +350,7 @@ function BusinessToolsInner({
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [showReferral, setShowReferral] = useState(false);
   const [customPanels, setCustomPanels] = useState<{id: string; name: string; slug: string; color: string}[]>([]);
-  const [accessLevel, setAccessLevel] = useState('standard');
+  const accessLevel = btAccess;
 
   // CORRECTLY inside EmployeeAccessProvider
   const { canView, canAction: empCanAction, loading: empLoading } = useEmployeeAccess();
@@ -400,26 +402,19 @@ function BusinessToolsInner({
     return () => clearInterval(interval);
   }, [token]);
 
-  // Fetch custom panels + access level for sidebar
+  // Fetch custom panels for sidebar (only if advanced access)
   useEffect(() => {
-    if (!token) return;
+    if (!token || accessLevel !== 'advanced') return;
     (async () => {
       try {
-        const [panelsRes, accessRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/panels`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/access-level`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-        if (accessRes.ok) {
-          const data = await accessRes.json();
-          setAccessLevel(data.level);
-        }
-        if (panelsRes.ok) {
-          const data = await panelsRes.json();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/business-tools/panels`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
           setCustomPanels(data.panels || []);
         }
       } catch { /* empty */ }
     })();
-  }, [token]);
+  }, [token, accessLevel]);
 
   const submitOnboarding = async () => {
     if (!onboardingForm.businessName.trim()) { alert('Business name is required'); return; }
@@ -452,6 +447,28 @@ function BusinessToolsInner({
           <p className="text-sm text-gray-500">Loading your permissions...</p>
         </div>
       </div>
+    );
+  }
+
+  // Global access gate: if businessToolAccess is "none", block everything
+  if (accessLevel === 'none') {
+    return (
+      <PermissionContext.Provider value={{ permissions, isAdmin, hasPermission, canAction: effectiveCanAction, loading, token }}>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center" data-testid="no-business-tools-access">
+          <div className="text-center max-w-md px-6">
+            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+              <LayoutGrid className="h-8 w-8 text-gray-400" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Business Tools Not Enabled</h2>
+            <p className="text-gray-500 mt-2 text-sm">
+              Business tools access is not enabled for your account. Contact your platform admin to enable access.
+            </p>
+            <Link href="/seller" className="inline-flex items-center gap-2 mt-6 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+              <ChevronLeft className="h-4 w-4" /> Back to Dashboard
+            </Link>
+          </div>
+        </div>
+      </PermissionContext.Provider>
     );
   }
 
@@ -748,6 +765,7 @@ export default function BusinessToolsLayout({
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
+  const [businessToolAccess, setBusinessToolAccess] = useState<string>('standard');
 
   const loadPermissions = useCallback(async () => {
     try {
@@ -776,6 +794,7 @@ export default function BusinessToolsLayout({
       const data = await response.json();
       setPermissions(data.permissions || []);
       setIsAdmin(data.isAdmin || false);
+      setBusinessToolAccess(data.businessToolAccess || 'standard');
     } catch (err) {
       console.error('Error loading permissions:', err);
     } finally {
@@ -813,6 +832,7 @@ export default function BusinessToolsLayout({
           hasPermission={hasPermission}
           loading={loading}
           token={token}
+          businessToolAccess={businessToolAccess}
         >
           {children}
         </BusinessToolsInner>
