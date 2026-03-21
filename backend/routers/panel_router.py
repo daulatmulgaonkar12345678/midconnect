@@ -33,6 +33,7 @@ class PanelFieldInput(BaseModel):
     label: str = Field(..., min_length=1, max_length=100)
     type: str = Field(..., description="text, number, date, dropdown, multiselect, boolean, longtext, relation")
     required: bool = False
+    unique: bool = False
     options: Optional[List[str]] = None
     relatedPanel: Optional[str] = None
     relationType: Optional[str] = None
@@ -45,6 +46,7 @@ class CreatePanelRequest(BaseModel):
     icon: Optional[str] = "layout-grid"
     color: Optional[str] = "blue"
     fields: Optional[List[PanelFieldInput]] = []
+    allowedModules: Optional[List[str]] = Field(default_factory=list)
 
 
 class UpdatePanelRequest(BaseModel):
@@ -52,6 +54,7 @@ class UpdatePanelRequest(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
+    allowedModules: Optional[List[str]] = None
 
 
 class AddFieldRequest(BaseModel):
@@ -59,6 +62,7 @@ class AddFieldRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=100)
     type: str
     required: bool = False
+    unique: bool = False
     options: Optional[List[str]] = None
     relatedPanel: Optional[str] = None
     relationType: Optional[str] = None
@@ -161,7 +165,7 @@ def init_panel_router(db, verify_token_func):
         cursor = db.panels.find(
             {"sellerId": ObjectId(seller_id)},
             {"_id": 1, "name": 1, "slug": 1, "description": 1, "icon": 1, "color": 1,
-             "fields": 1, "createdAt": 1, "updatedAt": 1}
+             "fields": 1, "allowedModules": 1, "createdAt": 1, "updatedAt": 1}
         ).sort("createdAt", 1)
         panels = await cursor.to_list(MAX_PANELS_PER_BUSINESS + 5)
         return {"panels": serialize_doc(panels), "count": len(panels), "limit": MAX_PANELS_PER_BUSINESS}
@@ -319,9 +323,34 @@ def init_panel_router(db, verify_token_func):
             "icon": data.icon or "layout-grid",
             "color": data.color or "blue",
             "fields": fields,
+            "allowedModules": data.allowedModules or [],
             "createdAt": now,
             "updatedAt": now,
         }
+
+        # Auto-add required inventory relation field if linked to inventory
+        if "inventory" in (data.allowedModules or []):
+            has_inv_relation = any(
+                f["type"] == "relation" and f.get("relatedPanel") == "inventory"
+                for f in fields
+            )
+            if not has_inv_relation:
+                inv_field = {
+                    "key": "product",
+                    "label": "Product",
+                    "type": "relation",
+                    "required": True,
+                    "unique": False,
+                    "relatedPanel": "inventory",
+                    "relationType": "many_to_one",
+                    "options": None,
+                    "order": 0,
+                }
+                # Shift existing field orders
+                for f in doc["fields"]:
+                    f["order"] = f.get("order", 0) + 1
+                doc["fields"].insert(0, inv_field)
+
         result = await db.panels.insert_one(doc)
         doc["_id"] = result.inserted_id
         logger.info(f"Panel created: {data.name} for seller {seller_id}")
@@ -360,6 +389,26 @@ def init_panel_router(db, verify_token_func):
             update["icon"] = data.icon
         if data.color is not None:
             update["color"] = data.color
+        if data.allowedModules is not None:
+            update["allowedModules"] = data.allowedModules
+            # Auto-add inventory relation field if newly linking to inventory
+            if "inventory" in data.allowedModules:
+                current_fields = panel.get("fields", [])
+                has_inv_relation = any(
+                    f["type"] == "relation" and f.get("relatedPanel") == "inventory"
+                    for f in current_fields
+                )
+                if not has_inv_relation:
+                    inv_field = {
+                        "key": "product", "label": "Product", "type": "relation",
+                        "required": True, "unique": False,
+                        "relatedPanel": "inventory", "relationType": "many_to_one",
+                        "options": None, "order": 0,
+                    }
+                    for f in current_fields:
+                        f["order"] = f.get("order", 0) + 1
+                    current_fields.insert(0, inv_field)
+                    update["fields"] = current_fields
 
         await db.panels.update_one({"_id": ObjectId(panel_id)}, {"$set": update})
         logger.info(f"Panel {panel_id} updated")
@@ -583,7 +632,7 @@ def init_panel_router(db, verify_token_func):
             pass
         return {"id": str(value), "label": str(value)[:12]}
 
-    async def validate_record_data(panel: dict, data: dict, seller_id: str):
+    async def validate_record_data(panel: dict, data: dict, seller_id: str, exclude_record_id: str = None):
         """Validate record data against panel field definitions."""
         fields = panel.get("fields", [])
         errors = []
@@ -593,7 +642,7 @@ def init_panel_router(db, verify_token_func):
             val = data.get(key)
             is_disabled = f.get("disabled", False)
             if is_disabled:
-                continue  # Skip disabled fields
+                continue
 
             if f.get("required") and (val is None or val == "" or val == []):
                 errors.append(f"Field '{f['label']}' is required")
@@ -629,7 +678,6 @@ def init_panel_router(db, verify_token_func):
                     errors.append(f"Field '{f['label']}' must be true or false")
 
             elif ftype == "relation":
-                # Validate linked entity exists
                 target = f.get("relatedPanel", "")
                 if target and val:
                     exists = False
@@ -645,15 +693,30 @@ def init_panel_router(db, verify_token_func):
                     if not exists:
                         errors.append(f"Field '{f['label']}' references a non-existent record")
 
-                    # One-to-one uniqueness check
                     if f.get("relationType") == "one_to_one" and val:
-                        existing = await db.panel_records.find_one({
+                        dup_query = {
                             "panelId": ObjectId(str(panel["_id"])),
                             "sellerId": ObjectId(seller_id),
                             f"data.{key}": val
-                        }, {"_id": 1})
+                        }
+                        if exclude_record_id:
+                            dup_query["_id"] = {"$ne": ObjectId(exclude_record_id)}
+                        existing = await db.panel_records.find_one(dup_query, {"_id": 1})
                         if existing:
                             errors.append(f"Field '{f['label']}' already has a one-to-one link to this record")
+
+            # Unique field validation
+            if f.get("unique") and val is not None and val != "":
+                dup_query = {
+                    "panelId": ObjectId(str(panel["_id"])),
+                    "sellerId": ObjectId(seller_id),
+                    f"data.{key}": val,
+                }
+                if exclude_record_id:
+                    dup_query["_id"] = {"$ne": ObjectId(exclude_record_id)}
+                dup = await db.panel_records.find_one(dup_query, {"_id": 1})
+                if dup:
+                    errors.append(f"Field '{f['label']}' value '{val}' already exists. Must be unique.")
 
         if errors:
             raise HTTPException(status_code=400, detail="; ".join(errors))
@@ -743,9 +806,8 @@ def init_panel_router(db, verify_token_func):
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found")
 
-        await validate_record_data(panel, data.data, seller_id)
+        await validate_record_data(panel, data.data, seller_id, exclude_record_id=None)
 
-        # Only store data for defined fields
         field_keys = {f["key"] for f in panel.get("fields", []) if not f.get("disabled")}
         clean_data = {k: v for k, v in data.data.items() if k in field_keys}
 
@@ -762,6 +824,29 @@ def init_panel_router(db, verify_token_func):
         }
         result = await db.panel_records.insert_one(doc)
         doc["_id"] = result.inserted_id
+
+        # Activity log
+        log_entry = {
+            "type": "PANEL_RECORD_CREATED",
+            "panelId": ObjectId(panel_id),
+            "panelName": panel.get("name", ""),
+            "recordId": result.inserted_id,
+            "sellerId": ObjectId(seller_id),
+            "createdBy": user_id,
+            "timestamp": now,
+        }
+        # Include product reference if panel is linked to inventory
+        relation_fields = [f for f in panel.get("fields", []) if f["type"] == "relation" and f.get("relatedPanel") == "inventory"]
+        for rf in relation_fields:
+            if clean_data.get(rf["key"]):
+                log_entry["productId"] = clean_data[rf["key"]]
+                break
+        # Include unique fields in log (e.g. QC number)
+        for f in panel.get("fields", []):
+            if f.get("unique") and clean_data.get(f["key"]):
+                log_entry[f["key"]] = clean_data[f["key"]]
+        await db.panel_activity_logs.insert_one(log_entry)
+
         logger.info(f"Record created in panel {panel_id} by {user_id}")
         return serialize_doc(doc)
 
@@ -780,7 +865,7 @@ def init_panel_router(db, verify_token_func):
         if not record:
             raise HTTPException(status_code=404, detail="Record not found")
 
-        await validate_record_data(panel, data.data, seller_id)
+        await validate_record_data(panel, data.data, seller_id, exclude_record_id=record_id)
 
         field_keys = {f["key"] for f in panel.get("fields", []) if not f.get("disabled")}
         clean_data = {k: v for k, v in data.data.items() if k in field_keys}
@@ -920,5 +1005,24 @@ def init_panel_router(db, verify_token_func):
         if is_platform_admin(user):
             level = "advanced"
         return {"level": level, "limits": {"maxPanels": MAX_PANELS_PER_BUSINESS, "maxFieldsPerPanel": MAX_FIELDS_PER_PANEL}}
+
+    # ── PANEL ACTIVITY LOGS ──
+    @router.get("/panels/{panel_id}/activity-logs")
+    async def get_panel_activity_logs(panel_id: str, authorization: str = Header(...), limit: int = 50):
+        user = await get_current_user(authorization)
+        check_panel_access(user, panel_id, "view")
+        seller_id = await get_seller_id(user)
+
+        cursor = db.panel_activity_logs.find(
+            {"panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)},
+            {"_id": 0, "type": 1, "panelName": 1, "recordId": 1, "productId": 1,
+             "createdBy": 1, "timestamp": 1}
+        ).sort("timestamp", -1).limit(limit)
+        logs = await cursor.to_list(limit)
+
+        for log in logs:
+            if "recordId" in log:
+                log["recordId"] = str(log["recordId"])
+        return {"logs": serialize_doc(logs)}
 
     return router

@@ -50,6 +50,7 @@ interface PanelField {
   label: string;
   type: string;
   required: boolean;
+  unique?: boolean;
   options?: string[];
   relatedPanel?: string;
   relationType?: string;
@@ -64,6 +65,7 @@ interface Panel {
   icon: string;
   color: string;
   fields: PanelField[];
+  allowedModules?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -90,6 +92,7 @@ export default function PanelsPage() {
   const [panelIcon, setPanelIcon] = useState('layout-grid');
   const [panelColor, setPanelColor] = useState('blue');
   const [panelFields, setPanelFields] = useState<PanelField[]>([]);
+  const [panelAllowedModules, setPanelAllowedModules] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Add field
@@ -98,6 +101,7 @@ export default function PanelsPage() {
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldType, setNewFieldType] = useState('text');
   const [newFieldRequired, setNewFieldRequired] = useState(false);
+  const [newFieldUnique, setNewFieldUnique] = useState(false);
   const [newFieldOptions, setNewFieldOptions] = useState('');
   const [newFieldRelated, setNewFieldRelated] = useState('');
   const [newFieldRelType, setNewFieldRelType] = useState('many_to_one');
@@ -143,8 +147,8 @@ export default function PanelsPage() {
     setPanelIcon('layout-grid');
     setPanelColor('blue');
     setPanelFields([]);
+    setPanelAllowedModules([]);
     setShowFieldForm(false);
-    setShowModal(true);
   };
 
   const openEditModal = (panel: Panel) => {
@@ -154,8 +158,8 @@ export default function PanelsPage() {
     setPanelIcon(panel.icon);
     setPanelColor(panel.color);
     setPanelFields([...panel.fields]);
+    setPanelAllowedModules(panel.allowedModules || []);
     setShowFieldForm(false);
-    setShowModal(true);
   };
 
   const autoKey = (label: string) =>
@@ -166,6 +170,7 @@ export default function PanelsPage() {
     setNewFieldLabel('');
     setNewFieldType('text');
     setNewFieldRequired(false);
+    setNewFieldUnique(false);
     setNewFieldOptions('');
     setNewFieldRelated('');
     setNewFieldRelType('many_to_one');
@@ -191,6 +196,7 @@ export default function PanelsPage() {
       label: newFieldLabel.trim(),
       type: newFieldType,
       required: newFieldRequired,
+      unique: newFieldUnique,
       options: ['dropdown', 'multiselect'].includes(newFieldType) ? newFieldOptions.split(',').map(o => o.trim()).filter(Boolean) : undefined,
       relatedPanel: newFieldType === 'relation' ? newFieldRelated : undefined,
       relationType: newFieldType === 'relation' ? newFieldRelType : undefined,
@@ -214,7 +220,7 @@ export default function PanelsPage() {
         const res = await fetch(`${API_URL}/api/business-tools/panels/${editingPanel.id}`, {
           method: 'PUT',
           headers: headers(),
-          body: JSON.stringify({ name: panelName.trim(), description: panelDesc.trim(), icon: panelIcon, color: panelColor }),
+          body: JSON.stringify({ name: panelName.trim(), description: panelDesc.trim(), icon: panelIcon, color: panelColor, allowedModules: panelAllowedModules }),
         });
         if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Update failed'); setSaving(false); return; }
 
@@ -256,6 +262,7 @@ export default function PanelsPage() {
             icon: panelIcon,
             color: panelColor,
             fields: panelFields,
+            allowedModules: panelAllowedModules,
           }),
         });
         if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Create failed'); setSaving(false); return; }
