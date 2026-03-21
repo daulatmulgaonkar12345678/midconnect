@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { usePermissions } from '../layout';
 import { toast } from 'sonner';
 import {
@@ -75,6 +76,7 @@ interface LinkableTarget {
 
 export default function PanelsPage() {
   const { token, isAdmin, loading: permLoading } = usePermissions();
+  const router = useRouter();
   const [panels, setPanels] = useState<Panel[]>([]);
   const [loading, setLoading] = useState(true);
   const [accessLevel, setAccessLevel] = useState('standard');
@@ -406,9 +408,15 @@ export default function PanelsPage() {
                   )}
                 </div>
               </div>
-              <div className="border-t px-5 py-3 flex items-center justify-between bg-gray-50/50 rounded-b-xl">
+              <div className="border-t px-5 py-3 flex items-center justify-between bg-gray-50/50 rounded-b-xl cursor-pointer hover:bg-gray-100/70 transition-colors"
+                onClick={() => router.push(`/seller/business-tools/panels/${panel.id}`)}
+                data-testid={`open-panel-${panel.id}`}
+              >
                 <span className="text-xs text-gray-400">{panel.fields.length} field{panel.fields.length !== 1 ? 's' : ''}</span>
-                <ChevronRight className="h-4 w-4 text-gray-400" />
+                <div className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
+                  <span>Open Records</span>
+                  <ChevronRight className="h-4 w-4" />
+                </div>
               </div>
             </div>
           ))}

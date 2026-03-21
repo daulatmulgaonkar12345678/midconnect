@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 MAX_PANELS_PER_BUSINESS = 10
 MAX_FIELDS_PER_PANEL = 20
 
+MAX_RECORDS_PER_PAGE = 50
+
 VALID_FIELD_TYPES = {"text", "number", "date", "dropdown", "multiselect", "boolean", "longtext", "relation"}
 VALID_RELATION_TYPES = {"many_to_one", "one_to_one"}
 SYSTEM_LINKABLE = {"inventory", "invoices"}  # Built-in modules that can be linked
@@ -66,10 +68,19 @@ class UpdateFieldRequest(BaseModel):
     label: Optional[str] = None
     required: Optional[bool] = None
     options: Optional[List[str]] = None
+    disabled: Optional[bool] = None
 
 
 class ReorderFieldsRequest(BaseModel):
     fieldKeys: List[str]
+
+
+class CreateRecordRequest(BaseModel):
+    data: dict
+
+
+class UpdateRecordRequest(BaseModel):
+    data: dict
 
 
 def init_panel_router(db, verify_token_func):
@@ -375,6 +386,8 @@ def init_panel_router(db, verify_token_func):
             update_ops[f"fields.{field_idx}.required"] = data.required
         if data.options is not None:
             update_ops[f"fields.{field_idx}.options"] = data.options
+        if data.disabled is not None:
+            update_ops[f"fields.{field_idx}.disabled"] = data.disabled
 
         await db.panels.update_one({"_id": ObjectId(panel_id)}, {"$set": update_ops})
         return {"message": "Field updated"}
@@ -394,6 +407,15 @@ def init_panel_router(db, verify_token_func):
         fields = panel.get("fields", [])
         if not any(f["key"] == field_key for f in fields):
             raise HTTPException(status_code=404, detail=f"Field '{field_key}' not found")
+
+        # Block deletion if any record has data for this field
+        has_data = await db.panel_records.find_one({
+            "panelId": ObjectId(panel_id),
+            "sellerId": ObjectId(seller_id),
+            f"data.{field_key}": {"$exists": True, "$nin": [None, ""]}
+        })
+        if has_data:
+            raise HTTPException(status_code=400, detail=f"Cannot delete field '{field_key}': records contain data for this field. Disable it instead.")
 
         new_fields = [f for f in fields if f["key"] != field_key]
         # Re-order
@@ -439,6 +461,352 @@ def init_panel_router(db, verify_token_func):
             {"$set": {"fields": reordered, "updatedAt": datetime.now(timezone.utc)}}
         )
         return {"message": "Fields reordered"}
+
+    # ═══════════════════════════════════════════
+    # RECORD CRUD — Phase 2
+    # ═══════════════════════════════════════════
+
+    def allow_record_access(user: dict):
+        """Allow seller admin AND employees with advanced access to manage records."""
+        require_advanced_access(user)
+        # Buyers blocked
+        if user.get("accountType") == "buyer":
+            raise HTTPException(status_code=403, detail="Buyers cannot access panels.")
+
+    async def resolve_relation_display(seller_id: str, field: dict, value):
+        """Resolve a relation value to a display label."""
+        if not value:
+            return None
+        target = field.get("relatedPanel", "")
+        try:
+            if target == "inventory":
+                doc = await db.products.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"name": 1, "sku": 1})
+                if doc:
+                    return {"id": str(doc["_id"]), "label": doc.get("name", ""), "sku": doc.get("sku", "")}
+            elif target == "invoices":
+                doc = await db.invoices.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"invoiceNumber": 1, "buyerName": 1})
+                if doc:
+                    return {"id": str(doc["_id"]), "label": doc.get("invoiceNumber", ""), "buyerName": doc.get("buyerName", "")}
+            else:
+                # Custom panel
+                doc = await db.panel_records.find_one({"_id": ObjectId(value), "panelId": ObjectId(target), "sellerId": ObjectId(seller_id)})
+                if doc:
+                    data = doc.get("data", {})
+                    # Use first text field as label
+                    linked_panel = await db.panels.find_one({"_id": ObjectId(target)}, {"fields": 1, "name": 1})
+                    label = ""
+                    if linked_panel:
+                        for f in linked_panel.get("fields", []):
+                            if f["type"] in ("text", "dropdown") and data.get(f["key"]):
+                                label = str(data[f["key"]])
+                                break
+                    return {"id": str(doc["_id"]), "label": label or str(doc["_id"])[:8]}
+        except Exception:
+            pass
+        return {"id": str(value), "label": str(value)[:12]}
+
+    async def validate_record_data(panel: dict, data: dict, seller_id: str):
+        """Validate record data against panel field definitions."""
+        fields = panel.get("fields", [])
+        errors = []
+
+        for f in fields:
+            key = f["key"]
+            val = data.get(key)
+            is_disabled = f.get("disabled", False)
+            if is_disabled:
+                continue  # Skip disabled fields
+
+            if f.get("required") and (val is None or val == "" or val == []):
+                errors.append(f"Field '{f['label']}' is required")
+                continue
+
+            if val is None or val == "":
+                continue
+
+            ftype = f["type"]
+            if ftype == "number":
+                try:
+                    float(val)
+                except (ValueError, TypeError):
+                    errors.append(f"Field '{f['label']}' must be a number")
+
+            elif ftype == "dropdown":
+                opts = f.get("options", [])
+                if opts and str(val) not in opts:
+                    errors.append(f"Field '{f['label']}' must be one of: {', '.join(opts)}")
+
+            elif ftype == "multiselect":
+                if not isinstance(val, list):
+                    errors.append(f"Field '{f['label']}' must be a list")
+                else:
+                    opts = f.get("options", [])
+                    if opts:
+                        invalid = [v for v in val if v not in opts]
+                        if invalid:
+                            errors.append(f"Field '{f['label']}' has invalid options: {', '.join(invalid)}")
+
+            elif ftype == "boolean":
+                if not isinstance(val, bool):
+                    errors.append(f"Field '{f['label']}' must be true or false")
+
+            elif ftype == "relation":
+                # Validate linked entity exists
+                target = f.get("relatedPanel", "")
+                if target and val:
+                    exists = False
+                    try:
+                        if target == "inventory":
+                            exists = bool(await db.products.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        elif target == "invoices":
+                            exists = bool(await db.invoices.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        else:
+                            exists = bool(await db.panel_records.find_one({"_id": ObjectId(val), "panelId": ObjectId(target), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                    except Exception:
+                        pass
+                    if not exists:
+                        errors.append(f"Field '{f['label']}' references a non-existent record")
+
+                    # One-to-one uniqueness check
+                    if f.get("relationType") == "one_to_one" and val:
+                        existing = await db.panel_records.find_one({
+                            "panelId": ObjectId(str(panel["_id"])),
+                            "sellerId": ObjectId(seller_id),
+                            f"data.{key}": val
+                        }, {"_id": 1})
+                        if existing:
+                            errors.append(f"Field '{f['label']}' already has a one-to-one link to this record")
+
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+
+    # ── LIST RECORDS ──
+    @router.get("/panels/{panel_id}/records")
+    async def list_records(
+        panel_id: str,
+        page: int = 1,
+        search: str = "",
+        authorization: str = Header(...)
+    ):
+        user = await get_current_user(authorization)
+        allow_record_access(user)
+        seller_id = await get_seller_id(user)
+
+        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+
+        query = {"panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)}
+        if search:
+            # Search across text fields
+            text_keys = [f"data.{f['key']}" for f in panel.get("fields", []) if f["type"] in ("text", "longtext", "dropdown")]
+            if text_keys:
+                query["$or"] = [{k: {"$regex": search, "$options": "i"}} for k in text_keys]
+
+        total = await db.panel_records.count_documents(query)
+        skip = (max(1, page) - 1) * MAX_RECORDS_PER_PAGE
+
+        cursor = db.panel_records.find(query).sort("createdAt", -1).skip(skip).limit(MAX_RECORDS_PER_PAGE)
+        records = await cursor.to_list(MAX_RECORDS_PER_PAGE)
+
+        # Resolve relation fields for display
+        relation_fields = [f for f in panel.get("fields", []) if f["type"] == "relation"]
+        serialized = []
+        for rec in records:
+            sr = serialize_doc(rec)
+            sr["_resolved"] = {}
+            for rf in relation_fields:
+                val = rec.get("data", {}).get(rf["key"])
+                if val:
+                    sr["_resolved"][rf["key"]] = await resolve_relation_display(seller_id, rf, val)
+            serialized.append(sr)
+
+        return {
+            "records": serialized,
+            "total": total,
+            "page": page,
+            "pages": max(1, (total + MAX_RECORDS_PER_PAGE - 1) // MAX_RECORDS_PER_PAGE),
+            "panelName": panel["name"],
+        }
+
+    # ── GET SINGLE RECORD ──
+    @router.get("/panels/{panel_id}/records/{record_id}")
+    async def get_record(panel_id: str, record_id: str, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        allow_record_access(user)
+        seller_id = await get_seller_id(user)
+
+        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+
+        record = await db.panel_records.find_one({"_id": ObjectId(record_id), "panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not record:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        sr = serialize_doc(record)
+        sr["_resolved"] = {}
+        for rf in panel.get("fields", []):
+            if rf["type"] == "relation":
+                val = record.get("data", {}).get(rf["key"])
+                if val:
+                    sr["_resolved"][rf["key"]] = await resolve_relation_display(seller_id, rf, val)
+
+        return {"record": sr, "panel": serialize_doc(panel)}
+
+    # ── CREATE RECORD ──
+    @router.post("/panels/{panel_id}/records")
+    async def create_record(panel_id: str, data: CreateRecordRequest, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        allow_record_access(user)
+        seller_id = await get_seller_id(user)
+
+        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+
+        await validate_record_data(panel, data.data, seller_id)
+
+        # Only store data for defined fields
+        field_keys = {f["key"] for f in panel.get("fields", []) if not f.get("disabled")}
+        clean_data = {k: v for k, v in data.data.items() if k in field_keys}
+
+        now = datetime.now(timezone.utc)
+        user_id = str(user.get("_id") or user.get("id"))
+
+        doc = {
+            "panelId": ObjectId(panel_id),
+            "sellerId": ObjectId(seller_id),
+            "data": clean_data,
+            "createdBy": user_id,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        result = await db.panel_records.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        logger.info(f"Record created in panel {panel_id} by {user_id}")
+        return serialize_doc(doc)
+
+    # ── UPDATE RECORD ──
+    @router.put("/panels/{panel_id}/records/{record_id}")
+    async def update_record(panel_id: str, record_id: str, data: UpdateRecordRequest, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        allow_record_access(user)
+        seller_id = await get_seller_id(user)
+
+        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+
+        record = await db.panel_records.find_one({"_id": ObjectId(record_id), "panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not record:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        await validate_record_data(panel, data.data, seller_id)
+
+        field_keys = {f["key"] for f in panel.get("fields", []) if not f.get("disabled")}
+        clean_data = {k: v for k, v in data.data.items() if k in field_keys}
+
+        await db.panel_records.update_one(
+            {"_id": ObjectId(record_id)},
+            {"$set": {"data": clean_data, "updatedAt": datetime.now(timezone.utc)}}
+        )
+        logger.info(f"Record {record_id} updated in panel {panel_id}")
+        return {"message": "Record updated"}
+
+    # ── DELETE RECORD ──
+    @router.delete("/panels/{panel_id}/records/{record_id}")
+    async def delete_record(panel_id: str, record_id: str, authorization: str = Header(...)):
+        user = await get_current_user(authorization)
+        allow_record_access(user)
+        seller_id = await get_seller_id(user)
+
+        record = await db.panel_records.find_one({"_id": ObjectId(record_id), "panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not record:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        # Check if any other panel record has a relation pointing to this record
+        # Check all panels' relation fields that target this panel
+        panels_with_relations = db.panels.find({
+            "sellerId": ObjectId(seller_id),
+            "fields.type": "relation",
+            "fields.relatedPanel": panel_id
+        })
+        async for p in panels_with_relations:
+            for f in p.get("fields", []):
+                if f.get("type") == "relation" and f.get("relatedPanel") == panel_id:
+                    linked = await db.panel_records.find_one({
+                        "panelId": p["_id"],
+                        "sellerId": ObjectId(seller_id),
+                        f"data.{f['key']}": record_id
+                    })
+                    if linked:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Cannot delete: this record is linked from panel '{p['name']}'. Remove the link first."
+                        )
+
+        await db.panel_records.delete_one({"_id": ObjectId(record_id)})
+        logger.info(f"Record {record_id} deleted from panel {panel_id}")
+        return {"message": "Record deleted"}
+
+    # ── RELATION LOOKUP: search linkable entities ──
+    @router.get("/panels/{panel_id}/relation-lookup")
+    async def relation_lookup(
+        panel_id: str,
+        target: str = "",
+        search: str = "",
+        authorization: str = Header(...)
+    ):
+        user = await get_current_user(authorization)
+        allow_record_access(user)
+        seller_id = await get_seller_id(user)
+
+        results = []
+        limit = 20
+
+        if target == "inventory":
+            q = {"sellerId": ObjectId(seller_id)}
+            if search:
+                q["$or"] = [
+                    {"name": {"$regex": search, "$options": "i"}},
+                    {"sku": {"$regex": search, "$options": "i"}},
+                ]
+            cursor = db.products.find(q, {"_id": 1, "name": 1, "sku": 1}).limit(limit)
+            async for doc in cursor:
+                results.append({"id": str(doc["_id"]), "label": doc.get("name", ""), "sub": doc.get("sku", "")})
+
+        elif target == "invoices":
+            q = {"sellerId": ObjectId(seller_id)}
+            if search:
+                q["$or"] = [
+                    {"invoiceNumber": {"$regex": search, "$options": "i"}},
+                    {"buyerName": {"$regex": search, "$options": "i"}},
+                ]
+            cursor = db.invoices.find(q, {"_id": 1, "invoiceNumber": 1, "buyerName": 1}).sort("createdAt", -1).limit(limit)
+            async for doc in cursor:
+                results.append({"id": str(doc["_id"]), "label": doc.get("invoiceNumber", ""), "sub": doc.get("buyerName", "")})
+
+        else:
+            # Custom panel records
+            linked_panel = await db.panels.find_one({"_id": ObjectId(target), "sellerId": ObjectId(seller_id)})
+            if linked_panel:
+                q = {"panelId": ObjectId(target), "sellerId": ObjectId(seller_id)}
+                if search:
+                    text_keys = [f"data.{f['key']}" for f in linked_panel.get("fields", []) if f["type"] in ("text", "dropdown")]
+                    if text_keys:
+                        q["$or"] = [{k: {"$regex": search, "$options": "i"}} for k in text_keys]
+                cursor = db.panel_records.find(q).sort("createdAt", -1).limit(limit)
+                async for doc in cursor:
+                    data = doc.get("data", {})
+                    label = ""
+                    for f in linked_panel.get("fields", []):
+                        if f["type"] in ("text", "dropdown") and data.get(f["key"]):
+                            label = str(data[f["key"]])
+                            break
+                    results.append({"id": str(doc["_id"]), "label": label or str(doc["_id"])[:8], "sub": ""})
+
+        return {"results": results}
 
     # ── SUPER ADMIN: SET ACCESS LEVEL ──
     @router.put("/admin/set-access-level")
