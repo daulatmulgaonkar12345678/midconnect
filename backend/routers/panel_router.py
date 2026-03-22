@@ -23,7 +23,7 @@ MAX_RECORDS_PER_PAGE = 50
 
 VALID_FIELD_TYPES = {"text", "number", "date", "dropdown", "multiselect", "boolean", "longtext", "relation"}
 VALID_RELATION_TYPES = {"many_to_one", "one_to_one"}
-SYSTEM_LINKABLE = {"inventory", "invoices"}  # Built-in modules that can be linked
+SYSTEM_LINKABLE = {"inventory", "invoices", "buyers", "suppliers", "purchase_orders", "quotations", "composite_products", "employees"}
 
 
 # ── Pydantic Models ──
@@ -208,6 +208,12 @@ def init_panel_router(db, verify_token_func):
         targets = [
             {"id": "inventory", "name": "Inventory", "type": "system"},
             {"id": "invoices", "name": "Invoices", "type": "system"},
+            {"id": "buyers", "name": "Buyers", "type": "system"},
+            {"id": "suppliers", "name": "Suppliers", "type": "system"},
+            {"id": "purchase_orders", "name": "Purchase Orders", "type": "system"},
+            {"id": "quotations", "name": "Quotations", "type": "system"},
+            {"id": "composite_products", "name": "Composite Products", "type": "system"},
+            {"id": "employees", "name": "Employees", "type": "system"},
         ]
 
         panels = await db.panels.find(
@@ -684,7 +690,6 @@ def init_panel_router(db, verify_token_func):
         target = field.get("relatedPanel", "")
         try:
             if target == "inventory":
-                # Inventory items are sellerListings, need to join with products for name
                 listing = await db.sellerListings.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"productId": 1, "sku": 1})
                 if listing:
                     product = await db.products.find_one({"_id": listing.get("productId")}, {"name": 1}) if listing.get("productId") else None
@@ -692,13 +697,40 @@ def init_panel_router(db, verify_token_func):
             elif target == "invoices":
                 doc = await db.invoices.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"invoiceNumber": 1, "buyerName": 1})
                 if doc:
-                    return {"id": str(doc["_id"]), "label": doc.get("invoiceNumber", ""), "buyerName": doc.get("buyerName", "")}
+                    return {"id": str(doc["_id"]), "label": doc.get("invoiceNumber", ""), "sub": doc.get("buyerName", "")}
+            elif target == "buyers":
+                doc = await db.seller_buyers.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"buyerName": 1, "phone": 1})
+                if doc:
+                    return {"id": str(doc["_id"]), "label": doc.get("buyerName", ""), "sub": doc.get("phone", "")}
+            elif target == "suppliers":
+                doc = await db.seller_suppliers.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"supplierName": 1, "phone": 1})
+                if doc:
+                    return {"id": str(doc["_id"]), "label": doc.get("supplierName", ""), "sub": doc.get("phone", "")}
+            elif target == "purchase_orders":
+                doc = await db.purchase_orders.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"poNumber": 1, "supplierName": 1})
+                if doc:
+                    return {"id": str(doc["_id"]), "label": doc.get("poNumber", ""), "sub": doc.get("supplierName", "")}
+            elif target == "quotations":
+                doc = await db.quotations.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"quotationNumber": 1, "buyerId": 1})
+                if doc:
+                    buyer_name = ""
+                    if doc.get("buyerId"):
+                        buyer = await db.seller_buyers.find_one({"_id": doc["buyerId"]}, {"buyerName": 1})
+                        buyer_name = buyer.get("buyerName", "") if buyer else ""
+                    return {"id": str(doc["_id"]), "label": doc.get("quotationNumber", ""), "sub": buyer_name}
+            elif target == "composite_products":
+                doc = await db.composite_products.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"name": 1, "price": 1})
+                if doc:
+                    return {"id": str(doc["_id"]), "label": doc.get("name", ""), "sub": f"Rs {doc['price']}" if doc.get("price") else ""}
+            elif target == "employees":
+                doc = await db.users.find_one({"_id": ObjectId(value), "companyId": ObjectId(seller_id), "employeeStatus": {"$in": ["active", "disabled"]}}, {"name": 1, "email": 1, "employeeRole": 1})
+                if doc:
+                    return {"id": str(doc["_id"]), "label": doc.get("name", doc.get("email", "")), "sub": doc.get("employeeRole", "")}
             else:
                 # Custom panel
                 doc = await db.panel_records.find_one({"_id": ObjectId(value), "panelId": ObjectId(target), "sellerId": ObjectId(seller_id)})
                 if doc:
                     data = doc.get("data", {})
-                    # Use first text field as label
                     linked_panel = await db.panels.find_one({"_id": ObjectId(target)}, {"fields": 1, "name": 1})
                     label = ""
                     if linked_panel:
@@ -765,6 +797,18 @@ def init_panel_router(db, verify_token_func):
                             exists = bool(await db.sellerListings.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}, {"_id": 1}))
                         elif target == "invoices":
                             exists = bool(await db.invoices.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        elif target == "buyers":
+                            exists = bool(await db.seller_buyers.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        elif target == "suppliers":
+                            exists = bool(await db.seller_suppliers.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        elif target == "purchase_orders":
+                            exists = bool(await db.purchase_orders.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        elif target == "quotations":
+                            exists = bool(await db.quotations.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        elif target == "composite_products":
+                            exists = bool(await db.composite_products.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                        elif target == "employees":
+                            exists = bool(await db.users.find_one({"_id": ObjectId(val), "companyId": ObjectId(seller_id), "employeeStatus": {"$in": ["active", "disabled"]}}, {"_id": 1}))
                         else:
                             exists = bool(await db.panel_records.find_one({"_id": ObjectId(val), "panelId": ObjectId(target), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
                     except Exception:
@@ -1053,6 +1097,77 @@ def init_panel_router(db, verify_token_func):
             cursor = db.invoices.find(q, {"_id": 1, "invoiceNumber": 1, "buyerName": 1}).sort("createdAt", -1).limit(limit)
             async for doc in cursor:
                 results.append({"id": str(doc["_id"]), "label": doc.get("invoiceNumber", ""), "sub": doc.get("buyerName", "")})
+
+        elif target == "buyers":
+            q = {"sellerId": ObjectId(seller_id)}
+            if search:
+                q["$or"] = [
+                    {"buyerName": {"$regex": search, "$options": "i"}},
+                    {"phone": {"$regex": search, "$options": "i"}},
+                    {"company": {"$regex": search, "$options": "i"}},
+                ]
+            cursor = db.seller_buyers.find(q, {"_id": 1, "buyerName": 1, "phone": 1}).sort("createdAt", -1).limit(limit)
+            async for doc in cursor:
+                results.append({"id": str(doc["_id"]), "label": doc.get("buyerName", ""), "sub": doc.get("phone", "")})
+
+        elif target == "suppliers":
+            q = {"sellerId": ObjectId(seller_id)}
+            if search:
+                q["$or"] = [
+                    {"supplierName": {"$regex": search, "$options": "i"}},
+                    {"phone": {"$regex": search, "$options": "i"}},
+                    {"contact": {"$regex": search, "$options": "i"}},
+                ]
+            cursor = db.seller_suppliers.find(q, {"_id": 1, "supplierName": 1, "phone": 1}).sort("createdAt", -1).limit(limit)
+            async for doc in cursor:
+                results.append({"id": str(doc["_id"]), "label": doc.get("supplierName", ""), "sub": doc.get("phone", "")})
+
+        elif target == "purchase_orders":
+            q = {"sellerId": ObjectId(seller_id)}
+            if search:
+                q["$or"] = [
+                    {"poNumber": {"$regex": search, "$options": "i"}},
+                    {"supplierName": {"$regex": search, "$options": "i"}},
+                ]
+            cursor = db.purchase_orders.find(q, {"_id": 1, "poNumber": 1, "supplierName": 1}).sort("createdAt", -1).limit(limit)
+            async for doc in cursor:
+                results.append({"id": str(doc["_id"]), "label": doc.get("poNumber", ""), "sub": doc.get("supplierName", "")})
+
+        elif target == "quotations":
+            pipeline = [
+                {"$match": {"sellerId": ObjectId(seller_id)}},
+                {"$lookup": {"from": "seller_buyers", "localField": "buyerId", "foreignField": "_id", "as": "buyer"}},
+                {"$unwind": {"path": "$buyer", "preserveNullAndEmptyArrays": True}},
+                {"$project": {"quotationNumber": 1, "buyerName": "$buyer.buyerName"}},
+            ]
+            if search:
+                pipeline.append({"$match": {"$or": [
+                    {"quotationNumber": {"$regex": search, "$options": "i"}},
+                    {"buyerName": {"$regex": search, "$options": "i"}},
+                ]}})
+            pipeline.extend([{"$sort": {"_id": -1}}, {"$limit": limit}])
+            items = await db.quotations.aggregate(pipeline).to_list(limit)
+            for item in items:
+                results.append({"id": str(item["_id"]), "label": item.get("quotationNumber", ""), "sub": item.get("buyerName", "")})
+
+        elif target == "composite_products":
+            q = {"sellerId": ObjectId(seller_id)}
+            if search:
+                q["name"] = {"$regex": search, "$options": "i"}
+            cursor = db.composite_products.find(q, {"_id": 1, "name": 1, "price": 1}).sort("createdAt", -1).limit(limit)
+            async for doc in cursor:
+                results.append({"id": str(doc["_id"]), "label": doc.get("name", ""), "sub": f"Rs {doc['price']}" if doc.get("price") else ""})
+
+        elif target == "employees":
+            q = {"companyId": ObjectId(seller_id), "employeeStatus": {"$in": ["active", "disabled"]}}
+            if search:
+                q["$or"] = [
+                    {"name": {"$regex": search, "$options": "i"}},
+                    {"email": {"$regex": search, "$options": "i"}},
+                ]
+            cursor = db.users.find(q, {"_id": 1, "name": 1, "email": 1, "employeeRole": 1}).limit(limit)
+            async for doc in cursor:
+                results.append({"id": str(doc["_id"]), "label": doc.get("name", doc.get("email", "")), "sub": doc.get("employeeRole", "")})
 
         else:
             # Custom panel records

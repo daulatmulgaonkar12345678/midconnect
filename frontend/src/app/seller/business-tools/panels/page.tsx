@@ -415,12 +415,19 @@ export default function PanelsPage() {
                 {/* Linked modules/panels badges */}
                 {((panel.allowedModules || []).length > 0 || (panel.allowedPanels || []).length > 0) && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {(panel.allowedModules || []).map(m => (
-                      <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs rounded-md border border-emerald-200 font-medium">
-                        <Link2 className="h-3 w-3" />
-                        {m === 'inventory' ? 'Inventory' : m === 'invoices' ? 'Invoices' : m}
-                      </span>
-                    ))}
+                    {(panel.allowedModules || []).map(m => {
+                      const moduleLabels: Record<string, string> = {
+                        inventory: 'Inventory', invoices: 'Invoices', buyers: 'Buyers',
+                        suppliers: 'Suppliers', purchase_orders: 'Purchase Orders',
+                        quotations: 'Quotations', composite_products: 'Composite Products', employees: 'Employees',
+                      };
+                      return (
+                        <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs rounded-md border border-emerald-200 font-medium">
+                          <Link2 className="h-3 w-3" />
+                          {moduleLabels[m] || m}
+                        </span>
+                      );
+                    })}
                     {(panel.allowedPanels || []).map(pid => {
                       const linked = panels.find(p => p.id === pid);
                       return (
@@ -526,6 +533,12 @@ export default function PanelsPage() {
                     {[
                       { key: 'inventory', label: 'Inventory' },
                       { key: 'invoices', label: 'Invoices' },
+                      { key: 'buyers', label: 'Buyers' },
+                      { key: 'suppliers', label: 'Suppliers' },
+                      { key: 'purchase_orders', label: 'Purchase Orders' },
+                      { key: 'quotations', label: 'Quotations' },
+                      { key: 'composite_products', label: 'Composite Products' },
+                      { key: 'employees', label: 'Employees' },
                     ].map(mod => (
                       <label key={mod.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                         <input
@@ -714,13 +727,19 @@ export default function PanelsPage() {
                           >
                             <option value="">Select module...</option>
                             <optgroup label="System Modules">
-                              <option value="inventory">Inventory (system)</option>
-                              <option value="invoices">Invoices (system)</option>
+                              <option value="inventory">Inventory</option>
+                              <option value="invoices">Invoices</option>
+                              <option value="buyers">Buyers</option>
+                              <option value="suppliers">Suppliers</option>
+                              <option value="purchase_orders">Purchase Orders</option>
+                              <option value="quotations">Quotations</option>
+                              <option value="composite_products">Composite Products</option>
+                              <option value="employees">Employees</option>
                             </optgroup>
                             {panels.length > 0 && (
                               <optgroup label="Custom Panels">
                                 {panels.map(p => (
-                                  <option key={p.id} value={p.id}>{p.name} (panel)</option>
+                                  <option key={p.id} value={p.id}>{p.name}</option>
                                 ))}
                               </optgroup>
                             )}

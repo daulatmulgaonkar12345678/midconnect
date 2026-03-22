@@ -41,11 +41,17 @@ export function RelationField({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const placeholder = relatedPanel === 'inventory'
-    ? 'Search products...'
-    : relatedPanel === 'invoices'
-      ? 'Search invoices...'
-      : 'Search records...';
+  const placeholderMap: Record<string, string> = {
+    inventory: 'Search products...',
+    invoices: 'Search invoices...',
+    buyers: 'Search buyers...',
+    suppliers: 'Search suppliers...',
+    purchase_orders: 'Search purchase orders...',
+    quotations: 'Search quotations...',
+    composite_products: 'Search composite products...',
+    employees: 'Search employees...',
+  };
+  const placeholder = placeholderMap[relatedPanel] || 'Search records...';
 
   // Sync resolved label from parent (e.g. when editing existing record)
   useEffect(() => {
