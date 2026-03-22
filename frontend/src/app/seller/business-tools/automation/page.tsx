@@ -135,6 +135,27 @@ export default function AutomationPage() {
     { id: 'inventory', name: 'Inventory', type: 'system' },
   ];
 
+  // Fields available on the target panel (for the Target Field dropdown)
+  const SYSTEM_TARGET_FIELDS: Record<string, { key: string; label: string }[]> = {
+    inventory: [
+      { key: 'stock', label: 'Stock' },
+      { key: 'quantity', label: 'Quantity' },
+      { key: 'minStock', label: 'Min Stock' },
+      { key: 'reorderPoint', label: 'Reorder Point' },
+    ],
+  };
+
+  const targetPanelFields = (() => {
+    if (!actionTargetId) return [];
+    if (actionTargetType === 'system') {
+      return SYSTEM_TARGET_FIELDS[actionTargetId] || [];
+    }
+    const tp = panels.find(p => p.id === actionTargetId);
+    return (tp?.fields || [])
+      .filter(f => f.type !== 'relation')
+      .map(f => ({ key: f.key, label: f.label }));
+  })();
+
   const allTargets = [
     ...SYSTEM_TARGETS,
     ...panels.map(p => ({ id: p.id, name: p.name, type: 'custom' })),
@@ -174,6 +195,8 @@ export default function AutomationPage() {
     if (!condField) { toast.error('Select a condition field'); return; }
     if (!actionRelField) { toast.error('Select a relation field for action'); return; }
     if (!actionTargetId) { toast.error('Select a target panel'); return; }
+    if (actionType === 'update_related' && !actionField) { toast.error('Select a target field'); return; }
+    if (actionType === 'update_related' && !actionValueFrom) { toast.error('Select a value source field'); return; }
 
     setSaving(true);
     const body = {
@@ -431,6 +454,7 @@ export default function AutomationPage() {
                         setActionTargetId(e.target.value);
                         const t = allTargets.find(x => x.id === e.target.value);
                         setActionTargetType(t?.type || 'custom');
+                        setActionField('');
                       }}
                         className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-target-select">
                         <option value="">Select target...</option>
@@ -454,8 +478,11 @@ export default function AutomationPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs text-gray-600 mb-1">Target Field *</label>
-                      <input type="text" value={actionField} onChange={e => setActionField(e.target.value)}
-                        placeholder="e.g. stock, quantity" className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-field-input" />
+                      <select value={actionField} onChange={e => setActionField(e.target.value)}
+                        className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-field-select">
+                        <option value="">Select target field...</option>
+                        {targetPanelFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs text-gray-600 mb-1">Value From (trigger field) *</label>
