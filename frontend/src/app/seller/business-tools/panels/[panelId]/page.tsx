@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import {
   Plus, Pencil, Trash2, Eye, Loader2, X, Save, Search,
-  ChevronLeft, ChevronRight, ArrowLeft, Link2
+  ChevronLeft, ChevronRight, ArrowLeft, Link2, FileSpreadsheet, FileDown
 } from 'lucide-react';
 import { RelationField } from './RelationField';
 
@@ -72,6 +72,10 @@ export default function PanelDetailPage() {
 
   // Resolved labels for relation fields (fieldKey -> { label, sub })
   const [resolvedLabels, setResolvedLabels] = useState<{ [key: string]: { label: string; sub?: string } }>({});
+
+  // Export states
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const headers = useCallback(() => ({
     Authorization: `Bearer ${token}`,
@@ -182,6 +186,37 @@ export default function PanelDetailPage() {
     } catch { toast.error('Delete failed'); }
   };
 
+  const handleExport = async (format: 'excel' | 'pdf') => {
+    const setLoading = format === 'excel' ? setExportingExcel : setExportingPdf;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/business-tools/panels/${panelId}/export/${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ detail: 'Export failed' }));
+        toast.error(d.detail || 'Export failed');
+        setLoading(false);
+        return;
+      }
+      const blob = await res.blob();
+      const ext = format === 'excel' ? 'xlsx' : 'pdf';
+      const filename = `${panel?.name?.replace(/\s+/g, '_') || 'export'}_export.${ext}`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(`${format === 'excel' ? 'Excel' : 'PDF'} exported successfully`);
+    } catch {
+      toast.error('Export failed');
+    }
+    setLoading(false);
+  };
+
   const setField = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
@@ -218,12 +253,32 @@ export default function PanelDetailPage() {
             {panel.description && <p className="text-sm text-gray-500">{panel.description}</p>}
           </div>
         </div>
-        <button onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
-          data-testid="create-record-btn"
-        >
-          <Plus className="h-4 w-4" /> New Record
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleExport('excel')}
+            disabled={exportingExcel || total === 0}
+            className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="export-excel-btn"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            {exportingExcel ? 'Exporting...' : 'Excel'}
+          </button>
+          <button
+            onClick={() => handleExport('pdf')}
+            disabled={exportingPdf || total === 0}
+            className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="export-pdf-btn"
+          >
+            <FileDown className="h-4 w-4" />
+            {exportingPdf ? 'Exporting...' : 'PDF'}
+          </button>
+          <button onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
+            data-testid="create-record-btn"
+          >
+            <Plus className="h-4 w-4" /> New Record
+          </button>
+        </div>
       </div>
 
       {/* Search */}

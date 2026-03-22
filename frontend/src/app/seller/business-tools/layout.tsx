@@ -35,7 +35,8 @@ import {
   Wifi,
   WifiOff,
   Gift,
-  LayoutGrid
+  LayoutGrid,
+  Zap
 } from 'lucide-react';
 
 // ──────────────────────────────────────
@@ -84,6 +85,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   '/seller/business-tools/settings': 'settings',
   '/seller/business-tools/notifications': 'dashboard',
   '/seller/business-tools/panels': 'dashboard',
+  '/seller/business-tools/automation': 'dashboard',
 };
 
 // ──────────────────────────────────────
@@ -596,6 +598,18 @@ function BusinessToolsInner({
                             </Link>
                           );
                         })}
+                        {isAdmin && (
+                          <Link
+                            href="/seller/business-tools/automation"
+                            data-testid="nav-automation"
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                              getColorClasses('amber', pathname === '/seller/business-tools/automation')
+                            } ${pathname === '/seller/business-tools/automation' ? 'border-l-4' : ''}`}
+                          >
+                            <Zap className="h-4 w-4" />
+                            <span className="flex-1">Automation</span>
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </>
@@ -665,6 +679,19 @@ function BusinessToolsInner({
                               <span className="truncate">{p.name}</span>
                             </Link>
                           ))}
+                          {isAdmin && (
+                            <Link
+                              href="/seller/business-tools/automation"
+                              onClick={() => setMobileMenuOpen(false)}
+                              data-testid="nav-automation-mobile"
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                                getColorClasses('amber', pathname === '/seller/business-tools/automation')
+                              }`}
+                            >
+                              <Zap className="h-4 w-4" />
+                              <span>Automation</span>
+                            </Link>
+                          )}
                         </div>
                       </>
                     )}

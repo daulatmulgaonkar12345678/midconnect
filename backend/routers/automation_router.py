@@ -278,8 +278,12 @@ def init_automation_router(db, verify_token_func):
     # EXECUTION ENGINE — called from panel_router
     # ══════════════════════════════════════
 
-    async def execute_automation(record_data: dict, panel_id: str, record_id: str, seller_id: str, user_id: str, event_type: str = "record_created"):
-        """Check and execute automation rules for a panel event. ONLY custom panels."""
+    async def execute_automation(record_data: dict, panel_id: str, record_id: str, seller_id: str, user_id: str, event_type: str = "record_created", _visited_rules: set = None):
+        """Check and execute automation rules for a panel event. ONLY custom panels.
+        _visited_rules prevents infinite loops when automation chains trigger each other."""
+        if _visited_rules is None:
+            _visited_rules = set()
+
         try:
             rules = await db.automation_rules.find({
                 "sellerId": ObjectId(seller_id),
@@ -291,13 +295,33 @@ def init_automation_router(db, verify_token_func):
                 return
 
             for rule in rules:
+                rule_id_str = str(rule["_id"])
+
+                # Infinite loop guard: skip if this rule was already executed in this chain
+                if rule_id_str in _visited_rules:
+                    logger.warning(f"Automation loop detected: rule '{rule.get('name')}' already executed in this chain. Skipping.")
+                    await db.automation_logs.insert_one({
+                        "sellerId": ObjectId(seller_id),
+                        "ruleId": rule["_id"],
+                        "ruleName": rule.get("name", ""),
+                        "trigger_panel_id": panel_id,
+                        "record_id": record_id,
+                        "event": event_type,
+                        "status": "skipped",
+                        "error": "Infinite loop prevented — rule already executed in this chain",
+                        "timestamp": datetime.now(timezone.utc),
+                    })
+                    continue
+
                 condition = rule.get("condition", {})
                 if not check_condition(record_data, condition):
                     continue
 
+                _visited_rules.add(rule_id_str)
+
                 for action in rule.get("actions", []):
                     try:
-                        await execute_action(action, record_data, record_id, panel_id, seller_id, user_id, rule)
+                        await execute_action(action, record_data, record_id, panel_id, seller_id, user_id, rule, _visited_rules)
                     except Exception as e:
                         logger.error(f"Automation action failed: {e} (rule: {rule.get('name')})")
                         await db.automation_logs.insert_one({
@@ -344,8 +368,10 @@ def init_automation_router(db, verify_token_func):
             return actual is None or actual == "" or actual == []
         return False
 
-    async def execute_action(action: dict, record_data: dict, record_id: str, panel_id: str, seller_id: str, user_id: str, rule: dict):
+    async def execute_action(action: dict, record_data: dict, record_id: str, panel_id: str, seller_id: str, user_id: str, rule: dict, _visited_rules: set = None):
         """Execute a single automation action with strict safety checks."""
+        if _visited_rules is None:
+            _visited_rules = set()
         action_type = action.get("type", "")
         relation_field = action.get("relation_field", "")
         target_panel_id = action.get("target_panel_id", "")
