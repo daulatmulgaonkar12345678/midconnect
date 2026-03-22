@@ -39,6 +39,7 @@ class PanelFieldInput(BaseModel):
     options: Optional[List[str]] = None
     relatedPanel: Optional[str] = None
     relationType: Optional[str] = None
+    bindingField: Optional[str] = None
     order: Optional[int] = 0
 
 
@@ -70,6 +71,7 @@ class AddFieldRequest(BaseModel):
     options: Optional[List[str]] = None
     relatedPanel: Optional[str] = None
     relationType: Optional[str] = None
+    bindingField: Optional[str] = None
 
 
 class UpdateFieldRequest(BaseModel):
@@ -458,6 +460,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                     "unique": False,
                     "relatedPanel": "inventory",
                     "relationType": "many_to_one",
+                    "bindingField": "productName",
                     "options": None,
                     "order": 0,
                     "systemManaged": True,
@@ -482,6 +485,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                     "unique": False,
                     "relatedPanel": "invoices",
                     "relationType": "many_to_one",
+                    "bindingField": "invoiceNumber",
                     "options": None,
                     "order": len(doc["fields"]),
                     "systemManaged": True,
@@ -540,6 +544,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                         "key": "product", "label": "Product (Linked to Inventory)", "type": "relation",
                         "required": True, "unique": False,
                         "relatedPanel": "inventory", "relationType": "many_to_one",
+                        "bindingField": "productName",
                         "options": None, "order": 0, "systemManaged": True,
                     }
                     for f in current_fields:
@@ -559,6 +564,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                         "key": "invoice", "label": "Invoice (Linked to Invoices)", "type": "relation",
                         "required": True, "unique": False,
                         "relatedPanel": "invoices", "relationType": "many_to_one",
+                        "bindingField": "invoiceNumber",
                         "options": None, "order": len(fields_to_check), "systemManaged": True,
                     }
                     if "fields" in update:
