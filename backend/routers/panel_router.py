@@ -1274,7 +1274,10 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
-        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        try:
+            panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid panel ID format")
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found")
 
@@ -1352,7 +1355,10 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
-        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        try:
+            panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid panel ID format")
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found")
 

@@ -11,40 +11,28 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 - **Offline:** IndexedDB (idb), Service Worker
 
 ## Completed Features
-1-22. (Previous features - B2B Marketplace, Invoices, Inventory, Panel System Phase 1-2, RBAC, Employee Permissions Architecture)
+1-25. (Previous features - B2B Marketplace, Invoices, Inventory, Panel System Phase 1-3A, RBAC, Employee Permissions, RelationField Component)
 
-23. **Phase 3A: Granular Module Permissions + Panel Data Integration (Mar 2026)**:
-    - Module permissions upgraded from simple boolean to `{view, edit}` per module
-    - PermissionGrid UI with [View] [Edit] checkboxes per system module, [View] [Create] [Edit] per custom panel
-    - Role templates updated: Admin (full), Manager (no employees/settings edit), Viewer (view-only)
-    - Panel Data Integration with Invoices: attach related panel records to invoices
-    - New API: `GET /panels/related-records?module=inventory&entityId={id}`
-    - Invoice storage: `linkedPanels: [{panelId, recordId}]` stored in invoice documents
-    - Invoice display: `linkedPanelData` resolved on read with panel name, color, and field values
-    - Bug fix: `resolve_seller_id` no longer returns None for admin-seller users
+26. **Phase 3B: Smart Document Builder (Mar 2026)** - LATEST:
+    - Excel export: styled .xlsx with header formatting, relation field resolution, auto-width columns
+    - PDF export: professional layout with reportlab, table styling, relation resolution, landscape for wide panels
+    - Export buttons on panel records page with loading states, disabled when no records
+    - Invalid ObjectId returns 400 (not 500) for both export endpoints
+    - Exports are strictly READ-ONLY — no automation triggered during export
 
-24. **Phase 3A (Part 2): Panel Binding UI & Controlled Linking (Mar 2026)** - LATEST:
-    - **Panel Configuration UI**: "Link This Panel To" section in create/edit modal
-    - **Module Linking**: Checkboxes for Inventory and Invoices modules
-    - **Panel Linking**: Dropdown to link up to 2 other panels with validation
-    - **Linking Rules**: No self-linking, no circular linking, max 2 linked panels
-    - **Auto-add Relation Fields**: System auto-adds required Product/Invoice relation fields when modules are linked
-    - **Unique Field Support**: "Unique" checkbox on field definitions, enforced at DB level
-    - **Activity Logging**: `PANEL_RECORD_CREATED` events logged with productId, qcNumber references
-    - **UI Badges**: Panel cards display linked modules/panels as colored badges
-    - **Backend**: `allowedPanels` added to panel schema, `validate_allowed_panels` helper for rules enforcement
-
-25. **RelationField Component Fix (Mar 2026)** - LATEST:
-    - Created reusable `RelationField.tsx` component for searchable relation dropdowns
-    - Debounced API calls (300ms) to `/relation-lookup` endpoint
-    - Loading spinner, empty state ("No results found"), outside-click-to-close
-    - Displays product name + SKU for inventory, invoice number + buyer name for invoices
-    - Selected value shown as chip with clear button
-    - Pre-populates resolved labels when editing existing records
-    - Works for inventory, invoices, and custom panel relations
-    - **Critical Backend Fix**: relation-lookup for inventory now queries `sellerListings` (with `$lookup` to `products`) instead of `products` directly — matching the inventory system's architecture
-    - **Validation Fix**: inventory relation validation now checks `sellerListings` collection
-    - **Display Fix**: resolved relation display joins `sellerListings` with `products` for name
+27. **Phase 4 Lite: Workflow Automation Engine (Mar 2026)** - LATEST:
+    - Full CRUD: create, list, update, delete automation rules
+    - Rule Builder UI: trigger panel selection, IF condition, THEN action via relation fields
+    - Condition operators: equals, not_equals, greater_than, less_than, contains, not_empty, is_empty
+    - Action operations: increment, decrement, set_value, create_record
+    - Safety: ONLY custom panels can trigger automation (system modules blocked)
+    - Relation-based actions: updates must go through a relation field (no blind/global updates)
+    - Blocked system fields: _id, sellerId, createdAt, updatedAt, createdBy cannot be modified
+    - Infinite loop prevention: _visited_rules set prevents re-execution in automation chains
+    - Execution logging: success/error/skipped status with timestamps
+    - System module support: inventory stock fields (stock, quantity, minStock, reorderPoint)
+    - Sidebar link: Automation visible to admin users only (desktop + mobile)
+    - Max 50 rules per business, max 5 actions per rule
 
 ## Permission Architecture
 ```
@@ -75,25 +63,19 @@ Panel Config:
   allowedPanels: ["<panelId1>", "<panelId2>"]
 }
 
-Auto-generated Fields:
-- If allowedModules includes "inventory" → auto-add Product relation field (required)
-- If allowedModules includes "invoices" → auto-add Invoice relation field (required)
-
-Linking Rules:
-- Max 2 allowedPanels per panel
-- No self-linking (panel cannot link to itself)
-- No circular linking (if A→B, then B→A is blocked)
-- Only existing panels can be linked
-
-Activity Log:
-- Collection: panel_activity_logs
-- Event: PANEL_RECORD_CREATED
-- Fields: type, panelId, panelName, recordId, sellerId, createdBy, timestamp, productId, qcNumber
+Automation Rule:
+{
+  name, is_active, sellerId,
+  trigger_panel_id (custom only),
+  condition: { field, operator, value },
+  actions: [{ type, target_panel_id, target_panel_type, relation_field, operation, field, value_from }],
+  execution_count, last_executed
+}
 ```
 
 ## Prioritized Backlog
 ### P0 (Next)
-1. **Panel System Phase 3B**: Document Builder (templates + {{variables}} + PDF/Excel export)
+1. **Document Builder Templates**: Customizable PDF templates with {{variables}} for professional document generation
 
 ### P1
 2. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
@@ -105,19 +87,14 @@ Activity Log:
 - "Request Upgrade" button for sellers
 
 ### Future
-- Automation Engine (rules, triggers, IF/THEN logic) - Phase 4
 - Many-to-many relations, deep chaining
+- Advanced automation: webhooks, email notifications, scheduled triggers
 
 ## Key Files
-- `/app/backend/utils/permissions.py` - normalize_permissions, check_user_permission
-- `/app/backend/routers/employee_mgmt_router.py` - ModulePermission, EmployeePermissions, CRUD
-- `/app/backend/routers/panel_router.py` - Panel CRUD, validate_allowed_panels, auto-add relation fields, activity logging
-- `/app/backend/routers/invoice_router.py` - linkedPanels storage + resolution
-- `/app/backend/models/business_tools.py` - LinkedPanelRef model
-- `/app/frontend/src/context/EmployeeAccessContext.tsx` - canView, canAction, panel methods
-- `/app/frontend/src/app/seller/business-tools/employees/page.tsx` - PermissionGrid
-- `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Attach Panel Data
-- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` - Panel config with linking UI
-- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` - Record CRUD with RelationField integration
-- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/RelationField.tsx` - Reusable searchable relation dropdown
-- `/app/frontend/src/app/seller/business-tools/layout.tsx` - Sidebar with sidebarPanels
+- `/app/backend/routers/automation_router.py` - Automation CRUD + execution engine with loop prevention
+- `/app/backend/routers/panel_router.py` - Panel CRUD, export endpoints, automation hooks
+- `/app/backend/server.py` - Router registration
+- `/app/frontend/src/app/seller/business-tools/automation/page.tsx` - Rule Builder UI
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` - Records + export buttons
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/RelationField.tsx` - Reusable relation dropdown
+- `/app/frontend/src/app/seller/business-tools/layout.tsx` - Sidebar with Automation link
