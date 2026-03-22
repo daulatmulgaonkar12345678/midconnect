@@ -1269,6 +1269,10 @@ def serialize_doc(doc):
     """Convert MongoDB document to JSON-serializable dict"""
     if doc is None:
         return None
+    if isinstance(doc, ObjectId):
+        return str(doc)
+    if isinstance(doc, datetime):
+        return doc.isoformat()
     if isinstance(doc, list):
         return [serialize_doc(d) for d in doc]
     if isinstance(doc, dict):
