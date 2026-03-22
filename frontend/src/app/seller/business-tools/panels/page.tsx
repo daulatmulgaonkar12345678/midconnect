@@ -127,8 +127,20 @@ export default function PanelsPage() {
       if (targetsRes.ok) {
         const data = await targetsRes.json();
         setLinkableTargets(data.targets || []);
+      } else {
+        // Fallback: at minimum show system modules
+        setLinkableTargets([
+          { id: 'inventory', name: 'Inventory', type: 'system' },
+          { id: 'invoices', name: 'Invoices', type: 'system' },
+        ]);
       }
-    } catch { /* empty */ }
+    } catch {
+      // Fallback on network error
+      setLinkableTargets([
+        { id: 'inventory', name: 'Inventory', type: 'system' },
+        { id: 'invoices', name: 'Invoices', type: 'system' },
+      ]);
+    }
     setLoading(false);
   }, [token, headers]);
 
@@ -540,7 +552,7 @@ export default function PanelsPage() {
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Other Panels</span>
                   <p className="text-xs text-gray-400 mt-0.5 mb-2">Max 2 panels. Cannot link to itself or create circular links.</p>
                   {panelAllowedPanels.map((pid, idx) => {
-                    const linked = linkableTargets.find(t => t.id === pid && t.type === 'panel');
+                    const linked = panels.find(p => p.id === pid) || linkableTargets.find(t => t.id === pid);
                     return (
                       <div key={pid} className="flex items-center gap-2 mb-2">
                         <div className="flex-1 px-3 py-1.5 bg-white border rounded-lg text-sm text-gray-700 flex items-center gap-2">
@@ -568,12 +580,11 @@ export default function PanelsPage() {
                       data-testid="add-linked-panel-select"
                     >
                       <option value="">Select a panel to link...</option>
-                      {linkableTargets
-                        .filter(t => t.type === 'panel')
-                        .filter(t => t.id !== editingPanel?.id)
-                        .filter(t => !panelAllowedPanels.includes(t.id))
-                        .map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
+                      {panels
+                        .filter(p => p.id !== editingPanel?.id)
+                        .filter(p => !panelAllowedPanels.includes(p.id))
+                        .map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
                         ))
                       }
                     </select>
@@ -613,7 +624,7 @@ export default function PanelsPage() {
                           )}
                           {f.relatedPanel && (
                             <span className="text-xs text-indigo-500 ml-1">
-                              linked to: {linkableTargets.find(t => t.id === f.relatedPanel)?.name || f.relatedPanel}
+                              linked to: {f.relatedPanel === 'inventory' ? 'Inventory' : f.relatedPanel === 'invoices' ? 'Invoices' : (panels.find(p => p.id === f.relatedPanel)?.name || f.relatedPanel)}
                             </span>
                           )}
                         </div>
@@ -702,9 +713,17 @@ export default function PanelsPage() {
                             data-testid="field-related-select"
                           >
                             <option value="">Select module...</option>
-                            {linkableTargets.map(t => (
-                              <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
-                            ))}
+                            <optgroup label="System Modules">
+                              <option value="inventory">Inventory (system)</option>
+                              <option value="invoices">Invoices (system)</option>
+                            </optgroup>
+                            {panels.length > 0 && (
+                              <optgroup label="Custom Panels">
+                                {panels.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name} (panel)</option>
+                                ))}
+                              </optgroup>
+                            )}
                           </select>
                         </div>
                         <div>
