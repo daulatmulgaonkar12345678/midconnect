@@ -228,6 +228,80 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
 
         return {"targets": targets}
 
+    # ── MODULE FIELDS (for binding variable selection) ──
+    SYSTEM_MODULE_FIELDS = {
+        "inventory": [
+            {"key": "productName", "label": "Product Name", "type": "text"},
+            {"key": "sku", "label": "SKU", "type": "text"},
+            {"key": "category", "label": "Category", "type": "text"},
+            {"key": "stock", "label": "Stock", "type": "number"},
+            {"key": "quantity", "label": "Quantity", "type": "number"},
+            {"key": "minStock", "label": "Min Stock", "type": "number"},
+            {"key": "reorderPoint", "label": "Reorder Point", "type": "number"},
+        ],
+        "invoices": [
+            {"key": "invoiceNumber", "label": "Invoice Number", "type": "text"},
+            {"key": "buyerName", "label": "Buyer Name", "type": "text"},
+            {"key": "totalAmount", "label": "Total Amount", "type": "number"},
+        ],
+        "buyers": [
+            {"key": "name", "label": "Buyer Name", "type": "text"},
+            {"key": "phone", "label": "Phone", "type": "text"},
+            {"key": "email", "label": "Email", "type": "text"},
+        ],
+        "suppliers": [
+            {"key": "name", "label": "Supplier Name", "type": "text"},
+            {"key": "phone", "label": "Phone", "type": "text"},
+            {"key": "email", "label": "Email", "type": "text"},
+        ],
+        "purchase_orders": [
+            {"key": "poNumber", "label": "PO Number", "type": "text"},
+            {"key": "supplierName", "label": "Supplier Name", "type": "text"},
+            {"key": "totalAmount", "label": "Total Amount", "type": "number"},
+        ],
+        "quotations": [
+            {"key": "quotationNumber", "label": "Quotation Number", "type": "text"},
+            {"key": "buyerName", "label": "Buyer Name", "type": "text"},
+            {"key": "totalAmount", "label": "Total Amount", "type": "number"},
+        ],
+        "composite_products": [
+            {"key": "name", "label": "Product Name", "type": "text"},
+            {"key": "sku", "label": "SKU", "type": "text"},
+        ],
+        "employees": [
+            {"key": "name", "label": "Employee Name", "type": "text"},
+            {"key": "role", "label": "Role", "type": "text"},
+            {"key": "email", "label": "Email", "type": "text"},
+        ],
+    }
+
+    @router.get("/panels/module-fields/{module_id}")
+    async def get_module_fields(module_id: str, authorization: str = Header(...)):
+        """Return available fields for a system module or custom panel — used for binding variable selection."""
+        user = await get_current_user(authorization)
+        require_advanced_access(user)
+        seller_id = await get_seller_id(user)
+
+        # System module
+        if module_id in SYSTEM_MODULE_FIELDS:
+            return {"fields": SYSTEM_MODULE_FIELDS[module_id], "type": "system", "name": module_id}
+
+        # Custom panel
+        try:
+            panel = await db.panels.find_one({"_id": ObjectId(module_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid module ID")
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+
+        fields = [
+            {"key": f["key"], "label": f["label"], "type": f["type"]}
+            for f in panel.get("fields", [])
+            if f["type"] != "relation"
+        ]
+        return {"fields": fields, "type": "panel", "name": panel["name"]}
+
+
     # ── RELATED RECORDS (for panel data integration with modules) ──
     @router.get("/panels/related-records")
     async def get_related_records(

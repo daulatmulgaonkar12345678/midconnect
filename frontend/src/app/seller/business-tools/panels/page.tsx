@@ -48,6 +48,7 @@ interface PanelField {
   options?: string[];
   relatedPanel?: string;
   relationType?: string;
+  bindingField?: string;
   order: number;
   systemManaged?: boolean;
 }
@@ -102,6 +103,9 @@ export default function PanelsPage() {
   const [newFieldOptions, setNewFieldOptions] = useState('');
   const [newFieldRelated, setNewFieldRelated] = useState('');
   const [newFieldRelType, setNewFieldRelType] = useState('many_to_one');
+  const [newFieldBindingField, setNewFieldBindingField] = useState('');
+  const [targetModuleFields, setTargetModuleFields] = useState<{key: string; label: string; type: string}[]>([]);
+  const [loadingModuleFields, setLoadingModuleFields] = useState(false);
 
   const headers = useCallback(() => ({
     Authorization: `Bearer ${token}`,
@@ -187,6 +191,21 @@ export default function PanelsPage() {
     setNewFieldOptions('');
     setNewFieldRelated('');
     setNewFieldRelType('many_to_one');
+    setNewFieldBindingField('');
+    setTargetModuleFields([]);
+  };
+
+  const fetchModuleFields = async (moduleId: string) => {
+    if (!moduleId) { setTargetModuleFields([]); return; }
+    setLoadingModuleFields(true);
+    try {
+      const res = await fetch(`${API_URL}/api/business-tools/panels/module-fields/${moduleId}`, { headers: headers() });
+      if (res.ok) {
+        const data = await res.json();
+        setTargetModuleFields(data.fields || []);
+      }
+    } catch { /* ignore */ }
+    setLoadingModuleFields(false);
   };
 
   const addField = () => {
@@ -203,16 +222,25 @@ export default function PanelsPage() {
       toast.error('Select a linked module for relation field');
       return;
     }
+    if (newFieldType === 'relation' && !newFieldBindingField) {
+      toast.error('Select a binding variable — the common field that links both panels');
+      return;
+    }
+
+    // For relation fields, auto-set label from binding variable + target
+    const targetName = linkableTargets.find(t => t.id === newFieldRelated)?.name || newFieldRelated;
+    const bindingLabel = targetModuleFields.find(f => f.key === newFieldBindingField)?.label || newFieldBindingField;
 
     const field: PanelField = {
       key,
-      label: newFieldLabel.trim(),
+      label: newFieldType === 'relation' ? `${bindingLabel} (Linked to ${targetName})` : newFieldLabel.trim(),
       type: newFieldType,
       required: newFieldRequired,
       unique: newFieldUnique,
       options: ['dropdown', 'multiselect'].includes(newFieldType) ? newFieldOptions.split(',').map(o => o.trim()).filter(Boolean) : undefined,
       relatedPanel: newFieldType === 'relation' ? newFieldRelated : undefined,
       relationType: newFieldType === 'relation' ? newFieldRelType : undefined,
+      bindingField: newFieldType === 'relation' ? newFieldBindingField : undefined,
       order: panelFields.length,
     };
     setPanelFields(prev => [...prev, field]);
@@ -658,6 +686,9 @@ export default function PanelsPage() {
                                 const name = moduleLabels[f.relatedPanel || ''] || panels.find(p => p.id === f.relatedPanel)?.name || f.relatedPanel;
                                 return `Linked to ${name}`;
                               })()}
+                              {f.bindingField && (
+                                <span className="text-indigo-400 ml-1">via {f.bindingField}</span>
+                              )}
                             </span>
                           )}
                         </div>
@@ -744,43 +775,90 @@ export default function PanelsPage() {
 
                     {/* Relation config */}
                     {newFieldType === 'relation' && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Link To</label>
-                          <select value={newFieldRelated} onChange={e => setNewFieldRelated(e.target.value)}
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-sm"
-                            data-testid="field-related-select"
-                          >
-                            <option value="">Select module...</option>
-                            <optgroup label="System Modules">
-                              <option value="inventory">Inventory</option>
-                              <option value="invoices">Invoices</option>
-                              <option value="buyers">Buyers</option>
-                              <option value="suppliers">Suppliers</option>
-                              <option value="purchase_orders">Purchase Orders</option>
-                              <option value="quotations">Quotations</option>
-                              <option value="composite_products">Composite Products</option>
-                              <option value="employees">Employees</option>
-                            </optgroup>
-                            {panels.length > 0 && (
-                              <optgroup label="Custom Panels">
-                                {panels.map(p => (
-                                  <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Link To</label>
+                            <select value={newFieldRelated} onChange={e => {
+                              setNewFieldRelated(e.target.value);
+                              setNewFieldBindingField('');
+                              setTargetModuleFields([]);
+                              if (e.target.value) fetchModuleFields(e.target.value);
+                            }}
+                              className="w-full px-2.5 py-1.5 border rounded-lg text-sm"
+                              data-testid="field-related-select"
+                            >
+                              <option value="">Select module...</option>
+                              <optgroup label="System Modules">
+                                <option value="inventory">Inventory</option>
+                                <option value="invoices">Invoices</option>
+                                <option value="buyers">Buyers</option>
+                                <option value="suppliers">Suppliers</option>
+                                <option value="purchase_orders">Purchase Orders</option>
+                                <option value="quotations">Quotations</option>
+                                <option value="composite_products">Composite Products</option>
+                                <option value="employees">Employees</option>
                               </optgroup>
+                              {panels.length > 0 && (
+                                <optgroup label="Custom Panels">
+                                  {panels.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Relation Type</label>
+                            <select value={newFieldRelType} onChange={e => setNewFieldRelType(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border rounded-lg text-sm"
+                              data-testid="field-reltype-select"
+                            >
+                              <option value="many_to_one">Many to One (default)</option>
+                              <option value="one_to_one">One to One</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Binding Variable — appears after selecting a target */}
+                        {newFieldRelated && (
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <label className="block text-xs font-semibold text-blue-800 mb-1">
+                              Binding Variable (Common Field)
+                            </label>
+                            <p className="text-xs text-blue-600 mb-2">
+                              Select which field from the target is the common reference. This is how the system identifies and links records.
+                            </p>
+                            {loadingModuleFields ? (
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Loading fields...
+                              </div>
+                            ) : (
+                              <select value={newFieldBindingField} onChange={e => {
+                                setNewFieldBindingField(e.target.value);
+                                // Auto-set label from binding field + target name
+                                if (e.target.value) {
+                                  const bf = targetModuleFields.find(f => f.key === e.target.value);
+                                  const tn = linkableTargets.find(t => t.id === newFieldRelated)?.name || newFieldRelated;
+                                  if (bf) {
+                                    setNewFieldLabel(`${bf.label} (Linked to ${tn})`);
+                                    setNewFieldKey(autoKey(bf.label));
+                                  }
+                                }
+                              }}
+                                className="w-full px-2.5 py-1.5 border rounded-lg text-sm bg-white"
+                                data-testid="field-binding-select"
+                              >
+                                <option value="">Select binding variable...</option>
+                                {targetModuleFields.map(f => (
+                                  <option key={f.key} value={f.key}>
+                                    {f.label} ({f.type})
+                                  </option>
+                                ))}
+                              </select>
                             )}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Relation Type</label>
-                          <select value={newFieldRelType} onChange={e => setNewFieldRelType(e.target.value)}
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-sm"
-                            data-testid="field-reltype-select"
-                          >
-                            <option value="many_to_one">Many to One (default)</option>
-                            <option value="one_to_one">One to One</option>
-                          </select>
-                        </div>
+                          </div>
+                        )}
                       </div>
                     )}
 

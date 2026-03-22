@@ -33,6 +33,7 @@ interface PanelField {
   relatedPanel?: string;
   options?: string[];
   systemManaged?: boolean;
+  bindingField?: string;
 }
 
 interface Panel {
@@ -463,7 +464,8 @@ export default function AutomationPage() {
                         const targetLabel = SYSTEM_MODULES.includes(f.relatedPanel || '')
                           ? MODULE_LABELS[f.relatedPanel || ''] || f.relatedPanel
                           : panels.find(p => p.id === f.relatedPanel)?.name || f.relatedPanel;
-                        return <option key={f.key} value={f.key}>{f.label} (→ {targetLabel})</option>;
+                        const binding = f.bindingField ? ` via ${f.bindingField}` : '';
+                        return <option key={f.key} value={f.key}>{f.label} (→ {targetLabel}{binding})</option>;
                       })}
                     </select>
                   </div>
