@@ -138,8 +138,14 @@ def init_automation_router(db, verify_token_func):
             raise HTTPException(status_code=404, detail="Trigger panel not found.")
         return panel
 
+    SYSTEM_MODULE_IDS = {"inventory", "invoices", "buyers", "suppliers", "purchase_orders", "quotations", "composite_products", "employees"}
+
     async def validate_target_panel(seller_id: str, panel_id: str):
-        """Validate target panel exists (custom panel)."""
+        """Validate target panel exists (custom panel or system module)."""
+        # System modules are valid targets
+        if panel_id in SYSTEM_MODULE_IDS:
+            return {"_id": panel_id, "name": panel_id, "type": "system"}
+        # Custom panel
         try:
             panel = await db.panels.find_one(
                 {"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)},
