@@ -49,6 +49,7 @@ interface PanelField {
   relatedPanel?: string;
   relationType?: string;
   order: number;
+  systemManaged?: boolean;
 }
 
 interface Panel {
@@ -530,9 +531,12 @@ export default function PanelsPage() {
                 </div>
               </div>
 
-              {/* Link This Panel To */}
+              {/* Connect Panel With (Entity) */}
               <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4" data-testid="panel-linking-section">
-                <label className="block text-sm font-medium text-gray-700">Link This Panel To</label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Connect Panel With (Entity)</label>
+                  <p className="text-xs text-gray-400 mt-0.5">Select system modules this panel connects to. A relation field will be auto-created for each connection.</p>
+                </div>
 
                 {/* Module checkboxes */}
                 <div>
@@ -645,16 +649,30 @@ export default function PanelsPage() {
                           )}
                           {f.relatedPanel && (
                             <span className="text-xs text-indigo-500 ml-1">
-                              linked to: {f.relatedPanel === 'inventory' ? 'Inventory' : f.relatedPanel === 'invoices' ? 'Invoices' : (panels.find(p => p.id === f.relatedPanel)?.name || f.relatedPanel)}
+                              {(() => {
+                                const moduleLabels: Record<string, string> = {
+                                  inventory: 'Inventory', invoices: 'Invoices', buyers: 'Buyers',
+                                  suppliers: 'Suppliers', purchase_orders: 'Purchase Orders',
+                                  quotations: 'Quotations', composite_products: 'Composite Products', employees: 'Employees',
+                                };
+                                const name = moduleLabels[f.relatedPanel || ''] || panels.find(p => p.id === f.relatedPanel)?.name || f.relatedPanel;
+                                return `Linked to ${name}`;
+                              })()}
                             </span>
                           )}
                         </div>
-                        <button onClick={() => removeField(f.key)}
-                          className="p-1 text-gray-400 hover:text-red-500 flex-shrink-0"
-                          data-testid={`remove-field-${f.key}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        {f.systemManaged ? (
+                          <span className="text-xs text-gray-400 flex items-center gap-1 flex-shrink-0 px-1.5" title="Auto-created by system">
+                            <Lock className="h-3 w-3" /> Auto
+                          </span>
+                        ) : (
+                          <button onClick={() => removeField(f.key)}
+                            className="p-1 text-gray-400 hover:text-red-500 flex-shrink-0"
+                            data-testid={`remove-field-${f.key}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}

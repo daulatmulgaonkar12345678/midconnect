@@ -31,6 +31,8 @@ interface PanelField {
   label: string;
   type: string;
   relatedPanel?: string;
+  options?: string[];
+  systemManaged?: boolean;
 }
 
 interface Panel {
@@ -88,8 +90,6 @@ export default function AutomationPage() {
   const [condOp, setCondOp] = useState('equals');
   const [condValue, setCondValue] = useState('');
   const [actionType, setActionType] = useState('update_related');
-  const [actionTargetId, setActionTargetId] = useState('');
-  const [actionTargetType, setActionTargetType] = useState('custom');
   const [actionRelField, setActionRelField] = useState('');
   const [actionOp, setActionOp] = useState('increment');
   const [actionField, setActionField] = useState('');
@@ -131,9 +131,16 @@ export default function AutomationPage() {
   const triggerFields = triggerPanel?.fields || [];
   const relationFields = triggerFields.filter(f => f.type === 'relation');
 
-  const SYSTEM_TARGETS = [
-    { id: 'inventory', name: 'Inventory', type: 'system' },
-  ];
+  // Condition field info (for showing dropdown options)
+  const condFieldInfo = triggerFields.find(f => f.key === condField);
+  const condFieldHasOptions = condFieldInfo && (condFieldInfo.type === 'dropdown' || condFieldInfo.type === 'multiselect') && condFieldInfo.options?.length;
+
+  const SYSTEM_MODULES = ['inventory', 'invoices', 'buyers', 'suppliers', 'purchase_orders', 'quotations', 'composite_products', 'employees'];
+  const MODULE_LABELS: Record<string, string> = {
+    inventory: 'Inventory', invoices: 'Invoices', buyers: 'Buyers',
+    suppliers: 'Suppliers', purchase_orders: 'Purchase Orders',
+    quotations: 'Quotations', composite_products: 'Composite Products', employees: 'Employees',
+  };
 
   // Fields available on the target panel (for the Target Field dropdown)
   const SYSTEM_TARGET_FIELDS: Record<string, { key: string; label: string }[]> = {
@@ -145,25 +152,28 @@ export default function AutomationPage() {
     ],
   };
 
+  // Derive target panel from selected relation field (auto-set)
+  const selectedRelField = triggerFields.find(f => f.key === actionRelField);
+  const derivedTargetId = selectedRelField?.relatedPanel || '';
+  const derivedTargetType = SYSTEM_MODULES.includes(derivedTargetId) ? 'system' : 'custom';
+  const derivedTargetName = SYSTEM_MODULES.includes(derivedTargetId)
+    ? MODULE_LABELS[derivedTargetId] || derivedTargetId
+    : panels.find(p => p.id === derivedTargetId)?.name || derivedTargetId;
+
   const targetPanelFields = (() => {
-    if (!actionTargetId) return [];
-    if (actionTargetType === 'system') {
-      return SYSTEM_TARGET_FIELDS[actionTargetId] || [];
+    if (!derivedTargetId) return [];
+    if (derivedTargetType === 'system') {
+      return SYSTEM_TARGET_FIELDS[derivedTargetId] || [];
     }
-    const tp = panels.find(p => p.id === actionTargetId);
+    const tp = panels.find(p => p.id === derivedTargetId);
     return (tp?.fields || [])
       .filter(f => f.type !== 'relation')
       .map(f => ({ key: f.key, label: f.label }));
   })();
 
-  const allTargets = [
-    ...SYSTEM_TARGETS,
-    ...panels.map(p => ({ id: p.id, name: p.name, type: 'custom' })),
-  ];
-
   const resetForm = () => {
     setRuleName(''); setTriggerPanelId(''); setCondField(''); setCondOp('equals'); setCondValue('');
-    setActionType('update_related'); setActionTargetId(''); setActionTargetType('custom');
+    setActionType('update_related');
     setActionRelField(''); setActionOp('increment'); setActionField(''); setActionValueFrom('');
   };
 
@@ -179,8 +189,6 @@ export default function AutomationPage() {
     const a = rule.actions[0];
     if (a) {
       setActionType(a.type);
-      setActionTargetId(a.target_panel_id);
-      setActionTargetType(a.target_panel_type);
       setActionRelField(a.relation_field);
       setActionOp(a.operation || 'increment');
       setActionField(a.field || '');
@@ -194,7 +202,7 @@ export default function AutomationPage() {
     if (!triggerPanelId) { toast.error('Select a trigger panel'); return; }
     if (!condField) { toast.error('Select a condition field'); return; }
     if (!actionRelField) { toast.error('Select a relation field for action'); return; }
-    if (!actionTargetId) { toast.error('Select a target panel'); return; }
+    if (!derivedTargetId) { toast.error('Relation field has no linked target'); return; }
     if (actionType === 'update_related' && !actionField) { toast.error('Select a target field'); return; }
     if (actionType === 'update_related' && !actionValueFrom) { toast.error('Select a value source field'); return; }
 
@@ -205,8 +213,8 @@ export default function AutomationPage() {
       condition: { field: condField, operator: condOp, value: condValue || undefined },
       actions: [{
         type: actionType,
-        target_panel_id: actionTargetId,
-        target_panel_type: actionTargetType,
+        target_panel_id: derivedTargetId,
+        target_panel_type: derivedTargetType,
         relation_field: actionRelField,
         operation: actionType === 'update_related' ? actionOp : undefined,
         field: actionField || undefined,
@@ -416,18 +424,26 @@ export default function AutomationPage() {
                 <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
                   <label className="block text-sm font-semibold text-amber-800">IF (Condition)</label>
                   <div className="grid grid-cols-3 gap-2">
-                    <select value={condField} onChange={e => setCondField(e.target.value)}
+                    <select value={condField} onChange={e => { setCondField(e.target.value); setCondValue(''); }}
                       className="px-2 py-1.5 border rounded-lg text-sm" data-testid="cond-field-select">
                       <option value="">Field...</option>
-                      {triggerFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      {triggerFields.filter(f => f.type !== 'relation').map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
                     </select>
                     <select value={condOp} onChange={e => setCondOp(e.target.value)}
                       className="px-2 py-1.5 border rounded-lg text-sm" data-testid="cond-op-select">
                       {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     {!['not_empty', 'is_empty'].includes(condOp) && (
-                      <input type="text" value={condValue} onChange={e => setCondValue(e.target.value)}
-                        placeholder="Value" className="px-2 py-1.5 border rounded-lg text-sm" data-testid="cond-value-input" />
+                      condFieldHasOptions ? (
+                        <select value={condValue} onChange={e => setCondValue(e.target.value)}
+                          className="px-2 py-1.5 border rounded-lg text-sm" data-testid="cond-value-select">
+                          <option value="">Select value...</option>
+                          {condFieldInfo!.options!.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      ) : (
+                        <input type="text" value={condValue} onChange={e => setCondValue(e.target.value)}
+                          placeholder="Value" className="px-2 py-1.5 border rounded-lg text-sm" data-testid="cond-value-input" />
+                      )
                     )}
                   </div>
                 </div>
@@ -440,59 +456,60 @@ export default function AutomationPage() {
 
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">Via Relation Field *</label>
-                    <select value={actionRelField} onChange={e => setActionRelField(e.target.value)}
+                    <select value={actionRelField} onChange={e => { setActionRelField(e.target.value); setActionField(''); }}
                       className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-rel-field-select">
                       <option value="">Select relation field...</option>
-                      {relationFields.map(f => <option key={f.key} value={f.key}>{f.label} (→ {f.relatedPanel})</option>)}
+                      {relationFields.map(f => {
+                        const targetLabel = SYSTEM_MODULES.includes(f.relatedPanel || '')
+                          ? MODULE_LABELS[f.relatedPanel || ''] || f.relatedPanel
+                          : panels.find(p => p.id === f.relatedPanel)?.name || f.relatedPanel;
+                        return <option key={f.key} value={f.key}>{f.label} (→ {targetLabel})</option>;
+                      })}
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* Target Panel — auto-derived from relation field (read-only) */}
+                  {actionRelField && derivedTargetId && (
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Target Panel *</label>
-                      <select value={actionTargetId} onChange={e => {
-                        setActionTargetId(e.target.value);
-                        const t = allTargets.find(x => x.id === e.target.value);
-                        setActionTargetType(t?.type || 'custom');
-                        setActionField('');
-                      }}
-                        className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-target-select">
-                        <option value="">Select target...</option>
-                        <optgroup label="System Modules">
-                          {SYSTEM_TARGETS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </optgroup>
-                        <optgroup label="Custom Panels">
-                          {panels.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </optgroup>
-                      </select>
+                      <label className="block text-xs text-gray-600 mb-1">Target Panel (auto-detected)</label>
+                      <div className="w-full px-3 py-2 bg-white border rounded-lg text-sm text-gray-700 flex items-center gap-2" data-testid="action-target-display">
+                        <Lock className="h-3.5 w-3.5 text-gray-400" />
+                        <span className="font-medium">{derivedTargetName}</span>
+                        <span className="text-xs text-gray-400 ml-auto">{derivedTargetType === 'system' ? 'System Module' : 'Custom Panel'}</span>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Operation *</label>
-                      <select value={actionOp} onChange={e => setActionOp(e.target.value)}
-                        className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-op-select">
-                        {OPERATIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Target Field *</label>
-                      <select value={actionField} onChange={e => setActionField(e.target.value)}
-                        className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-field-select">
-                        <option value="">Select target field...</option>
-                        {targetPanelFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Value From (trigger field) *</label>
-                      <select value={actionValueFrom} onChange={e => setActionValueFrom(e.target.value)}
-                        className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-value-from-select">
-                        <option value="">Select field...</option>
-                        {triggerFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  {actionRelField && derivedTargetId && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Operation *</label>
+                          <select value={actionOp} onChange={e => setActionOp(e.target.value)}
+                            className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-op-select">
+                            {OPERATIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Target Field *</label>
+                          <select value={actionField} onChange={e => setActionField(e.target.value)}
+                            className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-field-select">
+                            <option value="">Select target field...</option>
+                            {targetPanelFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Value From (trigger field) *</label>
+                        <select value={actionValueFrom} onChange={e => setActionValueFrom(e.target.value)}
+                          className="w-full px-2 py-1.5 border rounded-lg text-sm" data-testid="action-value-from-select">
+                          <option value="">Select field...</option>
+                          {triggerFields.filter(f => f.type !== 'relation').map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

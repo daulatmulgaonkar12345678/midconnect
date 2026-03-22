@@ -378,7 +378,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
             if not has_inv_relation:
                 inv_field = {
                     "key": "product",
-                    "label": "Product",
+                    "label": "Product (Linked to Inventory)",
                     "type": "relation",
                     "required": True,
                     "unique": False,
@@ -386,6 +386,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                     "relationType": "many_to_one",
                     "options": None,
                     "order": 0,
+                    "systemManaged": True,
                 }
                 # Shift existing field orders
                 for f in doc["fields"]:
@@ -401,7 +402,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
             if not has_inv_relation:
                 inv_field = {
                     "key": "invoice",
-                    "label": "Invoice",
+                    "label": "Invoice (Linked to Invoices)",
                     "type": "relation",
                     "required": True,
                     "unique": False,
@@ -409,6 +410,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                     "relationType": "many_to_one",
                     "options": None,
                     "order": len(doc["fields"]),
+                    "systemManaged": True,
                 }
                 doc["fields"].append(inv_field)
 
@@ -461,10 +463,10 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                 )
                 if not has_inv_relation:
                     inv_field = {
-                        "key": "product", "label": "Product", "type": "relation",
+                        "key": "product", "label": "Product (Linked to Inventory)", "type": "relation",
                         "required": True, "unique": False,
                         "relatedPanel": "inventory", "relationType": "many_to_one",
-                        "options": None, "order": 0,
+                        "options": None, "order": 0, "systemManaged": True,
                     }
                     for f in current_fields:
                         f["order"] = f.get("order", 0) + 1
@@ -480,10 +482,10 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                 )
                 if not has_inv_relation:
                     inv_field = {
-                        "key": "invoice", "label": "Invoice", "type": "relation",
+                        "key": "invoice", "label": "Invoice (Linked to Invoices)", "type": "relation",
                         "required": True, "unique": False,
                         "relatedPanel": "invoices", "relationType": "many_to_one",
-                        "options": None, "order": len(fields_to_check),
+                        "options": None, "order": len(fields_to_check), "systemManaged": True,
                     }
                     if "fields" in update:
                         update["fields"].append(inv_field)
