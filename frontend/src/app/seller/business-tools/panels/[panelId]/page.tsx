@@ -7,9 +7,9 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import {
   Plus, Pencil, Trash2, Eye, Loader2, X, Save, Search,
-  ChevronLeft, ChevronRight, Type, Hash, Calendar, ListFilter,
-  CheckSquare, AlignLeft, Link2, ArrowLeft
+  ChevronLeft, ChevronRight, ArrowLeft, Link2
 } from 'lucide-react';
+import { RelationField } from './RelationField';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -41,16 +41,10 @@ interface RecordData {
 interface PanelRecord {
   id: string;
   data: RecordData;
-  _resolved?: { [key: string]: { id: string; label: string; sub?: string } };
+  _resolved?: { [key: string]: { id: string; label: string; sub?: string; sku?: string; buyerName?: string } };
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-}
-
-interface RelationOption {
-  id: string;
-  label: string;
-  sub?: string;
 }
 
 export default function PanelDetailPage() {
@@ -76,9 +70,8 @@ export default function PanelDetailPage() {
   // View modal
   const [viewRecord, setViewRecord] = useState<PanelRecord | null>(null);
 
-  // Relation lookup
-  const [relationResults, setRelationResults] = useState<{ [key: string]: RelationOption[] }>({});
-  const [relationSearch, setRelationSearch] = useState<{ [key: string]: string }>({});
+  // Resolved labels for relation fields (fieldKey -> { label, sub })
+  const [resolvedLabels, setResolvedLabels] = useState<{ [key: string]: { label: string; sub?: string } }>({});
 
   const headers = useCallback(() => ({
     Authorization: `Bearer ${token}`,
@@ -130,16 +123,21 @@ export default function PanelDetailPage() {
       else initial[f.key] = '';
     });
     setFormData(initial);
-    setRelationResults({});
-    setRelationSearch({});
+    setResolvedLabels({});
     setShowModal(true);
   };
 
   const openEdit = (rec: PanelRecord) => {
     setEditingRecord(rec);
     setFormData({ ...rec.data });
-    setRelationResults({});
-    setRelationSearch({});
+    // Pre-populate resolved labels from record's _resolved data
+    const labels: { [key: string]: { label: string; sub?: string } } = {};
+    if (rec._resolved) {
+      for (const [key, resolved] of Object.entries(rec._resolved)) {
+        if (resolved) labels[key] = { label: resolved.label, sub: resolved.sub || resolved.sku || resolved.buyerName };
+      }
+    }
+    setResolvedLabels(labels);
     setShowModal(true);
   };
 
@@ -183,18 +181,6 @@ export default function PanelDetailPage() {
       fetchRecords();
     } catch { toast.error('Delete failed'); }
   };
-
-  const lookupRelation = useCallback(async (fieldKey: string, target: string, q: string) => {
-    if (!token) return;
-    try {
-      const params = new URLSearchParams({ target, search: q });
-      const res = await fetch(`${API_URL}/api/business-tools/panels/${panelId}/relation-lookup?${params}`, { headers: headers() });
-      if (res.ok) {
-        const data = await res.json();
-        setRelationResults(prev => ({ ...prev, [fieldKey]: data.results || [] }));
-      }
-    } catch { /* empty */ }
-  }, [token, panelId, headers]);
 
   const setField = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
@@ -401,46 +387,19 @@ export default function PanelDetailPage() {
                   )}
 
                   {f.type === 'relation' && (
-                    <div>
-                      {formData[f.key] && (
-                        <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-indigo-50 rounded-lg border border-indigo-100">
-                          <Link2 className="h-4 w-4 text-indigo-500" />
-                          <span className="text-sm text-indigo-700 flex-1">
-                            {relationResults[f.key]?.find(r => r.id === formData[f.key])?.label || formData[f.key]}
-                          </span>
-                          <button onClick={() => setField(f.key, '')} className="text-gray-400 hover:text-red-500">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                        <input type="text"
-                          value={relationSearch[f.key] || ''}
-                          onChange={e => {
-                            setRelationSearch(prev => ({ ...prev, [f.key]: e.target.value }));
-                            lookupRelation(f.key, f.relatedPanel || '', e.target.value);
-                          }}
-                          onFocus={() => lookupRelation(f.key, f.relatedPanel || '', relationSearch[f.key] || '')}
-                          placeholder={`Search ${f.relatedPanel === 'inventory' ? 'products' : f.relatedPanel === 'invoices' ? 'invoices' : 'records'}...`}
-                          className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm"
-                          data-testid={`input-${f.key}-search`}
-                        />
-                      </div>
-                      {(relationResults[f.key] || []).length > 0 && (
-                        <div className="mt-1 max-h-32 overflow-y-auto border rounded-lg divide-y">
-                          {relationResults[f.key].map(r => (
-                            <button key={r.id} onClick={() => { setField(f.key, r.id); setRelationResults(prev => ({ ...prev, [f.key]: [] })); }}
-                              className="w-full text-left px-3 py-2 hover:bg-indigo-50 text-sm flex items-center justify-between"
-                              data-testid={`relation-option-${r.id}`}
-                            >
-                              <span className="font-medium text-gray-800">{r.label}</span>
-                              {r.sub && <span className="text-xs text-gray-400">{r.sub}</span>}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <RelationField
+                      panelId={panelId}
+                      fieldKey={f.key}
+                      relatedPanel={f.relatedPanel || ''}
+                      value={formData[f.key] || ''}
+                      resolvedLabel={resolvedLabels[f.key]?.label}
+                      resolvedSub={resolvedLabels[f.key]?.sub}
+                      token={token || ''}
+                      onChange={(id, label) => {
+                        setField(f.key, id);
+                        setResolvedLabels(prev => ({ ...prev, [f.key]: { label } }));
+                      }}
+                    />
                   )}
                 </div>
               ))}
