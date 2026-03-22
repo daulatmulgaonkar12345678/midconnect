@@ -1029,6 +1029,13 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
             "createdAt": now,
             "updatedAt": now,
         }
+
+        # Extract entity_id from relation fields for linking
+        for f in panel.get("fields", []):
+            if f.get("type") == "relation" and clean_data.get(f["key"]):
+                doc["entity_id"] = clean_data[f["key"]]
+                break
+
         result = await db.panel_records.insert_one(doc)
         doc["_id"] = result.inserted_id
 
