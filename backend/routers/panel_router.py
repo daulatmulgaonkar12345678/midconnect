@@ -47,6 +47,7 @@ class CreatePanelRequest(BaseModel):
     color: Optional[str] = "blue"
     fields: Optional[List[PanelFieldInput]] = []
     allowedModules: Optional[List[str]] = Field(default_factory=list)
+    allowedPanels: Optional[List[str]] = Field(default_factory=list)
 
 
 class UpdatePanelRequest(BaseModel):
@@ -55,6 +56,7 @@ class UpdatePanelRequest(BaseModel):
     icon: Optional[str] = None
     color: Optional[str] = None
     allowedModules: Optional[List[str]] = None
+    allowedPanels: Optional[List[str]] = None
 
 
 class AddFieldRequest(BaseModel):
@@ -155,6 +157,32 @@ def init_panel_router(db, verify_token_func):
             if rt not in VALID_RELATION_TYPES:
                 raise HTTPException(status_code=400, detail=f"Invalid relationType: {rt}")
 
+    async def validate_allowed_panels(seller_id: str, allowed_panels: list, current_panel_id: str = None):
+        """Validate panel linking rules: no self-link, no circular, max 2, must exist."""
+        if not allowed_panels:
+            return
+        if len(allowed_panels) > 2:
+            raise HTTPException(status_code=400, detail="Maximum 2 linked panels allowed.")
+        if len(set(allowed_panels)) != len(allowed_panels):
+            raise HTTPException(status_code=400, detail="Duplicate panel links are not allowed.")
+        if current_panel_id and current_panel_id in allowed_panels:
+            raise HTTPException(status_code=400, detail="A panel cannot link to itself.")
+        for pid in allowed_panels:
+            try:
+                target = await db.panels.find_one(
+                    {"_id": ObjectId(pid), "sellerId": ObjectId(seller_id)},
+                    {"_id": 1, "allowedPanels": 1}
+                )
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"Invalid panel ID: {pid}")
+            if not target:
+                raise HTTPException(status_code=404, detail=f"Linked panel not found: {pid}")
+            # Circular check: if the target already links back to us
+            if current_panel_id:
+                target_links = target.get("allowedPanels", [])
+                if current_panel_id in target_links:
+                    raise HTTPException(status_code=400, detail=f"Circular linking detected: panel '{pid}' already links back to this panel.")
+
     # ── LIST PANELS ──
     @router.get("/panels")
     async def list_panels(authorization: str = Header(...)):
@@ -165,7 +193,7 @@ def init_panel_router(db, verify_token_func):
         cursor = db.panels.find(
             {"sellerId": ObjectId(seller_id)},
             {"_id": 1, "name": 1, "slug": 1, "description": 1, "icon": 1, "color": 1,
-             "fields": 1, "allowedModules": 1, "createdAt": 1, "updatedAt": 1}
+             "fields": 1, "allowedModules": 1, "allowedPanels": 1, "createdAt": 1, "updatedAt": 1}
         ).sort("createdAt", 1)
         panels = await cursor.to_list(MAX_PANELS_PER_BUSINESS + 5)
         return {"panels": serialize_doc(panels), "count": len(panels), "limit": MAX_PANELS_PER_BUSINESS}
@@ -324,9 +352,14 @@ def init_panel_router(db, verify_token_func):
             "color": data.color or "blue",
             "fields": fields,
             "allowedModules": data.allowedModules or [],
+            "allowedPanels": data.allowedPanels or [],
             "createdAt": now,
             "updatedAt": now,
         }
+
+        # Validate allowedPanels
+        if data.allowedPanels:
+            await validate_allowed_panels(seller_id, data.allowedPanels, current_panel_id=None)
 
         # Auto-add required inventory relation field if linked to inventory
         if "inventory" in (data.allowedModules or []):
@@ -350,6 +383,26 @@ def init_panel_router(db, verify_token_func):
                 for f in doc["fields"]:
                     f["order"] = f.get("order", 0) + 1
                 doc["fields"].insert(0, inv_field)
+
+        # Auto-add required invoice relation field if linked to invoices
+        if "invoices" in (data.allowedModules or []):
+            has_inv_relation = any(
+                f["type"] == "relation" and f.get("relatedPanel") == "invoices"
+                for f in doc["fields"]
+            )
+            if not has_inv_relation:
+                inv_field = {
+                    "key": "invoice",
+                    "label": "Invoice",
+                    "type": "relation",
+                    "required": True,
+                    "unique": False,
+                    "relatedPanel": "invoices",
+                    "relationType": "many_to_one",
+                    "options": None,
+                    "order": len(doc["fields"]),
+                }
+                doc["fields"].append(inv_field)
 
         result = await db.panels.insert_one(doc)
         doc["_id"] = result.inserted_id
@@ -391,9 +444,9 @@ def init_panel_router(db, verify_token_func):
             update["color"] = data.color
         if data.allowedModules is not None:
             update["allowedModules"] = data.allowedModules
+            current_fields = panel.get("fields", [])
             # Auto-add inventory relation field if newly linking to inventory
             if "inventory" in data.allowedModules:
-                current_fields = panel.get("fields", [])
                 has_inv_relation = any(
                     f["type"] == "relation" and f.get("relatedPanel") == "inventory"
                     for f in current_fields
@@ -409,6 +462,30 @@ def init_panel_router(db, verify_token_func):
                         f["order"] = f.get("order", 0) + 1
                     current_fields.insert(0, inv_field)
                     update["fields"] = current_fields
+
+            # Auto-add invoice relation field if newly linking to invoices
+            if "invoices" in data.allowedModules:
+                fields_to_check = update.get("fields", current_fields)
+                has_inv_relation = any(
+                    f["type"] == "relation" and f.get("relatedPanel") == "invoices"
+                    for f in fields_to_check
+                )
+                if not has_inv_relation:
+                    inv_field = {
+                        "key": "invoice", "label": "Invoice", "type": "relation",
+                        "required": True, "unique": False,
+                        "relatedPanel": "invoices", "relationType": "many_to_one",
+                        "options": None, "order": len(fields_to_check),
+                    }
+                    if "fields" in update:
+                        update["fields"].append(inv_field)
+                    else:
+                        current_fields.append(inv_field)
+                        update["fields"] = current_fields
+
+        if data.allowedPanels is not None:
+            await validate_allowed_panels(seller_id, data.allowedPanels, current_panel_id=panel_id)
+            update["allowedPanels"] = data.allowedPanels
 
         await db.panels.update_one({"_id": ObjectId(panel_id)}, {"$set": update})
         logger.info(f"Panel {panel_id} updated")

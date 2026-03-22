@@ -102,7 +102,7 @@
   "context_for_next_testing_agent": "MongoDB schema alignment verified. All subscription endpoints use camelCase and store userId as ObjectId. Minor issue: admin_get_subscription endpoint (line 8275) lacks try/except guard. All other admin subscription endpoints properly wrapped.",
 
   "test_environment": {
-    "api_url": "https://erp-perms-modal.preview.emergentagent.com",
+    "api_url": "https://panel-product-sync.preview.emergentagent.com",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"
   }

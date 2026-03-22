@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import {
   LayoutGrid, Plus, Pencil, Trash2, ChevronRight, Loader2,
   Type, Hash, Calendar, ListFilter, CheckSquare, AlignLeft,
-  Link2, GripVertical, X, Save, AlertTriangle, Lock
+  Link2, GripVertical, X, Save, Lock
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -24,12 +24,6 @@ const FIELD_TYPES = [
   { value: 'boolean', label: 'Yes / No', icon: CheckSquare, desc: 'Checkbox toggle' },
   { value: 'longtext', label: 'Long Text', icon: AlignLeft, desc: 'Multi-line text for notes' },
   { value: 'relation', label: 'Relation', icon: Link2, desc: 'Link to another module' },
-];
-
-const ICON_OPTIONS = [
-  'layout-grid', 'clipboard-check', 'truck', 'package', 'shield-check',
-  'file-text', 'bar-chart', 'users', 'settings', 'zap',
-  'target', 'star', 'flag', 'tag', 'layers',
 ];
 
 const COLOR_OPTIONS = [
@@ -66,6 +60,7 @@ interface Panel {
   color: string;
   fields: PanelField[];
   allowedModules?: string[];
+  allowedPanels?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -93,6 +88,7 @@ export default function PanelsPage() {
   const [panelColor, setPanelColor] = useState('blue');
   const [panelFields, setPanelFields] = useState<PanelField[]>([]);
   const [panelAllowedModules, setPanelAllowedModules] = useState<string[]>([]);
+  const [panelAllowedPanels, setPanelAllowedPanels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Add field
@@ -148,7 +144,9 @@ export default function PanelsPage() {
     setPanelColor('blue');
     setPanelFields([]);
     setPanelAllowedModules([]);
+    setPanelAllowedPanels([]);
     setShowFieldForm(false);
+    setShowModal(true);
   };
 
   const openEditModal = (panel: Panel) => {
@@ -159,7 +157,9 @@ export default function PanelsPage() {
     setPanelColor(panel.color);
     setPanelFields([...panel.fields]);
     setPanelAllowedModules(panel.allowedModules || []);
+    setPanelAllowedPanels(panel.allowedPanels || []);
     setShowFieldForm(false);
+    setShowModal(true);
   };
 
   const autoKey = (label: string) =>
@@ -220,7 +220,7 @@ export default function PanelsPage() {
         const res = await fetch(`${API_URL}/api/business-tools/panels/${editingPanel.id}`, {
           method: 'PUT',
           headers: headers(),
-          body: JSON.stringify({ name: panelName.trim(), description: panelDesc.trim(), icon: panelIcon, color: panelColor, allowedModules: panelAllowedModules }),
+          body: JSON.stringify({ name: panelName.trim(), description: panelDesc.trim(), icon: panelIcon, color: panelColor, allowedModules: panelAllowedModules, allowedPanels: panelAllowedPanels }),
         });
         if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Update failed'); setSaving(false); return; }
 
@@ -263,6 +263,7 @@ export default function PanelsPage() {
             color: panelColor,
             fields: panelFields,
             allowedModules: panelAllowedModules,
+            allowedPanels: panelAllowedPanels,
           }),
         });
         if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Create failed'); setSaving(false); return; }
@@ -399,7 +400,28 @@ export default function PanelsPage() {
                   )}
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-1.5">
+                {/* Linked modules/panels badges */}
+                {((panel.allowedModules || []).length > 0 || (panel.allowedPanels || []).length > 0) && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {(panel.allowedModules || []).map(m => (
+                      <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs rounded-md border border-emerald-200 font-medium">
+                        <Link2 className="h-3 w-3" />
+                        {m === 'inventory' ? 'Inventory' : m === 'invoices' ? 'Invoices' : m}
+                      </span>
+                    ))}
+                    {(panel.allowedPanels || []).map(pid => {
+                      const linked = panels.find(p => p.id === pid);
+                      return (
+                        <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-50 text-violet-700 text-xs rounded-md border border-violet-200 font-medium">
+                          <Link2 className="h-3 w-3" />
+                          {linked?.name || pid.slice(0, 8)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   {panel.fields.map(f => {
                     const Icon = fieldTypeIcon(f.type);
                     return (
@@ -481,6 +503,84 @@ export default function PanelsPage() {
                 </div>
               </div>
 
+              {/* Link This Panel To */}
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4" data-testid="panel-linking-section">
+                <label className="block text-sm font-medium text-gray-700">Link This Panel To</label>
+
+                {/* Module checkboxes */}
+                <div>
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Modules</span>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {[
+                      { key: 'inventory', label: 'Inventory' },
+                      { key: 'invoices', label: 'Invoices' },
+                    ].map(mod => (
+                      <label key={mod.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={panelAllowedModules.includes(mod.key)}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setPanelAllowedModules(prev => [...prev, mod.key]);
+                            } else {
+                              setPanelAllowedModules(prev => prev.filter(m => m !== mod.key));
+                            }
+                          }}
+                          className="rounded border-gray-300 text-indigo-600 w-4 h-4"
+                          data-testid={`link-module-${mod.key}`}
+                        />
+                        {mod.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Panel linking dropdown */}
+                <div>
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Other Panels</span>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-2">Max 2 panels. Cannot link to itself or create circular links.</p>
+                  {panelAllowedPanels.map((pid, idx) => {
+                    const linked = linkableTargets.find(t => t.id === pid && t.type === 'panel');
+                    return (
+                      <div key={pid} className="flex items-center gap-2 mb-2">
+                        <div className="flex-1 px-3 py-1.5 bg-white border rounded-lg text-sm text-gray-700 flex items-center gap-2">
+                          <Link2 className="h-3.5 w-3.5 text-violet-500" />
+                          {linked?.name || pid.slice(0, 8)}
+                        </div>
+                        <button onClick={() => setPanelAllowedPanels(prev => prev.filter((_, i) => i !== idx))}
+                          className="p-1 text-gray-400 hover:text-red-500"
+                          data-testid={`remove-linked-panel-${idx}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {panelAllowedPanels.length < 2 && (
+                    <select
+                      value=""
+                      onChange={e => {
+                        if (e.target.value && !panelAllowedPanels.includes(e.target.value)) {
+                          setPanelAllowedPanels(prev => [...prev, e.target.value]);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg text-sm text-gray-600"
+                      data-testid="add-linked-panel-select"
+                    >
+                      <option value="">Select a panel to link...</option>
+                      {linkableTargets
+                        .filter(t => t.type === 'panel')
+                        .filter(t => t.id !== editingPanel?.id)
+                        .filter(t => !panelAllowedPanels.includes(t.id))
+                        .map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))
+                      }
+                    </select>
+                  )}
+                </div>
+              </div>
+
               {/* Fields */}
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -499,7 +599,7 @@ export default function PanelsPage() {
 
                 {/* Existing fields */}
                 <div className="space-y-2">
-                  {panelFields.map((f, idx) => {
+                  {panelFields.map((f) => {
                     const Icon = fieldTypeIcon(f.type);
                     return (
                       <div key={f.key} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border" data-testid={`field-item-${f.key}`}>
@@ -507,7 +607,7 @@ export default function PanelsPage() {
                         <Icon className="h-4 w-4 text-gray-500 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <span className="text-sm font-medium text-gray-800">{f.label}</span>
-                          <span className="text-xs text-gray-400 ml-2">{f.type}{f.required ? ' (required)' : ''}</span>
+                          <span className="text-xs text-gray-400 ml-2">{f.type}{f.required ? ' (required)' : ''}{f.unique ? ' (unique)' : ''}</span>
                           {f.options && f.options.length > 0 && (
                             <span className="text-xs text-gray-400 ml-1">[ {f.options.join(', ')} ]</span>
                           )}
@@ -620,7 +720,7 @@ export default function PanelsPage() {
                       </div>
                     )}
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                         <input type="checkbox" checked={newFieldRequired}
                           onChange={e => setNewFieldRequired(e.target.checked)}
@@ -628,6 +728,14 @@ export default function PanelsPage() {
                           data-testid="field-required-checkbox"
                         />
                         Required
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                        <input type="checkbox" checked={newFieldUnique}
+                          onChange={e => setNewFieldUnique(e.target.checked)}
+                          className="rounded border-gray-300 text-amber-600"
+                          data-testid="field-unique-checkbox"
+                        />
+                        Unique
                       </label>
                     </div>
 
