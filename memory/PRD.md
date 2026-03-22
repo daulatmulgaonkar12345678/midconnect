@@ -42,6 +42,9 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Selected value shown as chip with clear button
     - Pre-populates resolved labels when editing existing records
     - Works for inventory, invoices, and custom panel relations
+    - **Critical Backend Fix**: relation-lookup for inventory now queries `sellerListings` (with `$lookup` to `products`) instead of `products` directly — matching the inventory system's architecture
+    - **Validation Fix**: inventory relation validation now checks `sellerListings` collection
+    - **Display Fix**: resolved relation display joins `sellerListings` with `products` for name
 
 ## Permission Architecture
 ```
