@@ -1002,6 +1002,9 @@ def init_panel_router(db, verify_token_func):
         check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
+        if not target:
+            return {"results": []}
+
         results = []
         limit = 20
 

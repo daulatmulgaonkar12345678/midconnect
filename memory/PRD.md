@@ -34,6 +34,15 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - **UI Badges**: Panel cards display linked modules/panels as colored badges
     - **Backend**: `allowedPanels` added to panel schema, `validate_allowed_panels` helper for rules enforcement
 
+25. **RelationField Component Fix (Mar 2026)** - LATEST:
+    - Created reusable `RelationField.tsx` component for searchable relation dropdowns
+    - Debounced API calls (300ms) to `/relation-lookup` endpoint
+    - Loading spinner, empty state ("No results found"), outside-click-to-close
+    - Displays product name + SKU for inventory, invoice number + buyer name for invoices
+    - Selected value shown as chip with clear button
+    - Pre-populates resolved labels when editing existing records
+    - Works for inventory, invoices, and custom panel relations
+
 ## Permission Architecture
 ```
 DB Schema (users.employeePermissions):
@@ -106,5 +115,6 @@ Activity Log:
 - `/app/frontend/src/app/seller/business-tools/employees/page.tsx` - PermissionGrid
 - `/app/frontend/src/app/seller/business-tools/invoices/page.tsx` - Attach Panel Data
 - `/app/frontend/src/app/seller/business-tools/panels/page.tsx` - Panel config with linking UI
-- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` - Record CRUD with relation lookup
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` - Record CRUD with RelationField integration
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/RelationField.tsx` - Reusable searchable relation dropdown
 - `/app/frontend/src/app/seller/business-tools/layout.tsx` - Sidebar with sidebarPanels
