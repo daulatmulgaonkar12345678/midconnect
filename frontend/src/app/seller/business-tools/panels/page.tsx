@@ -239,13 +239,21 @@ export default function PanelsPage() {
         // Sync fields: delete removed, add new
         const oldKeys = new Set(editingPanel.fields.map(f => f.key));
         const newKeys = new Set(panelFields.map(f => f.key));
+        const failedDeletes: string[] = [];
 
         for (const oldF of editingPanel.fields) {
           if (!newKeys.has(oldF.key)) {
-            await fetch(`${API_URL}/api/business-tools/panels/${editingPanel.id}/fields/${oldF.key}`, {
+            const delRes = await fetch(`${API_URL}/api/business-tools/panels/${editingPanel.id}/fields/${oldF.key}`, {
               method: 'DELETE', headers: headers(),
             });
+            if (!delRes.ok) {
+              const delData = await delRes.json().catch(() => ({ detail: 'Delete failed' }));
+              failedDeletes.push(`${oldF.label}: ${delData.detail || 'Cannot delete'}`);
+            }
           }
+        }
+        if (failedDeletes.length > 0) {
+          toast.error(failedDeletes.join('\n'), { duration: 6000 });
         }
         for (const newF of panelFields) {
           if (!oldKeys.has(newF.key)) {
