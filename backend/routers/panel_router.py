@@ -684,9 +684,11 @@ def init_panel_router(db, verify_token_func):
         target = field.get("relatedPanel", "")
         try:
             if target == "inventory":
-                doc = await db.products.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"name": 1, "sku": 1})
-                if doc:
-                    return {"id": str(doc["_id"]), "label": doc.get("name", ""), "sku": doc.get("sku", "")}
+                # Inventory items are sellerListings, need to join with products for name
+                listing = await db.sellerListings.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"productId": 1, "sku": 1})
+                if listing:
+                    product = await db.products.find_one({"_id": listing.get("productId")}, {"name": 1}) if listing.get("productId") else None
+                    return {"id": str(listing["_id"]), "label": product.get("name", "") if product else "", "sku": listing.get("sku", "")}
             elif target == "invoices":
                 doc = await db.invoices.find_one({"_id": ObjectId(value), "sellerId": ObjectId(seller_id)}, {"invoiceNumber": 1, "buyerName": 1})
                 if doc:
@@ -760,7 +762,7 @@ def init_panel_router(db, verify_token_func):
                     exists = False
                     try:
                         if target == "inventory":
-                            exists = bool(await db.products.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
+                            exists = bool(await db.sellerListings.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}, {"_id": 1}))
                         elif target == "invoices":
                             exists = bool(await db.invoices.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
                         else:
@@ -1009,15 +1011,37 @@ def init_panel_router(db, verify_token_func):
         limit = 20
 
         if target == "inventory":
-            q = {"sellerId": ObjectId(seller_id)}
+            # Inventory items are in sellerListings, joined with products for names
+            pipeline = [
+                {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+                {"$lookup": {
+                    "from": "products",
+                    "localField": "productId",
+                    "foreignField": "_id",
+                    "as": "productData"
+                }},
+                {"$unwind": {"path": "$productData", "preserveNullAndEmptyArrays": True}},
+                {"$project": {
+                    "listingId": "$_id",
+                    "productName": "$productData.name",
+                    "sku": {"$ifNull": ["$sku", ""]},
+                }},
+            ]
             if search:
-                q["$or"] = [
-                    {"name": {"$regex": search, "$options": "i"}},
-                    {"sku": {"$regex": search, "$options": "i"}},
-                ]
-            cursor = db.products.find(q, {"_id": 1, "name": 1, "sku": 1}).limit(limit)
-            async for doc in cursor:
-                results.append({"id": str(doc["_id"]), "label": doc.get("name", ""), "sub": doc.get("sku", "")})
+                pipeline.append({"$match": {
+                    "$or": [
+                        {"productName": {"$regex": search, "$options": "i"}},
+                        {"sku": {"$regex": search, "$options": "i"}},
+                    ]
+                }})
+            pipeline.append({"$limit": limit})
+            items = await db.sellerListings.aggregate(pipeline).to_list(limit)
+            for item in items:
+                results.append({
+                    "id": str(item.get("listingId", item.get("_id"))),
+                    "label": item.get("productName", ""),
+                    "sub": item.get("sku", ""),
+                })
 
         elif target == "invoices":
             q = {"sellerId": ObjectId(seller_id)}
