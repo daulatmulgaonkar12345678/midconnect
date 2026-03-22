@@ -60,7 +60,7 @@
   },
 
   "test_credentials": {
-    "api_url": "https://panel-product-sync.preview.emergentagent.com",
+    "api_url": "https://doc-builder-preview-1.preview.emergentagent.com",
     "test_product_slug": "industrial-electric-motor-5hp-test-category-supplier-india"
   },
 

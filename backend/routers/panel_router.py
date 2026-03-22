@@ -6,12 +6,14 @@ Panel creation restricted to seller admins (not employees).
 """
 
 from fastapi import APIRouter, HTTPException, Header
+from fastapi.responses import StreamingResponse
 from typing import Optional, List
 from datetime import datetime, timezone
 from bson import ObjectId
 from pydantic import BaseModel, Field
 import logging
 import re
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +91,7 @@ class UpdateRecordRequest(BaseModel):
     data: dict
 
 
-def init_panel_router(db, verify_token_func):
+def init_panel_router(db, verify_token_func, automation_executor=None):
     from utils.permissions import authenticate_user, resolve_seller_id, is_platform_admin, normalize_permissions
 
     router = APIRouter(tags=["Panels"])
@@ -971,6 +973,14 @@ def init_panel_router(db, verify_token_func):
         await db.panel_activity_logs.insert_one(log_entry)
 
         logger.info(f"Record created in panel {panel_id} by {user_id}")
+
+        # Execute automation rules (custom panels only)
+        if automation_executor:
+            try:
+                await automation_executor(clean_data, panel_id, str(result.inserted_id), seller_id, user_id, "record_created")
+            except Exception as e:
+                logger.error(f"Automation execution error: {e}")
+
         return serialize_doc(doc)
 
     # ── UPDATE RECORD ──
@@ -998,6 +1008,15 @@ def init_panel_router(db, verify_token_func):
             {"$set": {"data": clean_data, "updatedAt": datetime.now(timezone.utc)}}
         )
         logger.info(f"Record {record_id} updated in panel {panel_id}")
+
+        # Execute automation rules on update too
+        if automation_executor:
+            user_id = str(user.get("_id") or user.get("id"))
+            try:
+                await automation_executor(clean_data, panel_id, record_id, seller_id, user_id, "record_updated")
+            except Exception as e:
+                logger.error(f"Automation execution error on update: {e}")
+
         return {"message": "Record updated"}
 
     # ── DELETE RECORD ──
@@ -1243,5 +1262,173 @@ def init_panel_router(db, verify_token_func):
             if "recordId" in log:
                 log["recordId"] = str(log["recordId"])
         return {"logs": serialize_doc(logs)}
+
+    # ═══════════════════════════════════════════
+    # DOCUMENT BUILDER — Phase 3B (READ-ONLY)
+    # ═══════════════════════════════════════════
+
+    @router.get("/panels/{panel_id}/export/excel")
+    async def export_excel(panel_id: str, authorization: str = Header(...)):
+        """Export panel records to Excel. READ-ONLY — no automation triggered."""
+        user = await get_current_user(authorization)
+        check_panel_access(user, panel_id, "view")
+        seller_id = await get_seller_id(user)
+
+        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+
+        records = await db.panel_records.find(
+            {"panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)}
+        ).sort("createdAt", -1).to_list(5000)
+
+        fields = [f for f in panel.get("fields", []) if not f.get("disabled")]
+
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = panel["name"][:31]
+
+        # Header style
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
+        )
+
+        # Write headers
+        headers = ["#"] + [f["label"] for f in fields] + ["Created At"]
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+
+        # Resolve relation fields
+        for row_idx, rec in enumerate(records, 2):
+            ws.cell(row=row_idx, column=1, value=row_idx - 1).border = thin_border
+            for col_idx, f in enumerate(fields, 2):
+                val = rec.get("data", {}).get(f["key"], "")
+                # Resolve relations
+                if f["type"] == "relation" and val:
+                    resolved = await resolve_relation_display(seller_id, f, val)
+                    val = resolved.get("label", str(val)) if resolved else str(val)
+                elif isinstance(val, list):
+                    val = ", ".join(str(v) for v in val)
+                elif isinstance(val, bool):
+                    val = "Yes" if val else "No"
+                cell = ws.cell(row=row_idx, column=col_idx, value=str(val) if val else "")
+                cell.border = thin_border
+            # Created At
+            created = rec.get("createdAt", "")
+            if isinstance(created, datetime):
+                created = created.strftime("%Y-%m-%d %H:%M")
+            ws.cell(row=row_idx, column=len(fields) + 2, value=str(created)).border = thin_border
+
+        # Auto-width
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"{panel['name'].replace(' ', '_')}_export.xlsx"
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+    @router.get("/panels/{panel_id}/export/pdf")
+    async def export_pdf(panel_id: str, authorization: str = Header(...)):
+        """Export panel records to PDF. READ-ONLY — no automation triggered."""
+        user = await get_current_user(authorization)
+        check_panel_access(user, panel_id, "view")
+        seller_id = await get_seller_id(user)
+
+        panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+
+        records = await db.panel_records.find(
+            {"panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)}
+        ).sort("createdAt", -1).to_list(1000)
+
+        fields = [f for f in panel.get("fields", []) if not f.get("disabled")]
+
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.units import inch
+
+        output = io.BytesIO()
+        page_size = landscape(A4) if len(fields) > 5 else A4
+        doc = SimpleDocTemplate(output, pagesize=page_size, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        elements = []
+
+        # Title
+        elements.append(Paragraph(f"<b>{panel['name']}</b>", styles['Title']))
+        if panel.get("description"):
+            elements.append(Paragraph(panel["description"], styles['Normal']))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph(f"Total Records: {len(records)} | Exported: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}", styles['Normal']))
+        elements.append(Spacer(1, 12))
+
+        # Table
+        header_row = ["#"] + [f["label"] for f in fields]
+        table_data = [header_row]
+
+        for i, rec in enumerate(records, 1):
+            row = [str(i)]
+            for f in fields:
+                val = rec.get("data", {}).get(f["key"], "")
+                if f["type"] == "relation" and val:
+                    resolved = await resolve_relation_display(seller_id, f, val)
+                    val = resolved.get("label", str(val)) if resolved else str(val)
+                elif isinstance(val, list):
+                    val = ", ".join(str(v) for v in val)
+                elif isinstance(val, bool):
+                    val = "Yes" if val else "No"
+                row.append(str(val) if val else "")
+            table_data.append(row)
+
+        if len(table_data) > 1:
+            col_count = len(header_row)
+            avail_width = page_size[0] - inch
+            col_width = avail_width / col_count
+
+            t = Table(table_data, colWidths=[col_width] * col_count, repeatRows=1)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(t)
+        else:
+            elements.append(Paragraph("No records found.", styles['Normal']))
+
+        doc.build(elements)
+        output.seek(0)
+
+        filename = f"{panel['name'].replace(' ', '_')}_export.pdf"
+        return StreamingResponse(
+            output,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
 
     return router

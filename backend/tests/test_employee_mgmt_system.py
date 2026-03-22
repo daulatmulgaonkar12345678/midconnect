@@ -22,7 +22,7 @@ import sys
 # Add backend path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://panel-product-sync.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://doc-builder-preview-1.preview.emergentagent.com').rstrip('/')
 
 # Expected values from employee_mgmt_router.py
 EXPECTED_MODULES = [

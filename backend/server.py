@@ -1156,7 +1156,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://panel-product-sync.preview.emergentagent.com",
+        "https://doc-builder-preview-1.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
@@ -13158,8 +13158,12 @@ from utils.permissions import resolve_seller_id as _resolve_seller_id
 employee_mgmt_router = init_employee_mgmt_router(db, verify_firebase_token, _resolve_seller_id, sio)
 app.include_router(employee_mgmt_router, prefix="/api/business-tools")
 
+from routers.automation_router import init_automation_router
+automation_router = init_automation_router(db, verify_firebase_token)
+app.include_router(automation_router, prefix="/api/business-tools")
+
 from routers.panel_router import init_panel_router
-panel_router = init_panel_router(db, verify_firebase_token)
+panel_router = init_panel_router(db, verify_firebase_token, automation_executor=automation_router.execute_automation)
 app.include_router(panel_router, prefix="/api/business-tools")
 
 
