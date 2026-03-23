@@ -208,6 +208,9 @@ export default function AutomationPage() {
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
+  // System module source fields (when a system module is selected as trigger)
+  const [systemSourceFields, setSystemSourceFields] = useState<PanelField[]>([]);
+
   const getHeaders = useCallback(async () => {
     const token = await getIdToken();
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -230,6 +233,22 @@ export default function AutomationPage() {
   }, [getHeaders]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Fetch source fields when trigger panel is a system module ──
+  useEffect(() => {
+    if (!rule.trigger_panel_id) { setSystemSourceFields([]); return; }
+    if (!SYSTEM_MODULE_IDS.has(rule.trigger_panel_id)) { setSystemSourceFields([]); return; }
+    (async () => {
+      try {
+        const hdrs = await getHeaders();
+        const res = await fetch(`${API_URL}/api/business-tools/panels/module-fields/${rule.trigger_panel_id}`, { headers: hdrs });
+        if (res.ok) {
+          const d = await res.json();
+          setSystemSourceFields(d.fields || []);
+        }
+      } catch { setSystemSourceFields([]); }
+    })();
+  }, [rule.trigger_panel_id, getHeaders]);
 
   // ── Fetch target fields for a specific target index ──
 
@@ -266,8 +285,9 @@ export default function AutomationPage() {
 
   // ── Derived: source panel fields ──
 
-  const sourcePanel = panels.find(p => p.id === rule.trigger_panel_id);
-  const sourceFields = sourcePanel?.fields || [];
+  const isSystemSource = SYSTEM_MODULE_IDS.has(rule.trigger_panel_id);
+  const sourcePanel = isSystemSource ? null : panels.find(p => p.id === rule.trigger_panel_id);
+  const sourceFields: PanelField[] = isSystemSource ? systemSourceFields : (sourcePanel?.fields || []);
   const sourceDataFields = sourceFields.filter(f => f.type !== 'relation');
   const sourceRelationFields = sourceFields.filter(f => f.type === 'relation');
   const sourceAllFields = sourceFields; // ALL source fields for lookup key
@@ -281,6 +301,12 @@ export default function AutomationPage() {
 
   // All available target panels (custom + system)
   const allTargetOptions = [
+    ...panels.map(p => ({ id: p.id, label: p.name, type: 'panel' as const })),
+    ...SYSTEM_MODULES.map(m => ({ id: m.id, label: m.label, type: 'system' as const })),
+  ];
+
+  // All available source panels (custom + system)
+  const allSourceOptions = [
     ...panels.map(p => ({ id: p.id, label: p.name, type: 'panel' as const })),
     ...SYSTEM_MODULES.map(m => ({ id: m.id, label: m.label, type: 'system' as const })),
   ];
@@ -693,14 +719,14 @@ export default function AutomationPage() {
           <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
           <div>
             <p className="font-medium text-amber-800">No Custom Panels Found</p>
-            <p className="text-sm text-amber-600 mt-1">Create panels first, then build automation rules.</p>
+            <p className="text-sm text-amber-600 mt-1">You can still create rules using standard modules (Inventory, Invoices, etc.), or create custom panels first.</p>
           </div>
         </div>
       )}
 
       {/* Rules list */}
       <div className="space-y-3" data-testid="rules-list">
-        {rules.length === 0 && panels.length > 0 && (
+        {rules.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <Zap className="h-12 w-12 mx-auto mb-3 text-gray-300" />
             <p className="font-medium">No automation rules yet</p>
@@ -787,7 +813,14 @@ export default function AutomationPage() {
                       }}
                       className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid="trigger-panel-select">
                       <option value="">Select panel...</option>
-                      {panels.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {panels.length > 0 && (
+                        <optgroup label="Custom Panels">
+                          {panels.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </optgroup>
+                      )}
+                      <optgroup label="Standard Modules">
+                        {SYSTEM_MODULES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </optgroup>
                     </select>
                   </div>
                   <div>

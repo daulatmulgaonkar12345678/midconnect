@@ -297,9 +297,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
             raise HTTPException(status_code=404, detail="Panel not found")
 
         fields = [
-            {"key": f["key"], "label": f["label"], "type": f["type"]}
+            {"key": f["key"], "label": f["label"], "type": f["type"],
+             **({"relatedPanel": f.get("relatedPanel")} if f["type"] == "relation" else {})}
             for f in panel.get("fields", [])
-            if f["type"] != "relation"
         ]
         return {"fields": fields, "type": "panel", "name": panel["name"]}
 

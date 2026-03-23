@@ -144,6 +144,8 @@ def init_automation_router(db, verify_token_func):
             raise HTTPException(status_code=403, detail="Advanced access required.")
 
     async def validate_trigger_panel(seller_id: str, panel_id: str):
+        if panel_id in SYSTEM_MODULE_IDS:
+            return {"_id": panel_id, "name": panel_id, "fields": []}
         try:
             panel = await db.panels.find_one(
                 {"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)},
