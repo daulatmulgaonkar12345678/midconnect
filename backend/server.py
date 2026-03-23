@@ -13170,6 +13170,9 @@ from routers.panel_router import init_panel_router
 panel_router = init_panel_router(db, verify_firebase_token, automation_executor=automation_router.execute_automation)
 app.include_router(panel_router, prefix="/api/business-tools")
 
+# Wire automation executor into system module routers (initialized earlier)
+invoice_router_bt.automation_executor = automation_router.execute_automation
+
 
 
 

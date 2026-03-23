@@ -106,6 +106,12 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Frontend: Source Panel dropdown shows both Custom Panels and Standard Modules (with optgroups)
     - Frontend: When system module selected as source, its fields are fetched via module-fields API
     - Tests: 15/15 passed (100%)
+36. **System Module Automation Hook — Invoices (Mar 2026)**
+    - Added `automation_executor` hook to `invoice_router.py` — fires after invoice creation
+    - Maps invoice data to automation fields: invoiceNumber, buyerName, totalAmount
+    - Wired in `server.py` via late-binding (`invoice_router_bt.automation_executor = ...`)
+    - Fixed `get_source_field_info` to handle system module IDs (was crashing on ObjectId conversion)
+    - E2E verified: invoices → custom panel create_record works correctly
 
 ## Prioritized Backlog
 ### P0 (Next)

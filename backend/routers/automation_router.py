@@ -478,6 +478,11 @@ def init_automation_router(db, verify_token_func):
     async def get_source_field_info(panel_id: str, field_key: str) -> dict:
         """Get field definition from source panel to determine if it's a relation."""
         try:
+            if panel_id in SYSTEM_MODULE_IDS:
+                for f in SYSTEM_MODULE_FIELDS.get(panel_id, []):
+                    if f.get("key") == field_key:
+                        return f
+                return {}
             panel = await db.panels.find_one(
                 {"_id": ObjectId(panel_id)},
                 {"fields": 1}

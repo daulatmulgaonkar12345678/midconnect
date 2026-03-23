@@ -24,7 +24,7 @@ PAYMENT_METHODS = {"upi", "bank_transfer", "cash", "cheque", "other"}
 RECEIPT_REQUIRED_METHODS = {"upi", "bank_transfer", "cheque"}
 
 
-def init_invoice_router(db, verify_token_func, activity_log_service, composite_router=None):
+def init_invoice_router(db, verify_token_func, activity_log_service, composite_router=None, automation_executor=None):
     router = APIRouter(tags=["Invoices"])
 
     def serialize_doc(doc):
@@ -750,6 +750,20 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         })
 
         invoice_doc["buyerName"] = buyer.get("buyerName", "Unknown")
+
+        # ── Fire automation rules for system module "invoices" ──
+        auto_exec = getattr(router, 'automation_executor', None) or automation_executor
+        if auto_exec:
+            try:
+                auto_data = {
+                    "invoiceNumber": invoice_doc.get("invoiceNumber", ""),
+                    "buyerName": buyer.get("buyerName", ""),
+                    "totalAmount": invoice_doc.get("total", 0),
+                }
+                await auto_exec(auto_data, "invoices", str(result.inserted_id), seller_id, str(user["_id"]), "record_created")
+            except Exception as e:
+                logger.warning(f"Automation trigger failed for invoice {invoice_doc.get('invoiceNumber')}: {e}")
+
         response = {"message": "Invoice created", "invoice": serialize_doc(invoice_doc)}
         if pending_orders_created:
             response["pendingOrders"] = pending_orders_created
