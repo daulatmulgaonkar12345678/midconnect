@@ -14,7 +14,7 @@ import requests
 import os
 
 # Use environment variable for BASE_URL
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://doc-builder-preview-1.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-docs-flow-2.preview.emergentagent.com')
 BASE_URL = BASE_URL.rstrip('/')
 
 

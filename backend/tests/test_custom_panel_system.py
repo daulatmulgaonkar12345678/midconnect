@@ -9,7 +9,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://doc-builder-preview-1.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-docs-flow-2.preview.emergentagent.com')
 AUTH_HEADER = {"Authorization": "Bearer dev-test-token", "Content-Type": "application/json"}
 
 # Test data tracking for cleanup

@@ -1,9 +1,20 @@
 """
-Automation Router - Workflow Automation Engine (Phase 4 Full)
-Handles automation rule CRUD and execution.
-Supports: trigger types, action types (update/create/create_per_item),
-field mapping, default values, duplicate prevention, record linking,
-field visibility, and event chaining with infinite loop protection.
+Automation Router - Workflow Automation Engine (Phase 4 Multi-Target)
+
+Architecture:
+  - Panels = Data Layer (schema + records only)
+  - Rules = Workflow Layer (triggers, conditions, multi-target actions)
+  - Data always flows from Source Panel → Target Panels (single source of truth)
+  - No target panel acts as parent or triggers chains automatically
+
+Supports:
+  - One source panel per rule
+  - Multiple target panels per rule (custom + system)
+  - Per-target field mapping (source field, default value, reference)
+  - Per-target field visibility (visible/editable toggles)
+  - Trigger types: on_create, on_update, condition_based
+  - Action types per target: create_record, create_records_per_item, update_record
+  - Duplicate prevention, execution logging
 """
 
 from fastapi import APIRouter, HTTPException, Header
@@ -16,12 +27,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 MAX_RULES_PER_BUSINESS = 50
+MAX_TARGETS_PER_RULE = 10
 MAX_FIELD_MAPPINGS = 30
 ALLOWED_OPERATORS = {"equals", "not_equals", "greater_than", "less_than", "contains", "not_empty", "is_empty"}
 ALLOWED_TRIGGER_TYPES = {"on_create", "on_update", "condition_based"}
 ALLOWED_ACTION_TYPES = {"update_record", "create_record", "create_records_per_item"}
 ALLOWED_UPDATE_OPS = {"increment", "decrement", "set_value"}
 BLOCKED_SYSTEM_FIELDS = {"_id", "sellerId", "createdAt", "updatedAt", "createdBy"}
+SYSTEM_MODULE_IDS = {"inventory", "invoices", "buyers", "suppliers", "purchase_orders", "quotations", "composite_products", "employees"}
 
 
 # ── Pydantic Models ──
@@ -45,21 +58,25 @@ class FieldVisibility(BaseModel):
     editable: bool = True
 
 
-class CreateRuleRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    trigger_panel_id: str = Field(...)
-    trigger_type: str = Field(default="on_create", description="on_create | on_update | condition_based")
-    condition: Optional[AutomationCondition] = None
-    action_type: str = Field(default="create_record", description="update_record | create_record | create_records_per_item")
+class RuleTarget(BaseModel):
     target_panel_id: str = Field(...)
-    relation_field: str = Field(...)
-    # For update_record actions
+    action_type: str = Field(default="create_record")
+    relation_field: Optional[str] = None
+    # For update_record
     update_operation: Optional[str] = None
     update_field: Optional[str] = None
     update_value_from: Optional[str] = None
     # For create actions
     field_mappings: Optional[List[FieldMapping]] = None
     field_visibility: Optional[List[FieldVisibility]] = None
+
+
+class CreateRuleRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    trigger_panel_id: str = Field(...)
+    trigger_type: str = Field(default="on_create")
+    condition: Optional[AutomationCondition] = None
+    targets: List[RuleTarget] = Field(..., min_length=1)
     is_active: bool = True
     priority: int = 0
 
@@ -68,14 +85,7 @@ class UpdateRuleRequest(BaseModel):
     name: Optional[str] = None
     trigger_type: Optional[str] = None
     condition: Optional[AutomationCondition] = None
-    action_type: Optional[str] = None
-    target_panel_id: Optional[str] = None
-    relation_field: Optional[str] = None
-    update_operation: Optional[str] = None
-    update_field: Optional[str] = None
-    update_value_from: Optional[str] = None
-    field_mappings: Optional[List[FieldMapping]] = None
-    field_visibility: Optional[List[FieldVisibility]] = None
+    targets: Optional[List[RuleTarget]] = None
     is_active: Optional[bool] = None
     priority: Optional[int] = None
 
@@ -88,6 +98,10 @@ def init_automation_router(db, verify_token_func):
     def serialize_doc(doc):
         if doc is None:
             return None
+        if isinstance(doc, ObjectId):
+            return str(doc)
+        if isinstance(doc, datetime):
+            return doc.isoformat()
         if isinstance(doc, list):
             return [serialize_doc(d) for d in doc]
         if isinstance(doc, dict):
@@ -126,7 +140,6 @@ def init_automation_router(db, verify_token_func):
             raise HTTPException(status_code=403, detail="Advanced access required.")
 
     async def validate_trigger_panel(seller_id: str, panel_id: str):
-        """Ensure trigger panel is a custom panel."""
         try:
             panel = await db.panels.find_one(
                 {"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)},
@@ -138,49 +151,49 @@ def init_automation_router(db, verify_token_func):
             raise HTTPException(status_code=404, detail="Trigger panel not found.")
         return panel
 
-    SYSTEM_MODULE_IDS = {"inventory", "invoices", "buyers", "suppliers", "purchase_orders", "quotations", "composite_products", "employees"}
-
-    async def validate_target_panel(seller_id: str, panel_id: str):
-        """Validate target panel exists (custom panel or system module)."""
-        # System modules are valid targets
+    async def validate_target_id(seller_id: str, panel_id: str):
         if panel_id in SYSTEM_MODULE_IDS:
-            return {"_id": panel_id, "name": panel_id, "type": "system"}
-        # Custom panel
+            return True
         try:
             panel = await db.panels.find_one(
                 {"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)},
-                {"_id": 1, "name": 1, "fields": 1}
+                {"_id": 1}
             )
         except Exception:
-            raise HTTPException(status_code=400, detail="Invalid target panel ID.")
+            raise HTTPException(status_code=400, detail=f"Invalid target panel ID: {panel_id}")
         if not panel:
-            raise HTTPException(status_code=404, detail="Target panel not found.")
-        return panel
+            raise HTTPException(status_code=404, detail=f"Target panel not found: {panel_id}")
+        return True
 
-    def validate_rule_data(data):
-        """Validate rule configuration."""
-        if data.trigger_type not in ALLOWED_TRIGGER_TYPES:
-            raise HTTPException(status_code=400, detail=f"Invalid trigger type: {data.trigger_type}")
-        if data.action_type not in ALLOWED_ACTION_TYPES:
-            raise HTTPException(status_code=400, detail=f"Invalid action type: {data.action_type}")
-        if data.trigger_type == "condition_based" and not data.condition:
-            raise HTTPException(status_code=400, detail="Condition is required for condition_based trigger.")
-        if data.condition and data.condition.operator not in ALLOWED_OPERATORS:
-            raise HTTPException(status_code=400, detail=f"Invalid operator: {data.condition.operator}")
-        if data.action_type == "update_record":
-            if not data.update_operation or data.update_operation not in ALLOWED_UPDATE_OPS:
-                raise HTTPException(status_code=400, detail="Valid update_operation required for update_record.")
-            if not data.update_field:
+    def validate_target(t: RuleTarget):
+        if t.action_type not in ALLOWED_ACTION_TYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid action type: {t.action_type}")
+        if t.action_type == "update_record":
+            if not t.update_operation or t.update_operation not in ALLOWED_UPDATE_OPS:
+                raise HTTPException(status_code=400, detail="Valid update_operation required.")
+            if not t.update_field:
                 raise HTTPException(status_code=400, detail="update_field required for update_record.")
-            if data.update_field in BLOCKED_SYSTEM_FIELDS:
-                raise HTTPException(status_code=400, detail=f"Cannot modify system field '{data.update_field}'.")
-            if not data.update_value_from:
+            if t.update_field in BLOCKED_SYSTEM_FIELDS:
+                raise HTTPException(status_code=400, detail=f"Cannot modify system field '{t.update_field}'.")
+            if not t.update_value_from:
                 raise HTTPException(status_code=400, detail="update_value_from required for update_record.")
-        if data.action_type in ("create_record", "create_records_per_item"):
-            if not data.field_mappings or len(data.field_mappings) == 0:
+        if t.action_type in ("create_record", "create_records_per_item"):
+            if not t.field_mappings or len(t.field_mappings) == 0:
                 raise HTTPException(status_code=400, detail="field_mappings required for create actions.")
-            if len(data.field_mappings) > MAX_FIELD_MAPPINGS:
-                raise HTTPException(status_code=400, detail=f"Maximum {MAX_FIELD_MAPPINGS} field mappings allowed.")
+            if len(t.field_mappings) > MAX_FIELD_MAPPINGS:
+                raise HTTPException(status_code=400, detail=f"Maximum {MAX_FIELD_MAPPINGS} field mappings.")
+
+    async def get_panel_name(panel_id: str) -> str:
+        if panel_id in SYSTEM_MODULE_IDS:
+            labels = {"inventory": "Inventory", "invoices": "Invoices", "buyers": "Buyers",
+                      "suppliers": "Suppliers", "purchase_orders": "Purchase Orders",
+                      "quotations": "Quotations", "composite_products": "Composite Products", "employees": "Employees"}
+            return labels.get(panel_id, panel_id)
+        try:
+            p = await db.panels.find_one({"_id": ObjectId(panel_id)}, {"name": 1})
+            return p["name"] if p else "Unknown"
+        except Exception:
+            return "Unknown"
 
     # ── LIST RULES ──
     @router.get("/automation/rules")
@@ -189,32 +202,17 @@ def init_automation_router(db, verify_token_func):
         require_admin(user)
         seller_id = await get_seller_id(user)
 
-        cursor = db.automation_rules.find(
+        rules = await db.automation_rules.find(
             {"sellerId": ObjectId(seller_id)},
-        ).sort([("priority", 1), ("createdAt", -1)])
-        rules = await cursor.to_list(MAX_RULES_PER_BUSINESS)
-
-        # Enrich with panel names
-        panel_ids = set()
-        for r in rules:
-            panel_ids.add(r.get("trigger_panel_id"))
-            panel_ids.add(r.get("target_panel_id"))
-
-        panel_names = {}
-        for pid in panel_ids:
-            if not pid:
-                continue
-            try:
-                p = await db.panels.find_one({"_id": ObjectId(pid)}, {"name": 1})
-                if p:
-                    panel_names[pid] = p["name"]
-            except Exception:
-                pass
+        ).sort([("priority", 1), ("createdAt", -1)]).to_list(MAX_RULES_PER_BUSINESS)
 
         serialized = serialize_doc(rules)
+
+        # Enrich with panel names
         for r in serialized:
-            r["trigger_panel_name"] = panel_names.get(r.get("trigger_panel_id"), "Unknown")
-            r["target_panel_name"] = panel_names.get(r.get("target_panel_id"), "Unknown")
+            r["trigger_panel_name"] = await get_panel_name(r.get("trigger_panel_id", ""))
+            for t in r.get("targets", []):
+                t["target_panel_name"] = await get_panel_name(t.get("target_panel_id", ""))
 
         return {"rules": serialized, "count": len(serialized), "limit": MAX_RULES_PER_BUSINESS}
 
@@ -229,20 +227,20 @@ def init_automation_router(db, verify_token_func):
         if count >= MAX_RULES_PER_BUSINESS:
             raise HTTPException(status_code=400, detail=f"Maximum {MAX_RULES_PER_BUSINESS} rules allowed.")
 
-        validate_rule_data(data)
-        trigger_panel = await validate_trigger_panel(seller_id, data.trigger_panel_id)
+        if data.trigger_type not in ALLOWED_TRIGGER_TYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid trigger type: {data.trigger_type}")
+        if data.trigger_type == "condition_based" and not data.condition:
+            raise HTTPException(status_code=400, detail="Condition required for condition_based trigger.")
+        if data.condition and data.condition.operator and data.condition.operator not in ALLOWED_OPERATORS:
+            raise HTTPException(status_code=400, detail=f"Invalid operator: {data.condition.operator}")
+        if len(data.targets) > MAX_TARGETS_PER_RULE:
+            raise HTTPException(status_code=400, detail=f"Maximum {MAX_TARGETS_PER_RULE} targets per rule.")
 
-        # Validate relation_field exists in trigger panel
-        trigger_fields = {f["key"]: f for f in trigger_panel.get("fields", [])}
-        if data.relation_field not in trigger_fields:
-            raise HTTPException(status_code=400, detail=f"Relation field '{data.relation_field}' not found in trigger panel.")
-        rf = trigger_fields[data.relation_field]
-        if rf.get("type") != "relation":
-            raise HTTPException(status_code=400, detail=f"Field '{data.relation_field}' is not a relation field.")
+        await validate_trigger_panel(seller_id, data.trigger_panel_id)
 
-        # For create actions, validate target panel
-        if data.action_type in ("create_record", "create_records_per_item"):
-            await validate_target_panel(seller_id, data.target_panel_id)
+        for t in data.targets:
+            await validate_target_id(seller_id, t.target_panel_id)
+            validate_target(t)
 
         now = datetime.now(timezone.utc)
         doc = {
@@ -251,14 +249,7 @@ def init_automation_router(db, verify_token_func):
             "trigger_panel_id": data.trigger_panel_id,
             "trigger_type": data.trigger_type,
             "condition": data.condition.model_dump() if data.condition else None,
-            "action_type": data.action_type,
-            "target_panel_id": data.target_panel_id,
-            "relation_field": data.relation_field,
-            "update_operation": data.update_operation,
-            "update_field": data.update_field,
-            "update_value_from": data.update_value_from,
-            "field_mappings": [fm.model_dump() for fm in data.field_mappings] if data.field_mappings else [],
-            "field_visibility": [fv.model_dump() for fv in data.field_visibility] if data.field_visibility else [],
+            "targets": [t.model_dump() for t in data.targets],
             "is_active": data.is_active,
             "priority": data.priority,
             "execution_count": 0,
@@ -269,7 +260,7 @@ def init_automation_router(db, verify_token_func):
 
         result = await db.automation_rules.insert_one(doc)
         doc["_id"] = result.inserted_id
-        logger.info(f"Automation rule created: {data.name} for seller {seller_id}")
+        logger.info(f"Rule created: {data.name} ({len(data.targets)} targets)")
         return serialize_doc(doc)
 
     # ── UPDATE RULE ──
@@ -287,37 +278,21 @@ def init_automation_router(db, verify_token_func):
             raise HTTPException(status_code=404, detail="Rule not found.")
 
         update = {"updatedAt": datetime.now(timezone.utc)}
-
         if data.name is not None:
             update["name"] = data.name.strip()
         if data.is_active is not None:
             update["is_active"] = data.is_active
         if data.trigger_type is not None:
             if data.trigger_type not in ALLOWED_TRIGGER_TYPES:
-                raise HTTPException(status_code=400, detail=f"Invalid trigger type: {data.trigger_type}")
+                raise HTTPException(status_code=400, detail=f"Invalid trigger type.")
             update["trigger_type"] = data.trigger_type
         if data.condition is not None:
-            if data.condition.operator and data.condition.operator not in ALLOWED_OPERATORS:
-                raise HTTPException(status_code=400, detail=f"Invalid operator: {data.condition.operator}")
             update["condition"] = data.condition.model_dump()
-        if data.action_type is not None:
-            if data.action_type not in ALLOWED_ACTION_TYPES:
-                raise HTTPException(status_code=400, detail=f"Invalid action type: {data.action_type}")
-            update["action_type"] = data.action_type
-        if data.target_panel_id is not None:
-            update["target_panel_id"] = data.target_panel_id
-        if data.relation_field is not None:
-            update["relation_field"] = data.relation_field
-        if data.update_operation is not None:
-            update["update_operation"] = data.update_operation
-        if data.update_field is not None:
-            update["update_field"] = data.update_field
-        if data.update_value_from is not None:
-            update["update_value_from"] = data.update_value_from
-        if data.field_mappings is not None:
-            update["field_mappings"] = [fm.model_dump() for fm in data.field_mappings]
-        if data.field_visibility is not None:
-            update["field_visibility"] = [fv.model_dump() for fv in data.field_visibility]
+        if data.targets is not None:
+            for t in data.targets:
+                await validate_target_id(seller_id, t.target_panel_id)
+                validate_target(t)
+            update["targets"] = [t.model_dump() for t in data.targets]
         if data.priority is not None:
             update["priority"] = data.priority
 
@@ -330,24 +305,20 @@ def init_automation_router(db, verify_token_func):
         user = await get_current_user(authorization)
         require_admin(user)
         seller_id = await get_seller_id(user)
-
         result = await db.automation_rules.delete_one({"_id": ObjectId(rule_id), "sellerId": ObjectId(seller_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Rule not found.")
         return {"message": "Rule deleted"}
 
-    # ── GET EXECUTION LOGS ──
+    # ── LOGS ──
     @router.get("/automation/logs")
-    async def get_automation_logs(authorization: str = Header(...), limit: int = 50):
+    async def get_logs(authorization: str = Header(...), limit: int = 50):
         user = await get_current_user(authorization)
         require_admin(user)
         seller_id = await get_seller_id(user)
-
-        cursor = db.automation_logs.find(
-            {"sellerId": ObjectId(seller_id)},
-            {"_id": 0}
-        ).sort("timestamp", -1).limit(limit)
-        logs = await cursor.to_list(limit)
+        logs = await db.automation_logs.find(
+            {"sellerId": ObjectId(seller_id)}, {"_id": 0}
+        ).sort("timestamp", -1).limit(limit).to_list(limit)
         return {"logs": serialize_doc(logs)}
 
     # ══════════════════════════════════════
@@ -355,12 +326,12 @@ def init_automation_router(db, verify_token_func):
     # ══════════════════════════════════════
 
     async def execute_automation(record_data: dict, panel_id: str, record_id: str, seller_id: str, user_id: str, event_type: str = "record_created", _visited_rules: set = None):
-        """Main entry: check and execute automation rules for a panel event."""
+        """Entry point: find and execute matching rules for source panel event.
+        Data always originates from the SOURCE panel (single source of truth)."""
         if _visited_rules is None:
             _visited_rules = set()
 
         try:
-            # Map event to trigger types
             valid_triggers = set()
             if event_type == "record_created":
                 valid_triggers = {"on_create", "condition_based"}
@@ -380,13 +351,11 @@ def init_automation_router(db, verify_token_func):
             for rule in rules:
                 rule_id_str = str(rule["_id"])
 
-                # Infinite loop guard
                 if rule_id_str in _visited_rules:
-                    logger.warning(f"Loop detected: rule '{rule.get('name')}' already executed. Skipping.")
-                    await log_execution(seller_id, rule, panel_id, record_id, event_type, "skipped", "Infinite loop prevented")
+                    logger.warning(f"Loop prevented: rule '{rule.get('name')}' already executed.")
+                    await log_execution(seller_id, rule, panel_id, record_id, event_type, "skipped", "Loop prevented", None)
                     continue
 
-                # Check condition if present
                 condition = rule.get("condition")
                 if condition and condition.get("field"):
                     if not check_condition(record_data, condition):
@@ -394,285 +363,225 @@ def init_automation_router(db, verify_token_func):
 
                 _visited_rules.add(rule_id_str)
 
-                try:
-                    await execute_rule(rule, record_data, record_id, panel_id, seller_id, user_id, event_type, _visited_rules)
-                except Exception as e:
-                    logger.error(f"Rule execution failed: {e} (rule: {rule.get('name')})")
-                    await log_execution(seller_id, rule, panel_id, record_id, event_type, "error", str(e))
+                # Execute ALL targets in this rule using SOURCE data only
+                for target_config in rule.get("targets", []):
+                    try:
+                        await execute_target(
+                            rule, target_config, record_data, record_id,
+                            panel_id, seller_id, user_id, event_type
+                        )
+                    except Exception as e:
+                        logger.error(f"Target execution failed: {e} (rule: {rule.get('name')}, target: {target_config.get('target_panel_id')})")
+                        await log_execution(seller_id, rule, panel_id, record_id, event_type, "error", str(e), target_config.get("target_panel_id"))
+
+                await db.automation_rules.update_one(
+                    {"_id": rule["_id"]},
+                    {"$inc": {"execution_count": 1}, "$set": {"last_executed": datetime.now(timezone.utc)}}
+                )
 
         except Exception as e:
             logger.error(f"Automation engine error: {e}")
 
-    async def execute_rule(rule: dict, record_data: dict, record_id: str, panel_id: str, seller_id: str, user_id: str, event_type: str, _visited_rules: set):
-        """Execute a single rule based on its action_type."""
-        action_type = rule.get("action_type", "update_record")
-        relation_field = rule.get("relation_field", "")
-        target_panel_id = rule.get("target_panel_id", "")
+    async def execute_target(rule: dict, target: dict, source_data: dict, source_record_id: str, source_panel_id: str, seller_id: str, user_id: str, event_type: str):
+        """Execute a single target action. Data comes ONLY from source_data (parent panel)."""
+        action_type = target.get("action_type", "create_record")
+        target_panel_id = target.get("target_panel_id", "")
+        relation_field = target.get("relation_field", "")
         now = datetime.now(timezone.utc)
 
-        related_id = record_data.get(relation_field)
-
         if action_type == "update_record":
-            # Update existing record via relation
+            related_id = source_data.get(relation_field, "") if relation_field else ""
             if not related_id:
-                logger.warning(f"Automation: relation field '{relation_field}' empty, skipping update.")
-                return
+                raise Exception(f"Relation field '{relation_field}' empty in source.")
 
-            operation = rule.get("update_operation", "set_value")
-            target_field = rule.get("update_field", "")
-            value_from = rule.get("update_value_from", "")
-            source_value = record_data.get(value_from)
-
+            operation = target.get("update_operation", "set_value")
+            target_field = target.get("update_field", "")
+            value_from = target.get("update_value_from", "")
+            source_value = source_data.get(value_from)
             if source_value is None:
-                logger.warning(f"Automation: value_from '{value_from}' is empty, skipping.")
-                return
+                raise Exception(f"Source field '{value_from}' is empty.")
 
-            # Check if target is a system module or custom panel
-            target_panel = await db.panels.find_one({"_id": ObjectId(target_panel_id)})
-            if target_panel:
-                # Custom panel update
+            if target_panel_id in SYSTEM_MODULE_IDS:
+                await update_system_record(target_panel_id, related_id, target_field, operation, source_value, seller_id)
+            else:
                 target_record = await db.panel_records.find_one({
-                    "_id": ObjectId(related_id),
-                    "panelId": ObjectId(target_panel_id),
-                    "sellerId": ObjectId(seller_id),
+                    "_id": ObjectId(related_id), "panelId": ObjectId(target_panel_id), "sellerId": ObjectId(seller_id)
                 })
                 if not target_record:
-                    logger.warning(f"Target record {related_id} not found.")
-                    return
+                    raise Exception(f"Target record {related_id} not found.")
                 new_val = apply_operation(target_record.get("data", {}).get(target_field, 0), operation, source_value)
                 await db.panel_records.update_one(
                     {"_id": ObjectId(related_id)},
                     {"$set": {f"data.{target_field}": new_val, "updatedAt": now}}
                 )
-            else:
-                # System module update (inventory)
-                await update_system_record(target_panel_id, related_id, target_field, operation, source_value, seller_id)
 
-            await log_execution(seller_id, rule, panel_id, record_id, event_type, "success",
-                f"Updated {target_field} ({operation}) with {source_value}", target_panel_id=target_panel_id, target_record_id=related_id)
-            await db.automation_rules.update_one({"_id": rule["_id"]}, {"$inc": {"execution_count": 1}, "$set": {"last_executed": now}})
+            await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "success",
+                f"Updated {target_field} ({operation})", target_panel_id)
 
         elif action_type == "create_record":
-            # Create a single record in target panel with field mappings
-            mapped_data = build_mapped_data(rule, record_data, record_id, panel_id)
+            mapped_data = build_mapped_data(target, source_data, source_record_id, source_panel_id)
+            entity_id = source_data.get(relation_field, "") if relation_field else source_record_id
 
-            # Duplicate prevention: check entity_id + parent_id
-            entity_id = record_data.get(relation_field, "")
             dup = await db.panel_records.find_one({
-                "panelId": ObjectId(target_panel_id),
+                "panelId": ObjectId(target_panel_id) if target_panel_id not in SYSTEM_MODULE_IDS else target_panel_id,
                 "sellerId": ObjectId(seller_id),
                 "entity_id": entity_id,
-                "parent_id": record_id,
+                "parent_id": source_record_id,
                 "source_rule": str(rule["_id"]),
             })
             if dup:
-                logger.info(f"Duplicate prevented: record already exists for entity {entity_id} + parent {record_id}")
-                await log_execution(seller_id, rule, panel_id, record_id, event_type, "skipped", "Duplicate prevented")
+                await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "skipped", "Duplicate prevented", target_panel_id)
                 return
 
             new_record = {
-                "panelId": ObjectId(target_panel_id),
+                "panelId": ObjectId(target_panel_id) if target_panel_id not in SYSTEM_MODULE_IDS else target_panel_id,
                 "sellerId": ObjectId(seller_id),
                 "data": mapped_data,
                 "entity_id": entity_id,
-                "parent_id": record_id,
-                "source_panel": panel_id,
+                "parent_id": source_record_id,
+                "source_panel": source_panel_id,
                 "source_rule": str(rule["_id"]),
                 "createdBy": "automation",
                 "createdAt": now,
                 "updatedAt": now,
             }
             result = await db.panel_records.insert_one(new_record)
-
-            await log_execution(seller_id, rule, panel_id, record_id, event_type, "success",
-                f"Created record in target panel", target_panel_id=target_panel_id, target_record_id=str(result.inserted_id))
-            await db.automation_rules.update_one({"_id": rule["_id"]}, {"$inc": {"execution_count": 1}, "$set": {"last_executed": now}})
-
-            # Trigger chained automations on the new record
-            try:
-                await execute_automation(mapped_data, target_panel_id, str(result.inserted_id), seller_id, user_id, "record_created", _visited_rules)
-            except Exception as e:
-                logger.error(f"Chained automation error: {e}")
+            await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "success",
+                f"Created record", target_panel_id, str(result.inserted_id))
 
         elif action_type == "create_records_per_item":
-            # Extract line items from source record and create one record per item
-            items = extract_line_items(record_data)
-
+            items = extract_line_items(source_data)
             if not items:
-                logger.warning(f"No line items found in record {record_id}")
-                await log_execution(seller_id, rule, panel_id, record_id, event_type, "skipped", "No line items found")
+                await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "skipped", "No line items", target_panel_id)
                 return
 
-            created_count = 0
+            created = 0
             for item in items:
-                # Merge item data with record data for mapping
-                item_data = {**record_data, **item}
+                # Merge item with source — but source is always parent
+                item_data = {**source_data, **item}
+                mapped_data = build_mapped_data(target, item_data, source_record_id, source_panel_id)
+                item_entity_id = item.get("productId") or item.get("product_id") or ""
 
-                mapped_data = build_mapped_data(rule, item_data, record_id, panel_id)
-
-                # Duplicate prevention per item
-                item_entity_id = item.get("productId") or item.get("product_id") or item_data.get(relation_field, "")
                 dup = await db.panel_records.find_one({
-                    "panelId": ObjectId(target_panel_id),
+                    "panelId": ObjectId(target_panel_id) if target_panel_id not in SYSTEM_MODULE_IDS else target_panel_id,
                     "sellerId": ObjectId(seller_id),
                     "entity_id": item_entity_id,
-                    "parent_id": record_id,
+                    "parent_id": source_record_id,
                     "source_rule": str(rule["_id"]),
                 })
                 if dup:
-                    logger.info(f"Duplicate prevented for item entity {item_entity_id}")
                     continue
 
                 new_record = {
-                    "panelId": ObjectId(target_panel_id),
+                    "panelId": ObjectId(target_panel_id) if target_panel_id not in SYSTEM_MODULE_IDS else target_panel_id,
                     "sellerId": ObjectId(seller_id),
                     "data": mapped_data,
                     "entity_id": item_entity_id,
-                    "parent_id": record_id,
-                    "source_panel": panel_id,
+                    "parent_id": source_record_id,
+                    "source_panel": source_panel_id,
                     "source_rule": str(rule["_id"]),
                     "createdBy": "automation",
                     "createdAt": now,
                     "updatedAt": now,
                 }
-                result = await db.panel_records.insert_one(new_record)
-                created_count += 1
+                await db.panel_records.insert_one(new_record)
+                created += 1
 
-                # Trigger chained automations
-                try:
-                    await execute_automation(mapped_data, target_panel_id, str(result.inserted_id), seller_id, user_id, "record_created", _visited_rules)
-                except Exception as e:
-                    logger.error(f"Chained automation error for item: {e}")
+            await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "success",
+                f"Created {created}/{len(items)} records", target_panel_id)
 
-            await log_execution(seller_id, rule, panel_id, record_id, event_type, "success",
-                f"Created {created_count} records from {len(items)} items", target_panel_id=target_panel_id)
-            await db.automation_rules.update_one({"_id": rule["_id"]}, {"$inc": {"execution_count": 1}, "$set": {"last_executed": now}})
-
-    def build_mapped_data(rule: dict, source_data: dict, source_record_id: str, source_panel_id: str) -> dict:
-        """Build target record data from field mappings + defaults."""
+    def build_mapped_data(target: dict, source_data: dict, source_record_id: str, source_panel_id: str) -> dict:
         mapped = {}
-        for fm in rule.get("field_mappings", []):
-            target = fm.get("target_field", "")
-            mtype = fm.get("mapping_type", "field")
-
-            if mtype == "field" and fm.get("source_field"):
-                mapped[target] = source_data.get(fm["source_field"])
-            elif mtype == "default" and fm.get("default_value") is not None:
-                mapped[target] = fm["default_value"]
-            elif mtype == "reference":
+        for fm in target.get("field_mappings", []):
+            tf = fm.get("target_field", "")
+            mt = fm.get("mapping_type", "field")
+            if mt == "field" and fm.get("source_field"):
+                mapped[tf] = source_data.get(fm["source_field"])
+            elif mt == "default" and fm.get("default_value") is not None:
+                mapped[tf] = fm["default_value"]
+            elif mt == "reference":
                 if fm.get("source_field") == "_parent_id":
-                    mapped[target] = source_record_id
+                    mapped[tf] = source_record_id
                 elif fm.get("source_field") == "_source_panel":
-                    mapped[target] = source_panel_id
+                    mapped[tf] = source_panel_id
                 elif fm.get("source_field"):
-                    mapped[target] = source_data.get(fm["source_field"])
-
+                    mapped[tf] = source_data.get(fm["source_field"])
         return mapped
 
-    def extract_line_items(record_data: dict) -> list:
-        """Extract line items from a record. Supports invoice-style items array
-        and also flat records (treated as single item)."""
-        # Check for items array (invoice pattern)
-        items = record_data.get("items")
-        if isinstance(items, list) and len(items) > 0:
+    def extract_line_items(data: dict) -> list:
+        items = data.get("items")
+        if isinstance(items, list) and items:
             return items
-
-        # Check for line_items key
-        items = record_data.get("line_items")
-        if isinstance(items, list) and len(items) > 0:
+        items = data.get("line_items")
+        if isinstance(items, list) and items:
             return items
-
-        # If record has productId directly, treat as single item
-        if record_data.get("productId") or record_data.get("product_id"):
-            return [record_data]
-
+        if data.get("productId") or data.get("product_id"):
+            return [data]
         return []
 
-    def check_condition(record_data: dict, condition: dict) -> bool:
-        """Evaluate condition against record data."""
-        field = condition.get("field", "")
-        operator = condition.get("operator", "")
-        expected = condition.get("value", "")
-        actual = record_data.get(field)
-
-        if operator == "equals":
+    def check_condition(data: dict, cond: dict) -> bool:
+        field = cond.get("field", "")
+        op = cond.get("operator", "")
+        expected = cond.get("value", "")
+        actual = data.get(field)
+        if op == "equals":
             return str(actual) == str(expected) if actual is not None else False
-        elif operator == "not_equals":
+        elif op == "not_equals":
             return str(actual) != str(expected) if actual is not None else True
-        elif operator == "greater_than":
-            try:
-                return float(actual) > float(expected)
-            except (ValueError, TypeError):
-                return False
-        elif operator == "less_than":
-            try:
-                return float(actual) < float(expected)
-            except (ValueError, TypeError):
-                return False
-        elif operator == "contains":
+        elif op == "greater_than":
+            try: return float(actual) > float(expected)
+            except: return False
+        elif op == "less_than":
+            try: return float(actual) < float(expected)
+            except: return False
+        elif op == "contains":
             return str(expected).lower() in str(actual or "").lower()
-        elif operator == "not_empty":
+        elif op == "not_empty":
             return actual is not None and actual != "" and actual != []
-        elif operator == "is_empty":
+        elif op == "is_empty":
             return actual is None or actual == "" or actual == []
         return False
 
     def apply_operation(current, operation: str, value):
-        """Apply increment/decrement/set operation."""
         if operation == "set_value":
             return value
         try:
-            current_num = float(current or 0)
-            val_num = float(value)
-            if operation == "increment":
-                return current_num + val_num
-            elif operation == "decrement":
-                return max(0, current_num - val_num)
-        except (ValueError, TypeError):
-            pass
+            c = float(current or 0)
+            v = float(value)
+            if operation == "increment": return c + v
+            elif operation == "decrement": return max(0, c - v)
+        except: pass
         return value
 
-    async def update_system_record(target_module: str, record_id: str, field: str, operation: str, value, seller_id: str):
-        """Update a system module record."""
-        try:
-            numeric_val = float(value)
-        except (ValueError, TypeError):
-            numeric_val = None
-
-        if target_module == "inventory":
-            safe_fields = {"stock", "quantity", "minStock", "reorderPoint"}
-            if field not in safe_fields:
-                raise Exception(f"Cannot modify field '{field}' on inventory. Allowed: {safe_fields}")
+    async def update_system_record(module: str, record_id: str, field: str, op: str, value, seller_id: str):
+        try: nv = float(value)
+        except: nv = None
+        if module == "inventory":
+            safe = {"stock", "quantity", "minStock", "reorderPoint"}
+            if field not in safe:
+                raise Exception(f"Cannot modify '{field}' on inventory.")
             listing = await db.sellerListings.find_one({"_id": ObjectId(record_id), "sellerId": ObjectId(seller_id)})
             if not listing:
-                raise Exception(f"Inventory listing {record_id} not found.")
-            current = listing.get(field, 0)
-            new_val = apply_operation(current, operation, numeric_val or value)
-            await db.sellerListings.update_one(
-                {"_id": ObjectId(record_id)},
-                {"$set": {field: new_val, "updatedAt": datetime.now(timezone.utc)}}
-            )
+                raise Exception(f"Listing {record_id} not found.")
+            new_val = apply_operation(listing.get(field, 0), op, nv or value)
+            await db.sellerListings.update_one({"_id": ObjectId(record_id)}, {"$set": {field: new_val, "updatedAt": datetime.now(timezone.utc)}})
         else:
-            raise Exception(f"System module '{target_module}' automation not yet supported.")
+            raise Exception(f"System module '{module}' not yet supported.")
 
-    async def log_execution(seller_id, rule, panel_id, record_id, event_type, status, message="", target_panel_id=None, target_record_id=None):
-        """Log automation execution result."""
+    async def log_execution(seller_id, rule, source_panel_id, record_id, event_type, status, message="", target_panel_id=None, target_record_id=None):
         await db.automation_logs.insert_one({
             "sellerId": ObjectId(seller_id),
             "ruleId": rule["_id"],
             "ruleName": rule.get("name", ""),
-            "trigger_panel_id": panel_id,
+            "trigger_panel_id": source_panel_id,
             "record_id": record_id,
             "target_panel_id": target_panel_id,
             "target_record_id": target_record_id,
-            "action_type": rule.get("action_type", ""),
             "event": event_type,
             "status": status,
             "message": message,
             "timestamp": datetime.now(timezone.utc),
         })
 
-    # Expose for panel_router
     router.execute_automation = execute_automation
-
     return router

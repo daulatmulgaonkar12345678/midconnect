@@ -25,7 +25,7 @@ import requests
 sys.path.insert(0, '/app/backend')
 
 # Environment setup
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://doc-builder-preview-1.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-docs-flow-2.preview.emergentagent.com')
 
 # Test URLs
 VALID_CLOUDINARY_IMAGE_URL = "https://res.cloudinary.com/dco24qmoq/image/upload/v1234567890/test_image.jpg"
