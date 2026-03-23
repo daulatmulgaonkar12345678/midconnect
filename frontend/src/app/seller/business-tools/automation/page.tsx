@@ -40,6 +40,12 @@ const UPDATE_OPS = [
   { value: 'set_value', label: 'Set Value (=)' },
 ];
 
+const DATA_MODES = [
+  { value: 'smart_sync', label: 'Smart Sync', desc: 'Auto-map matching fields + explicit mappings' },
+  { value: 'manual_only', label: 'Manual Only', desc: 'Only explicitly mapped fields transfer' },
+  { value: 'full_copy', label: 'Full Copy', desc: 'All matching target fields copied from source' },
+];
+
 const SYSTEM_MODULES = [
   { id: 'inventory', label: 'Inventory' },
   { id: 'invoices', label: 'Invoices' },
@@ -87,6 +93,7 @@ interface FieldVisibilityForm {
 interface TargetForm {
   target_panel_id: string;
   action_type: string;
+  data_mode: string;
   relation_field: string;
   update_operation: string;
   update_field: string;
@@ -117,6 +124,7 @@ interface RuleResponse {
     target_panel_id: string;
     target_panel_name?: string;
     action_type: string;
+    data_mode?: string;
     relation_field?: string | null;
     update_operation?: string | null;
     update_field?: string | null;
@@ -136,6 +144,7 @@ function createEmptyTarget(): TargetForm {
   return {
     target_panel_id: '',
     action_type: 'create_record',
+    data_mode: 'smart_sync',
     relation_field: '',
     update_operation: 'increment',
     update_field: '',
@@ -187,6 +196,10 @@ export default function AutomationPage() {
   // Logs
   const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
+
+  // Preview
+  const [previewData, setPreviewData] = useState<any[] | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const getHeaders = useCallback(async () => {
     const token = await getIdToken();
@@ -392,6 +405,7 @@ export default function AutomationPage() {
       targets: (r.targets || []).map(t => ({
         target_panel_id: t.target_panel_id,
         action_type: t.action_type || 'create_record',
+        data_mode: t.data_mode || 'smart_sync',
         relation_field: t.relation_field || '',
         update_operation: t.update_operation || 'increment',
         update_field: t.update_field || '',
@@ -439,8 +453,8 @@ export default function AutomationPage() {
         if (!t.update_value_from) { toast.error(`Target ${i + 1}: Select value source field`); return; }
       }
       if (t.action_type === 'create_record' || t.action_type === 'create_records_per_item') {
-        if (t.field_mappings.filter(fm => fm.target_field).length === 0) {
-          toast.error(`Target ${i + 1}: Add at least one field mapping`);
+        if (t.data_mode === 'manual_only' && t.field_mappings.filter(fm => fm.target_field).length === 0) {
+          toast.error(`Target ${i + 1}: Manual Only mode requires at least one field mapping`);
           return;
         }
       }
@@ -455,6 +469,7 @@ export default function AutomationPage() {
         const target: any = {
           target_panel_id: t.target_panel_id,
           action_type: t.action_type,
+          data_mode: t.data_mode,
         };
         if (t.relation_field) target.relation_field = t.relation_field;
         if (t.action_type === 'update_record') {
@@ -539,6 +554,50 @@ export default function AutomationPage() {
     } catch { /* silent */ }
     setShowLogs(true);
   };
+
+  // ── Preview Data ──
+  const fetchPreview = async () => {
+    if (!rule.trigger_panel_id || rule.targets.length === 0) {
+      toast.error('Set source panel and at least one target to preview');
+      return;
+    }
+    setLoadingPreview(true);
+    setPreviewData(null);
+    try {
+      const hdrs = await getHeaders();
+      const res = await fetch(`${API_URL}/api/business-tools/automation/preview`, {
+        method: 'POST',
+        headers: hdrs,
+        body: JSON.stringify({
+          trigger_panel_id: rule.trigger_panel_id,
+          targets: rule.targets.map(t => ({
+            target_panel_id: t.target_panel_id,
+            action_type: t.action_type,
+            data_mode: t.data_mode,
+            relation_field: t.relation_field || undefined,
+            update_operation: t.update_operation || undefined,
+            update_field: t.update_field || undefined,
+            update_value_from: t.update_value_from || undefined,
+            field_mappings: t.field_mappings.filter(fm => fm.target_field).map(fm => ({
+              target_field: fm.target_field,
+              source_field: fm.source_field || undefined,
+              default_value: fm.default_value || undefined,
+              mapping_type: fm.mapping_type,
+            })),
+          })),
+        }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setPreviewData(d.previews || []);
+        if (d.message) toast.info(d.message);
+      } else {
+        toast.error('Preview failed');
+      }
+    } catch { toast.error('Preview failed'); }
+    setLoadingPreview(false);
+  };
+
 
   // ── System target fields for update_record ──
 
@@ -781,17 +840,44 @@ export default function AutomationPage() {
                   ))}
                 </div>
               )}
+
+              {/* ── 5. PREVIEW DATA ── */}
+              {previewData && previewData.length > 0 && (
+                <div className="p-3 bg-indigo-50/70 rounded-lg border border-indigo-200 space-y-2" data-testid="preview-section">
+                  <label className="block text-sm font-semibold text-indigo-800">Preview: Data Output</label>
+                  {previewData.map((p: any, i: number) => (
+                    <div key={i} className="bg-white rounded-lg border p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-semibold text-indigo-600">{p.target_panel_name}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">{p.data_mode}</span>
+                        <span className="text-xs text-gray-400">{p.fields_count ? `${p.fields_count} fields` : ''}</span>
+                      </div>
+                      <pre className="text-xs bg-gray-50 rounded p-2 overflow-x-auto text-gray-700 font-mono" data-testid={`preview-json-${i}`}>
+                        {JSON.stringify(p.preview_data, null, 2)}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 p-4 border-t">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50" data-testid="cancel-btn">Cancel</button>
-              <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 transition-colors"
-                data-testid="save-rule-btn">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {editingRuleId ? 'Update Rule' : 'Create Rule'}
+            <div className="flex items-center justify-between p-4 border-t">
+              <button onClick={fetchPreview} disabled={loadingPreview || !rule.trigger_panel_id || rule.targets.length === 0}
+                className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-200 disabled:opacity-50 transition-colors"
+                data-testid="preview-btn">
+                {loadingPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+                Preview Data
               </button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50" data-testid="cancel-btn">Cancel</button>
+                <button onClick={handleSave} disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                  data-testid="save-rule-btn">
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {editingRuleId ? 'Update Rule' : 'Create Rule'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -915,6 +1001,30 @@ function TargetCard({
         </div>
       </div>
 
+      {/* Data Mode toggle — only for create actions */}
+      {isCreate && target.target_panel_id && (
+        <div>
+          <label className="block text-xs text-gray-600 mb-1.5">Data Mode</label>
+          <div className="flex gap-2" data-testid={`data-mode-${tIdx}`}>
+            {DATA_MODES.map(dm => (
+              <button key={dm.value} type="button"
+                onClick={() => onUpdate(tIdx, { data_mode: dm.value })}
+                className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  target.data_mode === dm.value
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                }`}
+                data-testid={`data-mode-${dm.value}-${tIdx}`}>
+                {dm.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            {DATA_MODES.find(dm => dm.value === target.data_mode)?.desc}
+          </p>
+        </div>
+      )}
+
       {/* Relation field (optional — used for entity linking) */}
       {target.target_panel_id && (
         <div>
@@ -963,8 +1073,25 @@ function TargetCard({
       {/* ── CREATE RECORD — Field Mapping ── */}
       {isCreate && target.target_panel_id && (
         <div className="space-y-2">
+          {/* Full Copy mode info */}
+          {target.data_mode === 'full_copy' && (
+            <div className="p-2.5 bg-blue-50 rounded-lg border border-blue-200 text-xs text-blue-700" data-testid={`full-copy-info-${tIdx}`}>
+              All target fields with matching source field names will be copied automatically.
+              Add explicit mappings below to override or map non-matching fields.
+            </div>
+          )}
+
+          {/* Smart Sync mode info */}
+          {target.data_mode === 'smart_sync' && (
+            <div className="p-2.5 bg-teal-50 rounded-lg border border-teal-200 text-xs text-teal-700" data-testid={`smart-sync-info-${tIdx}`}>
+              Explicit mappings below take priority. Remaining target fields auto-fill from matching source fields.
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-gray-700">Field Mapping (Source to Target)</label>
+            <label className="text-xs font-semibold text-gray-700">
+              {target.data_mode === 'manual_only' ? 'Field Mapping (Required)' : 'Field Mapping (Overrides)'}
+            </label>
             <div className="flex items-center gap-2">
               <button onClick={() => onSelectAll(tIdx)} type="button"
                 className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
@@ -1033,46 +1160,58 @@ function TargetCard({
                 </div>
               ))}
 
-              {target.field_mappings.length === 0 && (
+              {target.field_mappings.length === 0 && target.data_mode === 'manual_only' && (
                 <p className="text-xs text-gray-400 text-center py-2">No mappings yet. Click &quot;Select All&quot; or &quot;Add Row&quot;.</p>
+              )}
+              {target.field_mappings.length === 0 && target.data_mode !== 'manual_only' && (
+                <p className="text-xs text-gray-400 text-center py-2">
+                  No explicit overrides. {target.data_mode === 'smart_sync' ? 'Matching fields auto-mapped at execution.' : 'All matching fields copied at execution.'}
+                </p>
               )}
             </>
           )}
 
-          {/* Field Visibility */}
-          {target.field_mappings.filter(fm => fm.target_field).length > 0 && (
-            <div className="mt-2 p-3 bg-white/80 rounded-lg border">
-              <label className="text-xs font-semibold text-gray-700 mb-2 block">Field Visibility</label>
-              <div className="space-y-1.5">
-                <div className="grid grid-cols-6 gap-2 text-xs font-semibold text-gray-500">
-                  <div className="col-span-2">Field</div>
-                  <div className="col-span-2 text-center">Visible</div>
-                  <div className="col-span-2 text-center">Editable</div>
+          {/* Field Visibility — show for all target fields when full_copy/smart_sync, or mapped fields for manual */}
+          {(() => {
+            const visFields = target.data_mode === 'manual_only'
+              ? target.field_mappings.filter(fm => fm.target_field)
+              : target._targetFields.map(f => ({ target_field: f.key }));
+            if (visFields.length === 0) return null;
+            return (
+              <div className="mt-2 p-3 bg-white/80 rounded-lg border">
+                <label className="text-xs font-semibold text-gray-700 mb-2 block">Field Visibility (UI display only)</label>
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-6 gap-2 text-xs font-semibold text-gray-500">
+                    <div className="col-span-2">Field</div>
+                    <div className="col-span-2 text-center">Visible</div>
+                    <div className="col-span-2 text-center">Editable</div>
+                  </div>
+                  {visFields.map((fm, i) => {
+                    const fieldKey = 'target_field' in fm ? fm.target_field : '';
+                    const vis = getVis(tIdx, fieldKey);
+                    const tfLabel = target._targetFields.find(f => f.key === fieldKey)?.label || fieldKey;
+                    return (
+                      <div key={i} className="grid grid-cols-6 gap-2 items-center text-xs">
+                        <div className="col-span-2 text-gray-700">{tfLabel}</div>
+                        <div className="col-span-2 text-center">
+                          <input type="checkbox" checked={vis.visible}
+                            onChange={e => onToggleVis(tIdx, fieldKey, 'visible', e.target.checked)}
+                            className="rounded border-gray-300 text-green-600"
+                            data-testid={`vis-visible-${tIdx}-${fieldKey}`} />
+                        </div>
+                        <div className="col-span-2 text-center">
+                          <input type="checkbox" checked={vis.editable}
+                            onChange={e => onToggleVis(tIdx, fieldKey, 'editable', e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600"
+                            data-testid={`vis-editable-${tIdx}-${fieldKey}`} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                {target.field_mappings.filter(fm => fm.target_field).map((fm, i) => {
-                  const vis = getVis(tIdx, fm.target_field);
-                  const tfLabel = target._targetFields.find(f => f.key === fm.target_field)?.label || fm.target_field;
-                  return (
-                    <div key={i} className="grid grid-cols-6 gap-2 items-center text-xs">
-                      <div className="col-span-2 text-gray-700">{tfLabel}</div>
-                      <div className="col-span-2 text-center">
-                        <input type="checkbox" checked={vis.visible}
-                          onChange={e => onToggleVis(tIdx, fm.target_field, 'visible', e.target.checked)}
-                          className="rounded border-gray-300 text-green-600"
-                          data-testid={`vis-visible-${tIdx}-${fm.target_field}`} />
-                      </div>
-                      <div className="col-span-2 text-center">
-                        <input type="checkbox" checked={vis.editable}
-                          onChange={e => onToggleVis(tIdx, fm.target_field, 'editable', e.target.checked)}
-                          className="rounded border-gray-300 text-blue-600"
-                          data-testid={`vis-editable-${tIdx}-${fm.target_field}`} />
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
     </div>

@@ -33,6 +33,7 @@ ALLOWED_OPERATORS = {"equals", "not_equals", "greater_than", "less_than", "conta
 ALLOWED_TRIGGER_TYPES = {"on_create", "on_update", "condition_based"}
 ALLOWED_ACTION_TYPES = {"update_record", "create_record", "create_records_per_item"}
 ALLOWED_UPDATE_OPS = {"increment", "decrement", "set_value"}
+ALLOWED_DATA_MODES = {"smart_sync", "manual_only", "full_copy"}
 BLOCKED_SYSTEM_FIELDS = {"_id", "sellerId", "createdAt", "updatedAt", "createdBy"}
 SYSTEM_MODULE_IDS = {"inventory", "invoices", "buyers", "suppliers", "purchase_orders", "quotations", "composite_products", "employees"}
 
@@ -61,6 +62,7 @@ class FieldVisibility(BaseModel):
 class RuleTarget(BaseModel):
     target_panel_id: str = Field(...)
     action_type: str = Field(default="create_record")
+    data_mode: str = Field(default="smart_sync", description="smart_sync | manual_only | full_copy")
     relation_field: Optional[str] = None
     # For update_record
     update_operation: Optional[str] = None
@@ -168,6 +170,8 @@ def init_automation_router(db, verify_token_func):
     def validate_target(t: RuleTarget):
         if t.action_type not in ALLOWED_ACTION_TYPES:
             raise HTTPException(status_code=400, detail=f"Invalid action type: {t.action_type}")
+        if t.data_mode not in ALLOWED_DATA_MODES:
+            raise HTTPException(status_code=400, detail=f"Invalid data_mode: {t.data_mode}. Use: smart_sync, manual_only, full_copy")
         if t.action_type == "update_record":
             if not t.update_operation or t.update_operation not in ALLOWED_UPDATE_OPS:
                 raise HTTPException(status_code=400, detail="Valid update_operation required.")
@@ -178,9 +182,11 @@ def init_automation_router(db, verify_token_func):
             if not t.update_value_from:
                 raise HTTPException(status_code=400, detail="update_value_from required for update_record.")
         if t.action_type in ("create_record", "create_records_per_item"):
-            if not t.field_mappings or len(t.field_mappings) == 0:
-                raise HTTPException(status_code=400, detail="field_mappings required for create actions.")
-            if len(t.field_mappings) > MAX_FIELD_MAPPINGS:
+            # manual_only requires explicit mappings; smart_sync/full_copy can work without
+            if t.data_mode == "manual_only":
+                if not t.field_mappings or len(t.field_mappings) == 0:
+                    raise HTTPException(status_code=400, detail="field_mappings required for manual_only mode.")
+            if t.field_mappings and len(t.field_mappings) > MAX_FIELD_MAPPINGS:
                 raise HTTPException(status_code=400, detail=f"Maximum {MAX_FIELD_MAPPINGS} field mappings.")
 
     async def get_panel_name(panel_id: str) -> str:
@@ -321,6 +327,64 @@ def init_automation_router(db, verify_token_func):
         ).sort("timestamp", -1).limit(limit).to_list(limit)
         return {"logs": serialize_doc(logs)}
 
+    # ── PREVIEW (dry-run data output) ──
+    class PreviewRequest(BaseModel):
+        trigger_panel_id: str
+        targets: List[RuleTarget]
+        sample_data: Optional[dict] = None
+
+    @router.post("/automation/preview")
+    async def preview_rule(data: PreviewRequest, authorization: str = Header(...)):
+        """Preview what data each target would receive given sample source data.
+        Uses the first record from the source panel if no sample_data provided."""
+        user = await get_current_user(authorization)
+        require_admin(user)
+        seller_id = await get_seller_id(user)
+
+        # Get sample data from source panel
+        source_data = data.sample_data
+        if not source_data:
+            sample_record = await db.panel_records.find_one(
+                {"panelId": ObjectId(data.trigger_panel_id), "sellerId": ObjectId(seller_id)},
+                {"_id": 0, "data": 1}
+            )
+            source_data = sample_record.get("data", {}) if sample_record else {}
+
+        if not source_data:
+            return {"previews": [], "message": "No sample data available. Add a record to this panel first."}
+
+        previews = []
+        for t in data.targets:
+            target_dict = t.model_dump()
+            target_panel_id = t.target_panel_id
+            target_field_keys = await get_target_field_keys(target_panel_id, seller_id)
+            target_name = await get_panel_name(target_panel_id)
+
+            if t.action_type == "update_record":
+                value_from = t.update_value_from or ""
+                previews.append({
+                    "target_panel_id": target_panel_id,
+                    "target_panel_name": target_name,
+                    "action_type": t.action_type,
+                    "data_mode": t.data_mode,
+                    "preview_data": {
+                        t.update_field or "field": f"{t.update_operation}({source_data.get(value_from, '?')})"
+                    },
+                })
+            else:
+                mapped = build_mapped_data(target_dict, source_data, "preview_record_id", data.trigger_panel_id, target_field_keys)
+                previews.append({
+                    "target_panel_id": target_panel_id,
+                    "target_panel_name": target_name,
+                    "action_type": t.action_type,
+                    "data_mode": t.data_mode,
+                    "preview_data": mapped,
+                    "fields_count": len(mapped),
+                })
+
+        return {"previews": previews, "source_data_keys": list(source_data.keys())}
+
+
     # ══════════════════════════════════════
     # EXECUTION ENGINE
     # ══════════════════════════════════════
@@ -419,7 +483,8 @@ def init_automation_router(db, verify_token_func):
                 f"Updated {target_field} ({operation})", target_panel_id)
 
         elif action_type == "create_record":
-            mapped_data = build_mapped_data(target, source_data, source_record_id, source_panel_id)
+            target_field_keys = await get_target_field_keys(target_panel_id, seller_id)
+            mapped_data = build_mapped_data(target, source_data, source_record_id, source_panel_id, target_field_keys)
             entity_id = source_data.get(relation_field, "") if relation_field else source_record_id
 
             dup = await db.panel_records.find_one({
@@ -459,7 +524,8 @@ def init_automation_router(db, verify_token_func):
             for item in items:
                 # Merge item with source — but source is always parent
                 item_data = {**source_data, **item}
-                mapped_data = build_mapped_data(target, item_data, source_record_id, source_panel_id)
+                target_field_keys = await get_target_field_keys(target_panel_id, seller_id)
+                mapped_data = build_mapped_data(target, item_data, source_record_id, source_panel_id, target_field_keys)
                 item_entity_id = item.get("productId") or item.get("product_id") or ""
 
                 dup = await db.panel_records.find_one({
@@ -490,10 +556,49 @@ def init_automation_router(db, verify_token_func):
             await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "success",
                 f"Created {created}/{len(items)} records", target_panel_id)
 
-    def build_mapped_data(target: dict, source_data: dict, source_record_id: str, source_panel_id: str) -> dict:
+    # ── System module field definitions (for execution-time smart sync / full copy) ──
+    SYSTEM_MODULE_FIELD_KEYS = {
+        "inventory": {"productName", "sku", "category", "stock", "quantity", "minStock", "reorderPoint"},
+        "invoices": {"invoiceNumber", "buyerName", "totalAmount"},
+        "buyers": {"name", "phone", "email"},
+        "suppliers": {"name", "phone", "email"},
+        "purchase_orders": {"poNumber", "supplierName", "totalAmount"},
+        "quotations": {"quotationNumber", "buyerName", "totalAmount"},
+        "composite_products": {"name", "sku"},
+        "employees": {"name", "role", "email"},
+    }
+
+    async def get_target_field_keys(target_panel_id: str, seller_id: str) -> set:
+        """Get the set of valid field keys for a target panel at execution time."""
+        if target_panel_id in SYSTEM_MODULE_FIELD_KEYS:
+            return SYSTEM_MODULE_FIELD_KEYS[target_panel_id]
+        try:
+            panel = await db.panels.find_one(
+                {"_id": ObjectId(target_panel_id), "sellerId": ObjectId(seller_id)},
+                {"fields": 1}
+            )
+            if panel:
+                return {f["key"] for f in panel.get("fields", []) if f.get("type") != "relation"}
+        except Exception:
+            pass
+        return set()
+
+    def build_mapped_data(target: dict, source_data: dict, source_record_id: str, source_panel_id: str, target_field_keys: set = None) -> dict:
+        """Build the data dict for a new record based on data_mode.
+
+        Modes:
+          manual_only  — only explicit field_mappings
+          smart_sync   — explicit mappings first, then auto-fill matching field names
+          full_copy    — for each target field that exists in source, copy value
+        """
+        data_mode = target.get("data_mode", "smart_sync")
         mapped = {}
-        for fm in target.get("field_mappings", []):
+
+        # Step 1: Always apply explicit field_mappings (highest priority)
+        for fm in (target.get("field_mappings") or []):
             tf = fm.get("target_field", "")
+            if not tf:
+                continue
             mt = fm.get("mapping_type", "field")
             if mt == "field" and fm.get("source_field"):
                 mapped[tf] = source_data.get(fm["source_field"])
@@ -506,6 +611,26 @@ def init_automation_router(db, verify_token_func):
                     mapped[tf] = source_panel_id
                 elif fm.get("source_field"):
                     mapped[tf] = source_data.get(fm["source_field"])
+
+        # Step 2: Apply mode-specific logic
+        if data_mode == "manual_only":
+            # Only explicit mappings — already done
+            pass
+
+        elif data_mode == "smart_sync" and target_field_keys:
+            # Auto-fill: for each target field NOT already mapped,
+            # if source has same field name → copy value
+            for tkey in target_field_keys:
+                if tkey not in mapped and tkey in source_data:
+                    mapped[tkey] = source_data[tkey]
+
+        elif data_mode == "full_copy" and target_field_keys:
+            # For each target field that exists in source, copy value
+            # Explicit mappings take priority (already in mapped)
+            for tkey in target_field_keys:
+                if tkey not in mapped and tkey in source_data:
+                    mapped[tkey] = source_data[tkey]
+
         return mapped
 
     def extract_line_items(data: dict) -> list:

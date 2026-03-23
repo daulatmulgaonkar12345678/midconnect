@@ -27,6 +27,7 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     {
       "target_panel_id": "string (custom panel ObjectId or system module ID)",
       "action_type": "create_record | create_records_per_item | update_record",
+      "data_mode": "smart_sync | manual_only | full_copy",
       "relation_field": "string (optional)",
       "update_operation": "increment | decrement | set_value",
       "update_field": "string",
@@ -44,6 +45,11 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 }
 ```
 
+### Data Mode Behavior (LOCKED)
+- **smart_sync** (default): Explicit mappings take priority. Remaining target fields auto-fill from matching source field names.
+- **manual_only**: Only explicitly mapped fields transfer. Most restrictive.
+- **full_copy**: For each target field that exists in source, copy value. Explicit mappings override.
+
 ### System Modules Supported as Targets
 inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_products, employees
 
@@ -52,30 +58,37 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 26. Phase 3B: Smart Document Builder (Excel/PDF export)
 27. Phase 4 Lite: Basic Automation (superseded)
 28. **Phase 4 Full: Multi-Target Workflow Automation Engine (Mar 2026)**
-    - Backend: Complete rewrite with multi-target support, per-target field mapping/visibility
-    - Frontend: Complete rewrite with contract-first approach, TargetCard components
+    - Backend: Multi-target support, per-target field mapping/visibility
+    - Frontend: Contract-first approach, TargetCard components
     - Trigger Types: on_create, on_update, condition_based
     - Action Types: create_record, create_records_per_item, update_record
     - Duplicate prevention, execution logging, loop prevention
-    - Backend tested: 16/16 tests passed (100%)
-    - Backend lint: All checks passed
+29. **Phase 4.1: Data Mode + Preview (Mar 2026)**
+    - 3 data modes per target: smart_sync, manual_only, full_copy
+    - Smart Sync: explicit mappings priority, auto-fill matching field names
+    - Full Copy: safe version — only copies target fields that exist in source
+    - Preview endpoint: dry-run showing exact data output before saving
+    - Frontend: Data Mode toggle, mode-specific info messages, Preview Data button
+    - Tests: 18/18 backend tests passed (100%)
 
 ## Prioritized Backlog
 ### P0 (Next)
-1. End-to-end workflow testing: Invoice -> QC -> Dispatch flow with real data
-2. Document Builder Templates: customizable PDF with {{variables}}
+1. End-to-end workflow testing: Create real panels, create rules, trigger automation, verify target records
+2. Apply field_visibility in records UI (records page respects visible/editable settings)
+3. Document Builder Templates: customizable PDF with {{variables}}
 
 ### P1
-3. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
-4. Seller Reminder Controls
+4. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
+5. Seller Reminder Controls
 
 ### P2
 - GSTR-1 JSON export | Custom Material Report
 - White-label toggle | WhatsApp Business API
 
 ## Key Files
-- `/app/backend/routers/automation_router.py` — Multi-target engine: CRUD, execution, mapping, dedup, chaining
-- `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, export, entity_id extraction
-- `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Multi-target Rule Builder UI
-- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config: binding variable, systemManaged fields
-- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export buttons
+- `/app/backend/routers/automation_router.py` — Multi-target engine + data modes + preview
+- `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, export
+- `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Multi-target Rule Builder UI with data modes
+- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export
+- `/app/backend/tests/test_automation_data_mode_preview.py` — 18 backend tests
