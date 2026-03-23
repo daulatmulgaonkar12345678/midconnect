@@ -87,24 +87,37 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Clear error messages when match fails
     - End-to-end verified: QC(pass) → Inventory stock increment. Stock 7 → 32 correctly
     - Tests: 18/18 passed (100%)
+33. **Field Visibility in Records UI (Mar 2026)**
+    - New API: `GET /panels/{panel_id}/field-visibility` — aggregates visibility rules from all active automation rules targeting a panel
+    - Merge logic: most restrictive wins (visible=false wins, editable=false wins)
+    - Frontend: Records table hides `visible=false` fields, disables `editable=false` fields with lock icon + "Auto" badge
+    - Create/Edit modal: hidden fields removed, non-editable fields shown disabled with visual indicator
+    - View modal: shows lock icon for auto-managed fields
+    - Panel existence validation added (returns 404 for non-existent panels)
+    - Tests: 22/22 passed (16 API + 6 E2E) (100%)
+34. **MATCH + UPDATE Engine Verification (Mar 2026)**
+    - Case 1: Correct match → stock incremented correctly ✅
+    - Case 2: No match → no update, error logged gracefully ✅
+    - Case 3: Relation field → uses ObjectId internally ✅
+    - Edge case: null/empty quantity → safe fallback, no increment ✅
 
 ## Prioritized Backlog
 ### P0 (Next)
-1. Apply field_visibility in records UI (records page respects visible/editable settings from rules)
-2. Document Builder Templates: customizable PDF with {{variables}}
+1. Document Builder Templates: customizable PDF with {{variables}}
 
 ### P1
-3. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
-4. Seller Reminder Controls
+2. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
+3. Seller Reminder Controls
 
 ### P2
 - GSTR-1 JSON export | Custom Material Report
 - White-label toggle | WhatsApp Business API
 
 ## Key Files
-- `/app/backend/routers/automation_router.py` — Multi-target engine + data modes + preview
-- `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, record validation
+- `/app/backend/routers/automation_router.py` — Multi-target engine + data modes + preview + MATCH+UPDATE
+- `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, record validation, field-visibility endpoint
 - `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Multi-target Rule Builder UI with data modes
 - `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config
-- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export
-- `/app/backend/tests/test_automation_data_mode_preview.py` — 18 backend tests
+- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export + field visibility
+- `/app/backend/tests/test_e2e_full.py` — 6 E2E tests (MATCH+UPDATE + field visibility)
+- `/app/backend/tests/test_field_visibility_match_update.py` — 16 API tests
