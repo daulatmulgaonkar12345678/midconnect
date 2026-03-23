@@ -378,8 +378,26 @@ export default function AutomationPage() {
   // ── Target panel change handler ──
 
   const handleTargetPanelChange = (tIdx: number, panelId: string) => {
+    // Auto-detect: if source has a relation field pointing to this target, pre-select it as lookup key
+    let autoRelationField = '';
+    if (panelId) {
+      const matchingRelation = sourceFields.find(f =>
+        f.type === 'relation' && (
+          f.relatedPanel === panelId ||
+          f.relatedPanel === panelId.toLowerCase() ||
+          (panelId === 'inventory' && f.relatedPanel === 'inventory') ||
+          (panelId === 'purchase_orders' && f.relatedPanel === 'purchase_orders') ||
+          (panelId === 'employees' && f.relatedPanel === 'employees') ||
+          (panelId === 'buyers' && f.relatedPanel === 'buyers') ||
+          (panelId === 'suppliers' && f.relatedPanel === 'suppliers')
+        )
+      );
+      if (matchingRelation) autoRelationField = matchingRelation.key;
+    }
+
     updateTarget(tIdx, {
       target_panel_id: panelId,
+      relation_field: autoRelationField,
       field_mappings: [],
       field_visibility: [],
       update_field: '',
@@ -1122,12 +1140,21 @@ function TargetCard({
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Value From (Source) *</label>
+            <label className="block text-xs text-gray-600 mb-1">Value From (Source) * <span className="text-gray-400 font-normal">(numeric field)</span></label>
             <select value={target.update_value_from}
               onChange={e => onUpdate(tIdx, { update_value_from: e.target.value })}
               className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-value-from-${tIdx}`}>
               <option value="">Select field...</option>
-              {sourceAllFields.map(f => <option key={f.key} value={f.key}>{f.label}{f.type === 'number' ? '' : ` (${f.type})`}</option>)}
+              <optgroup label="Data Fields (recommended)">
+                {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label} ({f.type})</option>)}
+              </optgroup>
+              {sourceAllFields.filter(f => f.type === 'relation').length > 0 && (
+                <optgroup label="Relation Fields">
+                  {sourceAllFields.filter(f => f.type === 'relation').map(f => (
+                    <option key={f.key} value={f.key}>{f.label} (linked to {f.relatedPanel})</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         </div>

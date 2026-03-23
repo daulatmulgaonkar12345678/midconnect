@@ -460,14 +460,24 @@ def init_automation_router(db, verify_token_func):
         if action_type == "update_record":
             related_id = source_data.get(relation_field, "") if relation_field else ""
             if not related_id:
-                raise Exception(f"Relation field '{relation_field}' empty in source.")
+                raise Exception(f"Lookup field '{relation_field}' is empty in source record. Cannot identify which target record to update.")
+
+            # Validate that lookup value looks like a valid ObjectId
+            related_id_str = str(related_id)
+            try:
+                ObjectId(related_id_str)
+            except Exception:
+                raise Exception(
+                    f"Lookup field '{relation_field}' contains '{related_id_str}' which is not a valid record ID. "
+                    f"Make sure the Lookup Key is set to a relation field (e.g., Product Name linked to Inventory), not a data field."
+                )
 
             operation = target.get("update_operation", "set_value")
             target_field = target.get("update_field", "")
             value_from = target.get("update_value_from", "")
             source_value = source_data.get(value_from)
             if source_value is None:
-                raise Exception(f"Source field '{value_from}' is empty.")
+                raise Exception(f"Value source field '{value_from}' is empty in source record.")
 
             if target_panel_id in SYSTEM_MODULE_IDS:
                 await update_system_record(target_panel_id, related_id, target_field, operation, source_value, seller_id)

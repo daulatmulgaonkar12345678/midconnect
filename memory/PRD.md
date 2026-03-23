@@ -68,13 +68,17 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Root cause: `get_target_field_keys()` excluded relation-type fields from matching
     - Fix: Include ALL field types in target_field_keys
 31. **Bug Fix: Update Record lookup field (Mar 2026)**
-    - Root cause: "Relation Field" dropdown showed only data fields (excluded relation fields), so user couldn't select product_name (linked to Inventory) as the lookup key
-    - Fixes applied:
-      1. Dropdown now shows ALL source fields — relation fields that link to the target module are shown FIRST with "(linked)" label
-      2. Renamed label to "Lookup Key *" for update_record with clear guidance text
-      3. Made lookup key REQUIRED for update_record (with validation)
-      4. "Value From" dropdown also shows all field types now
-      5. Preview shows both lookup key resolution AND update operation
+    - Root cause: "Relation Field" dropdown showed only data fields (excluded relation fields); label was confusing
+    - Fixes:
+      1. Dropdown now shows all source fields — relation fields linking to target shown FIRST with "(linked)" label
+      2. Label renamed to "Lookup Key *" for update_record with guidance text
+      3. Made lookup key REQUIRED for update_record with validation
+      4. Preview shows lookup resolution + operation
+32. **Fix: Update Record end-to-end binding (Mar 2026)**
+    - Auto-select: When user picks a target panel for update_record, the system auto-detects matching source relation field (e.g., product_name → inventory) and pre-selects it as Lookup Key
+    - Value From dropdown: Grouped into "Data Fields (recommended)" and "Relation Fields" with type labels to prevent confusion
+    - Backend: Clear error message if lookup value is not a valid ObjectId (tells user to use a relation field)
+    - End-to-end verified: QC (status=pass) → Inventory stock increment by quantity. Stock went from 7 → 57 correctly
     - Tests: 18/18 backend tests passed (100%)
 
 ## Prioritized Backlog
