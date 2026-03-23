@@ -64,7 +64,9 @@ class RuleTarget(BaseModel):
     action_type: str = Field(default="create_record")
     data_mode: str = Field(default="smart_sync", description="smart_sync | manual_only | full_copy")
     relation_field: Optional[str] = None
-    # For update_record
+    # For update_record — MATCH + UPDATE
+    match_target_field: Optional[str] = None   # e.g., "product_name" in inventory
+    match_source_field: Optional[str] = None   # e.g., "product_name" in QC
     update_operation: Optional[str] = None
     update_field: Optional[str] = None
     update_value_from: Optional[str] = None
@@ -173,6 +175,10 @@ def init_automation_router(db, verify_token_func):
         if t.data_mode not in ALLOWED_DATA_MODES:
             raise HTTPException(status_code=400, detail=f"Invalid data_mode: {t.data_mode}. Use: smart_sync, manual_only, full_copy")
         if t.action_type == "update_record":
+            if not t.match_target_field:
+                raise HTTPException(status_code=400, detail="match_target_field required: which field in target identifies the record.")
+            if not t.match_source_field:
+                raise HTTPException(status_code=400, detail="match_source_field required: which source field contains the match value.")
             if not t.update_operation or t.update_operation not in ALLOWED_UPDATE_OPS:
                 raise HTTPException(status_code=400, detail="Valid update_operation required.")
             if not t.update_field:
@@ -361,18 +367,18 @@ def init_automation_router(db, verify_token_func):
             target_name = await get_panel_name(target_panel_id)
 
             if t.action_type == "update_record":
-                value_from = t.update_value_from or ""
-                relation_field = t.relation_field or ""
-                lookup_value = source_data.get(relation_field, "?") if relation_field else "?"
-                update_value = source_data.get(value_from, "?")
+                match_tf = t.match_target_field or "(not set)"
+                match_sf = t.match_source_field or t.relation_field or "(not set)"
+                match_val = source_data.get(match_sf, "?") if match_sf != "(not set)" else "?"
+                update_val = source_data.get(t.update_value_from or "", "?")
                 previews.append({
                     "target_panel_id": target_panel_id,
                     "target_panel_name": target_name,
                     "action_type": t.action_type,
                     "data_mode": t.data_mode,
                     "preview_data": {
-                        "_lookup": f"Find record where ID = {lookup_value} (from {relation_field})",
-                        t.update_field or "field": f"{t.update_operation}({update_value})"
+                        "_match": f"Find {target_name} where [{match_tf}] = {match_val} (from source.{match_sf})",
+                        "_update": f"{t.update_field} = {t.update_operation}({update_val}) (from source.{t.update_value_from})"
                     },
                 })
             else:
@@ -458,20 +464,22 @@ def init_automation_router(db, verify_token_func):
         now = datetime.now(timezone.utc)
 
         if action_type == "update_record":
-            related_id = source_data.get(relation_field, "") if relation_field else ""
-            if not related_id:
-                raise Exception(f"Lookup field '{relation_field}' is empty in source record. Cannot identify which target record to update.")
+            # ── MATCH: Find the target record ──
+            match_target_field = target.get("match_target_field", "")
+            match_source_field = target.get("match_source_field", "")
 
-            # Validate that lookup value looks like a valid ObjectId
-            related_id_str = str(related_id)
-            try:
-                ObjectId(related_id_str)
-            except Exception:
-                raise Exception(
-                    f"Lookup field '{relation_field}' contains '{related_id_str}' which is not a valid record ID. "
-                    f"Make sure the Lookup Key is set to a relation field (e.g., Product Name linked to Inventory), not a data field."
-                )
+            # Backward compat: if old relation_field is set but new fields aren't, use it
+            if not match_source_field and relation_field:
+                match_source_field = relation_field
 
+            if not match_source_field:
+                raise Exception("match_source_field is not set. Cannot identify which record to update.")
+
+            match_value = source_data.get(match_source_field)
+            if not match_value:
+                raise Exception(f"Source field '{match_source_field}' is empty in source record.")
+
+            # ── UPDATE: Get the value to apply ──
             operation = target.get("update_operation", "set_value")
             target_field = target.get("update_field", "")
             value_from = target.get("update_value_from", "")
@@ -479,17 +487,25 @@ def init_automation_router(db, verify_token_func):
             if source_value is None:
                 raise Exception(f"Value source field '{value_from}' is empty in source record.")
 
+            # ── Execute on system module ──
             if target_panel_id in SYSTEM_MODULE_IDS:
-                await update_system_record(target_panel_id, related_id, target_field, operation, source_value, seller_id)
+                await update_system_record(target_panel_id, match_target_field, str(match_value), target_field, operation, source_value, seller_id)
             else:
-                target_record = await db.panel_records.find_one({
-                    "_id": ObjectId(related_id), "panelId": ObjectId(target_panel_id), "sellerId": ObjectId(seller_id)
-                })
+                # ── Execute on custom panel ──
+                # Find the target record by matching field value
+                query = {"panelId": ObjectId(target_panel_id), "sellerId": ObjectId(seller_id)}
+                # If match_target_field is "_id", match by record ID
+                if match_target_field == "_id":
+                    query["_id"] = ObjectId(str(match_value))
+                else:
+                    query[f"data.{match_target_field}"] = str(match_value)
+
+                target_record = await db.panel_records.find_one(query)
                 if not target_record:
-                    raise Exception(f"Target record {related_id} not found.")
+                    raise Exception(f"No record found in target panel where {match_target_field} = {match_value}")
                 new_val = apply_operation(target_record.get("data", {}).get(target_field, 0), operation, source_value)
                 await db.panel_records.update_one(
-                    {"_id": ObjectId(related_id)},
+                    {"_id": target_record["_id"]},
                     {"$set": {f"data.{target_field}": new_val, "updatedAt": now}}
                 )
 
@@ -700,22 +716,44 @@ def init_automation_router(db, verify_token_func):
             pass
         return value
 
-    async def update_system_record(module: str, record_id: str, field: str, op: str, value, seller_id: str):
+    async def update_system_record(module: str, match_target_field: str, match_value: str, update_field: str, op: str, value, seller_id: str):
+        """Find a system record by MATCH condition, then UPDATE the target field."""
         try:
             nv = float(value)
         except (ValueError, TypeError):
             nv = None
+
         if module == "inventory":
-            safe = {"stock", "quantity", "minStock", "reorderPoint"}
-            if field not in safe:
-                raise Exception(f"Cannot modify '{field}' on inventory.")
-            listing = await db.sellerListings.find_one({"_id": ObjectId(record_id), "sellerId": ObjectId(seller_id)})
+            safe_update = {"stock", "quantity", "minStock", "reorderPoint"}
+            if update_field not in safe_update:
+                raise Exception(f"Cannot modify '{update_field}' on inventory.")
+
+            # Build match query — find the inventory record
+            query = {"sellerId": ObjectId(seller_id)}
+            if match_target_field == "_id" or match_target_field == "id":
+                query["_id"] = ObjectId(match_value)
+            elif match_target_field == "productName":
+                query["productName"] = match_value
+            elif match_target_field == "sku":
+                query["sku"] = match_value
+            else:
+                # Default: try by _id (for relation fields that store ObjectId)
+                try:
+                    query["_id"] = ObjectId(match_value)
+                except Exception:
+                    query[match_target_field] = match_value
+
+            listing = await db.sellerListings.find_one(query)
             if not listing:
-                raise Exception(f"Listing {record_id} not found.")
-            new_val = apply_operation(listing.get(field, 0), op, nv or value)
-            await db.sellerListings.update_one({"_id": ObjectId(record_id)}, {"$set": {field: new_val, "updatedAt": datetime.now(timezone.utc)}})
+                raise Exception(f"Inventory record not found where {match_target_field} = {match_value}")
+
+            new_val = apply_operation(listing.get(update_field, 0), op, nv or value)
+            await db.sellerListings.update_one(
+                {"_id": listing["_id"]},
+                {"$set": {update_field: new_val, "updatedAt": datetime.now(timezone.utc)}}
+            )
         else:
-            raise Exception(f"System module '{module}' not yet supported.")
+            raise Exception(f"System module '{module}' not yet supported for updates.")
 
     async def log_execution(seller_id, rule, source_panel_id, record_id, event_type, status, message="", target_panel_id=None, target_record_id=None):
         await db.automation_logs.insert_one({

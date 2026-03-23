@@ -74,12 +74,19 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
       2. Label renamed to "Lookup Key *" for update_record with guidance text
       3. Made lookup key REQUIRED for update_record with validation
       4. Preview shows lookup resolution + operation
-32. **Fix: Update Record end-to-end binding (Mar 2026)**
-    - Auto-select: When user picks a target panel for update_record, the system auto-detects matching source relation field (e.g., product_name → inventory) and pre-selects it as Lookup Key
-    - Value From dropdown: Grouped into "Data Fields (recommended)" and "Relation Fields" with type labels to prevent confusion
-    - Backend: Clear error message if lookup value is not a valid ObjectId (tells user to use a relation field)
-    - End-to-end verified: QC (status=pass) → Inventory stock increment by quantity. Stock went from 7 → 57 correctly
-    - Tests: 18/18 backend tests passed (100%)
+32. **ARCHITECTURE UPGRADE: Relational Update Engine (Mar 2026)**
+    - Replaced single "Lookup Key" with proper **MATCH + UPDATE** model
+    - **MATCH**: `[Target Field] = [Source Field]` — identifies WHICH record to update
+      - e.g., `Inventory.product_name = QC.product_name`
+    - **UPDATE**: `[Target Field] = Operation(Source Value)` — what to change
+      - e.g., `stock = increment(quantity)`
+    - Backend: New fields `match_target_field` + `match_source_field` on RuleTarget
+    - Backend: `update_system_record` now supports field-based matching (by _id, productName, sku, or any field)
+    - Frontend: Two-section UI with blue MATCH box + orange UPDATE box
+    - Auto-detect: When target = Inventory and source has relation to inventory, auto-fills match fields
+    - Clear error messages when match fails
+    - End-to-end verified: QC(pass) → Inventory stock increment. Stock 7 → 32 correctly
+    - Tests: 18/18 passed (100%)
 
 ## Prioritized Backlog
 ### P0 (Next)

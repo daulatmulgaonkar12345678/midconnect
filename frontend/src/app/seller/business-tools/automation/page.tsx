@@ -95,6 +95,9 @@ interface TargetForm {
   action_type: string;
   data_mode: string;
   relation_field: string;
+  // For update_record — MATCH + UPDATE
+  match_target_field: string;
+  match_source_field: string;
   update_operation: string;
   update_field: string;
   update_value_from: string;
@@ -126,6 +129,8 @@ interface RuleResponse {
     action_type: string;
     data_mode?: string;
     relation_field?: string | null;
+    match_target_field?: string | null;
+    match_source_field?: string | null;
     update_operation?: string | null;
     update_field?: string | null;
     update_value_from?: string | null;
@@ -146,6 +151,8 @@ function createEmptyTarget(): TargetForm {
     action_type: 'create_record',
     data_mode: 'smart_sync',
     relation_field: '',
+    match_target_field: '',
+    match_source_field: '',
     update_operation: 'increment',
     update_field: '',
     update_value_from: '',
@@ -378,8 +385,9 @@ export default function AutomationPage() {
   // ── Target panel change handler ──
 
   const handleTargetPanelChange = (tIdx: number, panelId: string) => {
-    // Auto-detect: if source has a relation field pointing to this target, pre-select it as lookup key
-    let autoRelationField = '';
+    // Auto-detect: if source has a relation field pointing to this target, pre-select it as match
+    let autoMatchSource = '';
+    let autoMatchTarget = '';
     if (panelId) {
       const matchingRelation = sourceFields.find(f =>
         f.type === 'relation' && (
@@ -392,12 +400,17 @@ export default function AutomationPage() {
           (panelId === 'suppliers' && f.relatedPanel === 'suppliers')
         )
       );
-      if (matchingRelation) autoRelationField = matchingRelation.key;
+      if (matchingRelation) {
+        autoMatchSource = matchingRelation.key;
+        autoMatchTarget = matchingRelation.key; // same field name in target
+      }
     }
 
     updateTarget(tIdx, {
       target_panel_id: panelId,
-      relation_field: autoRelationField,
+      relation_field: autoMatchSource,
+      match_source_field: autoMatchSource,
+      match_target_field: autoMatchTarget,
       field_mappings: [],
       field_visibility: [],
       update_field: '',
@@ -426,6 +439,8 @@ export default function AutomationPage() {
         action_type: t.action_type || 'create_record',
         data_mode: t.data_mode || 'smart_sync',
         relation_field: t.relation_field || '',
+        match_target_field: t.match_target_field || '',
+        match_source_field: t.match_source_field || t.relation_field || '',
         update_operation: t.update_operation || 'increment',
         update_field: t.update_field || '',
         update_value_from: t.update_value_from || '',
@@ -468,7 +483,8 @@ export default function AutomationPage() {
       const t = rule.targets[i];
       if (!t.target_panel_id) { toast.error(`Target ${i + 1}: Select a target panel`); return; }
       if (t.action_type === 'update_record') {
-        if (!t.relation_field) { toast.error(`Target ${i + 1}: Select a Lookup Key (which source field identifies the record to update)`); return; }
+        if (!t.match_target_field) { toast.error(`Target ${i + 1}: Select a Target Field in Match Condition`); return; }
+        if (!t.match_source_field) { toast.error(`Target ${i + 1}: Select a Source Field in Match Condition`); return; }
         if (!t.update_field) { toast.error(`Target ${i + 1}: Select target field for update`); return; }
         if (!t.update_value_from) { toast.error(`Target ${i + 1}: Select value source field`); return; }
       }
@@ -493,6 +509,8 @@ export default function AutomationPage() {
         };
         if (t.relation_field) target.relation_field = t.relation_field;
         if (t.action_type === 'update_record') {
+          target.match_target_field = t.match_target_field;
+          target.match_source_field = t.match_source_field;
           target.update_operation = t.update_operation;
           target.update_field = t.update_field;
           target.update_value_from = t.update_value_from;
@@ -595,6 +613,8 @@ export default function AutomationPage() {
             action_type: t.action_type,
             data_mode: t.data_mode,
             relation_field: t.relation_field || undefined,
+            match_target_field: t.match_target_field || undefined,
+            match_source_field: t.match_source_field || undefined,
             update_operation: t.update_operation || undefined,
             update_field: t.update_field || undefined,
             update_value_from: t.update_value_from || undefined,
@@ -1047,116 +1067,104 @@ function TargetCard({
         </div>
       )}
 
-      {/* Lookup / Relation field — REQUIRED for update_record, optional for create */}
-      {target.target_panel_id && (
-        <div>
-          {isUpdate ? (
-            <>
-              <label className="block text-xs text-gray-600 mb-1 font-semibold">
-                Lookup Key * <span className="font-normal text-gray-400">(Which source field identifies the record in {targetLabel}?)</span>
-              </label>
-              <select value={target.relation_field}
-                onChange={e => onUpdate(tIdx, { relation_field: e.target.value })}
-                className={`w-full px-2 py-1.5 border rounded-lg text-sm bg-white ${!target.relation_field ? 'border-red-300' : ''}`}
-                data-testid={`relation-field-select-${tIdx}`}>
-                <option value="">Select lookup field...</option>
-                {/* Relation fields linking to target module — show first with highlight */}
-                {sourceAllFields.filter(f => f.type === 'relation' && (
-                  f.relatedPanel === target.target_panel_id ||
-                  f.relatedPanel === targetLabel.toLowerCase() ||
-                  (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
-                )).length > 0 && (
-                  <optgroup label={`Linked to ${targetLabel}`}>
-                    {sourceAllFields.filter(f => f.type === 'relation' && (
-                      f.relatedPanel === target.target_panel_id ||
-                      f.relatedPanel === targetLabel.toLowerCase() ||
-                      (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
-                    )).map(f => (
-                      <option key={f.key} value={f.key}>{f.label} (linked)</option>
-                    ))}
+      {/* ── For UPDATE: MATCH CONDITION + UPDATE SECTION ── */}
+      {isUpdate && target.target_panel_id && (
+        <div className="space-y-3">
+          {/* MATCH CONDITION */}
+          <div className="p-3 bg-blue-50/70 rounded-lg border border-blue-200">
+            <label className="block text-xs font-semibold text-blue-800 mb-2">
+              MATCH: Find Record Where *
+            </label>
+            <div className="grid grid-cols-5 gap-2 items-end">
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-500 mb-1">Target Field ({targetLabel})</label>
+                <select value={target.match_target_field}
+                  onChange={e => onUpdate(tIdx, { match_target_field: e.target.value })}
+                  className={`w-full px-2 py-1.5 border rounded-lg text-sm bg-white ${!target.match_target_field ? 'border-red-300' : ''}`}
+                  data-testid={`match-target-field-${tIdx}`}>
+                  <option value="">Select target field...</option>
+                  {target._targetFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                </select>
+              </div>
+              <div className="col-span-1 text-center text-xs text-gray-400 pb-2 font-bold">=</div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-500 mb-1">Source Field (from source panel)</label>
+                <select value={target.match_source_field}
+                  onChange={e => onUpdate(tIdx, { match_source_field: e.target.value, relation_field: e.target.value })}
+                  className={`w-full px-2 py-1.5 border rounded-lg text-sm bg-white ${!target.match_source_field ? 'border-red-300' : ''}`}
+                  data-testid={`match-source-field-${tIdx}`}>
+                  <option value="">Select source field...</option>
+                  {sourceAllFields.filter(f => f.type === 'relation').length > 0 && (
+                    <optgroup label="Relation Fields (recommended)">
+                      {sourceAllFields.filter(f => f.type === 'relation').map(f => (
+                        <option key={f.key} value={f.key}>{f.label} (linked to {f.relatedPanel})</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Data Fields">
+                    {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label} ({f.type})</option>)}
                   </optgroup>
-                )}
-                {/* Other relation fields */}
-                {sourceAllFields.filter(f => f.type === 'relation' && !(
-                  f.relatedPanel === target.target_panel_id ||
-                  f.relatedPanel === targetLabel.toLowerCase() ||
-                  (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
-                )).length > 0 && (
-                  <optgroup label="Other Relations">
-                    {sourceAllFields.filter(f => f.type === 'relation' && !(
-                      f.relatedPanel === target.target_panel_id ||
-                      f.relatedPanel === targetLabel.toLowerCase() ||
-                      (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
-                    )).map(f => (
-                      <option key={f.key} value={f.key}>{f.label}</option>
-                    ))}
+                </select>
+              </div>
+            </div>
+            {(!target.match_target_field || !target.match_source_field) && (
+              <p className="text-xs text-red-500 mt-1.5">Both fields required: this identifies WHICH {targetLabel} record to update</p>
+            )}
+          </div>
+
+          {/* UPDATE SECTION */}
+          <div className="p-3 bg-orange-50/70 rounded-lg border border-orange-200">
+            <label className="block text-xs font-semibold text-orange-800 mb-2">
+              UPDATE: Modify Field *
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Target Field (to update)</label>
+                <select value={target.update_field}
+                  onChange={e => onUpdate(tIdx, { update_field: e.target.value })}
+                  className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-field-${tIdx}`}>
+                  <option value="">Select field...</option>
+                  {updateFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Operation</label>
+                <select value={target.update_operation}
+                  onChange={e => onUpdate(tIdx, { update_operation: e.target.value })}
+                  className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-op-${tIdx}`}>
+                  {UPDATE_OPS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Value From (Source)</label>
+                <select value={target.update_value_from}
+                  onChange={e => onUpdate(tIdx, { update_value_from: e.target.value })}
+                  className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-value-from-${tIdx}`}>
+                  <option value="">Select field...</option>
+                  <optgroup label="Data Fields (recommended)">
+                    {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label} ({f.type})</option>)}
                   </optgroup>
-                )}
-                {/* Data fields as fallback */}
-                <optgroup label="Data Fields">
-                  {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-                </optgroup>
-              </select>
-              {!target.relation_field && (
-                <p className="text-xs text-red-500 mt-1">Required: Select which source field contains the {targetLabel} record ID</p>
-              )}
-            </>
-          ) : (
-            <>
-              <label className="block text-xs text-gray-600 mb-1">Relation Field (optional - for entity linking)</label>
-              <select value={target.relation_field}
-                onChange={e => onUpdate(tIdx, { relation_field: e.target.value })}
-                className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`relation-field-select-${tIdx}`}>
-                <option value="">None</option>
-                {sourceAllFields.map(f => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}{f.type === 'relation' ? ` (linked to ${f.relatedPanel || '?'})` : ''}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ── UPDATE RECORD config ── */}
-      {isUpdate && target.target_panel_id && (
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Operation *</label>
-            <select value={target.update_operation}
-              onChange={e => onUpdate(tIdx, { update_operation: e.target.value })}
-              className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-op-${tIdx}`}>
-              {UPDATE_OPS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Target Field * <span className="text-gray-400 font-normal">(field to update)</span></label>
-            <select value={target.update_field}
-              onChange={e => onUpdate(tIdx, { update_field: e.target.value })}
-              className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-field-${tIdx}`}>
-              <option value="">Select field...</option>
-              {updateFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Value From (Source) * <span className="text-gray-400 font-normal">(numeric field)</span></label>
-            <select value={target.update_value_from}
-              onChange={e => onUpdate(tIdx, { update_value_from: e.target.value })}
-              className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-value-from-${tIdx}`}>
-              <option value="">Select field...</option>
-              <optgroup label="Data Fields (recommended)">
-                {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label} ({f.type})</option>)}
-              </optgroup>
-              {sourceAllFields.filter(f => f.type === 'relation').length > 0 && (
-                <optgroup label="Relation Fields">
-                  {sourceAllFields.filter(f => f.type === 'relation').map(f => (
-                    <option key={f.key} value={f.key}>{f.label} (linked to {f.relatedPanel})</option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
+      {/* ── For CREATE: Relation field (optional) ── */}
+      {isCreate && target.target_panel_id && (
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Relation Field (optional - for entity linking)</label>
+          <select value={target.relation_field}
+            onChange={e => onUpdate(tIdx, { relation_field: e.target.value })}
+            className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`relation-field-select-${tIdx}`}>
+            <option value="">None</option>
+            {sourceAllFields.map(f => (
+              <option key={f.key} value={f.key}>
+                {f.label}{f.type === 'relation' ? ` (linked to ${f.relatedPanel || '?'})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
