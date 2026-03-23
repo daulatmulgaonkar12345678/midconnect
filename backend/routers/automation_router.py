@@ -362,13 +362,17 @@ def init_automation_router(db, verify_token_func):
 
             if t.action_type == "update_record":
                 value_from = t.update_value_from or ""
+                relation_field = t.relation_field or ""
+                lookup_value = source_data.get(relation_field, "?") if relation_field else "?"
+                update_value = source_data.get(value_from, "?")
                 previews.append({
                     "target_panel_id": target_panel_id,
                     "target_panel_name": target_name,
                     "action_type": t.action_type,
                     "data_mode": t.data_mode,
                     "preview_data": {
-                        t.update_field or "field": f"{t.update_operation}({source_data.get(value_from, '?')})"
+                        "_lookup": f"Find record where ID = {lookup_value} (from {relation_field})",
+                        t.update_field or "field": f"{t.update_operation}({update_value})"
                     },
                 })
             else:

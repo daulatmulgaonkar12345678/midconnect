@@ -263,6 +263,7 @@ export default function AutomationPage() {
   const sourceFields = sourcePanel?.fields || [];
   const sourceDataFields = sourceFields.filter(f => f.type !== 'relation');
   const sourceRelationFields = sourceFields.filter(f => f.type === 'relation');
+  const sourceAllFields = sourceFields; // ALL source fields for lookup key
 
   // Source fields available for mapping (data + relations + special refs)
   const sourceFieldsForMapping = [
@@ -449,6 +450,7 @@ export default function AutomationPage() {
       const t = rule.targets[i];
       if (!t.target_panel_id) { toast.error(`Target ${i + 1}: Select a target panel`); return; }
       if (t.action_type === 'update_record') {
+        if (!t.relation_field) { toast.error(`Target ${i + 1}: Select a Lookup Key (which source field identifies the record to update)`); return; }
         if (!t.update_field) { toast.error(`Target ${i + 1}: Select target field for update`); return; }
         if (!t.update_value_from) { toast.error(`Target ${i + 1}: Select value source field`); return; }
       }
@@ -825,6 +827,7 @@ export default function AutomationPage() {
                       panels={panels}
                       allTargetOptions={allTargetOptions}
                       sourceDataFields={sourceDataFields}
+                      sourceAllFields={sourceAllFields}
                       sourceFieldsForMapping={sourceFieldsForMapping}
                       getUpdateFields={getUpdateFields}
                       onChangePanel={handleTargetPanelChange}
@@ -928,6 +931,7 @@ interface TargetCardProps {
   panels: Panel[];
   allTargetOptions: { id: string; label: string; type: 'panel' | 'system' }[];
   sourceDataFields: PanelField[];
+  sourceAllFields: PanelField[];
   sourceFieldsForMapping: { key: string; label: string }[];
   getUpdateFields: (panelId: string, fields: { key: string; label: string }[]) => { key: string; label: string }[];
   onChangePanel: (tIdx: number, panelId: string) => void;
@@ -942,7 +946,7 @@ interface TargetCardProps {
 }
 
 function TargetCard({
-  tIdx, target, panels, allTargetOptions, sourceDataFields, sourceFieldsForMapping,
+  tIdx, target, panels, allTargetOptions, sourceDataFields, sourceAllFields, sourceFieldsForMapping,
   getUpdateFields, onChangePanel, onUpdate, onRemove, onAddMapping, onRemoveMapping,
   onUpdateMapping, onSelectAll, onToggleVis, getVis,
 }: TargetCardProps) {
@@ -1025,16 +1029,75 @@ function TargetCard({
         </div>
       )}
 
-      {/* Relation field (optional — used for entity linking) */}
+      {/* Lookup / Relation field — REQUIRED for update_record, optional for create */}
       {target.target_panel_id && (
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Relation Field (optional - for entity linking)</label>
-          <select value={target.relation_field}
-            onChange={e => onUpdate(tIdx, { relation_field: e.target.value })}
-            className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`relation-field-select-${tIdx}`}>
-            <option value="">None</option>
-            {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-          </select>
+          {isUpdate ? (
+            <>
+              <label className="block text-xs text-gray-600 mb-1 font-semibold">
+                Lookup Key * <span className="font-normal text-gray-400">(Which source field identifies the record in {targetLabel}?)</span>
+              </label>
+              <select value={target.relation_field}
+                onChange={e => onUpdate(tIdx, { relation_field: e.target.value })}
+                className={`w-full px-2 py-1.5 border rounded-lg text-sm bg-white ${!target.relation_field ? 'border-red-300' : ''}`}
+                data-testid={`relation-field-select-${tIdx}`}>
+                <option value="">Select lookup field...</option>
+                {/* Relation fields linking to target module — show first with highlight */}
+                {sourceAllFields.filter(f => f.type === 'relation' && (
+                  f.relatedPanel === target.target_panel_id ||
+                  f.relatedPanel === targetLabel.toLowerCase() ||
+                  (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
+                )).length > 0 && (
+                  <optgroup label={`Linked to ${targetLabel}`}>
+                    {sourceAllFields.filter(f => f.type === 'relation' && (
+                      f.relatedPanel === target.target_panel_id ||
+                      f.relatedPanel === targetLabel.toLowerCase() ||
+                      (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
+                    )).map(f => (
+                      <option key={f.key} value={f.key}>{f.label} (linked)</option>
+                    ))}
+                  </optgroup>
+                )}
+                {/* Other relation fields */}
+                {sourceAllFields.filter(f => f.type === 'relation' && !(
+                  f.relatedPanel === target.target_panel_id ||
+                  f.relatedPanel === targetLabel.toLowerCase() ||
+                  (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
+                )).length > 0 && (
+                  <optgroup label="Other Relations">
+                    {sourceAllFields.filter(f => f.type === 'relation' && !(
+                      f.relatedPanel === target.target_panel_id ||
+                      f.relatedPanel === targetLabel.toLowerCase() ||
+                      (target.target_panel_id === 'inventory' && f.relatedPanel === 'inventory')
+                    )).map(f => (
+                      <option key={f.key} value={f.key}>{f.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {/* Data fields as fallback */}
+                <optgroup label="Data Fields">
+                  {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                </optgroup>
+              </select>
+              {!target.relation_field && (
+                <p className="text-xs text-red-500 mt-1">Required: Select which source field contains the {targetLabel} record ID</p>
+              )}
+            </>
+          ) : (
+            <>
+              <label className="block text-xs text-gray-600 mb-1">Relation Field (optional - for entity linking)</label>
+              <select value={target.relation_field}
+                onChange={e => onUpdate(tIdx, { relation_field: e.target.value })}
+                className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`relation-field-select-${tIdx}`}>
+                <option value="">None</option>
+                {sourceAllFields.map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}{f.type === 'relation' ? ` (linked to ${f.relatedPanel || '?'})` : ''}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       )}
 
@@ -1050,7 +1113,7 @@ function TargetCard({
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Target Field *</label>
+            <label className="block text-xs text-gray-600 mb-1">Target Field * <span className="text-gray-400 font-normal">(field to update)</span></label>
             <select value={target.update_field}
               onChange={e => onUpdate(tIdx, { update_field: e.target.value })}
               className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-field-${tIdx}`}>
@@ -1064,7 +1127,7 @@ function TargetCard({
               onChange={e => onUpdate(tIdx, { update_value_from: e.target.value })}
               className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white" data-testid={`update-value-from-${tIdx}`}>
               <option value="">Select field...</option>
-              {sourceDataFields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+              {sourceAllFields.map(f => <option key={f.key} value={f.key}>{f.label}{f.type === 'number' ? '' : ` (${f.type})`}</option>)}
             </select>
           </div>
         </div>

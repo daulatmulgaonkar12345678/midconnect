@@ -65,9 +65,16 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Preview endpoint: dry-run showing exact data output before saving
     - Frontend: Data Mode toggle, mode-specific info messages, Preview Data button
 30. **Bug Fix: Smart Sync relation field matching (Mar 2026)**
-    - Root cause: `get_target_field_keys()` excluded relation-type fields (type != "relation") from matching
-    - Fix: Include ALL field types in target_field_keys so relation fields like Product Name (linked to Inventory) and Employee Name (linked to Employees) are auto-synced when field names match
-    - Verified with end-to-end test: Inward -> QC, all matching fields (including relations) now transfer correctly
+    - Root cause: `get_target_field_keys()` excluded relation-type fields from matching
+    - Fix: Include ALL field types in target_field_keys
+31. **Bug Fix: Update Record lookup field (Mar 2026)**
+    - Root cause: "Relation Field" dropdown showed only data fields (excluded relation fields), so user couldn't select product_name (linked to Inventory) as the lookup key
+    - Fixes applied:
+      1. Dropdown now shows ALL source fields — relation fields that link to the target module are shown FIRST with "(linked)" label
+      2. Renamed label to "Lookup Key *" for update_record with clear guidance text
+      3. Made lookup key REQUIRED for update_record (with validation)
+      4. "Value From" dropdown also shows all field types now
+      5. Preview shows both lookup key resolution AND update operation
     - Tests: 18/18 backend tests passed (100%)
 
 ## Prioritized Backlog
