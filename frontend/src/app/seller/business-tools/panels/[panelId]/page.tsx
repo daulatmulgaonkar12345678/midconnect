@@ -32,6 +32,7 @@ interface Panel {
   description: string;
   color: string;
   fields: PanelField[];
+  downloadEnabled?: boolean;
 }
 
 interface RecordData {
