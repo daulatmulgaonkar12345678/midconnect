@@ -112,6 +112,17 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Wired in `server.py` via late-binding (`invoice_router_bt.automation_executor = ...`)
     - Fixed `get_source_field_info` to handle system module IDs (was crashing on ObjectId conversion)
     - E2E verified: invoices → custom panel create_record works correctly
+37. **Data Population Fix — Relation Auto-Linking (Mar 2026)**
+    - `auto_link_relations()`: When a target field is a relation to the source panel/module, auto-fills with source_record_id (ObjectId) instead of text value
+    - `_normalize_key()`: Handles camelCase ↔ snake_case matching for smart_sync (e.g., `invoiceNumber` → `invoice_number`)
+    - Overrides smart_sync text values for relation fields — relation fields MUST store ObjectIds
+    - Tests: 18/18 passed (100%)
+38. **Per-Record PDF Download (Mar 2026)**
+    - Panel schema: `downloadEnabled` (boolean) — toggle on/off in panel create/edit modal
+    - Endpoint: `GET /panels/{panel_id}/records/{record_id}/download-pdf` — generates clean A4 PDF with field labels + values
+    - Returns 403 when downloadEnabled=false, 404 for invalid panel/record
+    - UI: Download button per record row (emerald green), also in view modal
+    - PDF includes: company name, panel name, record date, all field values (resolved relations), generation timestamp
 
 ## Prioritized Backlog
 ### P0 (Next)
