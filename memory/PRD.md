@@ -100,6 +100,12 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Case 2: No match → no update, error logged gracefully ✅
     - Case 3: Relation field → uses ObjectId internally ✅
     - Edge case: null/empty quantity → safe fallback, no increment ✅
+35. **System Modules in Rule Source/Trigger Panel (Mar 2026)**
+    - Backend: `validate_trigger_panel` now accepts system module IDs (inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_products, employees)
+    - Backend: `module-fields` endpoint now includes relation fields for custom panels (previously excluded)
+    - Frontend: Source Panel dropdown shows both Custom Panels and Standard Modules (with optgroups)
+    - Frontend: When system module selected as source, its fields are fetched via module-fields API
+    - Tests: 15/15 passed (100%)
 
 ## Prioritized Backlog
 ### P0 (Next)
