@@ -585,7 +585,10 @@ def init_automation_router(db, verify_token_func):
 
         elif action_type == "create_record":
             target_field_keys = await get_target_field_keys(target_panel_id, seller_id)
+            target_field_defs = await get_target_field_defs(target_panel_id, seller_id)
             mapped_data = build_mapped_data(target, source_data, source_record_id, source_panel_id, target_field_keys)
+            # Auto-link relation fields back to the source panel/module
+            auto_link_relations(mapped_data, target_field_defs, source_panel_id, source_record_id)
             entity_id = source_data.get(relation_field, "") if relation_field else source_record_id
 
             dup = await db.panel_records.find_one({
@@ -622,11 +625,13 @@ def init_automation_router(db, verify_token_func):
                 return
 
             created = 0
+            target_field_defs_items = await get_target_field_defs(target_panel_id, seller_id)
             for item in items:
                 # Merge item with source — but source is always parent
                 item_data = {**source_data, **item}
                 target_field_keys = await get_target_field_keys(target_panel_id, seller_id)
                 mapped_data = build_mapped_data(target, item_data, source_record_id, source_panel_id, target_field_keys)
+                auto_link_relations(mapped_data, target_field_defs_items, source_panel_id, source_record_id)
                 item_entity_id = item.get("productId") or item.get("product_id") or ""
 
                 dup = await db.panel_records.find_one({
@@ -658,15 +663,53 @@ def init_automation_router(db, verify_token_func):
                 f"Created {created}/{len(items)} records", target_panel_id)
 
     # ── System module field definitions (for execution-time smart sync / full copy) ──
+    SYSTEM_MODULE_FIELDS = {
+        "inventory": [
+            {"key": "productName", "label": "Product Name", "type": "text"},
+            {"key": "sku", "label": "SKU", "type": "text"},
+            {"key": "category", "label": "Category", "type": "text"},
+            {"key": "stock", "label": "Stock", "type": "number"},
+            {"key": "quantity", "label": "Quantity", "type": "number"},
+            {"key": "minStock", "label": "Min Stock", "type": "number"},
+            {"key": "reorderPoint", "label": "Reorder Point", "type": "number"},
+        ],
+        "invoices": [
+            {"key": "invoiceNumber", "label": "Invoice Number", "type": "text"},
+            {"key": "buyerName", "label": "Buyer Name", "type": "text"},
+            {"key": "totalAmount", "label": "Total Amount", "type": "number"},
+        ],
+        "buyers": [
+            {"key": "name", "label": "Name", "type": "text"},
+            {"key": "phone", "label": "Phone", "type": "text"},
+            {"key": "email", "label": "Email", "type": "text"},
+        ],
+        "suppliers": [
+            {"key": "name", "label": "Name", "type": "text"},
+            {"key": "phone", "label": "Phone", "type": "text"},
+            {"key": "email", "label": "Email", "type": "text"},
+        ],
+        "purchase_orders": [
+            {"key": "poNumber", "label": "PO Number", "type": "text"},
+            {"key": "supplierName", "label": "Supplier Name", "type": "text"},
+            {"key": "totalAmount", "label": "Total Amount", "type": "number"},
+        ],
+        "quotations": [
+            {"key": "quotationNumber", "label": "Quotation Number", "type": "text"},
+            {"key": "buyerName", "label": "Buyer Name", "type": "text"},
+            {"key": "totalAmount", "label": "Total Amount", "type": "number"},
+        ],
+        "composite_products": [
+            {"key": "name", "label": "Name", "type": "text"},
+            {"key": "sku", "label": "SKU", "type": "text"},
+        ],
+        "employees": [
+            {"key": "name", "label": "Name", "type": "text"},
+            {"key": "role", "label": "Role", "type": "text"},
+            {"key": "email", "label": "Email", "type": "text"},
+        ],
+    }
     SYSTEM_MODULE_FIELD_KEYS = {
-        "inventory": {"productName", "sku", "category", "stock", "quantity", "minStock", "reorderPoint"},
-        "invoices": {"invoiceNumber", "buyerName", "totalAmount"},
-        "buyers": {"name", "phone", "email"},
-        "suppliers": {"name", "phone", "email"},
-        "purchase_orders": {"poNumber", "supplierName", "totalAmount"},
-        "quotations": {"quotationNumber", "buyerName", "totalAmount"},
-        "composite_products": {"name", "sku"},
-        "employees": {"name", "role", "email"},
+        mid: {f["key"] for f in fields} for mid, fields in SYSTEM_MODULE_FIELDS.items()
     }
 
     async def get_target_field_keys(target_panel_id: str, seller_id: str) -> set:
@@ -685,12 +728,50 @@ def init_automation_router(db, verify_token_func):
             pass
         return set()
 
+    async def get_target_field_defs(target_panel_id: str, seller_id: str) -> list:
+        """Get full field definitions for a target panel (needed for relation auto-linking)."""
+        if target_panel_id in SYSTEM_MODULE_IDS:
+            return SYSTEM_MODULE_FIELDS.get(target_panel_id, [])
+        try:
+            panel = await db.panels.find_one(
+                {"_id": ObjectId(target_panel_id), "sellerId": ObjectId(seller_id)},
+                {"fields": 1}
+            )
+            if panel:
+                return panel.get("fields", [])
+        except Exception:
+            pass
+        return []
+
+    def auto_link_relations(mapped_data: dict, target_fields: list, source_panel_id: str, source_record_id: str):
+        """Auto-populate relation fields that link back to the source panel/module.
+        If a target field is type=relation and its relatedPanel matches the source, fill with source_record_id.
+        This OVERRIDES any smart_sync text value — relation fields must store ObjectIds."""
+        for f in target_fields:
+            fkey = f.get("key", "")
+            if f.get("type") != "relation" or not fkey:
+                continue
+            related = f.get("relatedPanel", "")
+            if not related:
+                continue
+            # If this relation points to the source panel → auto-link with ObjectId
+            if related == source_panel_id:
+                mapped_data[fkey] = source_record_id
+
+    def _normalize_key(key: str) -> str:
+        """Normalize field key for fuzzy matching: camelCase → lowercase, snake_case → lowercase, strip underscores."""
+        import re
+        # Convert camelCase to snake_case first, then lowercase
+        s1 = re.sub(r'([A-Z])', r'_\1', key).lower()
+        # Remove all underscores and spaces for comparison
+        return re.sub(r'[_\s-]', '', s1)
+
     def build_mapped_data(target: dict, source_data: dict, source_record_id: str, source_panel_id: str, target_field_keys: set = None) -> dict:
         """Build the data dict for a new record based on data_mode.
 
         Modes:
           manual_only  — only explicit field_mappings
-          smart_sync   — explicit mappings first, then auto-fill matching field names
+          smart_sync   — explicit mappings first, then auto-fill matching field names (including normalized matching)
           full_copy    — for each target field that exists in source, copy value
         """
         data_mode = target.get("data_mode", "smart_sync")
@@ -719,19 +800,24 @@ def init_automation_router(db, verify_token_func):
             # Only explicit mappings — already done
             pass
 
-        elif data_mode == "smart_sync" and target_field_keys:
-            # Auto-fill: for each target field NOT already mapped,
-            # if source has same field name → copy value
-            for tkey in target_field_keys:
-                if tkey not in mapped and tkey in source_data:
-                    mapped[tkey] = source_data[tkey]
+        elif data_mode in ("smart_sync", "full_copy") and target_field_keys:
+            # Build normalized lookup for source data
+            norm_source = {}
+            for skey, sval in source_data.items():
+                norm_source[_normalize_key(skey)] = (skey, sval)
 
-        elif data_mode == "full_copy" and target_field_keys:
-            # For each target field that exists in source, copy value
-            # Explicit mappings take priority (already in mapped)
             for tkey in target_field_keys:
-                if tkey not in mapped and tkey in source_data:
+                if tkey in mapped:
+                    continue
+                # Exact match first
+                if tkey in source_data:
                     mapped[tkey] = source_data[tkey]
+                    continue
+                # Normalized match (camelCase ↔ snake_case)
+                norm_t = _normalize_key(tkey)
+                if norm_t in norm_source:
+                    _, sval = norm_source[norm_t]
+                    mapped[tkey] = sval
 
         return mapped
 
