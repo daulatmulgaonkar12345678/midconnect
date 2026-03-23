@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import {
   Plus, Pencil, Trash2, Eye, Loader2, X, Save, Search,
-  ChevronLeft, ChevronRight, ArrowLeft, Link2, FileSpreadsheet, FileDown
+  ChevronLeft, ChevronRight, ArrowLeft, Link2, FileSpreadsheet, FileDown, Lock
 } from 'lucide-react';
 import { RelationField } from './RelationField';
 
@@ -77,6 +77,9 @@ export default function PanelDetailPage() {
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
+  // Field visibility from automation rules
+  const [fieldVisibility, setFieldVisibility] = useState<{ [key: string]: { visible: boolean; editable: boolean; source_rules: string[] } }>({});
+
   const headers = useCallback(() => ({
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json'
@@ -96,6 +99,17 @@ export default function PanelDetailPage() {
     } catch { toast.error('Failed to load panel'); }
   }, [token, panelId, headers, router]);
 
+  const fetchFieldVisibility = useCallback(async () => {
+    if (!token || !panelId) return;
+    try {
+      const res = await fetch(`${API_URL}/api/business-tools/panels/${panelId}/field-visibility`, { headers: headers() });
+      if (res.ok) {
+        const data = await res.json();
+        setFieldVisibility(data.field_visibility || {});
+      }
+    } catch { /* non-critical */ }
+  }, [token, panelId, headers]);
+
   const fetchRecords = useCallback(async () => {
     if (!token || !panelId) return;
     setLoading(true);
@@ -113,15 +127,20 @@ export default function PanelDetailPage() {
   }, [token, panelId, page, search, headers]);
 
   useEffect(() => {
-    if (!permLoading && token) { fetchPanel(); fetchRecords(); }
-  }, [permLoading, token, fetchPanel, fetchRecords]);
+    if (!permLoading && token) { fetchPanel(); fetchRecords(); fetchFieldVisibility(); }
+  }, [permLoading, token, fetchPanel, fetchRecords, fetchFieldVisibility]);
 
   const activeFields = panel?.fields.filter(f => !f.disabled) || [];
+  // Fields visible in table/view — respect field_visibility rules
+  const visibleFields = activeFields.filter(f => fieldVisibility[f.key]?.visible !== false);
+  // Check if a field is editable (defaults to true if no rule set)
+  const isFieldEditable = (key: string) => fieldVisibility[key]?.editable !== false;
+  const getFieldRuleSources = (key: string) => fieldVisibility[key]?.source_rules || [];
 
   const openCreate = () => {
     setEditingRecord(null);
     const initial: RecordData = {};
-    activeFields.forEach(f => {
+    visibleFields.forEach(f => {
       if (f.type === 'boolean') initial[f.key] = false;
       else if (f.type === 'multiselect') initial[f.key] = [];
       else initial[f.key] = '';
@@ -237,8 +256,8 @@ export default function PanelDetailPage() {
     return <div className="text-center py-16 text-gray-500">Panel not found</div>;
   }
 
-  // Display columns: first 4 non-disabled fields
-  const displayFields = activeFields.slice(0, 4);
+  // Display columns: first 4 visible non-disabled fields
+  const displayFields = visibleFields.slice(0, 4);
 
   return (
     <div className="space-y-5" data-testid="panel-detail-page">
@@ -377,35 +396,48 @@ export default function PanelDetailPage() {
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5 text-gray-500" /></button>
             </div>
             <div className="p-5 space-y-4">
-              {activeFields.map(f => (
+              {visibleFields.map(f => {
+                const editable = isFieldEditable(f.key);
+                const ruleSources = getFieldRuleSources(f.key);
+                return (
                 <div key={f.key} data-testid={`form-field-${f.key}`}>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     {f.label} {f.required && <span className="text-red-400">*</span>}
+                    {!editable && (
+                      <span className="inline-flex items-center gap-1 ml-2 px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-semibold rounded border border-amber-200" title={`Auto-managed by: ${ruleSources.join(', ')}`}>
+                        <Lock className="h-2.5 w-2.5" /> Auto
+                      </span>
+                    )}
                   </label>
 
                   {f.type === 'text' && (
                     <input type="text" value={formData[f.key] || ''} onChange={e => setField(f.key, e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg text-sm" data-testid={`input-${f.key}`} />
+                      disabled={!editable}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm ${!editable ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`} data-testid={`input-${f.key}`} />
                   )}
 
                   {f.type === 'number' && (
                     <input type="number" value={formData[f.key] || ''} onChange={e => setField(f.key, e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg text-sm" data-testid={`input-${f.key}`} />
+                      disabled={!editable}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm ${!editable ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`} data-testid={`input-${f.key}`} />
                   )}
 
                   {f.type === 'date' && (
                     <input type="date" value={formData[f.key] || ''} onChange={e => setField(f.key, e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg text-sm" data-testid={`input-${f.key}`} />
+                      disabled={!editable}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm ${!editable ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`} data-testid={`input-${f.key}`} />
                   )}
 
                   {f.type === 'longtext' && (
                     <textarea value={formData[f.key] || ''} onChange={e => setField(f.key, e.target.value)}
-                      rows={3} className="w-full px-3 py-2 border rounded-lg text-sm" data-testid={`input-${f.key}`} />
+                      disabled={!editable}
+                      rows={3} className={`w-full px-3 py-2 border rounded-lg text-sm ${!editable ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`} data-testid={`input-${f.key}`} />
                   )}
 
                   {f.type === 'boolean' && (
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className={`flex items-center gap-2 ${editable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                       <input type="checkbox" checked={!!formData[f.key]} onChange={e => setField(f.key, e.target.checked)}
+                        disabled={!editable}
                         className="rounded border-gray-300 text-indigo-600 w-4 h-4" data-testid={`input-${f.key}`} />
                       <span className="text-sm text-gray-600">{formData[f.key] ? 'Yes' : 'No'}</span>
                     </label>
@@ -413,7 +445,8 @@ export default function PanelDetailPage() {
 
                   {f.type === 'dropdown' && (
                     <select value={formData[f.key] || ''} onChange={e => setField(f.key, e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg text-sm" data-testid={`input-${f.key}`}>
+                      disabled={!editable}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm ${!editable ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`} data-testid={`input-${f.key}`}>
                       <option value="">Select...</option>
                       {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
@@ -425,11 +458,14 @@ export default function PanelDetailPage() {
                         const selected = (formData[f.key] || []).includes(o);
                         return (
                           <button key={o} type="button"
+                            disabled={!editable}
                             onClick={() => {
+                              if (!editable) return;
                               const current = formData[f.key] || [];
                               setField(f.key, selected ? current.filter((v: string) => v !== o) : [...current, o]);
                             }}
                             className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                              !editable ? 'opacity-50 cursor-not-allowed' :
                               selected ? 'bg-indigo-100 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                             }`}
                             data-testid={`input-${f.key}-${o}`}
@@ -442,22 +478,29 @@ export default function PanelDetailPage() {
                   )}
 
                   {f.type === 'relation' && (
-                    <RelationField
-                      panelId={panelId}
-                      fieldKey={f.key}
-                      relatedPanel={f.relatedPanel || ''}
-                      value={formData[f.key] || ''}
-                      resolvedLabel={resolvedLabels[f.key]?.label}
-                      resolvedSub={resolvedLabels[f.key]?.sub}
-                      token={token || ''}
-                      onChange={(id, label) => {
-                        setField(f.key, id);
-                        setResolvedLabels(prev => ({ ...prev, [f.key]: { label } }));
-                      }}
-                    />
+                    editable ? (
+                      <RelationField
+                        panelId={panelId}
+                        fieldKey={f.key}
+                        relatedPanel={f.relatedPanel || ''}
+                        value={formData[f.key] || ''}
+                        resolvedLabel={resolvedLabels[f.key]?.label}
+                        resolvedSub={resolvedLabels[f.key]?.sub}
+                        token={token || ''}
+                        onChange={(id, label) => {
+                          setField(f.key, id);
+                          setResolvedLabels(prev => ({ ...prev, [f.key]: { label } }));
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full px-3 py-2 border rounded-lg text-sm bg-gray-50 text-gray-500 cursor-not-allowed" data-testid={`input-${f.key}`}>
+                        {resolvedLabels[f.key]?.label || formData[f.key] || '—'}
+                      </div>
+                    )
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
             <div className="p-5 border-t bg-gray-50/50 rounded-b-xl flex justify-end gap-3">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600">Cancel</button>
@@ -481,14 +524,24 @@ export default function PanelDetailPage() {
               <button onClick={() => setViewRecord(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5 text-gray-500" /></button>
             </div>
             <div className="p-5 space-y-4">
-              {activeFields.map(f => (
+              {visibleFields.map(f => {
+                const editable = isFieldEditable(f.key);
+                return (
                 <div key={f.key} className="flex flex-col gap-0.5" data-testid={`view-field-${f.key}`}>
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</span>
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    {f.label}
+                    {!editable && (
+                      <span className="inline-flex items-center gap-0.5 ml-1.5 text-amber-600 font-medium normal-case" title="Auto-managed by automation">
+                        <Lock className="h-2.5 w-2.5" /> auto
+                      </span>
+                    )}
+                  </span>
                   <span className="text-sm text-gray-900">
                     {renderFieldValue(f, viewRecord.data[f.key], viewRecord._resolved?.[f.key])}
                   </span>
                 </div>
-              ))}
+                );
+              })}
               <div className="pt-3 border-t text-xs text-gray-400 flex items-center justify-between">
                 <span>Created: {new Date(viewRecord.createdAt).toLocaleString()}</span>
                 <span>Updated: {new Date(viewRecord.updatedAt).toLocaleString()}</span>

@@ -1,0 +1,99 @@
+{
+  "summary": "Iteration 113: Field Visibility API + MATCH+UPDATE Automation Engine Testing. All 16 API tests passed (100%) + 6 E2E tests passed (100%). The new field-visibility endpoint correctly returns merged visibility from automation rules. MATCH+UPDATE validation for update_record action works correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/business-tools/panels/{panel_id}/field-visibility",
+        "issue": "Does not validate panel existence - returns empty field_visibility for non-existent panels instead of 404. This is by design but could be improved for better error handling.",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Backend-only testing as requested. Frontend requires Firebase auth."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_field_visibility_match_update.py",
+    "/app/backend/tests/test_e2e_full.py",
+    "/app/test_reports/pytest/field_visibility_match_update_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ GET /api/business-tools/panels/{panel_id}/field-visibility endpoint implemented at line 391-423 in panel_router.py",
+    "✓ field-visibility correctly merges multiple rules with most-restrictive-wins logic (visible=false wins, editable=false wins)",
+    "✓ field-visibility returns source_rules array showing which rules contributed to each field's visibility",
+    "✓ POST /api/business-tools/automation/rules validates update_record requires: match_target_field, match_source_field, update_field, update_operation, update_value_from",
+    "✓ validate_target() function at line 172-196 in automation_router.py handles all update_record validation",
+    "✓ ALLOWED_UPDATE_OPS = {increment, decrement, set_value} - invalid operations rejected",
+    "✓ POST /api/business-tools/automation/preview returns structured MATCH + UPDATE preview with match and update sections",
+    "✓ Preview includes resolved_value showing actual values from sample_data",
+    "✓ GET /api/business-tools/panels lists panels with fields, allowedModules, allowedPanels",
+    "✓ GET /api/business-tools/panels/{panel_id}/records returns records with _resolved relations for display"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_field_visibility_match_update.py"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 API tests + 6/6 E2E tests passed)",
+    "frontend": "N/A - Backend-only testing requested"
+  },
+  "test_credentials": "dev-test-token (dev mode token for backend tests)",
+  "seed_data_creation": "E2E tests create and cleanup test panels/records. Visibility Test Panel (69c10091da9a16efdaa06753) exists with automation rules.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 113 tested field-visibility endpoint and MATCH+UPDATE validation. Key findings: (1) field-visibility endpoint at /api/business-tools/panels/{panel_id}/field-visibility returns merged visibility from all active automation rules targeting the panel. (2) Most restrictive wins: if any rule sets visible=false or editable=false, that takes precedence. (3) update_record action requires all 5 fields: match_target_field, match_source_field, update_field, update_operation, update_value_from. (4) Preview endpoint returns structured MATCH + UPDATE sections for update_record actions. (5) E2E tests confirm MATCH+UPDATE engine works: relation fields store ObjectIds, matching by ID works, edge cases (null/empty values) handled correctly.",
+  "features_tested": [
+    "GET /api/business-tools/panels/{panel_id}/field-visibility returns correct merged visibility from automation rules",
+    "field-visibility endpoint returns empty object when no automation rules target the panel",
+    "field-visibility correctly merges multiple rules (most restrictive wins)",
+    "POST /api/business-tools/automation/rules with update_record validates match_target_field required",
+    "POST /api/business-tools/automation/rules with update_record validates match_source_field required",
+    "POST /api/business-tools/automation/rules with update_record validates update_field required",
+    "POST /api/business-tools/automation/rules with update_record validates update_operation required",
+    "POST /api/business-tools/automation/rules with update_record validates update_value_from required",
+    "POST /api/business-tools/automation/rules rejects invalid update_operation values",
+    "GET /api/business-tools/panels lists panels correctly",
+    "GET /api/business-tools/panels/{panel_id} returns single panel",
+    "GET /api/business-tools/panels/{panel_id}/records returns records with _resolved relations",
+    "POST /api/business-tools/automation/preview returns structured MATCH + UPDATE preview for update_record",
+    "POST /api/business-tools/automation/preview works for create_record action",
+    "E2E: MATCH+UPDATE engine correctly increments stock when QC passes",
+    "E2E: MATCH+UPDATE handles unknown product (no match) gracefully with error logging",
+    "E2E: Relation fields store ObjectIds and matching by ID works correctly",
+    "E2E: Edge cases (null/empty quantity) handled - stock unchanged, error logged"
+  ],
+  "api_endpoints_verified": {
+    "GET /api/health": "200 - API healthy",
+    "GET /api/business-tools/access-level": "200 - Returns advanced access",
+    "GET /api/business-tools/panels": "200 - Returns panels list with count and limit",
+    "GET /api/business-tools/panels/{panel_id}": "200 - Returns single panel with fields",
+    "GET /api/business-tools/panels/{panel_id}/records": "200 - Returns records with _resolved relations",
+    "GET /api/business-tools/panels/{panel_id}/field-visibility": "200 - Returns merged field visibility",
+    "POST /api/business-tools/automation/rules (update_record missing match_target_field)": "400 - Validation error",
+    "POST /api/business-tools/automation/rules (update_record missing match_source_field)": "400 - Validation error",
+    "POST /api/business-tools/automation/rules (update_record missing update_field)": "400 - Validation error",
+    "POST /api/business-tools/automation/rules (update_record missing update_operation)": "400 - Validation error",
+    "POST /api/business-tools/automation/rules (update_record missing update_value_from)": "400 - Validation error",
+    "POST /api/business-tools/automation/rules (update_record invalid operation)": "400 - Validation error",
+    "POST /api/business-tools/automation/preview (update_record)": "200 - Returns structured MATCH + UPDATE preview",
+    "POST /api/business-tools/automation/preview (create_record)": "200 - Returns preview_data and data_mode"
+  },
+  "field_visibility_schema": {
+    "endpoint": "GET /api/business-tools/panels/{panel_id}/field-visibility",
+    "response": {
+      "panel_id": "string",
+      "field_visibility": {
+        "<field_key>": {
+          "visible": "boolean (default true, false wins)",
+          "editable": "boolean (default true, false wins)",
+          "source_rules": "[string] - rule names that contributed"
+        }
+      }
+    },
+    "merge_logic": "Most restrictive wins: if any rule sets visible=false or editable=false, that value is used"
+  }
+}

@@ -387,6 +387,41 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
             raise HTTPException(status_code=404, detail="Panel not found")
         return serialize_doc(panel)
 
+    # ── FIELD VISIBILITY (aggregated from automation rules) ──
+    @router.get("/panels/{panel_id}/field-visibility")
+    async def get_field_visibility(panel_id: str, authorization: str = Header(...)):
+        """Return merged field_visibility settings from all automation rules targeting this panel.
+        Most restrictive wins: visible=false wins over visible=true, editable=false wins over editable=true."""
+        user = await get_current_user(authorization)
+        check_panel_access(user, panel_id, "view")
+        seller_id = await get_seller_id(user)
+
+        rules = await db.automation_rules.find({
+            "sellerId": ObjectId(seller_id),
+            "is_active": True,
+            "targets.target_panel_id": panel_id,
+        }).to_list(100)
+
+        merged: dict = {}  # field_key -> {visible, editable, source_rules}
+        for rule in rules:
+            for t in rule.get("targets", []):
+                if t.get("target_panel_id") != panel_id:
+                    continue
+                for fv in (t.get("field_visibility") or []):
+                    fk = fv.get("field", "")
+                    if not fk:
+                        continue
+                    if fk not in merged:
+                        merged[fk] = {"visible": fv.get("visible", True), "editable": fv.get("editable", True), "source_rules": []}
+                    else:
+                        if not fv.get("visible", True):
+                            merged[fk]["visible"] = False
+                        if not fv.get("editable", True):
+                            merged[fk]["editable"] = False
+                    merged[fk]["source_rules"].append(rule.get("name", "Unknown"))
+
+        return {"panel_id": panel_id, "field_visibility": merged}
+
     # ── CREATE PANEL ──
     @router.post("/panels")
     async def create_panel(data: CreatePanelRequest, authorization: str = Header(...)):
