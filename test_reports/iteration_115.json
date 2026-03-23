@@ -1,0 +1,78 @@
+{
+  "summary": "Iteration 115: PDF Download per Record & Relation Field Auto-Linking Testing. All 18 API tests passed (100%). Both features are working correctly: (1) downloadEnabled toggle on panels with PDF download endpoint returning valid PDFs when enabled and 403 when disabled, (2) smart_sync normalized matching for camelCase ↔ snake_case field names, and (3) auto_link_relations function for system module source records.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Backend-only testing as requested. Frontend changes are UI-only (download toggle in panel modal, download button per record row)."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pdf_download_relation_autolinking.py",
+    "/app/test_reports/pytest/pdf_download_relation_autolinking_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ CreatePanelRequest at line 46-55 includes downloadEnabled: Optional[bool] = False",
+    "✓ UpdatePanelRequest at line 57-65 includes downloadEnabled: Optional[bool] = None",
+    "✓ list_panels at line 193-205 includes downloadEnabled in projection",
+    "✓ create_panel at line 484 stores downloadEnabled correctly",
+    "✓ update_panel at lines 625-626 handles downloadEnabled update",
+    "✓ download_record_pdf endpoint at lines 1578-1680 returns valid PDF with proper headers",
+    "✓ download_record_pdf returns 403 when downloadEnabled=false (line 1591-1592)",
+    "✓ auto_link_relations at lines 746-759 correctly auto-populates relation fields with source_record_id",
+    "✓ _normalize_key at lines 761-767 handles camelCase → snake_case conversion correctly",
+    "✓ build_mapped_data at lines 769-822 implements smart_sync with normalized matching"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pdf_download_relation_autolinking.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "N/A - Backend-only testing requested"
+  },
+  "test_credentials": "dev-test-token (dev mode token for backend tests)",
+  "seed_data_creation": "Test panels and rules created and cleaned up automatically. Used existing panel: 69bea698166d5a071a336fb8 (QC Panel with downloadEnabled=true), record: 69c128b9d3605adbaa0330d4",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 115 tested PDF download and relation auto-linking features. Key findings: (1) downloadEnabled toggle works correctly in panel CRUD operations. (2) PDF download endpoint returns valid PDF with proper Content-Type and Content-Disposition headers when enabled, 403 when disabled. (3) _normalize_key function correctly converts camelCase to snake_case for fuzzy matching (invoiceNumber → invoice_number). (4) auto_link_relations function auto-populates relation fields that point back to the source panel/module with the source_record_id (ObjectId). (5) smart_sync mode in build_mapped_data uses normalized matching to map fields across naming conventions.",
+  "features_tested": [
+    "POST /api/business-tools/panels with downloadEnabled=true stores correctly",
+    "POST /api/business-tools/panels with downloadEnabled=false stores correctly",
+    "GET /api/business-tools/panels includes downloadEnabled field in response",
+    "PUT /api/business-tools/panels/{id} with downloadEnabled toggle works",
+    "GET /api/business-tools/panels/{id} includes downloadEnabled field",
+    "GET /api/business-tools/panels/{panel_id}/records/{record_id}/download-pdf returns valid PDF when downloadEnabled=true",
+    "GET /api/business-tools/panels/{panel_id}/records/{record_id}/download-pdf returns 403 when downloadEnabled=false",
+    "GET /api/business-tools/panels/{panel_id}/records/{record_id}/download-pdf returns 404 for invalid panel",
+    "GET /api/business-tools/panels/{panel_id}/records/{record_id}/download-pdf returns 404 for invalid record",
+    "POST /api/business-tools/automation/preview with camelCase source → snake_case target shows normalized mapping",
+    "Panel with allowedModules=['invoices'] auto-adds invoice relation field",
+    "Automation rule with system module trigger (invoices) creates successfully",
+    "smart_sync exact match works (invoiceNumber → invoiceNumber)",
+    "smart_sync normalized match works (invoiceNumber → invoice_number, buyerName → buyer_name, totalAmount → total_amount)"
+  ],
+  "api_endpoints_verified": {
+    "GET /api/health": "200 - API healthy",
+    "POST /api/business-tools/panels (downloadEnabled=true)": "200 - Panel created with downloadEnabled=true",
+    "POST /api/business-tools/panels (downloadEnabled=false)": "200 - Panel created with downloadEnabled=false",
+    "GET /api/business-tools/panels": "200 - Lists panels with downloadEnabled field",
+    "PUT /api/business-tools/panels/{id} (downloadEnabled toggle)": "200 - Toggle works correctly",
+    "GET /api/business-tools/panels/{id}": "200 - Returns panel with downloadEnabled field",
+    "GET /api/business-tools/panels/{panel_id}/records/{record_id}/download-pdf (enabled)": "200 - Returns valid PDF",
+    "GET /api/business-tools/panels/{panel_id}/records/{record_id}/download-pdf (disabled)": "403 - PDF download not enabled",
+    "GET /api/business-tools/panels/{invalid}/records/{record_id}/download-pdf": "404 - Panel not found",
+    "GET /api/business-tools/panels/{panel_id}/records/{invalid}/download-pdf": "404 - Record not found",
+    "POST /api/business-tools/automation/preview (smart_sync)": "200 - Shows normalized field mapping",
+    "POST /api/business-tools/automation/rules (invoices trigger)": "200 - Rule created"
+  },
+  "code_review_notes": {
+    "auto_link_relations": "Function at line 746-759 correctly identifies relation fields pointing to source panel and auto-populates with source_record_id (ObjectId). This ensures relation fields store ObjectIds instead of text values.",
+    "_normalize_key": "Function at line 761-767 converts camelCase to snake_case by inserting underscores before uppercase letters, then lowercases and removes all underscores/spaces. This enables fuzzy matching between invoiceNumber and invoice_number.",
+    "build_mapped_data": "Function at line 769-822 implements three modes: manual_only (explicit mappings only), smart_sync (explicit + normalized matching), full_copy (copy all matching fields). Normalized matching uses _normalize_key for both source and target keys.",
+    "PDF_generation": "Uses reportlab library with proper styling (header, field labels, values, footer). Returns StreamingResponse with application/pdf content-type and attachment disposition."
+  }
+}

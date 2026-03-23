@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import {
   Plus, Pencil, Trash2, Eye, Loader2, X, Save, Search,
-  ChevronLeft, ChevronRight, ArrowLeft, Link2, FileSpreadsheet, FileDown, Lock
+  ChevronLeft, ChevronRight, ArrowLeft, Link2, FileSpreadsheet, FileDown, Lock, Download
 } from 'lucide-react';
 import { RelationField } from './RelationField';
 
@@ -153,7 +153,6 @@ export default function PanelDetailPage() {
   const openEdit = (rec: PanelRecord) => {
     setEditingRecord(rec);
     setFormData({ ...rec.data });
-    // Pre-populate resolved labels from record's _resolved data
     const labels: { [key: string]: { label: string; sub?: string } } = {};
     if (rec._resolved) {
       for (const [key, resolved] of Object.entries(rec._resolved)) {
@@ -162,6 +161,29 @@ export default function PanelDetailPage() {
     }
     setResolvedLabels(labels);
     setShowModal(true);
+  };
+
+  const downloadRecordPdf = async (recordId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/business-tools/panels/${panelId}/records/${recordId}/download-pdf`, { headers: headers() });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const disposition = res.headers.get('content-disposition');
+        const fname = disposition?.match(/filename="(.+)"/)?.[1] || 'record.pdf';
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        toast.success('PDF downloaded');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.detail || 'Failed to download PDF');
+      }
+    } catch { toast.error('Download failed'); }
   };
 
   const openView = async (rec: PanelRecord) => {
@@ -352,6 +374,11 @@ export default function PanelDetailPage() {
                         <button onClick={() => openView(rec)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" data-testid={`view-record-${rec.id}`}>
                           <Eye className="h-4 w-4" />
                         </button>
+                        {panel?.downloadEnabled && (
+                          <button onClick={() => downloadRecordPdf(rec.id)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="Download PDF" data-testid={`download-record-${rec.id}`}>
+                            <Download className="h-4 w-4" />
+                          </button>
+                        )}
                         <button onClick={() => openEdit(rec)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" data-testid={`edit-record-${rec.id}`}>
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -548,6 +575,14 @@ export default function PanelDetailPage() {
               </div>
             </div>
             <div className="p-5 border-t bg-gray-50/50 rounded-b-xl flex justify-end gap-3">
+              {panel?.downloadEnabled && (
+                <button onClick={() => downloadRecordPdf(viewRecord.id)}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700"
+                  data-testid="download-from-view-btn"
+                >
+                  <Download className="h-4 w-4" /> Download PDF
+                </button>
+              )}
               <button onClick={() => { setViewRecord(null); openEdit(viewRecord); }}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
                 data-testid="edit-from-view-btn"

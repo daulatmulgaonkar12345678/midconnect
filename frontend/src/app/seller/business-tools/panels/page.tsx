@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import {
   LayoutGrid, Plus, Pencil, Trash2, ChevronRight, Loader2,
   Type, Hash, Calendar, ListFilter, CheckSquare, AlignLeft,
-  Link2, GripVertical, X, Save, Lock
+  Link2, GripVertical, X, Save, Lock, Download
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -63,6 +63,7 @@ interface Panel {
   fields: PanelField[];
   allowedModules?: string[];
   allowedPanels?: string[];
+  downloadEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,6 +92,7 @@ export default function PanelsPage() {
   const [panelFields, setPanelFields] = useState<PanelField[]>([]);
   const [panelAllowedModules, setPanelAllowedModules] = useState<string[]>([]);
   const [panelAllowedPanels, setPanelAllowedPanels] = useState<string[]>([]);
+  const [panelDownloadEnabled, setPanelDownloadEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Add field
@@ -162,6 +164,7 @@ export default function PanelsPage() {
     setPanelFields([]);
     setPanelAllowedModules([]);
     setPanelAllowedPanels([]);
+    setPanelDownloadEnabled(false);
     setShowFieldForm(false);
     setShowModal(true);
   };
@@ -175,6 +178,7 @@ export default function PanelsPage() {
     setPanelFields([...panel.fields]);
     setPanelAllowedModules(panel.allowedModules || []);
     setPanelAllowedPanels(panel.allowedPanels || []);
+    setPanelDownloadEnabled(panel.downloadEnabled || false);
     setShowFieldForm(false);
     setShowModal(true);
   };
@@ -261,7 +265,7 @@ export default function PanelsPage() {
         const res = await fetch(`${API_URL}/api/business-tools/panels/${editingPanel.id}`, {
           method: 'PUT',
           headers: headers(),
-          body: JSON.stringify({ name: panelName.trim(), description: panelDesc.trim(), icon: panelIcon, color: panelColor, allowedModules: panelAllowedModules, allowedPanels: panelAllowedPanels }),
+          body: JSON.stringify({ name: panelName.trim(), description: panelDesc.trim(), icon: panelIcon, color: panelColor, allowedModules: panelAllowedModules, allowedPanels: panelAllowedPanels, downloadEnabled: panelDownloadEnabled }),
         });
         if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Update failed'); setSaving(false); return; }
 
@@ -313,6 +317,7 @@ export default function PanelsPage() {
             fields: panelFields,
             allowedModules: panelAllowedModules,
             allowedPanels: panelAllowedPanels,
+            downloadEnabled: panelDownloadEnabled,
           }),
         });
         if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Create failed'); setSaving(false); return; }
@@ -557,6 +562,23 @@ export default function PanelsPage() {
                     />
                   ))}
                 </div>
+              </div>
+
+              {/* Download toggle */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200" data-testid="download-toggle-section">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <Download className="h-4 w-4 text-gray-500" /> Record PDF Download
+                  </label>
+                  <p className="text-xs text-gray-400 mt-0.5">Allow downloading individual records as PDF</p>
+                </div>
+                <button
+                  onClick={() => setPanelDownloadEnabled(!panelDownloadEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${panelDownloadEnabled ? 'bg-indigo-600' : 'bg-gray-300'}`}
+                  data-testid="download-toggle"
+                >
+                  <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${panelDownloadEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
               </div>
 
               {/* Connect Panel With (Entity) */}

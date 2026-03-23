@@ -51,6 +51,7 @@ class CreatePanelRequest(BaseModel):
     fields: Optional[List[PanelFieldInput]] = []
     allowedModules: Optional[List[str]] = Field(default_factory=list)
     allowedPanels: Optional[List[str]] = Field(default_factory=list)
+    downloadEnabled: Optional[bool] = False
 
 
 class UpdatePanelRequest(BaseModel):
@@ -60,6 +61,7 @@ class UpdatePanelRequest(BaseModel):
     color: Optional[str] = None
     allowedModules: Optional[List[str]] = None
     allowedPanels: Optional[List[str]] = None
+    downloadEnabled: Optional[bool] = None
 
 
 class AddFieldRequest(BaseModel):
@@ -197,7 +199,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         cursor = db.panels.find(
             {"sellerId": ObjectId(seller_id)},
             {"_id": 1, "name": 1, "slug": 1, "description": 1, "icon": 1, "color": 1,
-             "fields": 1, "allowedModules": 1, "allowedPanels": 1, "createdAt": 1, "updatedAt": 1}
+             "fields": 1, "allowedModules": 1, "allowedPanels": 1, "downloadEnabled": 1, "createdAt": 1, "updatedAt": 1}
         ).sort("createdAt", 1)
         panels = await cursor.to_list(MAX_PANELS_PER_BUSINESS + 5)
         return {"panels": serialize_doc(panels), "count": len(panels), "limit": MAX_PANELS_PER_BUSINESS}
@@ -479,6 +481,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
             "fields": fields,
             "allowedModules": data.allowedModules or [],
             "allowedPanels": data.allowedPanels or [],
+            "downloadEnabled": data.downloadEnabled or False,
             "createdAt": now,
             "updatedAt": now,
         }
@@ -618,6 +621,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         if data.allowedPanels is not None:
             await validate_allowed_panels(seller_id, data.allowedPanels, current_panel_id=panel_id)
             update["allowedPanels"] = data.allowedPanels
+
+        if data.downloadEnabled is not None:
+            update["downloadEnabled"] = data.downloadEnabled
 
         await db.panels.update_one({"_id": ObjectId(panel_id)}, {"$set": update})
         logger.info(f"Panel {panel_id} updated")
@@ -1562,6 +1568,111 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         output.seek(0)
 
         filename = f"{panel['name'].replace(' ', '_')}_export.pdf"
+        return StreamingResponse(
+            output,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+    # ── SINGLE RECORD PDF DOWNLOAD ──
+    @router.get("/panels/{panel_id}/records/{record_id}/download-pdf")
+    async def download_record_pdf(panel_id: str, record_id: str, authorization: str = Header(...)):
+        """Download a single record as a clean PDF. Only works if panel has downloadEnabled=true."""
+        user = await get_current_user(authorization)
+        check_panel_access(user, panel_id, "view")
+        seller_id = await get_seller_id(user)
+
+        try:
+            panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid panel ID")
+        if not panel:
+            raise HTTPException(status_code=404, detail="Panel not found")
+        if not panel.get("downloadEnabled"):
+            raise HTTPException(status_code=403, detail="PDF download is not enabled for this panel")
+
+        try:
+            record = await db.panel_records.find_one({"_id": ObjectId(record_id), "panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid record ID")
+        if not record:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        fields = [f for f in panel.get("fields", []) if not f.get("disabled")]
+
+        # Get seller/company info for header
+        seller = await db.users.find_one({"_id": ObjectId(seller_id)}, {"name": 1, "profile": 1})
+        company_name = ""
+        if seller:
+            company_name = seller.get("profile", {}).get("businessName", "") or seller.get("name", "")
+
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.units import inch
+
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=A4, topMargin=0.6*inch, bottomMargin=0.6*inch, leftMargin=0.75*inch, rightMargin=0.75*inch)
+        styles = getSampleStyleSheet()
+
+        # Custom styles
+        header_style = ParagraphStyle('RecordHeader', parent=styles['Title'], fontSize=16, spaceAfter=4, textColor=colors.HexColor('#1F2937'))
+        sub_style = ParagraphStyle('SubHeader', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#6B7280'), spaceAfter=12)
+        label_style = ParagraphStyle('FieldLabel', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#6B7280'), spaceAfter=2)
+        value_style = ParagraphStyle('FieldValue', parent=styles['Normal'], fontSize=11, textColor=colors.HexColor('#111827'), spaceAfter=10)
+
+        elements = []
+
+        # Header
+        if company_name:
+            elements.append(Paragraph(f"<b>{company_name}</b>", header_style))
+        elements.append(Paragraph(f"<b>{panel['name']}</b>", ParagraphStyle('PanelName', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#4F46E5'))))
+        created = record.get("createdAt")
+        date_str = created.strftime("%d %b %Y, %I:%M %p") if created else "—"
+        elements.append(Paragraph(f"Record Date: {date_str}", sub_style))
+        elements.append(Spacer(1, 8))
+
+        # Divider line
+        elements.append(Table([[""]], colWidths=[6.5*inch], rowHeights=[1]))
+        elements[-1].setStyle(TableStyle([('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#E5E7EB'))]))
+        elements.append(Spacer(1, 12))
+
+        # Fields as label-value pairs
+        data = record.get("data", {})
+        for f in fields:
+            val = data.get(f["key"], "")
+            if f["type"] == "relation" and val:
+                resolved = await resolve_relation_display(seller_id, f, val)
+                val = resolved.get("label", str(val)) if resolved else str(val)
+            elif isinstance(val, list):
+                val = ", ".join(str(v) for v in val)
+            elif isinstance(val, bool):
+                val = "Yes" if val else "No"
+            val_str = str(val) if val else "—"
+
+            elements.append(Paragraph(f["label"].upper(), label_style))
+            elements.append(Paragraph(val_str, value_style))
+
+        # Footer
+        elements.append(Spacer(1, 24))
+        elements.append(Table([[""]], colWidths=[6.5*inch], rowHeights=[1]))
+        elements[-1].setStyle(TableStyle([('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.HexColor('#E5E7EB'))]))
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(f"Generated on {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M UTC')}", ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.HexColor('#9CA3AF'))))
+
+        doc.build(elements)
+        output.seek(0)
+
+        # Use first text field value as filename hint
+        first_val = ""
+        for f in fields:
+            if f["type"] in ("text", "dropdown") and data.get(f["key"]):
+                first_val = str(data[f["key"]])[:30]
+                break
+        slug = first_val.replace(" ", "_") if first_val else record_id[:8]
+        filename = f"{panel['name'].replace(' ', '_')}_{slug}.pdf"
+
         return StreamingResponse(
             output,
             media_type="application/pdf",
