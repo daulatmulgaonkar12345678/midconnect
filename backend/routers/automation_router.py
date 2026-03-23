@@ -284,7 +284,7 @@ def init_automation_router(db, verify_token_func):
             update["is_active"] = data.is_active
         if data.trigger_type is not None:
             if data.trigger_type not in ALLOWED_TRIGGER_TYPES:
-                raise HTTPException(status_code=400, detail=f"Invalid trigger type.")
+                raise HTTPException(status_code=400, detail="Invalid trigger type.")
             update["trigger_type"] = data.trigger_type
         if data.condition is not None:
             update["condition"] = data.condition.model_dump()
@@ -447,7 +447,7 @@ def init_automation_router(db, verify_token_func):
             }
             result = await db.panel_records.insert_one(new_record)
             await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "success",
-                f"Created record", target_panel_id, str(result.inserted_id))
+                "Created record", target_panel_id, str(result.inserted_id))
 
         elif action_type == "create_records_per_item":
             items = extract_line_items(source_data)
@@ -529,11 +529,15 @@ def init_automation_router(db, verify_token_func):
         elif op == "not_equals":
             return str(actual) != str(expected) if actual is not None else True
         elif op == "greater_than":
-            try: return float(actual) > float(expected)
-            except: return False
+            try:
+                return float(actual) > float(expected)
+            except (ValueError, TypeError):
+                return False
         elif op == "less_than":
-            try: return float(actual) < float(expected)
-            except: return False
+            try:
+                return float(actual) < float(expected)
+            except (ValueError, TypeError):
+                return False
         elif op == "contains":
             return str(expected).lower() in str(actual or "").lower()
         elif op == "not_empty":
@@ -548,14 +552,19 @@ def init_automation_router(db, verify_token_func):
         try:
             c = float(current or 0)
             v = float(value)
-            if operation == "increment": return c + v
-            elif operation == "decrement": return max(0, c - v)
-        except: pass
+            if operation == "increment":
+                return c + v
+            elif operation == "decrement":
+                return max(0, c - v)
+        except (ValueError, TypeError):
+            pass
         return value
 
     async def update_system_record(module: str, record_id: str, field: str, op: str, value, seller_id: str):
-        try: nv = float(value)
-        except: nv = None
+        try:
+            nv = float(value)
+        except (ValueError, TypeError):
+            nv = None
         if module == "inventory":
             safe = {"stock", "quantity", "minStock", "reorderPoint"}
             if field not in safe:
