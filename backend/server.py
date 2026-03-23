@@ -1156,7 +1156,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://smart-docs-flow-2.preview.emergentagent.com",
+        "https://relational-update.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)

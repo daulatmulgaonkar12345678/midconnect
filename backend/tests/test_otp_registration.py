@@ -24,7 +24,7 @@ import random
 import string
 
 # Get BASE_URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-docs-flow-2.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://relational-update.preview.emergentagent.com')
 if BASE_URL.endswith('/'):
     BASE_URL = BASE_URL.rstrip('/')
 

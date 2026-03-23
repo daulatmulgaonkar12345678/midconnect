@@ -890,12 +890,32 @@ export default function AutomationPage() {
                     <div key={i} className="bg-white rounded-lg border p-3">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-xs font-semibold text-indigo-600">{p.target_panel_name}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">{p.data_mode}</span>
-                        <span className="text-xs text-gray-400">{p.fields_count ? `${p.fields_count} fields` : ''}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">{p.action_type}</span>
+                        {p.data_mode && <span className="text-xs text-gray-400">{p.data_mode}</span>}
+                        {p.fields_count != null && <span className="text-xs text-gray-400">{p.fields_count} fields</span>}
                       </div>
-                      <pre className="text-xs bg-gray-50 rounded p-2 overflow-x-auto text-gray-700 font-mono" data-testid={`preview-json-${i}`}>
-                        {JSON.stringify(p.preview_data, null, 2)}
-                      </pre>
+                      {/* Structured preview for update_record */}
+                      {p.match && p.update ? (
+                        <div className="space-y-1.5 text-xs font-mono">
+                          <div className="p-2 bg-blue-50 rounded border border-blue-200">
+                            <span className="font-semibold text-blue-700">MATCH: </span>
+                            <span className="text-blue-600">
+                              {p.match.target_field} = {String(p.match.resolved_value)}
+                              {p.match.is_relation_id && <span className="text-blue-400 ml-1">(ID)</span>}
+                            </span>
+                          </div>
+                          <div className="p-2 bg-orange-50 rounded border border-orange-200">
+                            <span className="font-semibold text-orange-700">UPDATE: </span>
+                            <span className="text-orange-600">
+                              {p.update.target_field} = {p.update.operation}({String(p.update.resolved_value)})
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <pre className="text-xs bg-gray-50 rounded p-2 overflow-x-auto text-gray-700 font-mono" data-testid={`preview-json-${i}`}>
+                          {JSON.stringify(p.preview_data, null, 2)}
+                        </pre>
+                      )}
                     </div>
                   ))}
                 </div>

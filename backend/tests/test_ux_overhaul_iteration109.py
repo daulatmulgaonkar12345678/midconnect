@@ -19,7 +19,7 @@ import requests
 import os
 import json
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://smart-docs-flow-2.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://relational-update.preview.emergentagent.com')
 
 # Test token for dev mode
 TEST_TOKEN = "dev-test-token"

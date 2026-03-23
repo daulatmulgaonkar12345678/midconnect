@@ -370,15 +370,32 @@ def init_automation_router(db, verify_token_func):
                 match_tf = t.match_target_field or "(not set)"
                 match_sf = t.match_source_field or t.relation_field or "(not set)"
                 match_val = source_data.get(match_sf, "?") if match_sf != "(not set)" else "?"
+
+                # Check if source field is a relation → value is an ID
+                sf_info = await get_source_field_info(data.trigger_panel_id, match_sf) if match_sf != "(not set)" else {}
+                is_relation = sf_info.get("type") == "relation"
+                resolved_val = f"{match_val} (relation ID)" if is_relation else match_val
+
                 update_val = source_data.get(t.update_value_from or "", "?")
                 previews.append({
                     "target_panel_id": target_panel_id,
                     "target_panel_name": target_name,
                     "action_type": t.action_type,
-                    "data_mode": t.data_mode,
+                    "match": {
+                        "target_field": match_tf,
+                        "source_field": match_sf,
+                        "resolved_value": resolved_val,
+                        "is_relation_id": is_relation,
+                    },
+                    "update": {
+                        "target_field": t.update_field or "(not set)",
+                        "operation": t.update_operation or "set_value",
+                        "source_field": t.update_value_from or "(not set)",
+                        "resolved_value": update_val,
+                    },
                     "preview_data": {
-                        "_match": f"Find {target_name} where [{match_tf}] = {match_val} (from source.{match_sf})",
-                        "_update": f"{t.update_field} = {t.update_operation}({update_val}) (from source.{t.update_value_from})"
+                        "match": {match_tf: resolved_val},
+                        "update": {t.update_field or "?": f"{t.update_operation}({update_val})"},
                     },
                 })
             else:
@@ -456,6 +473,34 @@ def init_automation_router(db, verify_token_func):
         except Exception as e:
             logger.error(f"Automation engine error: {e}")
 
+    async def get_source_field_info(panel_id: str, field_key: str) -> dict:
+        """Get field definition from source panel to determine if it's a relation."""
+        try:
+            panel = await db.panels.find_one(
+                {"_id": ObjectId(panel_id)},
+                {"fields": 1}
+            )
+            if panel:
+                for f in panel.get("fields", []):
+                    if f.get("key") == field_key:
+                        return f
+        except Exception:
+            pass
+        return {}
+
+    async def resolve_match_value(source_data: dict, match_source_field: str, source_panel_id: str):
+        """Extract the match value from source data.
+        If the source field is a relation, the stored value IS the target record's ObjectId.
+        Returns (match_value, is_relation_id)."""
+        raw_value = source_data.get(match_source_field)
+        if raw_value is None or raw_value == "":
+            return None, False
+
+        field_info = await get_source_field_info(source_panel_id, match_source_field)
+        is_relation = field_info.get("type") == "relation"
+
+        return str(raw_value), is_relation
+
     async def execute_target(rule: dict, target: dict, source_data: dict, source_record_id: str, source_panel_id: str, seller_id: str, user_id: str, event_type: str):
         """Execute a single target action. Data comes ONLY from source_data (parent panel)."""
         action_type = target.get("action_type", "create_record")
@@ -468,49 +513,68 @@ def init_automation_router(db, verify_token_func):
             match_target_field = target.get("match_target_field", "")
             match_source_field = target.get("match_source_field", "")
 
-            # Backward compat: if old relation_field is set but new fields aren't, use it
+            # Backward compat
             if not match_source_field and relation_field:
                 match_source_field = relation_field
 
             if not match_source_field:
-                raise Exception("match_source_field is not set. Cannot identify which record to update.")
+                raise Exception("MATCH config missing: match_source_field is required.")
+            if not match_target_field:
+                raise Exception("MATCH config missing: match_target_field is required.")
 
-            match_value = source_data.get(match_source_field)
+            # Resolve match value — relation fields store ObjectId, data fields store values
+            match_value, is_relation_id = await resolve_match_value(source_data, match_source_field, source_panel_id)
             if not match_value:
-                raise Exception(f"Source field '{match_source_field}' is empty in source record.")
+                raise Exception(f"MATCH failed: Source field '{match_source_field}' is empty in source record.")
 
             # ── UPDATE: Get the value to apply ──
             operation = target.get("update_operation", "set_value")
-            target_field = target.get("update_field", "")
+            update_field = target.get("update_field", "")
             value_from = target.get("update_value_from", "")
+
+            if not update_field:
+                raise Exception("UPDATE config missing: update_field is required.")
+            if not value_from:
+                raise Exception("UPDATE config missing: update_value_from is required.")
+
             source_value = source_data.get(value_from)
             if source_value is None:
-                raise Exception(f"Value source field '{value_from}' is empty in source record.")
+                raise Exception(f"UPDATE failed: Source field '{value_from}' is empty.")
+
+            # Validate numeric for increment/decrement
+            if operation in ("increment", "decrement"):
+                try:
+                    float(source_value)
+                except (ValueError, TypeError):
+                    raise Exception(f"UPDATE failed: '{value_from}' value '{source_value}' is not numeric. Increment/decrement requires a number.")
 
             # ── Execute on system module ──
             if target_panel_id in SYSTEM_MODULE_IDS:
-                await update_system_record(target_panel_id, match_target_field, str(match_value), target_field, operation, source_value, seller_id)
+                await update_system_record(target_panel_id, match_target_field, match_value, is_relation_id, update_field, operation, source_value, seller_id)
             else:
                 # ── Execute on custom panel ──
-                # Find the target record by matching field value
                 query = {"panelId": ObjectId(target_panel_id), "sellerId": ObjectId(seller_id)}
-                # If match_target_field is "_id", match by record ID
-                if match_target_field == "_id":
-                    query["_id"] = ObjectId(str(match_value))
+
+                if is_relation_id:
+                    # Source field is a relation → match_value is an ObjectId → find by _id
+                    query["_id"] = ObjectId(match_value)
+                elif match_target_field == "_id":
+                    query["_id"] = ObjectId(match_value)
                 else:
-                    query[f"data.{match_target_field}"] = str(match_value)
+                    # Match by data field value
+                    query[f"data.{match_target_field}"] = match_value
 
                 target_record = await db.panel_records.find_one(query)
                 if not target_record:
-                    raise Exception(f"No record found in target panel where {match_target_field} = {match_value}")
-                new_val = apply_operation(target_record.get("data", {}).get(target_field, 0), operation, source_value)
+                    raise Exception(f"MATCH failed: No record found in target where {match_target_field} = {match_value}")
+                new_val = apply_operation(target_record.get("data", {}).get(update_field, 0), operation, source_value)
                 await db.panel_records.update_one(
                     {"_id": target_record["_id"]},
-                    {"$set": {f"data.{target_field}": new_val, "updatedAt": now}}
+                    {"$set": {f"data.{update_field}": new_val, "updatedAt": now}}
                 )
 
             await log_execution(seller_id, rule, source_panel_id, source_record_id, event_type, "success",
-                f"Updated {target_field} ({operation})", target_panel_id)
+                f"Updated {update_field} ({operation})", target_panel_id)
 
         elif action_type == "create_record":
             target_field_keys = await get_target_field_keys(target_panel_id, seller_id)
@@ -716,8 +780,12 @@ def init_automation_router(db, verify_token_func):
             pass
         return value
 
-    async def update_system_record(module: str, match_target_field: str, match_value: str, update_field: str, op: str, value, seller_id: str):
-        """Find a system record by MATCH condition, then UPDATE the target field."""
+    async def update_system_record(module: str, match_target_field: str, match_value: str, is_relation_id: bool, update_field: str, op: str, value, seller_id: str):
+        """Find a system record by MATCH condition, then UPDATE the target field.
+
+        If is_relation_id=True, match_value is an ObjectId → find by _id.
+        Otherwise, match by the specified target field value.
+        """
         try:
             nv = float(value)
         except (ValueError, TypeError):
@@ -726,26 +794,25 @@ def init_automation_router(db, verify_token_func):
         if module == "inventory":
             safe_update = {"stock", "quantity", "minStock", "reorderPoint"}
             if update_field not in safe_update:
-                raise Exception(f"Cannot modify '{update_field}' on inventory.")
+                raise Exception(f"Cannot modify '{update_field}' on inventory. Allowed: {safe_update}")
 
-            # Build match query — find the inventory record
             query = {"sellerId": ObjectId(seller_id)}
-            if match_target_field == "_id" or match_target_field == "id":
+
+            if is_relation_id:
+                # Source field is a relation to inventory → value is the sellerListing ObjectId
+                query["_id"] = ObjectId(match_value)
+            elif match_target_field in ("_id", "id"):
                 query["_id"] = ObjectId(match_value)
             elif match_target_field == "productName":
                 query["productName"] = match_value
             elif match_target_field == "sku":
                 query["sku"] = match_value
             else:
-                # Default: try by _id (for relation fields that store ObjectId)
-                try:
-                    query["_id"] = ObjectId(match_value)
-                except Exception:
-                    query[match_target_field] = match_value
+                query[match_target_field] = match_value
 
             listing = await db.sellerListings.find_one(query)
             if not listing:
-                raise Exception(f"Inventory record not found where {match_target_field} = {match_value}")
+                raise Exception(f"MATCH failed: No inventory record where {match_target_field} = {match_value}")
 
             new_val = apply_operation(listing.get(update_field, 0), op, nv or value)
             await db.sellerListings.update_one(
