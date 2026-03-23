@@ -569,7 +569,8 @@ def init_automation_router(db, verify_token_func):
     }
 
     async def get_target_field_keys(target_panel_id: str, seller_id: str) -> set:
-        """Get the set of valid field keys for a target panel at execution time."""
+        """Get the set of valid field keys for a target panel at execution time.
+        Includes ALL field types (including relation fields) for smart sync matching."""
         if target_panel_id in SYSTEM_MODULE_FIELD_KEYS:
             return SYSTEM_MODULE_FIELD_KEYS[target_panel_id]
         try:
@@ -578,7 +579,7 @@ def init_automation_router(db, verify_token_func):
                 {"fields": 1}
             )
             if panel:
-                return {f["key"] for f in panel.get("fields", []) if f.get("type") != "relation"}
+                return {f["key"] for f in panel.get("fields", [])}
         except Exception:
             pass
         return set()

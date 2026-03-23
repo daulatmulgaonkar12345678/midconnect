@@ -46,7 +46,7 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 ```
 
 ### Data Mode Behavior (LOCKED)
-- **smart_sync** (default): Explicit mappings take priority. Remaining target fields auto-fill from matching source field names.
+- **smart_sync** (default): Explicit mappings priority. Remaining target fields (ALL types incl. relations) auto-fill from matching source field names.
 - **manual_only**: Only explicitly mapped fields transfer. Most restrictive.
 - **full_copy**: For each target field that exists in source, copy value. Explicit mappings override.
 
@@ -60,26 +60,24 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 28. **Phase 4 Full: Multi-Target Workflow Automation Engine (Mar 2026)**
     - Backend: Multi-target support, per-target field mapping/visibility
     - Frontend: Contract-first approach, TargetCard components
-    - Trigger Types: on_create, on_update, condition_based
-    - Action Types: create_record, create_records_per_item, update_record
-    - Duplicate prevention, execution logging, loop prevention
 29. **Phase 4.1: Data Mode + Preview (Mar 2026)**
     - 3 data modes per target: smart_sync, manual_only, full_copy
-    - Smart Sync: explicit mappings priority, auto-fill matching field names
-    - Full Copy: safe version — only copies target fields that exist in source
     - Preview endpoint: dry-run showing exact data output before saving
     - Frontend: Data Mode toggle, mode-specific info messages, Preview Data button
+30. **Bug Fix: Smart Sync relation field matching (Mar 2026)**
+    - Root cause: `get_target_field_keys()` excluded relation-type fields (type != "relation") from matching
+    - Fix: Include ALL field types in target_field_keys so relation fields like Product Name (linked to Inventory) and Employee Name (linked to Employees) are auto-synced when field names match
+    - Verified with end-to-end test: Inward -> QC, all matching fields (including relations) now transfer correctly
     - Tests: 18/18 backend tests passed (100%)
 
 ## Prioritized Backlog
 ### P0 (Next)
-1. End-to-end workflow testing: Create real panels, create rules, trigger automation, verify target records
-2. Apply field_visibility in records UI (records page respects visible/editable settings)
-3. Document Builder Templates: customizable PDF with {{variables}}
+1. Apply field_visibility in records UI (records page respects visible/editable settings from rules)
+2. Document Builder Templates: customizable PDF with {{variables}}
 
 ### P1
-4. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
-5. Seller Reminder Controls
+3. Reporting Phase 3: Cash Flow, Tax Liability, Order Fulfillment
+4. Seller Reminder Controls
 
 ### P2
 - GSTR-1 JSON export | Custom Material Report
@@ -87,7 +85,7 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 
 ## Key Files
 - `/app/backend/routers/automation_router.py` — Multi-target engine + data modes + preview
-- `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, export
+- `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, record validation
 - `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Multi-target Rule Builder UI with data modes
 - `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config
 - `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export
