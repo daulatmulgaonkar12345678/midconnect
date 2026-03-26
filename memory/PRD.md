@@ -129,6 +129,16 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Standard plan lists: inventory, employee, buyer/supplier, invoices, POs, WhatsApp, Excel/PDF exports
     - About: Repositioned as SaaS + Automation platform (not just marketplace)
     - Sections: Mission, What We Do (9 feature cards), Vision, Why Choose, Who Is It For, Join Us CTA
+40. **Hybrid Referral + Sales Tracking System (Mar 2026)**
+    - **Sales tracking** runs parallel to existing referral rewards (no breaking changes)
+    - `record_referral_commission()`: Called when invoice becomes fully paid, stores 20% commission in `referral_commissions` collection
+    - `GET /referral/sales-stats`: Returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings (user view — no revenue shown)
+    - `GET /referral/admin/sales-overview`: Admin-only — full revenue, commission, per-partner breakdown
+    - Commission: 20% default, stored per invoice, status=pending/paid_out, duplicate prevention
+    - Fraud prevention: self-referral, same email, same phone
+    - Frontend: Sales Performance section in ReferralModal (3 metric cards), earnings indicator in ReferralWidget
+    - Backward compatible: existing referral links, tiers, stats all unchanged
+    - Tests: 18/18 passed (14 API + 4 commission recording)
 
 ## Prioritized Backlog
 ### P0 (Next)
