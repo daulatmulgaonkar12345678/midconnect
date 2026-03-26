@@ -20,7 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://relational-update.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://udyog-monetize.preview.emergentagent.com').rstrip('/')
 AUTH_TOKEN = "dev-test-token"  # Firebase bypass in dev mode
 
 EXPECTED_SYSTEM_MODULES = [

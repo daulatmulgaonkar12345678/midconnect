@@ -16,7 +16,7 @@ import os
 import io
 
 # Use public URL for testing
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://relational-update.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://udyog-monetize.preview.emergentagent.com")
 
 
 class TestInventoryDescriptionField:

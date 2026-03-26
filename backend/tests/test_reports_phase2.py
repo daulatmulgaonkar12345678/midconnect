@@ -14,7 +14,7 @@ import os
 from datetime import datetime, timedelta
 
 # Use public URL from environment for testing
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://relational-update.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://udyog-monetize.preview.emergentagent.com')
 AUTH_TOKEN = "dev-test-token"
 
 def get_headers():

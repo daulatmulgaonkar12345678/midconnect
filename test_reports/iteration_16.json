@@ -80,7 +80,7 @@
   
   "test_credentials": {
     "dev_token": "dev-test-token",
-    "api_url": "https://relational-update.preview.emergentagent.com",
+    "api_url": "https://udyog-monetize.preview.emergentagent.com",
     "test_seller_id": "699cb1d8ded1c6446549c19f"
   },
   

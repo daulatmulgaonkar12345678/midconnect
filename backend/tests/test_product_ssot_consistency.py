@@ -21,7 +21,7 @@ import requests
 import os
 
 # Get BASE_URL from environment (frontend env for public testing)
-BASE_URL = "https://relational-update.preview.emergentagent.com"
+BASE_URL = "https://udyog-monetize.preview.emergentagent.com"
 
 # Expected test data (from seed data)
 EXPECTED_PRODUCT_ID = "6981a9a74108b0cbd93aa631"

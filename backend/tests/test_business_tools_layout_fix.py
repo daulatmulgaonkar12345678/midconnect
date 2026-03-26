@@ -17,7 +17,7 @@ import os
 import re
 
 # Get BASE_URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://relational-update.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://udyog-monetize.preview.emergentagent.com')
 BASE_URL = BASE_URL.rstrip('/')
 
 
