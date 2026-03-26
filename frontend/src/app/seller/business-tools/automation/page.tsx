@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
+import { SubscriptionBanner } from '@/components/SubscriptionGates';
 import {
   Zap, Plus, Pencil, Trash2, Loader2, X, Save, Power, PowerOff,
   ChevronRight, Activity, AlertTriangle, Check, Target, ArrowRight
@@ -695,6 +696,9 @@ export default function AutomationPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto" data-testid="automation-page">
+      {/* Subscription Banner */}
+      <SubscriptionBanner />
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

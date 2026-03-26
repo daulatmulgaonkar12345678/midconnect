@@ -270,7 +270,11 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_EMPLOYEES.value)
         seller_id = await get_seller_id(user)
-        
+
+        from middleware.subscription_guard import check_resource_limit
+        emp_count = await db.users.count_documents({"companyId": ObjectId(seller_id), "role": {"$ne": "seller_admin"}})
+        await check_resource_limit(db, user, "add_employee", current_count=emp_count)
+
         # Validate role exists
         try:
             role_oid = ObjectId(data.roleId)
@@ -462,7 +466,10 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_BUYERS.value)
         seller_id = await get_seller_id(user)
-        
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         now = datetime.now(timezone.utc)
         buyer_doc = {
             "sellerId": ObjectId(seller_id),
@@ -565,7 +572,10 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_BUYERS.value)
         seller_id = await get_seller_id(user)
-        
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         try:
             buyer_oid = ObjectId(buyer_id)
         except Exception:
@@ -598,7 +608,10 @@ def init_business_tools_router(db, verify_token_func, activity_log_service=None)
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_BUYERS.value)
         seller_id = await get_seller_id(user)
-        
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         try:
             buyer_oid = ObjectId(buyer_id)
         except Exception:

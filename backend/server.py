@@ -3016,6 +3016,20 @@ async def get_current_user_profile(user: dict = Depends(require_auth)):
     """Get current user profile"""
     return serialize_doc(user)
 
+@api_router.get("/subscription/status")
+async def get_subscription_status_api(user: dict = Depends(require_auth)):
+    """Get current user's subscription status, plan, and feature limits."""
+    from middleware.subscription_guard import get_user_subscription
+    sub_info = await get_user_subscription(db, user)
+    return {
+        "plan": sub_info["plan"],
+        "status": sub_info["status"],
+        "isExpired": sub_info["isExpired"],
+        "features": sub_info["config"],
+        "endDate": sub_info["endDate"].isoformat() if sub_info["endDate"] else None,
+    }
+
+
 @api_router.put("/users/me")
 async def update_user_profile(update_data: UserUpdate, user: dict = Depends(require_auth)):
     """Update current user profile"""

@@ -371,6 +371,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         buyer = await db.seller_buyers.find_one({"_id": ObjectId(data.buyerId), "sellerId": ObjectId(seller_id)})
         if not buyer:
             raise HTTPException(status_code=404, detail="Buyer not found")
@@ -1011,6 +1014,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         if data.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Invalid status. Valid: {', '.join(VALID_STATUSES)}")
 
@@ -1036,6 +1042,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         user = await get_current_user(authorization)
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
 
         try:
             inv_oid = ObjectId(invoice_id)
@@ -1166,6 +1175,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         try:
             inv_oid = ObjectId(invoice_id)
             pay_oid = ObjectId(payment_id)
@@ -1194,6 +1206,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         user = await get_current_user(authorization)
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, feature="export_pdf")
 
         valid_copies = ["original", "transporter", "supplier", "office"]
         if copy_type not in valid_copies:
@@ -1257,6 +1272,9 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
         user = await get_current_user(authorization)
         await require_permission(user, Permission.CREATE_INVOICE.value)
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, feature="export_pdf")
 
         valid_copies = ["original", "transporter", "supplier", "office"]
         copy_list = [c.strip() for c in copies.split(",") if c.strip() in valid_copies]

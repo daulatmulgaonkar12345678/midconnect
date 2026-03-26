@@ -207,7 +207,10 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         user = await get_current_user(authorization)
         await require_permission(user, Permission.MANAGE_INVENTORY.value)
         seller_id = await get_seller_id(user)
-        
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         try:
             listing_oid = ObjectId(listing_id)
         except Exception:

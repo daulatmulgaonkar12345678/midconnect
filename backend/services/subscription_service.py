@@ -118,8 +118,8 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
                 "endDate": end_date
             }
     
-    # Pro and Enterprise are unlimited
-    if plan in ["pro", "enterprise"]:
+    # Pro, Enterprise, Starter, Standard are unlimited inquiry plans
+    if plan in ["starter", "standard", "pro", "enterprise"]:
         return {
             "plan": plan,
             "limit": -1,

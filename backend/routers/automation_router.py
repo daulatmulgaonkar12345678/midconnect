@@ -26,7 +26,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-MAX_RULES_PER_BUSINESS = 50
+# Limits (structural only — plan-based limits in config/plan_features.py)
 MAX_TARGETS_PER_RULE = 10
 MAX_FIELD_MAPPINGS = 30
 ALLOWED_OPERATORS = {"equals", "not_equals", "greater_than", "less_than", "contains", "not_empty", "is_empty"}
@@ -216,9 +216,13 @@ def init_automation_router(db, verify_token_func):
         require_admin(user)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import get_user_subscription
+        sub_info = await get_user_subscription(db, user)
+        max_rules = sub_info["config"].get("maxRules", 5)
+
         rules = await db.automation_rules.find(
             {"sellerId": ObjectId(seller_id)},
-        ).sort([("priority", 1), ("createdAt", -1)]).to_list(MAX_RULES_PER_BUSINESS)
+        ).sort([("priority", 1), ("createdAt", -1)]).to_list(max_rules + 5 if max_rules > 0 else 250)
 
         serialized = serialize_doc(rules)
 
@@ -228,7 +232,7 @@ def init_automation_router(db, verify_token_func):
             for t in r.get("targets", []):
                 t["target_panel_name"] = await get_panel_name(t.get("target_panel_id", ""))
 
-        return {"rules": serialized, "count": len(serialized), "limit": MAX_RULES_PER_BUSINESS}
+        return {"rules": serialized, "count": len(serialized), "limit": max_rules}
 
     # ── CREATE RULE ──
     @router.post("/automation/rules")
@@ -237,9 +241,9 @@ def init_automation_router(db, verify_token_func):
         require_admin(user)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import check_resource_limit
         count = await db.automation_rules.count_documents({"sellerId": ObjectId(seller_id)})
-        if count >= MAX_RULES_PER_BUSINESS:
-            raise HTTPException(status_code=400, detail=f"Maximum {MAX_RULES_PER_BUSINESS} rules allowed.")
+        await check_resource_limit(db, user, "create_rule", current_count=count)
 
         if data.trigger_type not in ALLOWED_TRIGGER_TYPES:
             raise HTTPException(status_code=400, detail=f"Invalid trigger type: {data.trigger_type}")
@@ -284,6 +288,9 @@ def init_automation_router(db, verify_token_func):
         require_admin(user)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, feature="run_automation")
+
         try:
             rule = await db.automation_rules.find_one({"_id": ObjectId(rule_id), "sellerId": ObjectId(seller_id)})
         except Exception:
@@ -319,6 +326,10 @@ def init_automation_router(db, verify_token_func):
         user = await get_current_user(authorization)
         require_admin(user)
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         result = await db.automation_rules.delete_one({"_id": ObjectId(rule_id), "sellerId": ObjectId(seller_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Rule not found.")
@@ -425,6 +436,16 @@ def init_automation_router(db, verify_token_func):
             _visited_rules = set()
 
         try:
+            # Subscription check: block automation if plan doesn't support it
+            from config.plan_features import get_plan_config
+            seller_user = await db.users.find_one({"_id": ObjectId(seller_id)})
+            if seller_user:
+                from middleware.subscription_guard import get_user_subscription
+                sub_info = await get_user_subscription(db, seller_user)
+                if sub_info["isExpired"] or not sub_info["config"].get("automation", False):
+                    logger.info(f"[AUTOMATION] Skipped: plan={sub_info['plan']} expired={sub_info['isExpired']} for seller {seller_id}")
+                    return
+
             valid_triggers = set()
             if event_type == "record_created":
                 valid_triggers = {"on_create", "condition_based"}

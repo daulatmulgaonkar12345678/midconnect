@@ -17,8 +17,7 @@ import io
 
 logger = logging.getLogger(__name__)
 
-# Limits
-MAX_PANELS_PER_BUSINESS = 10
+# Limits (structural only — plan-based limits are in config/plan_features.py)
 MAX_FIELDS_PER_PANEL = 20
 
 MAX_RECORDS_PER_PAGE = 50
@@ -201,8 +200,13 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
             {"_id": 1, "name": 1, "slug": 1, "description": 1, "icon": 1, "color": 1,
              "fields": 1, "allowedModules": 1, "allowedPanels": 1, "downloadEnabled": 1, "createdAt": 1, "updatedAt": 1}
         ).sort("createdAt", 1)
-        panels = await cursor.to_list(MAX_PANELS_PER_BUSINESS + 5)
-        return {"panels": serialize_doc(panels), "count": len(panels), "limit": MAX_PANELS_PER_BUSINESS}
+
+        from middleware.subscription_guard import get_user_subscription
+        sub_info = await get_user_subscription(db, user)
+        max_panels = sub_info["config"].get("maxPanels", 3)
+
+        panels = await cursor.to_list(max_panels + 5 if max_panels > 0 else 100)
+        return {"panels": serialize_doc(panels), "count": len(panels), "limit": max_panels}
 
     # ── LINKABLE TARGETS (for relation fields) — must be before {panel_id} routes ──
     @router.get("/panels/linkable-targets")
@@ -225,7 +229,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         panels = await db.panels.find(
             {"sellerId": ObjectId(seller_id)},
             {"_id": 1, "name": 1}
-        ).to_list(MAX_PANELS_PER_BUSINESS)
+        ).to_list(100)
 
         for p in panels:
             targets.append({"id": str(p["_id"]), "name": p["name"], "type": "panel"})
@@ -439,10 +443,10 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         require_seller_admin(user)
         seller_id = await get_seller_id(user)
 
-        # Check limit
+        # Subscription: check plan limit
+        from middleware.subscription_guard import check_resource_limit
         count = await db.panels.count_documents({"sellerId": ObjectId(seller_id)})
-        if count >= MAX_PANELS_PER_BUSINESS:
-            raise HTTPException(status_code=400, detail=f"Maximum {MAX_PANELS_PER_BUSINESS} panels allowed per business.")
+        await check_resource_limit(db, user, "create_panel", current_count=count)
 
         # Check duplicate name
         existing = await db.panels.find_one({"sellerId": ObjectId(seller_id), "name": {"$regex": f"^{re.escape(data.name.strip())}$", "$options": "i"}})
@@ -550,6 +554,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         require_seller_admin(user)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         try:
             panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         except Exception:
@@ -637,6 +644,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         require_seller_admin(user)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         try:
             panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         except Exception:
@@ -670,6 +680,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         require_seller_admin(user)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found")
@@ -701,6 +714,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         require_seller_admin(user)
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found")
@@ -730,6 +746,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         require_advanced_access(user)
         require_seller_admin(user)
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
 
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         if not panel:
@@ -766,6 +785,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         require_advanced_access(user)
         require_seller_admin(user)
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
 
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         if not panel:
@@ -1057,6 +1079,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         check_panel_access(user, panel_id, "create")
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found")
@@ -1127,6 +1152,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         check_panel_access(user, panel_id, "edit")
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
+
         panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found")
@@ -1162,6 +1190,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         user = await get_current_user(authorization)
         check_panel_access(user, panel_id, "edit")
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, write_operation=True)
 
         record = await db.panel_records.find_one({"_id": ObjectId(record_id), "panelId": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         if not record:
@@ -1411,6 +1442,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
 
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, feature="export_excel")
+
         try:
             panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
         except Exception:
@@ -1491,6 +1525,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         user = await get_current_user(authorization)
         check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, feature="export_pdf")
 
         try:
             panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})
@@ -1581,6 +1618,9 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         user = await get_current_user(authorization)
         check_panel_access(user, panel_id, "view")
         seller_id = await get_seller_id(user)
+
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, feature="export_pdf")
 
         try:
             panel = await db.panels.find_one({"_id": ObjectId(panel_id), "sellerId": ObjectId(seller_id)})

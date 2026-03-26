@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
+import { SubscriptionProvider } from '@/context/SubscriptionContext';
 import IndustrialHeader from '@/components/IndustrialHeader';
 import Footer from '@/components/Footer';
 import { SEO, APP_KEYWORDS } from '@/lib/config';
@@ -51,6 +52,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased bg-gray-50`}>
         <AuthProvider>
+          <SubscriptionProvider>
           <ServerWarmUp />
           <ServiceWorkerRegister />
           <div className="min-h-screen flex flex-col">
@@ -58,6 +60,7 @@ export default function RootLayout({
             <main className="flex-1">{children}</main>
             <Footer />
           </div>
+          </SubscriptionProvider>
         </AuthProvider>
       </body>
     </html>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePermissions } from '../layout';
 import { toast } from 'sonner';
+import { SubscriptionBanner } from '@/components/SubscriptionGates';
 import {
   LayoutGrid, Plus, Pencil, Trash2, ChevronRight, Loader2,
   Type, Hash, Calendar, ListFilter, CheckSquare, AlignLeft,
@@ -12,7 +13,6 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-const MAX_PANELS = 10;
 const MAX_FIELDS = 20;
 
 const FIELD_TYPES = [
@@ -81,6 +81,7 @@ export default function PanelsPage() {
   const [loading, setLoading] = useState(true);
   const [accessLevel, setAccessLevel] = useState('standard');
   const [linkableTargets, setLinkableTargets] = useState<LinkableTarget[]>([]);
+  const [maxPanels, setMaxPanels] = useState(3);
 
   // Create/Edit modal
   const [showModal, setShowModal] = useState(false);
@@ -126,6 +127,7 @@ export default function PanelsPage() {
       if (panelsRes.ok) {
         const data = await panelsRes.json();
         setPanels(data.panels || []);
+        if (data.limit !== undefined) setMaxPanels(data.limit);
       }
       if (accessRes.ok) {
         const data = await accessRes.json();
@@ -320,7 +322,7 @@ export default function PanelsPage() {
             downloadEnabled: panelDownloadEnabled,
           }),
         });
-        if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Create failed'); setSaving(false); return; }
+        if (!res.ok) { const d = await res.json(); const msg = typeof d.detail === 'object' ? d.detail.message : d.detail; toast.error(msg || 'Create failed'); setSaving(false); return; }
         toast.success('Panel created');
       }
       setShowModal(false);
@@ -335,7 +337,7 @@ export default function PanelsPage() {
       const res = await fetch(`${API_URL}/api/business-tools/panels/${panel.id}`, {
         method: 'DELETE', headers: headers(),
       });
-      if (!res.ok) { const d = await res.json(); toast.error(d.detail || 'Delete failed'); return; }
+      if (!res.ok) { const d = await res.json(); const msg = typeof d.detail === 'object' ? d.detail.message : d.detail; toast.error(msg || 'Delete failed'); return; }
       toast.success('Panel deleted');
       fetchPanels();
     } catch { toast.error('Delete failed'); }
@@ -369,15 +371,18 @@ export default function PanelsPage() {
 
   return (
     <div className="space-y-6" data-testid="panels-page">
+      {/* Subscription Banner */}
+      <SubscriptionBanner />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900" data-testid="panels-heading">Custom Panels</h1>
           <p className="text-gray-500 mt-1 text-sm">
-            Create custom data modules for your business. {panels.length}/{MAX_PANELS} panels used.
+            Create custom data modules for your business. {panels.length}/{maxPanels === -1 ? '\u221e' : maxPanels} panels used.
           </p>
         </div>
-        {isAdmin && panels.length < MAX_PANELS && (
+        {isAdmin && (maxPanels === -1 || panels.length < maxPanels) && (
           <button
             onClick={openCreateModal}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
@@ -392,12 +397,12 @@ export default function PanelsPage() {
       <div className="bg-white rounded-lg border p-3">
         <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
           <span>Panel usage</span>
-          <span>{panels.length} / {MAX_PANELS}</span>
+          <span>{panels.length} / {maxPanels === -1 ? '\u221e' : maxPanels}</span>
         </div>
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${panels.length >= MAX_PANELS ? 'bg-red-500' : panels.length >= MAX_PANELS * 0.7 ? 'bg-amber-500' : 'bg-indigo-500'}`}
-            style={{ width: `${(panels.length / MAX_PANELS) * 100}%` }}
+            className={`h-full rounded-full transition-all ${maxPanels !== -1 && panels.length >= maxPanels ? 'bg-red-500' : maxPanels !== -1 && panels.length >= maxPanels * 0.7 ? 'bg-amber-500' : 'bg-indigo-500'}`}
+            style={{ width: `${maxPanels === -1 ? 10 : (panels.length / maxPanels) * 100}%` }}
           />
         </div>
       </div>
