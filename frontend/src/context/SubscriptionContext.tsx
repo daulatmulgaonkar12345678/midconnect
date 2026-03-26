@@ -55,13 +55,14 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
 });
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
-  const { token, isAuthenticated } = useAuth();
+  const { getIdToken, isAuthenticated } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    if (!token) return;
     try {
+      const token = await getIdToken();
+      if (!token) return;
       const res = await fetch(`${API_URL}/api/subscription/status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -70,15 +71,15 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       }
     } catch { /* silent */ }
     setLoading(false);
-  }, [token]);
+  }, [getIdToken]);
 
   useEffect(() => {
-    if (isAuthenticated && token) {
+    if (isAuthenticated) {
       refresh();
     } else {
       setLoading(false);
     }
-  }, [isAuthenticated, token, refresh]);
+  }, [isAuthenticated, refresh]);
 
   const features = subscription?.features || defaultFeatures;
   const isExpired = subscription?.isExpired ?? true;

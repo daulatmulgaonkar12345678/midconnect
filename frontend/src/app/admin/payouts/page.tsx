@@ -50,7 +50,7 @@ interface Overview {
 type DateFilter = 'all' | 'today' | 'week' | 'month';
 
 export default function AdminPayoutsPage() {
-  const { token } = useAuth();
+  const { getIdToken } = useAuth();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
@@ -67,20 +67,23 @@ export default function AdminPayoutsPage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const headers = useCallback(() => ({
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  }), [token]);
+  const headers = useCallback(async () => {
+    const token = await getIdToken();
+    return {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+  }, [getIdToken]);
 
   const fetchOverview = useCallback(async () => {
-    if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/referral/admin/sales-overview`, { headers: headers() });
+      const h = await headers();
+      const res = await fetch(`${API_URL}/api/referral/admin/sales-overview`, { headers: h });
       if (res.ok) setOverview(await res.json());
     } catch { /* empty */ }
     setLoading(false);
-  }, [token, headers]);
+  }, [headers]);
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
 
@@ -88,7 +91,8 @@ export default function AdminPayoutsPage() {
     if (partnerOrders[code]) return;
     setLoadingOrders(code);
     try {
-      const res = await fetch(`${API_URL}/api/referral/admin/partner-orders/${code}`, { headers: headers() });
+      const h = await headers();
+      const res = await fetch(`${API_URL}/api/referral/admin/partner-orders/${code}`, { headers: h });
       if (res.ok) {
         const data = await res.json();
         setPartnerOrders(prev => ({ ...prev, [code]: data }));
@@ -144,10 +148,11 @@ export default function AdminPayoutsPage() {
     setProcessing(true);
     setMessage(null);
     try {
+      const h = await headers();
       if (payoutMode === 'single') {
         const res = await fetch(`${API_URL}/api/referral/admin/mark-payout`, {
           method: 'POST',
-          headers: headers(),
+          headers: h,
           body: JSON.stringify({ orderId: singlePayoutId, payoutReference: payoutRef, payoutMethod }),
         });
         const data = await res.json();
@@ -159,7 +164,7 @@ export default function AdminPayoutsPage() {
       } else {
         const res = await fetch(`${API_URL}/api/referral/admin/bulk-payout`, {
           method: 'POST',
-          headers: headers(),
+          headers: h,
           body: JSON.stringify({ orderIds: Array.from(selectedOrders), payoutReference: payoutRef, payoutMethod }),
         });
         const data = await res.json();
@@ -184,13 +189,10 @@ export default function AdminPayoutsPage() {
     setProcessing(false);
   };
 
-  const exportCSV = () => {
-    window.open(`${API_URL}/api/referral/admin/export-payouts?token=${token}`, '_blank');
-  };
-
   const downloadCSV = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/referral/admin/export-payouts`, { headers: headers() });
+      const h = await headers();
+      const res = await fetch(`${API_URL}/api/referral/admin/export-payouts`, { headers: h });
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
