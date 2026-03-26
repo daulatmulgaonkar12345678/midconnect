@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Gift, Copy, Check, X, Share2, Users, Trophy, ChevronRight, Loader2 } from 'lucide-react';
+import { Gift, Copy, Check, X, Share2, Users, Trophy, ChevronRight, Loader2, IndianRupee, TrendingUp, Wallet } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -9,6 +9,14 @@ interface ReferralTier {
   min_referrals: number;
   reward_days: number;
   label: string;
+}
+
+interface SalesStats {
+  paidCustomers: number;
+  totalEarnings: number;
+  pendingEarnings: number;
+  paidOutEarnings: number;
+  commissionRate: number;
 }
 
 interface ReferralStats {
@@ -41,6 +49,7 @@ export default function ReferralModal({ isOpen, onClose, token }: { isOpen: bool
   const [link, setLink] = useState('');
   const [code, setCode] = useState('');
   const [stats, setStats] = useState<ReferralStats | null>(null);
+  const [salesStats, setSalesStats] = useState<SalesStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
@@ -50,9 +59,10 @@ export default function ReferralModal({ isOpen, onClose, token }: { isOpen: bool
     setLoading(true);
     try {
       const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-      const [linkRes, statsRes] = await Promise.all([
+      const [linkRes, statsRes, salesRes] = await Promise.all([
         fetch(`${API_URL}/api/referral/my-link`, { headers: h }),
         fetch(`${API_URL}/api/referral/stats`, { headers: h }),
+        fetch(`${API_URL}/api/referral/sales-stats`, { headers: h }),
       ]);
       if (linkRes.ok) {
         const d = await linkRes.json();
@@ -60,6 +70,7 @@ export default function ReferralModal({ isOpen, onClose, token }: { isOpen: bool
         setCode(d.referralCode);
       }
       if (statsRes.ok) setStats(await statsRes.json());
+      if (salesRes.ok) setSalesStats(await salesRes.json());
     } catch { /* empty */ }
     setLoading(false);
   }, [token]);
@@ -220,6 +231,33 @@ export default function ReferralModal({ isOpen, onClose, token }: { isOpen: bool
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Sales Performance (New — parallel to referral rewards) ── */}
+            {salesStats && (
+              <div data-testid="sales-performance-section">
+                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Sales Performance</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center" data-testid="paid-customers-card">
+                    <Users className="w-4 h-4 text-blue-600 mx-auto mb-1" />
+                    <div className="text-lg font-bold text-blue-700">{salesStats.paidCustomers}</div>
+                    <div className="text-[10px] text-blue-500 font-medium">Paid Customers</div>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center" data-testid="total-earnings-card">
+                    <IndianRupee className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
+                    <div className="text-lg font-bold text-emerald-700">{salesStats.totalEarnings.toLocaleString('en-IN')}</div>
+                    <div className="text-[10px] text-emerald-500 font-medium">Your Earnings</div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center" data-testid="pending-earnings-card">
+                    <Wallet className="w-4 h-4 text-amber-600 mx-auto mb-1" />
+                    <div className="text-lg font-bold text-amber-700">{salesStats.pendingEarnings.toLocaleString('en-IN')}</div>
+                    <div className="text-[10px] text-amber-500 font-medium">Pending</div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 text-center">
+                  Commission rate: {(salesStats.commissionRate * 100).toFixed(0)}% of paid invoices
+                </p>
               </div>
             )}
           </div>

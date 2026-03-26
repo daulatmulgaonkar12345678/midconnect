@@ -13112,6 +13112,9 @@ from routers.referral_router import init_referral_router
 referral_router = init_referral_router(db, verify_firebase_token)
 app.include_router(referral_router, prefix="/api")
 
+# Wire referral commission recorder into invoice router
+invoice_router_bt.referral_commission_recorder = referral_router.record_referral_commission
+
 
 # ── Quotation Router ──
 from routers.quotation_router import init_quotation_router

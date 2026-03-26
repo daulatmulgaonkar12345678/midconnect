@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Gift, Users, ChevronRight, Trophy, Copy, Check, Share2 } from 'lucide-react';
+import { Gift, Users, ChevronRight, Trophy, Copy, Check, Share2, IndianRupee } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export default function ReferralWidget({ token, onOpenModal }: { token: string | null; onOpenModal: () => void }) {
   const [stats, setStats] = useState<{ successfulReferrals: number; referralsToNextTier: number; nextTier: { label: string; min_referrals: number } | null; currentTier: { label: string } | null } | null>(null);
+  const [earnings, setEarnings] = useState(0);
   const [link, setLink] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -16,9 +17,11 @@ export default function ReferralWidget({ token, onOpenModal }: { token: string |
     Promise.all([
       fetch(`${API_URL}/api/referral/stats`, { headers: h }).then(r => r.ok ? r.json() : null),
       fetch(`${API_URL}/api/referral/my-link`, { headers: h }).then(r => r.ok ? r.json() : null),
-    ]).then(([s, l]) => {
+      fetch(`${API_URL}/api/referral/sales-stats`, { headers: h }).then(r => r.ok ? r.json() : null),
+    ]).then(([s, l, sales]) => {
       if (s) setStats(s);
       if (l) setLink(l.referralLink);
+      if (sales) setEarnings(sales.totalEarnings || 0);
     }).catch(() => {});
   }, [token]);
 
@@ -58,12 +61,19 @@ export default function ReferralWidget({ token, onOpenModal }: { token: string |
       </div>
 
       {/* Stats */}
-      <div className="flex items-center gap-4 mb-3">
+      <div className="flex items-center gap-4 mb-3 flex-wrap">
         <div className="flex items-center gap-1.5">
           <Users className="w-3.5 h-3.5 text-indigo-500" />
           <span className="text-sm font-semibold text-gray-800">{successful}</span>
           <span className="text-xs text-gray-500">referral{successful !== 1 ? 's' : ''}</span>
         </div>
+        {earnings > 0 && (
+          <div className="flex items-center gap-1" data-testid="referral-widget-earnings">
+            <IndianRupee className="w-3 h-3 text-emerald-600" />
+            <span className="text-sm font-semibold text-emerald-700">{earnings.toLocaleString('en-IN')}</span>
+            <span className="text-xs text-emerald-500">earned</span>
+          </div>
+        )}
         {stats?.currentTier && (
           <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
             <Trophy className="w-3 h-3" /> {stats.currentTier.label}

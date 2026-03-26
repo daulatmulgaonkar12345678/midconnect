@@ -1119,6 +1119,15 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
             "createdAt": now,
         })
 
+        # ── Referral commission: record when invoice becomes fully paid ──
+        if is_fully_paid and updated_inv:
+            referral_commission_recorder = getattr(router, 'referral_commission_recorder', None)
+            if referral_commission_recorder:
+                try:
+                    await referral_commission_recorder(updated_inv, seller_id)
+                except Exception as e:
+                    logger.warning(f"Referral commission recording failed: {e}")
+
         return {"message": "Payment recorded", "payment": serialize_doc(payment_doc)}
 
     @router.get("/invoices/{invoice_id}/payments")

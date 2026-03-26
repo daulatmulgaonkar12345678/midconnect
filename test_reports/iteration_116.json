@@ -1,0 +1,78 @@
+{
+  "summary": "Iteration 116: Hybrid Referral + Sales Tracking System Testing. All 18 tests passed (14 API tests + 4 commission recording tests). The new sales tracking module is fully functional with correct commission calculation (20%), fraud prevention, and backward compatibility with existing referral endpoints.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Backend-only testing as requested. Frontend components (ReferralModal.tsx, ReferralWidget.tsx) not tested."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_referral_sales_tracking.py",
+    "/app/backend/tests/test_sales_tracking.py",
+    "/app/test_reports/pytest/referral_sales_tracking_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ GET /api/referral/sales-stats returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings, commissionRate (0.20)",
+    "✓ GET /api/referral/sales-stats returns zeros when user has no referral code",
+    "✓ GET /api/referral/admin/sales-overview returns full data (totalReferredUsers, paidUsers, totalRevenue, totalCommission, partners list)",
+    "✓ GET /api/referral/admin/sales-overview returns 401/403 for non-admin users",
+    "✓ GET /api/referral/my-link works unchanged (backward compatible)",
+    "✓ GET /api/referral/stats works unchanged (backward compatible)",
+    "✓ POST /api/referral/track-signup rejects self-referral (same referralCode)",
+    "✓ POST /api/referral/track-signup rejects invalid referral codes (404)",
+    "✓ Commission recording: stores commission=20% of total, status=pending",
+    "✓ Commission recording: prevents duplicates (same invoiceId)",
+    "✓ Commission recording: skips zero-amount invoices",
+    "✓ Commission recording: skips non-referred users",
+    "✓ Invoice router wiring: invoice_router_bt.referral_commission_recorder = referral_router.record_referral_commission (server.py:13116)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_referral_sales_tracking.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 tests passed - 14 API + 4 commission recording)",
+    "frontend": "N/A - Backend-only testing requested"
+  },
+  "test_credentials": "dev-test-token (admin user 69a0ac1089b696c2337c5a6e)",
+  "seed_data_creation": "Commission recording tests create and cleanup test users/invoices automatically",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 116 tested the hybrid referral + sales tracking system. Key findings: (1) sales-stats endpoint returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings, commissionRate=0.20. (2) admin/sales-overview returns full data including totalRevenue, totalCommission, partners list with per-partner breakdown. (3) Backward compatibility maintained - my-link and stats endpoints work unchanged. (4) Fraud prevention works - self-referral rejected, same email/phone checks in place. (5) Commission recording function correctly calculates 20% commission, stores with status=pending, prevents duplicates, skips zero-amount invoices and non-referred users. (6) Invoice router correctly wired to call referral_commission_recorder when invoice becomes fully paid.",
+  "features_tested": [
+    "GET /api/referral/sales-stats returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings, commissionRate",
+    "GET /api/referral/sales-stats returns zeros when user has no referral code",
+    "GET /api/referral/admin/sales-overview returns full data for admin",
+    "GET /api/referral/admin/sales-overview returns 403 for non-admin users",
+    "GET /api/referral/my-link still works unchanged (backward compatibility)",
+    "GET /api/referral/stats still works unchanged (backward compatibility)",
+    "POST /api/referral/track-signup rejects self-referral",
+    "POST /api/referral/track-signup rejects invalid referral codes",
+    "Commission recording: stores commission=20% of total",
+    "Commission recording: status=pending on creation",
+    "Commission recording: prevents duplicates",
+    "Commission recording: skips zero-amount invoices",
+    "Commission recording: skips non-referred users"
+  ],
+  "api_endpoints_verified": {
+    "GET /api/health": "200 - API healthy",
+    "GET /api/referral/sales-stats": "200 - Returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings, commissionRate=0.20",
+    "GET /api/referral/admin/sales-overview": "200 - Returns totalReferredUsers, paidUsers, totalRevenue, totalCommission, partners list",
+    "GET /api/referral/admin/sales-overview (no auth)": "401/403 - Requires admin",
+    "GET /api/referral/my-link": "200 - Returns referralCode, referralLink, userId",
+    "GET /api/referral/stats": "200 - Returns referralCode, totalReferred, successfulReferrals, pendingReferrals, tiers",
+    "POST /api/referral/track-signup (self-referral)": "400 - Cannot refer yourself",
+    "POST /api/referral/track-signup (invalid code)": "404 - Invalid referral code"
+  },
+  "code_review_notes": {
+    "record_referral_commission": "Function at line 427-460 in referral_router.py correctly: (1) checks if seller was referred, (2) skips zero-amount invoices, (3) prevents duplicate commission records, (4) calculates 20% commission, (5) stores with status=pending",
+    "sales_stats_endpoint": "Function at line 465-514 correctly aggregates paid customers and earnings from referral_commissions collection",
+    "admin_sales_overview": "Function at line 516-577 correctly shows full revenue, commission, and per-partner breakdown for admin users",
+    "invoice_router_integration": "Line 1123-1129 in invoice_router.py correctly calls referral_commission_recorder when invoice becomes fully paid",
+    "server_wiring": "Line 13116 in server.py correctly wires invoice_router_bt.referral_commission_recorder = referral_router.record_referral_commission"
+  }
+}
