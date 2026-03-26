@@ -20,7 +20,8 @@ import {
   Store,
   Calculator,
   Ruler,
-  Beaker
+  Beaker,
+  Wallet
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -106,6 +107,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: '/admin/users', label: 'Users', icon: Users },
     { href: '/admin/gst-verification', label: 'GST Verification', icon: FileText },
     { href: '/admin/product-requests', label: 'Product Requests', icon: FileText },
+    { href: '/admin/payouts', label: 'Payouts', icon: Wallet },
     { href: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 

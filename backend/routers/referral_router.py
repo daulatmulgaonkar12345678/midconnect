@@ -57,6 +57,18 @@ class PlanConfigUpdate(BaseModel):
     commissionPercent: float = Field(..., ge=0, le=100)
 
 
+class MarkPayoutRequest(BaseModel):
+    orderId: str = Field(..., min_length=1)
+    payoutReference: Optional[str] = Field(None, max_length=200)
+    payoutMethod: Optional[str] = Field("manual")
+
+
+class BulkPayoutRequest(BaseModel):
+    orderIds: List[str] = Field(..., min_length=1)
+    payoutReference: Optional[str] = Field(None, max_length=200)
+    payoutMethod: Optional[str] = Field("manual")
+
+
 def init_referral_router(db, verify_token_func):
     router = APIRouter()
 
@@ -564,6 +576,7 @@ def init_referral_router(db, verify_token_func):
                 "commission": commission,
                 "commissionPercent": commission_pct,
                 "status": "paid",
+                "payoutStatus": "pending",
                 "createdAt": now,
             }
 
@@ -610,8 +623,8 @@ def init_referral_router(db, verify_token_func):
         # Primary: orders collection
         orders = await db.orders.find({"referredBy": ref_code}).to_list(10000)
         orders_total = sum(o.get("commission", 0) for o in orders)
-        orders_pending = sum(o.get("commission", 0) for o in orders if o.get("status") == "paid")
-        orders_paid_out = sum(o.get("commission", 0) for o in orders if o.get("status") == "paid_out")
+        orders_pending = sum(o.get("commission", 0) for o in orders if o.get("payoutStatus", "pending") == "pending")
+        orders_paid_out = sum(o.get("commission", 0) for o in orders if o.get("payoutStatus") == "paid")
         orders_customer_count = len(orders)
 
         # Fallback: legacy referral_commissions
@@ -647,7 +660,7 @@ def init_referral_router(db, verify_token_func):
     @router.get("/referral/admin/sales-overview")
     async def admin_sales_overview(authorization: str = Header(...)):
         """Admin-only: Full overview of referral sales system.
-        Shows revenue, commission, user details — everything."""
+        Shows revenue, commission, payout status, per-partner breakdown."""
         user = await get_current_user(authorization)
         if not user.get("isAdmin"):
             raise HTTPException(status_code=403, detail="Admin access required")
@@ -656,8 +669,8 @@ def init_referral_router(db, verify_token_func):
         all_orders = await db.orders.find({}).to_list(50000)
         orders_revenue = sum(o.get("amount", 0) for o in all_orders)
         orders_commission = sum(o.get("commission", 0) for o in all_orders)
-        orders_pending_commission = sum(o.get("commission", 0) for o in all_orders if o.get("status") == "paid")
-        orders_paid_out = sum(o.get("commission", 0) for o in all_orders if o.get("status") == "paid_out")
+        orders_pending_payout = sum(o.get("commission", 0) for o in all_orders if o.get("payoutStatus", "pending") == "pending")
+        orders_paid_out = sum(o.get("commission", 0) for o in all_orders if o.get("payoutStatus") == "paid")
 
         # Legacy: referral_commissions
         all_legacy = await db.referral_commissions.find({}).to_list(50000)
@@ -667,23 +680,28 @@ def init_referral_router(db, verify_token_func):
         total_revenue = round(orders_revenue + legacy_revenue, 2)
         total_commission = round(orders_commission + legacy_commission, 2)
 
-        # Per-partner breakdown (from orders)
+        # Per-partner breakdown (from orders) with payout tracking
         partner_map: dict = {}
         for o in all_orders:
             code = o.get("referredBy", "")
             if code not in partner_map:
-                partner_map[code] = {"code": code, "revenue": 0, "commission": 0, "sales": 0}
+                partner_map[code] = {"code": code, "revenue": 0, "commission": 0, "paidAmount": 0, "pendingAmount": 0, "sales": 0}
             partner_map[code]["revenue"] += o.get("amount", 0)
             partner_map[code]["commission"] += o.get("commission", 0)
             partner_map[code]["sales"] += 1
+            if o.get("payoutStatus") == "paid":
+                partner_map[code]["paidAmount"] += o.get("commission", 0)
+            else:
+                partner_map[code]["pendingAmount"] += o.get("commission", 0)
 
         # Merge legacy data into partner_map
         for c in all_legacy:
             code = c.get("referredBy", "")
             if code not in partner_map:
-                partner_map[code] = {"code": code, "revenue": 0, "commission": 0, "sales": 0}
+                partner_map[code] = {"code": code, "revenue": 0, "commission": 0, "paidAmount": 0, "pendingAmount": 0, "sales": 0}
             partner_map[code]["revenue"] += c.get("orderAmount", 0)
             partner_map[code]["commission"] += c.get("commission", 0)
+            partner_map[code]["pendingAmount"] += c.get("commission", 0)
             partner_map[code]["sales"] += 1
 
         # Enrich with partner names
@@ -703,6 +721,8 @@ def init_referral_router(db, verify_token_func):
                 "successfulReferred": partner_user.get("referralSuccessCount", 0) if partner_user else 0,
                 "revenue": round(pdata["revenue"], 2),
                 "commission": round(pdata["commission"], 2),
+                "paidAmount": round(pdata["paidAmount"], 2),
+                "pendingAmount": round(pdata["pendingAmount"], 2),
             })
         partners.sort(key=lambda x: x["revenue"], reverse=True)
 
@@ -715,8 +735,8 @@ def init_referral_router(db, verify_token_func):
             "paidUsers": total_paid_users_orders,
             "totalRevenue": total_revenue,
             "totalCommission": total_commission,
-            "pendingCommission": round(orders_pending_commission, 2),
-            "paidOutCommission": round(orders_paid_out, 2),
+            "pendingPayout": round(orders_pending_payout, 2),
+            "paidOutAmount": round(orders_paid_out, 2),
             "partners": partners,
         }
 
@@ -765,5 +785,203 @@ def init_referral_router(db, verify_token_func):
             "price": data.price,
             "commissionPercent": data.commissionPercent,
         }
+
+    # ── Admin Payout Management ──
+
+    @router.post("/referral/admin/mark-payout")
+    async def mark_payout(data: MarkPayoutRequest, authorization: str = Header(...)):
+        """Admin: mark a single order commission as paid."""
+        user = await get_current_user(authorization)
+        if not user.get("isAdmin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        try:
+            order_oid = ObjectId(data.orderId)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid orderId")
+
+        order = await db.orders.find_one({"_id": order_oid})
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if order.get("payoutStatus") == "paid":
+            raise HTTPException(status_code=400, detail="Order already paid out")
+
+        now = datetime.now(timezone.utc)
+        await db.orders.update_one(
+            {"_id": order_oid},
+            {"$set": {
+                "payoutStatus": "paid",
+                "payoutDate": now,
+                "payoutReference": data.payoutReference or "",
+                "payoutMethod": data.payoutMethod or "manual",
+                "paidByAdmin": str(user["_id"]),
+                "payoutUpdatedAt": now,
+            }}
+        )
+
+        logger.info(f"[PAYOUT] Admin marked order {data.orderId} as paid. Ref: {data.payoutReference}")
+        return {
+            "message": "Payout marked as paid",
+            "orderId": data.orderId,
+            "payoutStatus": "paid",
+            "payoutDate": now.isoformat(),
+            "payoutReference": data.payoutReference or "",
+        }
+
+    @router.post("/referral/admin/bulk-payout")
+    async def bulk_payout(data: BulkPayoutRequest, authorization: str = Header(...)):
+        """Admin: mark multiple orders as paid in one action."""
+        user = await get_current_user(authorization)
+        if not user.get("isAdmin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        now = datetime.now(timezone.utc)
+        batch_id = f"BATCH_{now.strftime('%Y%m%d_%H%M%S')}_{str(user['_id'])[-4:]}"
+
+        success_ids = []
+        skipped_ids = []
+
+        for oid_str in data.orderIds:
+            try:
+                order_oid = ObjectId(oid_str)
+                order = await db.orders.find_one({"_id": order_oid})
+                if not order:
+                    skipped_ids.append({"id": oid_str, "reason": "not found"})
+                    continue
+                if order.get("payoutStatus") == "paid":
+                    skipped_ids.append({"id": oid_str, "reason": "already paid"})
+                    continue
+
+                await db.orders.update_one(
+                    {"_id": order_oid},
+                    {"$set": {
+                        "payoutStatus": "paid",
+                        "payoutDate": now,
+                        "payoutReference": data.payoutReference or "",
+                        "payoutMethod": data.payoutMethod or "manual",
+                        "payoutBatchId": batch_id,
+                        "paidByAdmin": str(user["_id"]),
+                        "payoutUpdatedAt": now,
+                    }}
+                )
+                success_ids.append(oid_str)
+            except Exception:
+                skipped_ids.append({"id": oid_str, "reason": "invalid id"})
+
+        logger.info(f"[PAYOUT] Bulk payout: batch={batch_id}, paid={len(success_ids)}, skipped={len(skipped_ids)}")
+        return {
+            "message": f"Bulk payout complete: {len(success_ids)} paid, {len(skipped_ids)} skipped",
+            "batchId": batch_id,
+            "paidCount": len(success_ids),
+            "skippedCount": len(skipped_ids),
+            "paidOrderIds": success_ids,
+            "skipped": skipped_ids,
+        }
+
+    @router.get("/referral/admin/partner-orders/{referral_code}")
+    async def get_partner_orders(referral_code: str, authorization: str = Header(...)):
+        """Admin: view all orders for a specific referral partner."""
+        user = await get_current_user(authorization)
+        if not user.get("isAdmin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        orders = await db.orders.find({"referredBy": referral_code}).sort("createdAt", -1).to_list(10000)
+
+        # Enrich with user info
+        result = []
+        for o in orders:
+            uid = o.get("userId")
+            referred_user = await db.users.find_one({"_id": uid}, {"profile": 1, "email": 1})
+            name = ""
+            email = ""
+            if referred_user:
+                name = referred_user.get("profile", {}).get("businessName", "") or ""
+                email = referred_user.get("email", "")
+
+            result.append({
+                "orderId": str(o["_id"]),
+                "userId": str(uid),
+                "userName": name or email or "Unknown",
+                "plan": o.get("plan", ""),
+                "amount": o.get("amount", 0),
+                "commission": o.get("commission", 0),
+                "commissionPercent": o.get("commissionPercent", 0),
+                "payoutStatus": o.get("payoutStatus", "pending"),
+                "payoutDate": o.get("payoutDate").isoformat() if o.get("payoutDate") else None,
+                "payoutReference": o.get("payoutReference", ""),
+                "payoutMethod": o.get("payoutMethod", ""),
+                "payoutBatchId": o.get("payoutBatchId", ""),
+                "createdAt": o.get("createdAt").isoformat() if o.get("createdAt") else "",
+            })
+
+        # Partner info
+        partner = await db.users.find_one({"referralCode": referral_code}, {"profile": 1, "email": 1})
+        partner_name = ""
+        if partner:
+            partner_name = partner.get("profile", {}).get("businessName", "") or partner.get("email", "")
+
+        return {
+            "referralCode": referral_code,
+            "partnerName": partner_name,
+            "orders": result,
+            "totalOrders": len(result),
+            "totalCommission": round(sum(o["commission"] for o in result), 2),
+            "paidAmount": round(sum(o["commission"] for o in result if o["payoutStatus"] == "paid"), 2),
+            "pendingAmount": round(sum(o["commission"] for o in result if o["payoutStatus"] == "pending"), 2),
+        }
+
+    @router.get("/referral/admin/export-payouts")
+    async def export_payouts_csv(authorization: str = Header(...)):
+        """Admin: export all orders as CSV for accounting."""
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+
+        user = await get_current_user(authorization)
+        if not user.get("isAdmin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        all_orders = await db.orders.find({}).sort("createdAt", -1).to_list(50000)
+
+        # Build CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Order ID", "Referral Partner", "User ID", "User Name", "Plan",
+            "Amount", "Commission", "Commission %", "Payout Status",
+            "Payout Date", "Payout Reference", "Payout Method", "Batch ID", "Created At"
+        ])
+
+        for o in all_orders:
+            uid = o.get("userId")
+            referred_user = await db.users.find_one({"_id": uid}, {"profile": 1, "email": 1})
+            user_name = ""
+            if referred_user:
+                user_name = referred_user.get("profile", {}).get("businessName", "") or referred_user.get("email", "")
+
+            writer.writerow([
+                str(o["_id"]),
+                o.get("referredBy", ""),
+                str(uid) if uid else "",
+                user_name,
+                o.get("plan", ""),
+                o.get("amount", 0),
+                o.get("commission", 0),
+                o.get("commissionPercent", 0),
+                o.get("payoutStatus", "pending"),
+                o.get("payoutDate").isoformat() if o.get("payoutDate") else "",
+                o.get("payoutReference", ""),
+                o.get("payoutMethod", ""),
+                o.get("payoutBatchId", ""),
+                o.get("createdAt").isoformat() if o.get("createdAt") else "",
+            ])
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=payouts_export_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"}
+        )
 
     return router
