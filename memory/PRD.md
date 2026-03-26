@@ -131,14 +131,27 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Sections: Mission, What We Do (9 feature cards), Vision, Why Choose, Who Is It For, Join Us CTA
 40. **Hybrid Referral + Sales Tracking System (Mar 2026)**
     - **Sales tracking** runs parallel to existing referral rewards (no breaking changes)
-    - `record_referral_commission()`: Called when invoice becomes fully paid, stores 20% commission in `referral_commissions` collection
+    - `record_referral_commission()`: Called when invoice becomes fully paid, stores 20% commission in `referral_commissions` collection (LEGACY — kept for backward compat)
     - `GET /referral/sales-stats`: Returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings (user view — no revenue shown)
     - `GET /referral/admin/sales-overview`: Admin-only — full revenue, commission, per-partner breakdown
     - Commission: 20% default, stored per invoice, status=pending/paid_out, duplicate prevention
     - Fraud prevention: self-referral, same email, same phone
     - Frontend: Sales Performance section in ReferralModal (3 metric cards), earnings indicator in ReferralWidget
     - Backward compatible: existing referral links, tiers, stats all unchanged
-    - Tests: 18/18 passed (14 API + 4 commission recording)
+41. **Admin-Triggered Order Creation System (Mar 2026)**
+    - NEW `orders` collection: primary source of truth for sales tracking (parallel to legacy `referral_commissions`)
+    - NEW `plan_config` collection: admin-configurable pricing & commission (Starter=5000, Standard=10000, Pro=15000, all 20% commission)
+    - Hooked into `admin_activate_subscription` endpoint — auto-creates order when:
+      - Plan is paid (starter/standard/pro)
+      - User has `referredBy` field
+      - No existing order for this user (first activation only)
+    - User schema extended: `subscriptionStatus`, `subscriptionType`, `plan` set on activation
+    - Admin endpoints: `GET/PUT /referral/admin/plan-config` for dynamic pricing
+    - Visibility rules: Users see earnings only (no revenue/commission %); Admin sees everything
+    - Validation: trial/free plans ignored, renewals/upgrades ignored, duplicate prevention
+    - SubscriptionPlan enum + SubscriptionCreate model extended to accept starter/standard/pro
+    - SubscriptionEngine updated with new plan configs
+    - Tests: 14/14 passed (100%) — plan config CRUD, order creation, duplicate prevention, trial filtering, backward compat
 
 ## Prioritized Backlog
 ### P0 (Next)
@@ -155,8 +168,12 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 ## Key Files
 - `/app/backend/routers/automation_router.py` — Multi-target engine + data modes + preview + MATCH+UPDATE
 - `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, record validation, field-visibility endpoint
+- `/app/backend/routers/referral_router.py` — Referral rewards + Sales tracking + Orders + Plan Config
 - `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Multi-target Rule Builder UI with data modes
 - `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config
 - `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export + field visibility
+- `/app/frontend/src/components/ReferralModal.tsx` — Referral modal with Sales Performance section
+- `/app/frontend/src/components/ReferralWidget.tsx` — Referral widget with earnings display
+- `/app/backend/tests/test_referral_order_creation.py` — 14 order creation tests
 - `/app/backend/tests/test_e2e_full.py` — 6 E2E tests (MATCH+UPDATE + field visibility)
 - `/app/backend/tests/test_field_visibility_match_update.py` — 16 API tests
