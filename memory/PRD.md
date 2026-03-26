@@ -163,6 +163,21 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Paid orders locked (no re-payout allowed)
     - Dedicated Admin Payouts page (`/admin/payouts`): Summary cards, partner table, expandable order rows, single + bulk payout, date filters, search, CSV export
     - Tests: 21/21 passed (100%) — mark payout, double prevention, bulk payout, partner orders, CSV export, auth enforcement
+43. **Central Subscription Guard + SaaS Enforcement System (Mar 2026)**
+    - **Architecture**: `config/plan_features.py` (SSOT) + `middleware/subscription_guard.py` (enforcement)
+    - **Plan tiers**: free (3 panels/5 rules/no export), trial (5/20/export), starter (10/50/export), standard (25/100), pro (50/200), enterprise (unlimited)
+    - **Enforcement on ALL routes**: panels, automation, invoices, buyers, inventory, exports, PDFs
+    - **Expiry → read-only**: Expired users can view data but cannot write, export, or run automations
+    - **Feature gating**: Boolean features (export, automation, pdfExport) gated per plan
+    - **Resource limits**: Dynamic limits on panels, rules, invoices/month, employees — enforced backend-only
+    - **Admin bypass**: Platform admins get enterprise-level access (no restrictions)
+    - **Employee handling**: Uses company owner's subscription (via resolve_seller_id)
+    - **API**: `GET /api/subscription/status` — returns plan, features, isExpired, endDate
+    - **Frontend**: `SubscriptionContext` provider, `SubscriptionBanner` (upgrade prompt), `FeatureGate` (disable locked features), `LimitIndicator` (progress bars)
+    - **Error codes**: SUBSCRIPTION_EXPIRED, FEATURE_NOT_AVAILABLE, LIMIT_REACHED (all with upgradeUrl)
+    - **Logging**: All blocked actions logged with user ID, feature, and plan
+    - **Session control middleware**: `active_sessions` collection, device fingerprinting, plan-based device limits (prepared)
+    - Tests: 25/25 passed (100%) — expiry blocking, read-only mode, feature gating, resource limits, admin bypass, error structures
 
 ## Prioritized Backlog
 ### P0 (Next)
@@ -177,16 +192,19 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 - White-label toggle | WhatsApp Business API
 
 ## Key Files
-- `/app/backend/routers/automation_router.py` — Multi-target engine + data modes + preview + MATCH+UPDATE
-- `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, record validation, field-visibility endpoint
-- `/app/backend/routers/referral_router.py` — Referral rewards + Sales tracking + Orders + Plan Config + Payout Management
-- `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Multi-target Rule Builder UI with data modes
-- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config
-- `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export + field visibility
-- `/app/frontend/src/components/ReferralModal.tsx` — Referral modal with Sales Performance section
-- `/app/frontend/src/components/ReferralWidget.tsx` — Referral widget with earnings display
-- `/app/frontend/src/app/admin/payouts/page.tsx` — Admin Payout Management dashboard
+- `/app/backend/config/plan_features.py` — Plan tiers SSOT (limits, features, sessions)
+- `/app/backend/middleware/subscription_guard.py` — Central subscription enforcement (enforce_subscription, check_resource_limit, session control)
+- `/app/backend/routers/automation_router.py` — Multi-target engine + subscription guard
+- `/app/backend/routers/panel_router.py` — Panel CRUD + export + subscription guard
+- `/app/backend/routers/invoice_router.py` — Invoice CRUD + PDF export + subscription guard
+- `/app/backend/routers/business_tools_router.py` — Buyer/Employee CRUD + subscription guard
+- `/app/backend/routers/inventory_router.py` — Inventory CRUD + subscription guard
+- `/app/backend/routers/referral_router.py` — Referral rewards + Sales tracking + Orders + Plan Config + Payouts
+- `/app/frontend/src/context/SubscriptionContext.tsx` — Frontend subscription state
+- `/app/frontend/src/components/SubscriptionGates.tsx` — SubscriptionBanner, FeatureGate, LimitIndicator
+- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config (dynamic limits)
+- `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Automation rules
+- `/app/frontend/src/app/admin/payouts/page.tsx` — Admin Payout dashboard
+- `/app/backend/tests/test_subscription_guard_middleware.py` — 25 subscription guard tests
 - `/app/backend/tests/test_referral_order_creation.py` — 14 order creation tests
 - `/app/backend/tests/test_payout_management.py` — 21 payout management tests
-- `/app/backend/tests/test_e2e_full.py` — 6 E2E tests (MATCH+UPDATE + field visibility)
-- `/app/backend/tests/test_field_visibility_match_update.py` — 16 API tests
