@@ -170,8 +170,9 @@ export default function UsersPage() {
                       </td>
                       <td className="px-4 py-4">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${
+                          user.subscriptionPlan === 'enterprise' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' :
                           user.subscriptionPlan === 'pro' ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white' :
-                          user.subscriptionPlan === 'trial' ? 'bg-blue-100 text-blue-700' :
+                          user.subscriptionPlan === 'standard' ? 'bg-blue-100 text-blue-700' :
                           'bg-gray-100 text-gray-600'
                         }`}>
                           {user.subscriptionPlan === 'pro' && <Crown className="h-3 w-3" />}

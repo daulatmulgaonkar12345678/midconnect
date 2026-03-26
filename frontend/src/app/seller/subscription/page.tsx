@@ -172,8 +172,8 @@ export default function SellerSubscriptionPage() {
   const plan = subscription?.subscription.planName ?? 'free';
   const subscriptionStatus = subscription?.subscription.status ?? 'active';
   const isActive = subscription?.subscription.isActive ?? false;
-  const isPro = plan === 'pro' && isActive;
-  const isTrial = plan === 'trial' && isActive;
+  const isPro = (plan === 'pro' || plan === 'enterprise') && isActive;
+  const isStandard = plan === 'standard' && isActive;
   const isFree = plan === 'free' || !isActive;
   const isExpired = (subscriptionStatus as string) === 'expired';
   const isSuspended = (subscriptionStatus as string) === 'suspended';
@@ -264,7 +264,7 @@ export default function SellerSubscriptionPage() {
             style={{ 
               background: isPro 
                 ? `linear-gradient(135deg, ${colors.primary} 0%, #3B82F6 100%)` 
-                : isTrial 
+                : isStandard 
                   ? `linear-gradient(135deg, ${colors.accent.from} 0%, ${colors.accent.to} 100%)`
                   : 'linear-gradient(135deg, #475569 0%, #64748B 100%)'
             }}
@@ -279,9 +279,9 @@ export default function SellerSubscriptionPage() {
                     <span className="text-2xl font-bold">
                       {plan.charAt(0).toUpperCase() + plan.slice(1)} Plan
                     </span>
-                    {isTrial && (
-                      <span className="ml-3 px-3 py-1 bg-white/20 text-white text-sm rounded-full">
-                        90-Day Trial
+                    {isStandard && (
+                      <span className="ml-3 px-3 py-1 bg-white/20 text-white text-sm rounded-full flex items-center gap-1">
+                        <BadgeCheck className="h-4 w-4" /> Active
                       </span>
                     )}
                     {isPro && (
@@ -294,14 +294,14 @@ export default function SellerSubscriptionPage() {
                 <p className="text-white/90 text-sm md:text-base">
                   {isPro 
                     ? `Your premium benefits are active until ${new Date(subscription?.subscription.endDate || '').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`
-                    : isTrial
-                    ? `Enjoy unlimited access. Trial ends ${new Date(subscription?.subscription.endDate || '').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                    : isStandard
+                    ? `Your standard plan is active until ${new Date(subscription?.subscription.endDate || '').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`
                     : 'Limited to 5 buyer inquiry acceptances per month'}
                 </p>
               </div>
               
               {/* Days Remaining Badge */}
-              {(isPro || isTrial) && subscription?.subscription.daysRemaining !== undefined && (
+              {(isPro || isStandard) && subscription?.subscription.daysRemaining !== undefined && (
                 <div className="bg-white/20 backdrop-blur-sm rounded-xl px-6 py-4 text-white text-center min-w-[120px]">
                   <p className="text-3xl font-bold">{subscription.subscription.daysRemaining}</p>
                   <p className="text-sm opacity-90">days remaining</p>
@@ -386,7 +386,7 @@ export default function SellerSubscriptionPage() {
           )}
 
           {/* Pro/Trial Users: Unlimited Badge */}
-          {(isPro || isTrial) && (
+          {(isPro || isStandard) && (
             <div className="p-6 md:p-8 border-b border-gray-100" data-testid="unlimited-usage">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-xl" style={{ backgroundColor: '#DCFCE7' }}>
@@ -688,31 +688,30 @@ export default function SellerSubscriptionPage() {
           </div>
         </div>
 
-        {/* ============== TRIAL USER NOTICE ============== */}
-        {isTrial && (
+        {/* ============== STANDARD USER UPGRADE NOTICE ============== */}
+        {isStandard && (
           <div 
             className="rounded-2xl p-6 md:p-8 mb-8 border-2"
             style={{ backgroundColor: '#FEF3C7', borderColor: '#FCD34D' }}
-            data-testid="trial-notice"
+            data-testid="standard-notice"
           >
             <div className="flex flex-col md:flex-row md:items-center gap-6">
               <div className="p-4 rounded-2xl bg-white flex-shrink-0">
                 <Clock className="h-8 w-8" style={{ color: colors.warning }} />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Your Trial Period is Active</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Your Standard Plan is Active</h3>
                 <p className="text-gray-700">
-                  Enjoy unlimited access during your trial. <strong>Trial cannot be renewed</strong> — 
-                  upgrade to Pro before it expires to keep all your benefits.
+                  Upgrade to Pro for higher limits, advanced automation, and priority support.
                 </p>
               </div>
               <button 
                 className="px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200 hover:scale-[1.02] whitespace-nowrap"
                 style={{ backgroundColor: colors.primary }}
                 onClick={() => alert('Payment integration coming soon!')}
-                data-testid="trial-upgrade-btn"
+                data-testid="standard-upgrade-btn"
               >
-                Upgrade to Pro - ₹{999}/quarter
+                Upgrade to Pro
               </button>
             </div>
           </div>

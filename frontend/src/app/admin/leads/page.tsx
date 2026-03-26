@@ -283,7 +283,7 @@ export default function AdminLeadsPage() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                         inquiry.sellerSubscriptionPlan === 'pro' ? 'bg-blue-100 text-blue-800' :
-                        inquiry.sellerSubscriptionPlan === 'trial' ? 'bg-purple-100 text-purple-800' :
+                        inquiry.sellerSubscriptionPlan === 'standard' ? 'bg-purple-100 text-purple-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
                         {inquiry.sellerSubscriptionPlan || 'free'}

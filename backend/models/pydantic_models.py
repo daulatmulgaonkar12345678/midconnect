@@ -40,6 +40,7 @@ class AccountStatus(str, Enum):
 
 class SubscriptionPlan(str, Enum):
     FREE = "free"
+    STANDARD = "standard"
     PRO = "pro"
     ENTERPRISE = "enterprise"
 
@@ -47,7 +48,6 @@ class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     CANCELLED = "cancelled"
-    TRIAL = "trial"
 
 class ListingStatus(str, Enum):
     DRAFT = "draft"

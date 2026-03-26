@@ -3,8 +3,7 @@ ENTERPRISE SUBSCRIPTION SERVICE
 SSOT: subscriptions collection
 
 Business Rules:
-- Active pro/enterprise: Unlimited leads (enquiriesUsed does NOT increment)
-- Active trial: Defined limit (enquiriesUsed increments)
+- Active standard/pro/enterprise: Unlimited leads (enquiriesUsed does NOT increment)
 - Expired/cancelled/free: 5 leads per month (enquiriesUsed increments)
 - Monthly reset on first of each month via enquiriesResetAt
 
@@ -33,17 +32,17 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
     
     Flow:
     1. Query subscriptions collection for this user
-    2. If no subscription or status not active/trial → free
+    2. If no subscription or status not active → free
     3. If endDate < now → mark expired in DB, return free
-    4. If pro/enterprise → unlimited
+    4. If standard/pro/enterprise → unlimited
     5. Otherwise → use enquiryLimit from DB
     
     Returns:
         {
-            "plan": "free" | "trial" | "pro" | "enterprise",
+            "plan": "free" | "standard" | "pro" | "enterprise",
             "limit": int (-1 for unlimited),
             "isUnlimited": bool,
-            "status": "free" | "active" | "trial" | "expired" | "cancelled",
+            "status": "free" | "active" | "expired" | "cancelled",
             "subscriptionId": str | None,
             "endDate": datetime | None
         }
@@ -94,7 +93,7 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
             "endDate": None
         }
     
-    # For trial/pro/enterprise, check expiry
+    # For paid plans, check expiry
     if end_date:
         # Make timezone aware if needed
         if end_date.tzinfo is None:
@@ -118,8 +117,8 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
                 "endDate": end_date
             }
     
-    # Pro, Enterprise, Starter, Standard are unlimited inquiry plans
-    if plan in ["starter", "standard", "pro", "enterprise"]:
+    # Standard, Pro, Enterprise are unlimited inquiry plans
+    if plan in ["standard", "pro", "enterprise"]:
         return {
             "plan": plan,
             "limit": -1,
@@ -129,7 +128,7 @@ async def get_effective_subscription(db, user_id: ObjectId) -> Dict[str, Any]:
             "endDate": end_date
         }
     
-    # Trial has defined limit from DB (or default)
+    # Fallback for unknown plans
     limit = sub.get("enquiryLimit", FREE_MONTHLY_LIMIT)
     
     return {
@@ -368,8 +367,8 @@ async def get_subscription_status_for_seller(db, user_id: ObjectId) -> Dict[str,
         badge = "Pro Active"
     elif status == "active" and plan == "enterprise":
         badge = "Enterprise Active"
-    elif status == "active" and plan == "trial":
-        badge = f"Trial ({days_remaining} days left)" if days_remaining else "Trial"
+    elif status == "active" and plan == "standard":
+        badge = f"Standard Active ({days_remaining} days left)" if days_remaining else "Standard Active"
     elif status == "expired":
         badge = "Expired – Free Mode (5/month)"
     else:

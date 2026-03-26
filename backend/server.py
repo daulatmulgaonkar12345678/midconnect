@@ -502,10 +502,9 @@ class AccountStatus(str, Enum):
 class SubscriptionPlan(str, Enum):
     """Valid subscription plans - Single Source of Truth"""
     FREE = "free"
-    TRIAL = "trial"
-    STARTER = "starter"
     STANDARD = "standard"
     PRO = "pro"
+    ENTERPRISE = "enterprise"
 
 # ================== SUBSCRIPTION SYSTEM UTILITIES ==================
 # 
@@ -519,19 +518,23 @@ class SubscriptionPlan(str, Enum):
 SUBSCRIPTION_PLANS = {
     "free": {
         "name": "Free",
-        "inquiryLimit": 5,  # per month
+        "inquiryLimit": 5,
         "canExpire": False,
     },
-    "trial": {
-        "name": "Trial",
-        "inquiryLimit": -1,  # unlimited
-        "durationDays": 90,
+    "standard": {
+        "name": "Standard",
+        "inquiryLimit": -1,
         "canExpire": True,
     },
     "pro": {
         "name": "Pro",
-        "inquiryLimit": -1,  # unlimited
-        "priceQuarterly": 999,  # INR
+        "inquiryLimit": -1,
+        "priceQuarterly": 999,
+        "canExpire": True,
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "inquiryLimit": -1,
         "canExpire": True,
     }
 }
@@ -587,7 +590,7 @@ def get_subscription_status(subscription: dict) -> str:
         return "limited"
     
     # Trial or Pro - check if still valid
-    if plan in ["trial", "pro"]:
+    if plan in ["standard", "pro", "enterprise"]:
         if not end_date:
             return "expired"
         
@@ -3018,15 +3021,25 @@ async def get_current_user_profile(user: dict = Depends(require_auth)):
 
 @api_router.get("/subscription/status")
 async def get_subscription_status_api(user: dict = Depends(require_auth)):
-    """Get current user's subscription status, plan, and feature limits."""
-    from middleware.subscription_guard import get_user_subscription
-    sub_info = await get_user_subscription(db, user)
+    """Get current user's subscription status, plan, and feature limits (with overrides)."""
+    from config.plan_features import get_effective_limits
+    limits = await get_effective_limits(db, user)
+    plan = limits.pop("plan", "free")
+    is_expired = limits.pop("isExpired", False)
+    status = limits.pop("status", "free")
+
+    # Get endDate from sub doc
+    from utils.permissions import resolve_seller_id
+    seller_id = resolve_seller_id(user)
+    sub = await db.subscriptions.find_one({"userId": ObjectId(seller_id)})
+    end_date = sub.get("endDate") if sub else None
+
     return {
-        "plan": sub_info["plan"],
-        "status": sub_info["status"],
-        "isExpired": sub_info["isExpired"],
-        "features": sub_info["config"],
-        "endDate": sub_info["endDate"].isoformat() if sub_info["endDate"] else None,
+        "plan": plan,
+        "status": status,
+        "isExpired": is_expired,
+        "features": limits,
+        "endDate": end_date.isoformat() if end_date else None,
     }
 
 
@@ -9786,6 +9799,149 @@ async def admin_set_business_tool_access(
     return {"message": f"Business tool access set to '{level}'", "businessToolAccess": level}
 
 
+# === Admin: Subscription Override (Per-Seller Custom Limits) ===
+@api_router.post("/admin/subscription/override")
+async def admin_set_subscription_override(
+    body: dict,
+    admin: dict = Depends(require_admin)
+):
+    """
+    Set per-seller limit overrides on their subscription.
+    Overrides take priority over default PLAN_CONFIG limits.
+
+    Payload:
+        {
+            "userId": "...",
+            "overrides": {
+                "maxPanels": 30,
+                "maxRules": 150,
+                "export": true
+            }
+        }
+    """
+    from config.plan_features import PLAN_CONFIG
+
+    user_id = body.get("userId")
+    overrides = body.get("overrides")
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="userId is required")
+    if not overrides or not isinstance(overrides, dict):
+        raise HTTPException(status_code=400, detail="overrides must be a non-empty dict")
+
+    # Validate override keys — only allow known limit keys
+    allowed_keys = set()
+    for plan_conf in PLAN_CONFIG.values():
+        allowed_keys.update(plan_conf.keys())
+    allowed_keys.discard("label")
+
+    invalid_keys = set(overrides.keys()) - allowed_keys
+    if invalid_keys:
+        raise HTTPException(status_code=400, detail=f"Invalid override keys: {list(invalid_keys)}. Allowed: {sorted(allowed_keys)}")
+
+    # Validate types
+    for key, value in overrides.items():
+        sample = PLAN_CONFIG["free"].get(key)
+        if isinstance(sample, bool) and not isinstance(value, bool):
+            raise HTTPException(status_code=400, detail=f"Override '{key}' must be a boolean")
+        if isinstance(sample, int) and not isinstance(value, (int, float)):
+            raise HTTPException(status_code=400, detail=f"Override '{key}' must be a number")
+
+    try:
+        user_oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid userId")
+
+    # Verify user exists
+    user_doc = await db.users.find_one({"_id": user_oid})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    now = datetime.now(timezone.utc)
+
+    # Upsert subscription with overrides
+    result = await db.subscriptions.update_one(
+        {"userId": user_oid},
+        {"$set": {"overrides": overrides, "updatedAt": now}},
+    )
+
+    if result.matched_count == 0:
+        # No subscription exists yet — create one with free plan + overrides
+        await db.subscriptions.insert_one({
+            "userId": user_oid,
+            "planName": "free",
+            "status": "free",
+            "overrides": overrides,
+            "startDate": now,
+            "endDate": None,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+
+    # Log the admin action
+    await db.admin_audit_log.insert_one({
+        "action": "subscription_override",
+        "targetUserId": user_oid,
+        "adminId": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],
+        "overrides": overrides,
+        "timestamp": now,
+    })
+
+    logger.info(f"[ADMIN] Override set for user {user_id} by admin {admin.get('email')}: {overrides}")
+
+    return {
+        "message": "Subscription overrides applied",
+        "userId": user_id,
+        "overrides": overrides,
+    }
+
+
+@api_router.get("/admin/subscription/override/{user_id}")
+async def admin_get_subscription_override(
+    user_id: str,
+    admin: dict = Depends(require_admin)
+):
+    """Get current overrides for a user's subscription."""
+    try:
+        user_oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid userId")
+
+    sub = await db.subscriptions.find_one({"userId": user_oid})
+    if not sub:
+        return {"userId": user_id, "overrides": {}, "planName": "free"}
+
+    return {
+        "userId": user_id,
+        "overrides": sub.get("overrides", {}),
+        "planName": sub.get("planName", "free"),
+    }
+
+
+@api_router.delete("/admin/subscription/override/{user_id}")
+async def admin_clear_subscription_override(
+    user_id: str,
+    admin: dict = Depends(require_admin)
+):
+    """Clear all overrides for a user — revert to plan defaults."""
+    try:
+        user_oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid userId")
+
+    result = await db.subscriptions.update_one(
+        {"userId": user_oid},
+        {"$set": {"overrides": {}, "updatedAt": datetime.now(timezone.utc)}}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="No subscription found for user")
+
+    logger.info(f"[ADMIN] Overrides cleared for user {user_id} by admin {admin.get('email')}")
+    return {"message": "Overrides cleared", "userId": user_id}
+
+
+
 # === Admin Subscription Management ===
 # 
 # SINGLE SOURCE OF TRUTH: Subscription stored in users.subscription object
@@ -9795,8 +9951,8 @@ async def admin_set_business_tool_access(
 
 class SubscriptionUpdateNew(BaseModel):
     """Update seller subscription - Single Source of Truth schema"""
-    plan: str = Field(..., description="free, trial, or pro")
-    endDate: Optional[datetime] = Field(None, description="When subscription ends (required for trial/pro)")
+    plan: str = Field(..., description="free, standard, pro, or enterprise")
+    endDate: Optional[datetime] = Field(None, description="When subscription ends (required for paid plans)")
     note: Optional[str] = Field(None, max_length=500)
     
     model_config = {"populate_by_name": True}
@@ -9804,8 +9960,8 @@ class SubscriptionUpdateNew(BaseModel):
     @field_validator('plan')
     @classmethod
     def validate_plan(cls, v):
-        if v not in ["free", "trial", "pro"]:
-            raise ValueError("Plan must be: free, trial, or pro")
+        if v not in ["free", "standard", "pro", "enterprise"]:
+            raise ValueError("Plan must be: free, standard, pro, or enterprise")
         return v
 
 @api_router.patch("/admin/users/{user_id}/subscription")
@@ -10007,8 +10163,8 @@ class SubscriptionCreate(BaseModel):
     @field_validator('planName')
     @classmethod
     def validate_plan(cls, v):
-        if v not in ["free", "trial", "starter", "standard", "pro"]:
-            raise ValueError("Plan must be: free, trial, starter, standard, or pro")
+        if v not in ["free", "standard", "pro", "enterprise"]:
+            raise ValueError("Plan must be: free, standard, pro, or enterprise")
         return v
 
 class SubscriptionExtend(BaseModel):
@@ -10228,9 +10384,7 @@ async def admin_activate_subscription(
         # Determine duration
         if data.durationDays:
             duration_days = data.durationDays
-        elif data.planName == "trial":
-            duration_days = 90
-        elif data.planName in ("starter", "standard", "pro"):
+        elif data.planName in ("standard", "pro", "enterprise"):
             duration_days = 90
         else:
             duration_days = 0
@@ -10265,7 +10419,7 @@ async def admin_activate_subscription(
                 "subscriptionUpdatedAt": now,
                 "subscriptionUpdatedBy": str(admin["_id"]),
                 "subscriptionStatus": "active",
-                "subscriptionType": "paid" if data.planName in ("starter", "standard", "pro") else "trial" if data.planName == "trial" else "free",
+                "subscriptionType": "paid" if data.planName in ("standard", "pro", "enterprise") else "free",
                 "plan": data.planName,
             }}
         )

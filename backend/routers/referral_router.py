@@ -38,13 +38,13 @@ ACTIVATION_CRITERIA_NEEDED = 2  # Must meet 2 of 3
 DEFAULT_COMMISSION_RATE = 0.20  # 20%
 
 # Paid plan names — only these trigger order creation
-PAID_PLANS = {"starter", "standard", "pro"}
+PAID_PLANS = {"standard", "pro", "enterprise"}
 
 # Default plan pricing & commission (seeded to plan_config collection)
 DEFAULT_PLAN_CONFIG = {
-    "starter": {"price": 5000, "commissionPercent": 20},
     "standard": {"price": 10000, "commissionPercent": 20},
     "pro": {"price": 15000, "commissionPercent": 20},
+    "enterprise": {"price": 50000, "commissionPercent": 20},
 }
 
 
@@ -207,7 +207,7 @@ def init_referral_router(db, verify_token_func):
             new_end = current_end
 
         plan = sub.get("plan", "free")
-        if plan in ("free", "trial"):
+        if plan == "free":
             plan = "referral_premium"
 
         await db.users.update_one(

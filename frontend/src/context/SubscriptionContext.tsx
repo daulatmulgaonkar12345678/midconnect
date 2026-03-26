@@ -38,7 +38,7 @@ interface SubscriptionContextType {
 }
 
 const defaultFeatures: PlanFeatures = {
-  maxPanels: 3, maxRules: 5, maxInvoicesPerMonth: 10, maxEmployees: 0,
+  maxPanels: 3, maxRules: 10, maxInvoicesPerMonth: 10, maxEmployees: 0,
   export: false, pdfExport: false, automation: false, maxSessions: 1, label: 'Free',
 };
 

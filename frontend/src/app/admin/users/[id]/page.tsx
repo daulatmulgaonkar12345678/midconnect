@@ -133,7 +133,7 @@ export default function UserDetailPage() {
   
   // Form states
   const [activateForm, setActivateForm] = useState({
-    planName: 'pro' as 'free' | 'trial' | 'pro',
+    planName: 'pro' as 'free' | 'standard' | 'pro' | 'enterprise',
     startDate: new Date().toISOString().split('T')[0],
     durationDays: 90,
     notes: ''
@@ -616,13 +616,14 @@ export default function UserDetailPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
                     <select 
                       value={activateForm.planName}
-                      onChange={(e) => setActivateForm({ ...activateForm, planName: e.target.value as 'free' | 'trial' | 'pro' })}
+                      onChange={(e) => setActivateForm({ ...activateForm, planName: e.target.value as 'free' | 'standard' | 'pro' | 'enterprise' })}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
                       data-testid="plan-select"
                     >
                       <option value="free">Free (5 inquiries/month)</option>
-                      <option value="trial">Trial (90 days unlimited)</option>
-                      <option value="pro">Pro (Quarterly)</option>
+                      <option value="standard">Standard (90 days)</option>
+                      <option value="pro">Pro (90 days)</option>
+                      <option value="enterprise">Enterprise (365 days)</option>
                     </select>
                   </div>
                   

@@ -52,16 +52,16 @@ class ReportType(str, Enum):
 class SubscriptionStatus(str, Enum):
     """Valid subscription statuses"""
     FREE = "free"
-    TRIAL = "trial"
-    PRO = "pro"
+    ACTIVE = "active"
     EXPIRED = "expired"
     CANCELLED = "cancelled"
 
 class SubscriptionPlan(str, Enum):
     """Valid subscription plans"""
     FREE = "free"
-    TRIAL = "trial"
+    STANDARD = "standard"
     PRO = "pro"
+    ENTERPRISE = "enterprise"
 
 class AccountStatus(str, Enum):
     """Valid account statuses"""

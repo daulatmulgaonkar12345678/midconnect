@@ -575,7 +575,7 @@ export interface AdminStats {
 export interface SubscriptionDetails {
   _id: string;
   userId: string;
-  planName: 'free' | 'trial' | 'pro';
+  planName: 'free' | 'standard' | 'pro' | 'enterprise';
   durationDays: number;
   startDate: string;
   endDate: string | null;
@@ -589,7 +589,7 @@ export interface SubscriptionDetails {
 
 export interface SellerSubscriptionStatus {
   subscription: {
-    planName: 'free' | 'trial' | 'pro';
+    planName: 'free' | 'standard' | 'pro' | 'enterprise';
     status: 'active' | 'expired' | 'suspended';
     startDate: string | null;
     endDate: string | null;

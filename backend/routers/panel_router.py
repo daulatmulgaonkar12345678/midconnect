@@ -1410,7 +1410,25 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         level = user.get("businessToolAccess", "standard")
         if is_platform_admin(user):
             level = "advanced"
-        return {"level": level, "limits": {"maxPanels": MAX_PANELS_PER_BUSINESS, "maxFieldsPerPanel": MAX_FIELDS_PER_PANEL}}
+
+        from config.plan_features import get_effective_limits
+        limits = await get_effective_limits(db, user)
+        plan = limits.get("plan", "free")
+
+        return {
+            "level": level,
+            "plan": plan,
+            "limits": {
+                "maxPanels": limits.get("maxPanels", 3),
+                "maxRules": limits.get("maxRules", 10),
+                "maxInvoicesPerMonth": limits.get("maxInvoicesPerMonth", 10),
+                "maxEmployees": limits.get("maxEmployees", 0),
+                "maxFieldsPerPanel": MAX_FIELDS_PER_PANEL,
+                "export": limits.get("export", False),
+                "pdfExport": limits.get("pdfExport", False),
+                "automation": limits.get("automation", False),
+            },
+        }
 
     # ── PANEL ACTIVITY LOGS ──
     @router.get("/panels/{panel_id}/activity-logs")

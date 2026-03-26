@@ -132,6 +132,7 @@ export default function PanelsPage() {
       if (accessRes.ok) {
         const data = await accessRes.json();
         setAccessLevel(data.level);
+        if (data.limits?.maxPanels !== undefined) setMaxPanels(data.limits.maxPanels);
       }
       if (targetsRes.ok) {
         const data = await targetsRes.json();

@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 import hashlib
 import logging
 
-from config.plan_features import PLAN_FEATURES, FEATURE_MAP, get_plan_config
+from config.plan_features import PLAN_CONFIG, FEATURE_MAP, get_effective_limits
 
 logger = logging.getLogger(__name__)
 
@@ -42,27 +42,30 @@ async def get_user_subscription(db, user: dict) -> dict:
             "plan": "enterprise",
             "status": "active",
             "isExpired": False,
-            "config": PLAN_FEATURES["enterprise"],
+            "config": PLAN_CONFIG["enterprise"],
             "endDate": None,
             "subscriptionId": None,
         }
 
+    # Use get_effective_limits for the core logic
+    limits = await get_effective_limits(db, user)
+    plan = limits.pop("plan", "free")
+    is_expired = limits.pop("isExpired", False)
+    status = limits.pop("status", "free")
+
+    # Get endDate from subscription doc
     seller_id = resolve_seller_id(user)
-
-    from services.subscription_service import get_effective_subscription
-    sub = await get_effective_subscription(db, ObjectId(seller_id))
-
-    plan = sub.get("plan", "free")
-    status = sub.get("status", "free")
-    is_expired = status in ("expired", "cancelled", "suspended")
+    if isinstance(seller_id, str):
+        seller_id = ObjectId(seller_id)
+    sub = await db.subscriptions.find_one({"userId": seller_id})
 
     return {
         "plan": plan,
         "status": status,
         "isExpired": is_expired,
-        "config": get_plan_config(plan if not is_expired else "free"),
-        "endDate": sub.get("endDate"),
-        "subscriptionId": sub.get("subscriptionId"),
+        "config": limits,
+        "endDate": sub.get("endDate") if sub else None,
+        "subscriptionId": str(sub["_id"]) if sub else None,
     }
 
 
@@ -71,15 +74,9 @@ async def enforce_subscription(db, user: dict, feature: str = None, write_operat
     Central subscription enforcement. Call in any route handler.
 
     Rules:
-    - Expired + write operation → BLOCKED (read-only mode)
-    - Feature not in plan → BLOCKED
-    - Otherwise → ALLOWED
-
-    Args:
-        db: MongoDB database
-        user: Authenticated user dict
-        feature: Feature key from FEATURE_MAP (e.g., "create_panel", "export_excel")
-        write_operation: True for POST/PUT/DELETE, False for GET
+    - Expired + write operation -> BLOCKED (read-only mode)
+    - Feature not in plan -> BLOCKED
+    - Otherwise -> ALLOWED
 
     Returns:
         Subscription info dict if allowed
@@ -89,7 +86,7 @@ async def enforce_subscription(db, user: dict, feature: str = None, write_operat
     """
     sub_info = await get_user_subscription(db, user)
 
-    # RULE 1: Expired + write → BLOCKED
+    # RULE 1: Expired + write -> BLOCKED
     if sub_info["isExpired"] and write_operation:
         logger.warning(f"[SUB_GUARD] BLOCKED expired user {user.get('_id')} write op. feature={feature}")
         raise HTTPException(
@@ -118,7 +115,7 @@ async def enforce_subscription(db, user: dict, feature: str = None, write_operat
                     status_code=403,
                     detail={
                         "error": "FEATURE_NOT_AVAILABLE",
-                        "message": f"This feature is not available on your {sub_info['config'].get('label', sub_info['plan'])} plan. Please upgrade.",
+                        "message": f"This feature is not available on your {config.get('label', sub_info['plan'])} plan. Please upgrade.",
                         "feature": feature,
                         "currentPlan": sub_info["plan"],
                         "upgradeUrl": "/seller/subscription",
@@ -132,12 +129,6 @@ async def check_resource_limit(db, user: dict, feature: str, current_count: int)
     """
     Check if user can create more of a resource (panels, rules, invoices).
     Calls enforce_subscription first, then checks numeric limit.
-
-    Args:
-        db: MongoDB database
-        user: Authenticated user dict
-        feature: Feature key (e.g., "create_panel")
-        current_count: Current resource count for this user
 
     Returns:
         Subscription info dict
@@ -183,17 +174,6 @@ async def check_resource_limit(db, user: dict, feature: str, current_count: int)
 async def enforce_session_limit(db, user: dict, device_fingerprint: str) -> None:
     """
     Track and enforce device/session limits.
-
-    Logic:
-    1. Upsert current device session
-    2. Count active sessions (active in last 30 min)
-    3. If count > plan limit, invalidate oldest sessions
-    4. If THIS session was invalidated, block access
-
-    Args:
-        db: MongoDB database
-        user: Authenticated user dict
-        device_fingerprint: Hash of user-agent or device info
     """
     from utils.permissions import is_platform_admin
 
@@ -233,7 +213,6 @@ async def enforce_session_limit(db, user: dict, device_fingerprint: str) -> None
     ).sort("lastActive", -1).to_list(max_sessions + 5)
 
     if len(active_sessions) > max_sessions:
-        # Keep newest max_sessions, invalidate the rest
         to_keep = {str(s["_id"]) for s in active_sessions[:max_sessions]}
         to_invalidate = [s["_id"] for s in active_sessions if str(s["_id"]) not in to_keep]
 

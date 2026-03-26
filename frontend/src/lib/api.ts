@@ -1316,7 +1316,7 @@ export const activateSubscription = (
   token: string,
   userId: string,
   data: {
-    planName: 'free' | 'trial' | 'pro';
+    planName: 'free' | 'standard' | 'pro' | 'enterprise';
     startDate: string;
     durationDays?: number;
     notes?: string;

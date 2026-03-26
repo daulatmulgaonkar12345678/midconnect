@@ -234,7 +234,7 @@ export default function SellerPerformancePage() {
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                   leadStats.leadStats.plan === 'enterprise' ? 'bg-purple-100 text-purple-700' :
                   leadStats.leadStats.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
-                  leadStats.leadStats.plan === 'trial' ? 'bg-yellow-100 text-yellow-700' :
+                  leadStats.leadStats.plan === 'standard' ? 'bg-yellow-100 text-yellow-700' :
                   'bg-gray-100 text-gray-700'
                 }`}>
                   {leadStats.leadStats.plan.charAt(0).toUpperCase() + leadStats.leadStats.plan.slice(1)} Plan

@@ -11,18 +11,20 @@ Features:
 - Extension logic (extends existing subscription)
 - No duplicate subscriptions
 - Audit trail via subscriptionHistory
+- Per-seller overrides support
 
 Schema:
 {
     "_id": ObjectId,
     "userId": ObjectId,
-    "planName": "free" | "trial" | "pro" | "enterprise",
+    "planName": "free" | "standard" | "pro" | "enterprise",
     "status": "active" | "expired" | "suspended",
     "startDate": ISODate,
     "endDate": ISODate | null,
     "activationSource": "admin" | "payment" | "system",
     "paymentId": string | null,
     "activatedBy": ObjectId | null,
+    "overrides": dict | null,
     "enquiryLimit": int,
     "enquiriesUsed": int,
     "enquiriesResetAt": ISODate,
@@ -45,28 +47,18 @@ PLAN_CONFIG = {
         "default_duration_days": 0,
         "subscription_weight": 0
     },
-    "trial": {
-        "enquiry_limit": -1,  # Unlimited during trial
-        "default_duration_days": 14,
-        "subscription_weight": 5
-    },
-    "starter": {
-        "enquiry_limit": -1,  # Unlimited
-        "default_duration_days": 30,
-        "subscription_weight": 10
-    },
     "standard": {
-        "enquiry_limit": -1,  # Unlimited
+        "enquiry_limit": -1,
         "default_duration_days": 90,
         "subscription_weight": 12
     },
     "pro": {
-        "enquiry_limit": -1,  # Unlimited
+        "enquiry_limit": -1,
         "default_duration_days": 90,
         "subscription_weight": 15
     },
     "enterprise": {
-        "enquiry_limit": -1,  # Unlimited
+        "enquiry_limit": -1,
         "default_duration_days": 365,
         "subscription_weight": 25
     }
@@ -120,10 +112,10 @@ class SubscriptionEngine:
         
         now = datetime.now(timezone.utc)
         
-        # Find subscription with active/trial status
+        # Find subscription with active status
         sub = await self.db.subscriptions.find_one({
             "userId": user_id,
-            "status": {"$in": ["active", "trial"]}
+            "status": {"$in": ["active"]}
         })
         
         if not sub:
@@ -139,7 +131,7 @@ class SubscriptionEngine:
             if end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=timezone.utc)
             
-            if end_date < now and sub.get("status") in ["active", "trial"]:
+            if end_date < now and sub.get("status") in ["active"]:
                 # Mark as expired
                 await self.db.subscriptions.update_one(
                     {"_id": sub["_id"]},
@@ -152,7 +144,7 @@ class SubscriptionEngine:
     async def activate_or_extend(
         self,
         user_id: ObjectId,
-        plan_name: Literal["free", "trial", "starter", "standard", "pro", "enterprise"],
+        plan_name: Literal["free", "standard", "pro", "enterprise"],
         duration_days: Optional[int] = None,
         source: Literal["admin", "payment", "system"] = "admin",
         payment_id: Optional[str] = None,
@@ -455,7 +447,7 @@ class SubscriptionEngine:
         cursor = self.db.subscriptions.find(
             {
                 "userId": {"$in": oids},
-                "status": {"$in": ["active", "trial"]}
+                "status": {"$in": ["active"]}
             },
             {"userId": 1, "planName": 1, "status": 1, "endDate": 1}
         )
