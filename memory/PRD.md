@@ -123,6 +123,12 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - Returns 403 when downloadEnabled=false, 404 for invalid panel/record
     - UI: Download button per record row (emerald green), also in view modal
     - PDF includes: company name, panel name, record date, all field values (resolved relations), generation timestamp
+39. **Pricing & About Page Rewrite (Mar 2026)**
+    - Pricing: 4-tier layout (Starter Free / Standard ₹10K / Pro ₹15K / Enterprise Custom) with founding member 50% offer
+    - Pro plan highlights system features: MATCH+UPDATE, cross-panel linking, PDF download, field visibility, data modes
+    - Standard plan lists: inventory, employee, buyer/supplier, invoices, POs, WhatsApp, Excel/PDF exports
+    - About: Repositioned as SaaS + Automation platform (not just marketplace)
+    - Sections: Mission, What We Do (9 feature cards), Vision, Why Choose, Who Is It For, Join Us CTA
 
 ## Prioritized Backlog
 ### P0 (Next)
