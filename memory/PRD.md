@@ -152,6 +152,17 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
     - SubscriptionPlan enum + SubscriptionCreate model extended to accept starter/standard/pro
     - SubscriptionEngine updated with new plan configs
     - Tests: 14/14 passed (100%) — plan config CRUD, order creation, duplicate prevention, trial filtering, backward compat
+42. **Admin Payout Management Module (Mar 2026)**
+    - Orders schema extended: `payoutStatus` (pending/paid), `payoutDate`, `payoutReference`, `payoutMethod` (bank/upi/manual), `paidByAdmin`, `payoutBatchId`
+    - `POST /referral/admin/mark-payout`: Single order payout with UTR/reference tracking, double-payout prevention
+    - `POST /referral/admin/bulk-payout`: Mark multiple orders as paid in one action with auto-generated batch ID
+    - `GET /referral/admin/partner-orders/{code}`: Per-partner order details with payout status
+    - `GET /referral/admin/export-payouts`: CSV export of all orders with payout fields for accounting
+    - Sales overview updated with per-partner paid/pending breakdown
+    - Sales stats updated to use payoutStatus for partner earnings view
+    - Paid orders locked (no re-payout allowed)
+    - Dedicated Admin Payouts page (`/admin/payouts`): Summary cards, partner table, expandable order rows, single + bulk payout, date filters, search, CSV export
+    - Tests: 21/21 passed (100%) — mark payout, double prevention, bulk payout, partner orders, CSV export, auth enforcement
 
 ## Prioritized Backlog
 ### P0 (Next)
@@ -168,12 +179,14 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 ## Key Files
 - `/app/backend/routers/automation_router.py` — Multi-target engine + data modes + preview + MATCH+UPDATE
 - `/app/backend/routers/panel_router.py` — Panel CRUD, module-fields API, record validation, field-visibility endpoint
-- `/app/backend/routers/referral_router.py` — Referral rewards + Sales tracking + Orders + Plan Config
+- `/app/backend/routers/referral_router.py` — Referral rewards + Sales tracking + Orders + Plan Config + Payout Management
 - `/app/frontend/src/app/seller/business-tools/automation/page.tsx` — Multi-target Rule Builder UI with data modes
 - `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config
 - `/app/frontend/src/app/seller/business-tools/panels/[panelId]/page.tsx` — Records + export + field visibility
 - `/app/frontend/src/components/ReferralModal.tsx` — Referral modal with Sales Performance section
 - `/app/frontend/src/components/ReferralWidget.tsx` — Referral widget with earnings display
+- `/app/frontend/src/app/admin/payouts/page.tsx` — Admin Payout Management dashboard
 - `/app/backend/tests/test_referral_order_creation.py` — 14 order creation tests
+- `/app/backend/tests/test_payout_management.py` — 21 payout management tests
 - `/app/backend/tests/test_e2e_full.py` — 6 E2E tests (MATCH+UPDATE + field visibility)
 - `/app/backend/tests/test_field_visibility_match_update.py` — 16 API tests
