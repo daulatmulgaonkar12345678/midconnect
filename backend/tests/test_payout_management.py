@@ -31,7 +31,7 @@ from pymongo import MongoClient
 # Get BASE_URL from environment
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://udyog-monetize.preview.emergentagent.com"
+    BASE_URL = "https://plan-limits-5.preview.emergentagent.com"
 
 # MongoDB connection for direct data manipulation
 MONGO_URL = "mongodb://localhost:27017"

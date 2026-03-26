@@ -53,7 +53,7 @@
   
   "test_credentials": {
     "auth_token": "dev-test-token",
-    "api_url": "https://udyog-monetize.preview.emergentagent.com"
+    "api_url": "https://plan-limits-5.preview.emergentagent.com"
   },
   
   "seed_data_creation": "Created test product 'TEST_NoSpecTemplate_Product' (ID: 699d629108ac3c22bb591667) in category TEST_DI_Cat1 which has no spec template",

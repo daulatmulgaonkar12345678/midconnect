@@ -18,7 +18,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://udyog-monetize.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://plan-limits-5.preview.emergentagent.com')
 DEV_TOKEN = "dev-test-token"
 
 class TestHealthAndAccess:

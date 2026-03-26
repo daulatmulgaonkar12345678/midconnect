@@ -26,7 +26,7 @@ from bson import ObjectId
 from datetime import datetime, timezone
 
 # Configuration
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://udyog-monetize.preview.emergentagent.com/api').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://plan-limits-5.preview.emergentagent.com/api').rstrip('/')
 DEV_TOKEN = "dev-test-token"
 VALID_CATEGORY_ID = "6981a9a74108b0cbd93aa630"  # Electrical Equipment
 PRODUCT_SLUG = "three-phase-ac-motor"

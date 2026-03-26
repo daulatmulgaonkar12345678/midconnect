@@ -19,7 +19,7 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from pymongo import MongoClient
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://udyog-monetize.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://plan-limits-5.preview.emergentagent.com').rstrip('/')
 
 # Test fixtures prefix
 TEST_PREFIX = "TEST_ANALYTICS_INTEGRATION_"
