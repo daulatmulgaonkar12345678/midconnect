@@ -3,7 +3,7 @@ REFERRAL SYSTEM ROUTER
 ======================
 Dual system:
 1. Referral rewards → for engagement (existing tiers, activation-based)
-2. Sales tracking → for monetization (commission on paid invoices)
+2. Sales tracking → for monetization (commission on admin-activated paid subscriptions)
 
 Endpoints:
 - GET  /referral/my-link           → Get/generate referral code & link
@@ -12,11 +12,13 @@ Endpoints:
 - POST /referral/track-signup      → Link a new user to their referrer
 - POST /referral/check-activation  → Check if referred user completed activation criteria
 - GET  /referral/admin/sales-overview → Admin: full revenue, commission, user details
+- GET  /referral/admin/plan-config → Admin: get plan pricing config
+- PUT  /referral/admin/plan-config → Admin: update plan pricing config
 """
 
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import random
@@ -35,9 +37,24 @@ ACTIVATION_WINDOW_DAYS = 7
 ACTIVATION_CRITERIA_NEEDED = 2  # Must meet 2 of 3
 DEFAULT_COMMISSION_RATE = 0.20  # 20%
 
+# Paid plan names — only these trigger order creation
+PAID_PLANS = {"starter", "standard", "pro"}
+
+# Default plan pricing & commission (seeded to plan_config collection)
+DEFAULT_PLAN_CONFIG = {
+    "starter": {"price": 5000, "commissionPercent": 20},
+    "standard": {"price": 10000, "commissionPercent": 20},
+    "pro": {"price": 15000, "commissionPercent": 20},
+}
+
 
 class TrackSignupRequest(BaseModel):
     referralCode: str = Field(..., min_length=3, max_length=20)
+
+
+class PlanConfigUpdate(BaseModel):
+    price: int = Field(..., ge=0)
+    commissionPercent: float = Field(..., ge=0, le=100)
 
 
 def init_referral_router(db, verify_token_func):
@@ -421,24 +438,63 @@ def init_referral_router(db, verify_token_func):
         }
 
     # ══════════════════════════════════════════════════════
-    # SALES TRACKING SYSTEM (New — runs parallel to referral rewards)
+    # SALES TRACKING SYSTEM (Dual: orders + legacy referral_commissions)
     # ══════════════════════════════════════════════════════
+
+    # ── Plan Config Management ──
+
+    async def _seed_plan_config():
+        """Seed default plan_config if collection is empty."""
+        count = await db.plan_config.count_documents({})
+        if count == 0:
+            now = datetime.now(timezone.utc)
+            for plan_name, config in DEFAULT_PLAN_CONFIG.items():
+                await db.plan_config.insert_one({
+                    "plan": plan_name,
+                    "price": config["price"],
+                    "commissionPercent": config["commissionPercent"],
+                    "createdAt": now,
+                    "updatedAt": now,
+                })
+            logger.info("Seeded default plan_config collection")
+
+    async def _get_plan_config(plan_name: str) -> dict:
+        """Fetch plan pricing from plan_config collection."""
+        config = await db.plan_config.find_one({"plan": plan_name}, {"_id": 0})
+        if not config:
+            fallback = DEFAULT_PLAN_CONFIG.get(plan_name)
+            if fallback:
+                return fallback
+            return None
+        return config
+
+    # Seed on router init
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_seed_plan_config())
+        else:
+            loop.run_until_complete(_seed_plan_config())
+    except RuntimeError:
+        pass
+
+    # ── Legacy: Invoice-based commission (kept for backward compat) ──
 
     async def record_referral_commission(invoice_doc: dict, seller_id: str):
         """Called when an invoice becomes fully paid. Records commission if seller was referred.
-        This is the ONLY place commission is calculated and stored — never dynamically."""
+        LEGACY system — kept for backward compatibility. New orders use orders collection."""
         try:
             seller = await db.users.find_one({"_id": ObjectId(seller_id)}, {"referredBy": 1})
             if not seller or not seller.get("referredBy"):
-                return  # Not a referred user
+                return
 
             ref_code = seller["referredBy"]
             invoice_id = invoice_doc.get("_id")
             total = invoice_doc.get("total", 0)
             if total <= 0:
-                return  # Skip zero-amount invoices
+                return
 
-            # Check duplicate — don't record commission twice for same invoice
             existing = await db.referral_commissions.find_one({"invoiceId": invoice_id})
             if existing:
                 return
@@ -452,21 +508,95 @@ def init_referral_router(db, verify_token_func):
                 "orderAmount": round(total, 2),
                 "commissionRate": DEFAULT_COMMISSION_RATE,
                 "commission": commission,
-                "status": "pending",  # pending | paid_out
+                "status": "pending",
                 "createdAt": datetime.now(timezone.utc),
             })
-            logger.info(f"Referral commission recorded: invoice={invoice_id}, seller={seller_id}, refCode={ref_code}, amount={total}, commission={commission}")
+            logger.info(f"[LEGACY] Referral commission recorded: invoice={invoice_id}")
         except Exception as e:
             logger.warning(f"Failed to record referral commission: {e}")
 
-    # Expose for invoice_router to call
     router.record_referral_commission = record_referral_commission
+
+    # ── NEW: Order creation on admin subscription activation ──
+
+    async def create_order_on_activation(user_id: str, plan_name: str):
+        """Called after admin activates a PAID subscription.
+        Creates an order record if all conditions are met:
+        1. Plan is paid (starter/standard/pro)
+        2. User has referredBy
+        3. No existing order for this user (first activation only)
+        """
+        try:
+            if plan_name not in PAID_PLANS:
+                return None
+
+            user = await db.users.find_one({"_id": ObjectId(user_id)})
+            if not user:
+                return None
+
+            ref_code = user.get("referredBy")
+            if not ref_code:
+                return None
+
+            # Duplicate prevention: one order per user
+            existing_order = await db.orders.find_one({"userId": ObjectId(user_id)})
+            if existing_order:
+                logger.info(f"[ORDERS] Skipped duplicate order for user {user_id}")
+                return None
+
+            # Fetch dynamic pricing from plan_config
+            config = await _get_plan_config(plan_name)
+            if not config:
+                logger.warning(f"[ORDERS] No plan_config for plan: {plan_name}")
+                return None
+
+            amount = config["price"]
+            commission_pct = config["commissionPercent"]
+            commission = round(amount * commission_pct / 100, 2)
+
+            now = datetime.now(timezone.utc)
+
+            order_doc = {
+                "userId": ObjectId(user_id),
+                "referredBy": ref_code,
+                "plan": plan_name,
+                "amount": amount,
+                "commission": commission,
+                "commissionPercent": commission_pct,
+                "status": "paid",
+                "createdAt": now,
+            }
+
+            result = await db.orders.insert_one(order_doc)
+
+            # Update user subscription fields
+            await db.users.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {
+                    "subscriptionStatus": "active",
+                    "subscriptionType": "paid",
+                    "plan": plan_name,
+                    "updatedAt": now,
+                }}
+            )
+
+            logger.info(f"[ORDERS] Created order: user={user_id}, plan={plan_name}, amount={amount}, commission={commission}, referredBy={ref_code}")
+            return str(result.inserted_id)
+
+        except Exception as e:
+            logger.error(f"[ORDERS] Failed to create order: {e}")
+            return None
+
+    # Expose for server.py to call
+    router.create_order_on_activation = create_order_on_activation
+
+    # ── Sales Stats (User view — reads from orders, fallback to referral_commissions) ──
 
     @router.get("/referral/sales-stats")
     async def get_sales_stats(authorization: str = Header(...)):
         """Get sales tracking metrics for the referral agent (user view).
         Shows: paid customers count, total earnings, pending earnings.
-        Does NOT show total revenue (admin only)."""
+        Does NOT show total revenue or commission % (admin only)."""
         user = await get_current_user(authorization)
         ref_code = user.get("referralCode")
         if not ref_code:
@@ -475,43 +605,44 @@ def init_referral_router(db, verify_token_func):
                 "totalEarnings": 0,
                 "pendingEarnings": 0,
                 "paidOutEarnings": 0,
-                "commissionRate": DEFAULT_COMMISSION_RATE,
             }
 
-        # Paid customers: referred users who have at least 1 paid invoice
-        referred_users = await db.users.find(
-            {"referredBy": ref_code},
-            {"_id": 1}
-        ).to_list(1000)
-        referred_ids = [u["_id"] for u in referred_users]
+        # Primary: orders collection
+        orders = await db.orders.find({"referredBy": ref_code}).to_list(10000)
+        orders_total = sum(o.get("commission", 0) for o in orders)
+        orders_pending = sum(o.get("commission", 0) for o in orders if o.get("status") == "paid")
+        orders_paid_out = sum(o.get("commission", 0) for o in orders if o.get("status") == "paid_out")
+        orders_customer_count = len(orders)
 
-        paid_customer_count = 0
-        if referred_ids:
-            # Count sellers with at least 1 fully paid invoice
-            pipeline = [
-                {"$match": {"sellerId": {"$in": referred_ids}, "status": "paid", "total": {"$gt": 0}}},
-                {"$group": {"_id": "$sellerId"}},
-                {"$count": "total"}
-            ]
-            result = await db.invoices.aggregate(pipeline).to_list(1)
-            paid_customer_count = result[0]["total"] if result else 0
+        # Fallback: legacy referral_commissions
+        legacy = await db.referral_commissions.find({"referredBy": ref_code}).to_list(10000)
+        legacy_total = sum(c.get("commission", 0) for c in legacy)
+        legacy_pending = sum(c.get("commission", 0) for c in legacy if c.get("status") == "pending")
+        legacy_paid_out = sum(c.get("commission", 0) for c in legacy if c.get("status") == "paid_out")
 
-        # Earnings from referral_commissions
-        commissions = await db.referral_commissions.find(
-            {"referredBy": ref_code}
-        ).to_list(10000)
+        # Unique paid customers from legacy (unique sellerIds)
+        legacy_seller_ids = set()
+        for c in legacy:
+            sid = c.get("sellerId")
+            if sid:
+                legacy_seller_ids.add(str(sid))
+        # Subtract any overlap (users who have both an order and legacy commission)
+        order_user_ids = {str(o.get("userId")) for o in orders}
+        legacy_only_customers = len(legacy_seller_ids - order_user_ids)
 
-        total_earnings = sum(c.get("commission", 0) for c in commissions)
-        pending_earnings = sum(c.get("commission", 0) for c in commissions if c.get("status") == "pending")
-        paid_out_earnings = sum(c.get("commission", 0) for c in commissions if c.get("status") == "paid_out")
+        total_paid_customers = orders_customer_count + legacy_only_customers
+        total_earnings = round(orders_total + legacy_total, 2)
+        pending_earnings = round(orders_pending + legacy_pending, 2)
+        paid_out_earnings = round(orders_paid_out + legacy_paid_out, 2)
 
         return {
-            "paidCustomers": paid_customer_count,
-            "totalEarnings": round(total_earnings, 2),
-            "pendingEarnings": round(pending_earnings, 2),
-            "paidOutEarnings": round(paid_out_earnings, 2),
-            "commissionRate": DEFAULT_COMMISSION_RATE,
+            "paidCustomers": total_paid_customers,
+            "totalEarnings": total_earnings,
+            "pendingEarnings": pending_earnings,
+            "paidOutEarnings": paid_out_earnings,
         }
+
+    # ── Admin Sales Overview ──
 
     @router.get("/referral/admin/sales-overview")
     async def admin_sales_overview(authorization: str = Header(...)):
@@ -521,15 +652,33 @@ def init_referral_router(db, verify_token_func):
         if not user.get("isAdmin"):
             raise HTTPException(status_code=403, detail="Admin access required")
 
-        # Total referral commissions
-        all_commissions = await db.referral_commissions.find({}).to_list(50000)
-        total_revenue = sum(c.get("orderAmount", 0) for c in all_commissions)
-        total_commission = sum(c.get("commission", 0) for c in all_commissions)
-        pending_commission = sum(c.get("commission", 0) for c in all_commissions if c.get("status") == "pending")
+        # Primary: orders collection
+        all_orders = await db.orders.find({}).to_list(50000)
+        orders_revenue = sum(o.get("amount", 0) for o in all_orders)
+        orders_commission = sum(o.get("commission", 0) for o in all_orders)
+        orders_pending_commission = sum(o.get("commission", 0) for o in all_orders if o.get("status") == "paid")
+        orders_paid_out = sum(o.get("commission", 0) for o in all_orders if o.get("status") == "paid_out")
 
-        # Per-partner breakdown
+        # Legacy: referral_commissions
+        all_legacy = await db.referral_commissions.find({}).to_list(50000)
+        legacy_revenue = sum(c.get("orderAmount", 0) for c in all_legacy)
+        legacy_commission = sum(c.get("commission", 0) for c in all_legacy)
+
+        total_revenue = round(orders_revenue + legacy_revenue, 2)
+        total_commission = round(orders_commission + legacy_commission, 2)
+
+        # Per-partner breakdown (from orders)
         partner_map: dict = {}
-        for c in all_commissions:
+        for o in all_orders:
+            code = o.get("referredBy", "")
+            if code not in partner_map:
+                partner_map[code] = {"code": code, "revenue": 0, "commission": 0, "sales": 0}
+            partner_map[code]["revenue"] += o.get("amount", 0)
+            partner_map[code]["commission"] += o.get("commission", 0)
+            partner_map[code]["sales"] += 1
+
+        # Merge legacy data into partner_map
+        for c in all_legacy:
             code = c.get("referredBy", "")
             if code not in partner_map:
                 partner_map[code] = {"code": code, "revenue": 0, "commission": 0, "sales": 0}
@@ -539,41 +688,82 @@ def init_referral_router(db, verify_token_func):
 
         # Enrich with partner names
         partners = []
-        for code, data in partner_map.items():
-            partner_user = await db.users.find_one({"referralCode": code}, {"profile": 1, "email": 1, "referralCount": 1, "referralSuccessCount": 1})
+        for code, pdata in partner_map.items():
+            partner_user = await db.users.find_one(
+                {"referralCode": code},
+                {"profile": 1, "email": 1, "referralCount": 1, "referralSuccessCount": 1}
+            )
             name = ""
             if partner_user:
                 name = partner_user.get("profile", {}).get("businessName", "") or partner_user.get("email", "")
             partners.append({
-                **data,
+                **pdata,
                 "name": name,
                 "totalReferred": partner_user.get("referralCount", 0) if partner_user else 0,
                 "successfulReferred": partner_user.get("referralSuccessCount", 0) if partner_user else 0,
-                "revenue": round(data["revenue"], 2),
-                "commission": round(data["commission"], 2),
+                "revenue": round(pdata["revenue"], 2),
+                "commission": round(pdata["commission"], 2),
             })
         partners.sort(key=lambda x: x["revenue"], reverse=True)
 
         # Global totals
         total_referral_users = await db.users.count_documents({"referredBy": {"$exists": True, "$ne": ""}})
-        # Paid users among referred
-        pipeline = [
-            {"$match": {"referredBy": {"$exists": True, "$ne": ""}}},
-            {"$lookup": {"from": "invoices", "localField": "_id", "foreignField": "sellerId", "as": "invoices"}},
-            {"$match": {"invoices": {"$elemMatch": {"status": "paid", "total": {"$gt": 0}}}}},
-            {"$count": "total"}
-        ]
-        paid_result = await db.users.aggregate(pipeline).to_list(1)
-        paid_users = paid_result[0]["total"] if paid_result else 0
+        total_paid_users_orders = await db.orders.count_documents({})
 
         return {
             "totalReferredUsers": total_referral_users,
-            "paidUsers": paid_users,
-            "totalRevenue": round(total_revenue, 2),
-            "totalCommission": round(total_commission, 2),
-            "pendingCommission": round(pending_commission, 2),
-            "commissionRate": DEFAULT_COMMISSION_RATE,
+            "paidUsers": total_paid_users_orders,
+            "totalRevenue": total_revenue,
+            "totalCommission": total_commission,
+            "pendingCommission": round(orders_pending_commission, 2),
+            "paidOutCommission": round(orders_paid_out, 2),
             "partners": partners,
+        }
+
+    # ── Admin Plan Config CRUD ──
+
+    @router.get("/referral/admin/plan-config")
+    async def get_plan_config(authorization: str = Header(...)):
+        """Admin: get all plan pricing configs."""
+        user = await get_current_user(authorization)
+        if not user.get("isAdmin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        configs = await db.plan_config.find({}, {"_id": 0}).to_list(20)
+        if not configs:
+            # Return defaults if nothing seeded yet
+            return {"plans": [
+                {"plan": k, **v} for k, v in DEFAULT_PLAN_CONFIG.items()
+            ]}
+        return {"plans": configs}
+
+    @router.put("/referral/admin/plan-config/{plan_name}")
+    async def update_plan_config(plan_name: str, data: PlanConfigUpdate, authorization: str = Header(...)):
+        """Admin: update price and commission for a plan."""
+        user = await get_current_user(authorization)
+        if not user.get("isAdmin"):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        if plan_name not in PAID_PLANS:
+            raise HTTPException(status_code=400, detail=f"Invalid plan: {plan_name}. Must be one of: {', '.join(PAID_PLANS)}")
+
+        now = datetime.now(timezone.utc)
+        await db.plan_config.update_one(
+            {"plan": plan_name},
+            {"$set": {
+                "price": data.price,
+                "commissionPercent": data.commissionPercent,
+                "updatedAt": now,
+            }},
+            upsert=True,
+        )
+
+        logger.info(f"[PLAN_CONFIG] Admin updated {plan_name}: price={data.price}, commission={data.commissionPercent}%")
+        return {
+            "message": f"Plan config for '{plan_name}' updated",
+            "plan": plan_name,
+            "price": data.price,
+            "commissionPercent": data.commissionPercent,
         }
 
     return router

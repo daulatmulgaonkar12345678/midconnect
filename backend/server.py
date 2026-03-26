@@ -503,6 +503,8 @@ class SubscriptionPlan(str, Enum):
     """Valid subscription plans - Single Source of Truth"""
     FREE = "free"
     TRIAL = "trial"
+    STARTER = "starter"
+    STANDARD = "standard"
     PRO = "pro"
 
 # ================== SUBSCRIPTION SYSTEM UTILITIES ==================
@@ -9991,8 +9993,8 @@ class SubscriptionCreate(BaseModel):
     @field_validator('planName')
     @classmethod
     def validate_plan(cls, v):
-        if v not in ["free", "trial", "pro"]:
-            raise ValueError("Plan must be: free, trial, or pro")
+        if v not in ["free", "trial", "starter", "standard", "pro"]:
+            raise ValueError("Plan must be: free, trial, starter, standard, or pro")
         return v
 
 class SubscriptionExtend(BaseModel):
@@ -10214,7 +10216,7 @@ async def admin_activate_subscription(
             duration_days = data.durationDays
         elif data.planName == "trial":
             duration_days = 90
-        elif data.planName == "pro":
+        elif data.planName in ("starter", "standard", "pro"):
             duration_days = 90
         else:
             duration_days = 0
@@ -10247,13 +10249,23 @@ async def admin_activate_subscription(
             {"$set": {
                 "subscription": legacy_subscription,
                 "subscriptionUpdatedAt": now,
-                "subscriptionUpdatedBy": str(admin["_id"])
+                "subscriptionUpdatedBy": str(admin["_id"]),
+                "subscriptionStatus": "active",
+                "subscriptionType": "paid" if data.planName in ("starter", "standard", "pro") else "trial" if data.planName == "trial" else "free",
+                "plan": data.planName,
             }}
         )
 
         subscription_doc = calculate_subscription_fields(subscription_doc)
 
         logger.info(f"[SUBSCRIPTION] Admin {admin['email']} {result['action']} {data.planName} for user {user_id}")
+
+        # ── Sales Tracking: Create order if user was referred & plan is paid ──
+        try:
+            if hasattr(referral_router, 'create_order_on_activation'):
+                await referral_router.create_order_on_activation(user_id, data.planName)
+        except Exception as order_err:
+            logger.warning(f"[SUBSCRIPTION] Order creation hook failed (non-blocking): {order_err}")
 
         return {
             "message": f"Subscription {result['action']} successfully",

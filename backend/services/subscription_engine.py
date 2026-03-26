@@ -50,9 +50,19 @@ PLAN_CONFIG = {
         "default_duration_days": 14,
         "subscription_weight": 5
     },
-    "pro": {
+    "starter": {
         "enquiry_limit": -1,  # Unlimited
         "default_duration_days": 30,
+        "subscription_weight": 10
+    },
+    "standard": {
+        "enquiry_limit": -1,  # Unlimited
+        "default_duration_days": 90,
+        "subscription_weight": 12
+    },
+    "pro": {
+        "enquiry_limit": -1,  # Unlimited
+        "default_duration_days": 90,
         "subscription_weight": 15
     },
     "enterprise": {
@@ -142,7 +152,7 @@ class SubscriptionEngine:
     async def activate_or_extend(
         self,
         user_id: ObjectId,
-        plan_name: Literal["free", "trial", "pro", "enterprise"],
+        plan_name: Literal["free", "trial", "starter", "standard", "pro", "enterprise"],
         duration_days: Optional[int] = None,
         source: Literal["admin", "payment", "system"] = "admin",
         payment_id: Optional[str] = None,

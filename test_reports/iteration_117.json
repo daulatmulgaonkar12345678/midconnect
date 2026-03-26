@@ -1,0 +1,80 @@
+{
+  "summary": "Iteration 117: Hybrid Referral + Sales Tracking Order Creation Testing. All 14 tests passed. The new order creation system on admin subscription activation is fully functional with correct commission calculation, duplicate prevention, and proper filtering (only paid plans for referred users create orders).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Backend-only testing as requested. Frontend components (ReferralModal.tsx, ReferralWidget.tsx) not tested."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_referral_order_creation.py",
+    "/app/test_reports/pytest/referral_order_creation_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ GET /api/referral/admin/plan-config returns 3 plans (starter, standard, pro) with price and commissionPercent",
+    "✓ PUT /api/referral/admin/plan-config/starter successfully updates price (6000) and commission (25%)",
+    "✓ PUT /api/referral/admin/plan-config/invalid_plan correctly returns 400",
+    "✓ POST /api/admin/subscriptions/activate/{user_id} with paid plan (starter) creates order for referred user",
+    "✓ Order created with correct fields: plan=starter, amount=5000, commission=1000.0 (20%), status=paid",
+    "✓ POST /api/admin/subscriptions/activate/{user_id} with trial plan does NOT create order",
+    "✓ Duplicate activation does NOT create duplicate order (count stays at 1)",
+    "✓ POST /api/admin/subscriptions/activate/{user_id} for non-referred user does NOT create order",
+    "✓ User schema updated after activation: subscriptionStatus=active, subscriptionType=paid, plan=standard",
+    "✓ GET /api/referral/sales-stats returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings (NO commissionRate field)",
+    "✓ GET /api/referral/admin/sales-overview returns totalRevenue=5000, totalCommission=1000.0, partners=1",
+    "✓ GET /api/referral/admin/sales-overview requires admin auth (returns 422 without auth)",
+    "✓ GET /api/referral/my-link still works (backward compatible)",
+    "✓ GET /api/referral/stats still works (backward compatible)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_referral_order_creation.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "N/A - Backend-only testing requested"
+  },
+  "test_credentials": "dev-test-token (admin user)",
+  "seed_data_creation": "Tests create and cleanup test users (TEST_referrer, TEST_referred, TEST_nonreferred, TEST_trial) and orders automatically",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 117 tested the hybrid referral + sales tracking order creation system. Key findings: (1) Plan config CRUD works - GET returns 3 plans with price/commissionPercent, PUT updates successfully. (2) Order creation on admin activation works correctly - only creates order when: user has referredBy field AND plan is paid (starter/standard/pro). (3) Duplicate prevention works - second activation for same user does NOT create duplicate order. (4) Trial plan does NOT create order. (5) Non-referred users do NOT create order. (6) User schema updated with subscriptionStatus, subscriptionType, plan fields. (7) sales-stats endpoint returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings (NO commissionRate field as per requirement). (8) admin/sales-overview returns full data including totalRevenue, totalCommission, partners breakdown. (9) Existing referral endpoints (my-link, stats) still work unchanged.",
+  "features_tested": [
+    "GET /api/referral/admin/plan-config returns 3 plans (starter, standard, pro) with correct prices",
+    "PUT /api/referral/admin/plan-config/starter updates price and commission successfully",
+    "POST /api/admin/subscriptions/activate/{user_id} with paid plan for referred user creates order in 'orders' collection",
+    "POST /api/admin/subscriptions/activate/{user_id} with trial plan does NOT create order",
+    "POST /api/admin/subscriptions/activate/{user_id} again for same user does NOT create duplicate order",
+    "POST /api/admin/subscriptions/activate/{user_id} for user without referredBy does NOT create order",
+    "GET /api/referral/sales-stats returns correct paidCustomers, totalEarnings, pendingEarnings (no commissionRate field)",
+    "GET /api/referral/admin/sales-overview returns totalRevenue, totalCommission, partners breakdown",
+    "User schema updated with subscriptionStatus, subscriptionType, plan after activation",
+    "Existing referral endpoints still work: GET /api/referral/my-link, GET /api/referral/stats"
+  ],
+  "api_endpoints_verified": {
+    "GET /api/health": "200 - API healthy",
+    "GET /api/referral/admin/plan-config": "200 - Returns 3 plans with price and commissionPercent",
+    "PUT /api/referral/admin/plan-config/starter": "200 - Updates price and commission",
+    "PUT /api/referral/admin/plan-config/invalid_plan": "400 - Invalid plan rejected",
+    "POST /api/admin/subscriptions/activate/{user_id} (paid plan, referred user)": "200 - Creates order",
+    "POST /api/admin/subscriptions/activate/{user_id} (trial plan)": "200 - No order created",
+    "POST /api/admin/subscriptions/activate/{user_id} (duplicate)": "200 - No duplicate order",
+    "POST /api/admin/subscriptions/activate/{user_id} (non-referred)": "200 - No order created",
+    "GET /api/referral/sales-stats": "200 - Returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings",
+    "GET /api/referral/admin/sales-overview": "200 - Returns totalRevenue, totalCommission, partners",
+    "GET /api/referral/admin/sales-overview (no auth)": "422 - Requires admin",
+    "GET /api/referral/my-link": "200 - Backward compatible",
+    "GET /api/referral/stats": "200 - Backward compatible"
+  },
+  "code_review_notes": {
+    "create_order_on_activation": "Function in referral_router.py correctly: (1) checks if plan is paid (starter/standard/pro), (2) checks if user has referredBy, (3) prevents duplicates (one order per user), (4) fetches dynamic pricing from plan_config, (5) calculates commission, (6) updates user schema",
+    "plan_config_endpoints": "GET returns all plans, PUT validates plan name and updates price/commissionPercent",
+    "sales_stats_endpoint": "Returns paidCustomers, totalEarnings, pendingEarnings, paidOutEarnings - NO commissionRate field (correct per requirement)",
+    "admin_sales_overview": "Returns full data including totalRevenue, totalCommission, partners breakdown with per-partner revenue/commission",
+    "server_integration": "Line 10263-10268 in server.py correctly calls referral_router.create_order_on_activation after admin subscription activation"
+  }
+}

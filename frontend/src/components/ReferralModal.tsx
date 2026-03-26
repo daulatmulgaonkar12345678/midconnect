@@ -16,7 +16,6 @@ interface SalesStats {
   totalEarnings: number;
   pendingEarnings: number;
   paidOutEarnings: number;
-  commissionRate: number;
 }
 
 interface ReferralStats {
@@ -235,7 +234,7 @@ export default function ReferralModal({ isOpen, onClose, token }: { isOpen: bool
             )}
 
             {/* ── Sales Performance (New — parallel to referral rewards) ── */}
-            {salesStats && (
+            {salesStats && (salesStats.paidCustomers > 0 || salesStats.totalEarnings > 0) && (
               <div data-testid="sales-performance-section">
                 <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Sales Performance</h3>
                 <div className="grid grid-cols-3 gap-3">
@@ -255,9 +254,6 @@ export default function ReferralModal({ isOpen, onClose, token }: { isOpen: bool
                     <div className="text-[10px] text-amber-500 font-medium">Pending</div>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-2 text-center">
-                  Commission rate: {(salesStats.commissionRate * 100).toFixed(0)}% of paid invoices
-                </p>
               </div>
             )}
           </div>
