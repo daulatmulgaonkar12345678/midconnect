@@ -22,33 +22,32 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 ### Limit Resolution (SSOT)
 - **PLAN_CONFIG** (`config/plan_features.py`) — Default limits per plan
 - **Per-Seller Overrides** — Admin-set custom limits in `subscriptions.overrides`
-- **`get_effective_limits(db, user)`** — Core resolver: merges defaults + overrides, override wins
+- **`get_effective_limits(db, user)`** — Core resolver: merges defaults + overrides
 - **Backend is single source of truth** — No frontend-based limits
+
+### Free Plan Behavior
+- **Can view**: Panels, records, data, dashboard — all GET requests work
+- **Cannot**: Create records/panels/invoices, export (Excel/PDF), run automation
+- **Shows**: Formal "Upgrade" popup (UpgradeModal) when attempting gated actions
+- **Backend**: Returns 403 with `FEATURE_NOT_AVAILABLE` or `SUBSCRIPTION_EXPIRED`
 
 ### Admin Override System
 - `POST /api/admin/subscription/override` — Set per-seller overrides
 - `GET /api/admin/subscription/override/{userId}` — Get current overrides
 - `DELETE /api/admin/subscription/override/{userId}` — Clear overrides
-
-### Admin Subscription Management UI
-- Page: `/admin/subscriptions`
-- Backend: `GET /api/admin/subscription/sellers` — Lists sellers with plan, status, usage, overrides, effective limits
-- Features: Plan filter cards, search, usage bars, inline override editor, feature badges
+- Admin UI at `/admin/subscriptions`
 
 ## Completed Features
 1-43. B2B Marketplace, Invoicing, Inventory, Panels Phase 1-3B, RBAC, Automation, Referral, Payouts, Central Subscription Guard
-44. **Flexible SaaS Plan System + Admin Override (Mar 2026)**
-    - Unified 4-plan system (removed trial/starter)
-    - `get_effective_limits()` resolver with admin override merging
-    - Admin CRUD endpoints for per-seller overrides
-    - Fixed /access-level 500 error
-    - Tests: 29/29 passed
-45. **Admin Subscription Management UI (Mar 2026)**
-    - Full admin page at /admin/subscriptions
-    - Seller list with plan, status, usage bars, feature badges
-    - Inline override editor (numeric + boolean toggles)
-    - Search, plan filter, pagination
-    - Tests: 12/12 passed
+44. Flexible SaaS Plan System + Admin Override (Mar 2026)
+45. Admin Subscription Management UI (Mar 2026)
+46. **Export Bug Fix + Free Plan Enforcement (Mar 2026)**
+    - Fixed timezone-naive datetime crash on /export/outstanding (ensure_utc())
+    - Added enforce_export_access() to all 14 export endpoints
+    - Built UpgradeModal component with useUpgradeModal hook
+    - Wired guards into Panels, Records, Reports, Invoices pages
+    - Free users blocked from create/download with formal upgrade popup
+    - Tests: 26/26 passed
 
 ## Prioritized Backlog
 ### P0 (Next)
@@ -66,7 +65,7 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 ## Key Files
 - `/app/backend/config/plan_features.py` — PLAN_CONFIG SSOT + get_effective_limits()
 - `/app/backend/middleware/subscription_guard.py` — enforce_subscription, check_resource_limit
-- `/app/backend/server.py` — Admin override & sellers list endpoints
+- `/app/backend/routers/export_import_router.py` — ensure_utc(), enforce_export_access()
+- `/app/frontend/src/components/SubscriptionGates.tsx` — UpgradeModal, useUpgradeModal, FeatureGate
 - `/app/frontend/src/app/admin/subscriptions/page.tsx` — Admin subscription management UI
 - `/app/frontend/src/context/SubscriptionContext.tsx` — Frontend subscription state
-- `/app/frontend/src/app/admin/layout.tsx` — Admin sidebar nav
