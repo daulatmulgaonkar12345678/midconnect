@@ -21,7 +21,8 @@ import {
   Calculator,
   Ruler,
   Beaker,
-  Wallet
+  Wallet,
+  CreditCard
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -108,6 +109,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: '/admin/gst-verification', label: 'GST Verification', icon: FileText },
     { href: '/admin/product-requests', label: 'Product Requests', icon: FileText },
     { href: '/admin/payouts', label: 'Payouts', icon: Wallet },
+    { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
     { href: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 

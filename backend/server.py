@@ -9799,6 +9799,104 @@ async def admin_set_business_tool_access(
     return {"message": f"Business tool access set to '{level}'", "businessToolAccess": level}
 
 
+# === Admin: List Sellers with Subscription + Effective Limits ===
+@api_router.get("/admin/subscription/sellers")
+async def admin_list_sellers_with_limits(
+    admin: dict = Depends(require_admin),
+    search: str = Query("", description="Search by company name or email"),
+    plan_filter: str = Query("", description="Filter by plan: free,standard,pro,enterprise"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+):
+    """
+    List all sellers with their subscription status, plan, effective limits, and overrides.
+    Used by the Admin Subscription Management UI.
+    """
+    from config.plan_features import PLAN_CONFIG
+
+    query = {"roles": "seller"}
+
+    if search:
+        query["$or"] = [
+            {"companyName": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"name": {"$regex": search, "$options": "i"}},
+        ]
+
+    skip_val = (page - 1) * limit
+    total = await db.users.count_documents(query)
+    users = await db.users.find(
+        query,
+        projection={"firebaseUid": 0, "passwordHash": 0}
+    ).sort("createdAt", -1).skip(skip_val).limit(limit).to_list(length=limit)
+
+    results = []
+    for u in users:
+        user_oid = u["_id"]
+
+        # Get subscription doc
+        sub = await db.subscriptions.find_one({"userId": user_oid})
+
+        plan_name = sub.get("planName", "free") if sub else "free"
+        status = sub.get("status", "free") if sub else "free"
+        overrides = sub.get("overrides", {}) if sub else {}
+        end_date = sub.get("endDate") if sub else None
+
+        # Resolve effective plan (fallback for unknown plans)
+        effective_plan = plan_name if plan_name in PLAN_CONFIG else "free"
+
+        # Check expiry
+        is_expired = status in ("expired", "cancelled", "suspended")
+        if not is_expired and end_date and effective_plan != "free":
+            if end_date.replace(tzinfo=timezone.utc) if end_date.tzinfo is None else end_date < datetime.now(timezone.utc):
+                is_expired = True
+                status = "expired"
+
+        # Get default limits + merge overrides
+        default_limits = dict(PLAN_CONFIG.get(effective_plan, PLAN_CONFIG["free"]))
+        effective_limits = {**default_limits}
+        if overrides:
+            for key, val in overrides.items():
+                if key in effective_limits:
+                    effective_limits[key] = val
+
+        # Count current usage
+        panel_count = await db.panels.count_documents({"sellerId": str(user_oid)})
+        rule_count = await db.automation_rules.count_documents({"seller_id": str(user_oid)})
+
+        results.append({
+            "userId": str(user_oid),
+            "email": u.get("email", ""),
+            "name": u.get("name", ""),
+            "companyName": u.get("companyName", u.get("gst", {}).get("legalName", "")),
+            "plan": plan_name,
+            "effectivePlan": effective_plan,
+            "status": status,
+            "isExpired": is_expired,
+            "endDate": end_date.isoformat() if end_date else None,
+            "overrides": overrides,
+            "defaultLimits": {k: v for k, v in PLAN_CONFIG.get(effective_plan, PLAN_CONFIG["free"]).items() if k != "label"},
+            "effectiveLimits": {k: v for k, v in effective_limits.items() if k != "label"},
+            "usage": {
+                "panels": panel_count,
+                "rules": rule_count,
+            },
+        })
+
+    # Optionally filter by plan
+    if plan_filter:
+        results = [r for r in results if r["plan"] == plan_filter]
+
+    return {
+        "sellers": results,
+        "total": total,
+        "page": page,
+        "pages": math.ceil(total / limit) if total > 0 else 1,
+        "planOptions": list(PLAN_CONFIG.keys()),
+    }
+
+
+
 # === Admin: Subscription Override (Per-Seller Custom Limits) ===
 @api_router.post("/admin/subscription/override")
 async def admin_set_subscription_override(

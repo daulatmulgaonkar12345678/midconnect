@@ -1,0 +1,67 @@
+{
+  "summary": "Iteration 121: Admin Subscription Management Page Testing. Backend: 12/12 tests passed for GET /api/admin/subscription/sellers endpoint. Frontend: Fixed TypeScript compilation error in page.tsx. The page is behind Firebase auth gate so visual testing shows login redirect (expected behavior).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Frontend page compiles successfully after TypeScript fix. Page is behind Firebase auth - redirects to /login?redirect=/admin when accessed without authentication. This is expected behavior per admin layout auth gate."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_subscription_sellers.py",
+    "/app/test_reports/pytest/admin_subscription_sellers_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ GET /api/admin/subscription/sellers returns 200 with sellers array",
+    "✓ Response includes all required fields: userId, email, name, companyName, plan, effectivePlan, status, isExpired, endDate, overrides, defaultLimits, effectiveLimits, usage",
+    "✓ Search filter works correctly (filters by company name, email, name)",
+    "✓ Plan filter works correctly (filters by free/standard/pro/enterprise)",
+    "✓ Pagination works (page, limit parameters)",
+    "✓ POST /api/admin/subscription/override sets overrides and they reflect in /sellers list",
+    "✓ DELETE /api/admin/subscription/override/{userId} clears overrides from sellers list",
+    "✓ Authentication required for all admin endpoints (401 without token)",
+    "✓ planOptions returned in response (free, standard, pro, enterprise)",
+    "✓ Invalid plan filter returns empty list (graceful handling)",
+    "✓ Frontend TypeScript error fixed: added 'unknown' cast for SellerLimits type conversion"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_subscription_sellers.py",
+    "/app/frontend/src/app/admin/subscriptions/page.tsx"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "Compiles successfully. Auth gate prevents visual testing."
+  },
+  "test_credentials": "dev-test-token (admin user)",
+  "seed_data_creation": "Tests use existing sellers in database. Override tests cleanup after themselves.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 121 tested the new Admin Subscription Management page at /admin/subscriptions. Key findings: (1) Backend endpoint GET /api/admin/subscription/sellers works correctly with all filters (search, plan_filter, pagination). (2) Response structure includes: sellers array with userId, email, name, companyName, plan, effectivePlan, status, isExpired, endDate, overrides, defaultLimits, effectiveLimits, usage (panels/rules counts). (3) Override CRUD integration works: POST sets overrides, DELETE clears them, changes reflect in sellers list. (4) Frontend had TypeScript error with SellerLimits type casting - fixed by adding 'unknown' intermediate cast. (5) Frontend page is behind Firebase auth gate - redirects to login when accessed without authentication. (6) Admin layout includes 'Subscriptions' nav item with CreditCard icon.",
+  "features_tested": [
+    "GET /api/admin/subscription/sellers returns seller list",
+    "GET /api/admin/subscription/sellers?search=term filters by search",
+    "GET /api/admin/subscription/sellers?plan_filter=free filters by plan",
+    "POST /api/admin/subscription/override sets overrides",
+    "DELETE /api/admin/subscription/override/{userId} clears overrides",
+    "Override changes reflect in sellers list",
+    "Authentication required for admin endpoints",
+    "Frontend page compiles without errors"
+  ],
+  "api_endpoints_verified": {
+    "GET /api/admin/subscription/sellers": "200 - Returns sellers array with plan, status, overrides, effectiveLimits, usage, defaultLimits",
+    "GET /api/admin/subscription/sellers?search=term": "200 - Filters by company name, email, or name",
+    "GET /api/admin/subscription/sellers?plan_filter=free": "200 - Filters by plan type",
+    "GET /api/admin/subscription/sellers?page=1&limit=5": "200 - Pagination works",
+    "POST /api/admin/subscription/override": "200 - Sets overrides on user subscription",
+    "DELETE /api/admin/subscription/override/{userId}": "200 - Clears overrides"
+  },
+  "typescript_fix_applied": {
+    "file": "/app/frontend/src/app/admin/subscriptions/page.tsx",
+    "issue": "Type error: Conversion of type 'SellerLimits' to type 'Record<string, number | boolean>' may be a mistake",
+    "fix": "Added 'unknown' intermediate cast: (seller.defaultLimits as unknown as Record<string, number | boolean>)"
+  }
+}
