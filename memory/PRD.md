@@ -9,50 +9,6 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 - **Auth:** Firebase Admin (email/password)
 - **Real-time:** python-socketio + socket.io-client
 
-## System Architecture: Decoupled Panels + Rules
-
-### Core Principle
-- **Panels = Data Layer** (schema + records only, no workflow logic)
-- **Rules = Workflow Layer** (triggers, conditions, multi-target actions)
-- **Single Source of Truth:** Data always flows from Source Panel -> Target Panels
-
-### Automation Rule Contract (LOCKED)
-```json
-{
-  "name": "string",
-  "trigger_panel_id": "string (source panel ObjectId)",
-  "trigger_type": "on_create | on_update | condition_based",
-  "condition": { "field": "string", "operator": "string", "value": "string" },
-  "targets": [
-    {
-      "target_panel_id": "string (custom panel ObjectId or system module ID)",
-      "action_type": "create_record | create_records_per_item | update_record",
-      "data_mode": "smart_sync | manual_only | full_copy",
-      "relation_field": "string (optional)",
-      "update_operation": "increment | decrement | set_value",
-      "update_field": "string",
-      "update_value_from": "string",
-      "field_mappings": [
-        { "target_field": "string", "source_field": "string", "default_value": "string", "mapping_type": "field | default | reference" }
-      ],
-      "field_visibility": [
-        { "field": "string", "visible": true, "editable": true }
-      ]
-    }
-  ],
-  "is_active": true,
-  "priority": 0
-}
-```
-
-### Data Mode Behavior (LOCKED)
-- **smart_sync** (default): Explicit mappings priority. Remaining target fields auto-fill from matching source field names.
-- **manual_only**: Only explicitly mapped fields transfer. Most restrictive.
-- **full_copy**: For each target field that exists in source, copy value. Explicit mappings override.
-
-### System Modules Supported as Targets
-inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_products, employees
-
 ## Subscription & Plan System (CURRENT — Mar 2026)
 
 ### Plans (4 tiers — NO trial, NO starter)
@@ -73,36 +29,26 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 - `POST /api/admin/subscription/override` — Set per-seller overrides
 - `GET /api/admin/subscription/override/{userId}` — Get current overrides
 - `DELETE /api/admin/subscription/override/{userId}` — Clear overrides
-- Validated: only known keys, correct types, user must exist
+
+### Admin Subscription Management UI
+- Page: `/admin/subscriptions`
+- Backend: `GET /api/admin/subscription/sellers` — Lists sellers with plan, status, usage, overrides, effective limits
+- Features: Plan filter cards, search, usage bars, inline override editor, feature badges
 
 ## Completed Features
-1-25. B2B Marketplace, Invoices, Inventory, Panel System Phase 1-3A, RBAC, Employee Permissions
-26. Phase 3B: Smart Document Builder (Excel/PDF export)
-27. Phase 4 Lite: Basic Automation (superseded)
-28. **Phase 4 Full: Multi-Target Workflow Automation Engine (Mar 2026)**
-29. **Phase 4.1: Data Mode + Preview (Mar 2026)**
-30. **Bug Fix: Smart Sync relation field matching (Mar 2026)**
-31. **Bug Fix: Update Record lookup field (Mar 2026)**
-32. **ARCHITECTURE UPGRADE: Relational Update Engine (Mar 2026)**
-33. **Field Visibility in Records UI (Mar 2026)**
-34. **MATCH + UPDATE Engine Verification (Mar 2026)**
-35. **System Modules in Rule Source/Trigger Panel (Mar 2026)**
-36. **System Module Automation Hook — Invoices (Mar 2026)**
-37. **Data Population Fix — Relation Auto-Linking (Mar 2026)**
-38. **Per-Record PDF Download (Mar 2026)**
-39. **Pricing & About Page Rewrite (Mar 2026)**
-40. **Hybrid Referral + Sales Tracking System (Mar 2026)**
-41. **Admin-Triggered Order Creation System (Mar 2026)**
-42. **Admin Payout Management Module (Mar 2026)**
-43. **Central Subscription Guard + SaaS Enforcement System (Mar 2026)**
+1-43. B2B Marketplace, Invoicing, Inventory, Panels Phase 1-3B, RBAC, Automation, Referral, Payouts, Central Subscription Guard
 44. **Flexible SaaS Plan System + Admin Override (Mar 2026)**
-    - Unified 4-plan system: free/standard/pro/enterprise (removed trial/starter)
-    - `get_effective_limits()` resolver in plan_features.py
-    - Per-seller admin overrides: `subscriptions.overrides` field
-    - Admin CRUD: POST/GET/DELETE /api/admin/subscription/override
-    - Fixed /access-level 500 error (removed undefined MAX_PANELS_PER_BUSINESS)
-    - Updated all enums, validators, frontend types to match 4-plan system
-    - Tests: 29/29 passed (100%)
+    - Unified 4-plan system (removed trial/starter)
+    - `get_effective_limits()` resolver with admin override merging
+    - Admin CRUD endpoints for per-seller overrides
+    - Fixed /access-level 500 error
+    - Tests: 29/29 passed
+45. **Admin Subscription Management UI (Mar 2026)**
+    - Full admin page at /admin/subscriptions
+    - Seller list with plan, status, usage bars, feature badges
+    - Inline override editor (numeric + boolean toggles)
+    - Search, plan filter, pagination
+    - Tests: 12/12 passed
 
 ## Prioritized Backlog
 ### P0 (Next)
@@ -118,17 +64,9 @@ inventory, invoices, buyers, suppliers, purchase_orders, quotations, composite_p
 - White-label toggle | WhatsApp Business API
 
 ## Key Files
-- `/app/backend/config/plan_features.py` — PLAN_CONFIG SSOT + get_effective_limits() resolver
+- `/app/backend/config/plan_features.py` — PLAN_CONFIG SSOT + get_effective_limits()
 - `/app/backend/middleware/subscription_guard.py` — enforce_subscription, check_resource_limit
-- `/app/backend/services/subscription_service.py` — get_effective_subscription
-- `/app/backend/services/subscription_engine.py` — Unified engine (activate/extend)
-- `/app/backend/routers/panel_router.py` — Panel CRUD + /access-level endpoint
-- `/app/backend/routers/automation_router.py` — Multi-target engine + subscription guard
-- `/app/backend/routers/invoice_router.py` — Invoice CRUD + PDF export
-- `/app/backend/routers/business_tools_router.py` — Buyer/Employee/Supplier CRUD
-- `/app/backend/routers/inventory_router.py` — Inventory CRUD
-- `/app/backend/routers/referral_router.py` — Referral + Sales + Orders + Payouts
+- `/app/backend/server.py` — Admin override & sellers list endpoints
+- `/app/frontend/src/app/admin/subscriptions/page.tsx` — Admin subscription management UI
 - `/app/frontend/src/context/SubscriptionContext.tsx` — Frontend subscription state
-- `/app/frontend/src/components/SubscriptionGates.tsx` — UI upgrade banners
-- `/app/frontend/src/app/seller/business-tools/panels/page.tsx` — Panel config
-- `/app/frontend/src/app/admin/payouts/page.tsx` — Admin Payout dashboard
+- `/app/frontend/src/app/admin/layout.tsx` — Admin sidebar nav
