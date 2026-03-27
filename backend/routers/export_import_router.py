@@ -17,6 +17,15 @@ from utils.permissions import authenticate_user, resolve_seller_id
 logger = logging.getLogger(__name__)
 
 
+def ensure_utc(dt):
+    """Ensure a datetime is timezone-aware (UTC). Handles naive datetimes from MongoDB."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def init_export_import_router(db, verify_token_func):
     router = APIRouter(tags=["Export/Import"])
 
@@ -25,6 +34,11 @@ def init_export_import_router(db, verify_token_func):
 
     async def get_seller_id(user: dict) -> str:
         return resolve_seller_id(user)
+
+    async def enforce_export_access(user: dict):
+        """Check if user's plan allows exports. Raises 403 if not."""
+        from middleware.subscription_guard import enforce_subscription
+        await enforce_subscription(db, user, feature="export_excel", write_operation=True)
 
     def parse_date(date_str: Optional[str]) -> Optional[datetime]:
         if not date_str:
@@ -105,6 +119,7 @@ def init_export_import_router(db, verify_token_func):
         period: str = "monthly"
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
@@ -176,6 +191,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
@@ -216,6 +232,7 @@ def init_export_import_router(db, verify_token_func):
         format: str = "csv"
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
 
         pipeline = [
@@ -260,6 +277,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
@@ -299,6 +317,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
@@ -343,6 +362,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
 
@@ -368,9 +388,9 @@ def init_export_import_router(db, verify_token_func):
         rows = []
         for inv in invoices:
             buyer = await db.seller_buyers.find_one({"_id": inv.get("buyerId")})
-            inv_date = inv.get("date") or inv.get("createdAt")
+            inv_date = ensure_utc(inv.get("date") or inv.get("createdAt"))
             due_date = inv_date + timedelta(days=30) if inv_date else None
-            days_overdue = max(0, (now - due_date).days) if due_date else 0
+            days_overdue = max(0, (now - ensure_utc(due_date)).days) if due_date else 0
             paid = inv.get("totalPaid", 0)
             pending = inv.get("pendingAmount", inv.get("total", 0))
             status_label = "Partial" if inv.get("status") == "partially_paid" else "Unpaid"
@@ -413,6 +433,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=30))
@@ -453,6 +474,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=30))
@@ -533,6 +555,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
@@ -581,6 +604,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
@@ -644,6 +668,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=365))
@@ -720,6 +745,7 @@ def init_export_import_router(db, verify_token_func):
         endDate: Optional[str] = None
     ):
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         start = parse_date(startDate) or (now - timedelta(days=30))
@@ -790,6 +816,7 @@ def init_export_import_router(db, verify_token_func):
             REV_STATE[n.lower()] = c
 
         user = await get_current_user(authorization)
+        await enforce_export_access(user)
         seller_id = await get_seller_id(user)
         now = datetime.now(timezone.utc)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

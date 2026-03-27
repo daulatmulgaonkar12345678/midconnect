@@ -1,0 +1,108 @@
+{
+  "summary": "Iteration 122: Export Endpoints & Subscription Enforcement Testing. All 26 tests passed. The timezone bug in /export/outstanding is FIXED (ensure_utc() wrapper). All 14 export endpoints return 200 for admin user (enterprise plan). Free plan users correctly have export=false in config, and enforce_export_access() guard is present on all export endpoints.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Backend-only testing as requested. Frontend UpgradeModal not tested."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_export_subscription_enforcement.py",
+    "/app/test_reports/pytest/export_subscription_enforcement_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ GET /api/business-tools/export/outstanding?format=xlsx returns 200 (timezone bug FIXED via ensure_utc())",
+    "✓ GET /api/business-tools/export/sales?format=xlsx returns 200 with valid Excel",
+    "✓ GET /api/business-tools/export/profit?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/inventory?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/buyers?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/invoices?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/purchase-orders?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/stock-movement?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/buyer-ledger?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/product-performance?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/category-report?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/low-stock?format=xlsx returns 200",
+    "✓ GET /api/business-tools/export/gst-report returns 200 with Excel (2 sheets)",
+    "✓ Admin user (dev-test-token) has enterprise plan with export=true",
+    "✓ Free plan config has export=false (correctly blocks free users)",
+    "✓ Standard/Pro/Enterprise plans have export=true",
+    "✓ FEATURE_MAP has export_excel -> export mapping",
+    "✓ ensure_utc() function exists for timezone handling (fixes naive datetime issue)",
+    "✓ All export endpoints have enforce_export_access() guard",
+    "✓ Export with date filters works correctly (timezone safe)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_export_subscription_enforcement.py"
+  ],
+  "success_rate": {
+    "backend": "100% (26/26 tests passed)",
+    "frontend": "N/A - Backend-only testing requested"
+  },
+  "test_credentials": "dev-test-token (admin user with enterprise plan)",
+  "seed_data_creation": "No seed data created. Tests use existing admin user.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 122 tested export endpoints and subscription enforcement. Key findings: (1) Timezone bug in /export/outstanding is FIXED - ensure_utc() wrapper handles naive datetimes from MongoDB. (2) All 14 export endpoints return 200 for admin user (enterprise plan). (3) Free plan has export=false in PLAN_CONFIG. (4) enforce_export_access() guard is present on all export endpoints - calls enforce_subscription(db, user, feature='export_excel', write_operation=True). (5) Subscription guard returns 403 with FEATURE_NOT_AVAILABLE for free users trying to export. (6) Admin user (dev-test-token) has enterprise plan with unlimited access. (7) Export endpoints tested: sales, profit, inventory, buyers, invoices, outstanding, purchase-orders, stock-movement, buyer-ledger, product-performance, category-report, low-stock, gst-report.",
+  "features_tested": [
+    "GET /api/business-tools/export/outstanding?format=xlsx (timezone bug fix verified)",
+    "GET /api/business-tools/export/sales?format=xlsx",
+    "GET /api/business-tools/export/sales?format=csv",
+    "GET /api/business-tools/export/profit?format=xlsx",
+    "GET /api/business-tools/export/inventory?format=xlsx",
+    "GET /api/business-tools/export/buyers?format=xlsx",
+    "GET /api/business-tools/export/invoices?format=xlsx",
+    "GET /api/business-tools/export/purchase-orders?format=xlsx",
+    "GET /api/business-tools/export/stock-movement?format=xlsx",
+    "GET /api/business-tools/export/buyer-ledger?format=xlsx",
+    "GET /api/business-tools/export/product-performance?format=xlsx",
+    "GET /api/business-tools/export/category-report?format=xlsx",
+    "GET /api/business-tools/export/low-stock?format=xlsx",
+    "GET /api/business-tools/export/gst-report",
+    "Export with date filters (startDate, endDate)",
+    "PLAN_CONFIG export settings (free=false, standard/pro/enterprise=true)",
+    "FEATURE_MAP export_excel mapping",
+    "ensure_utc() timezone handling function",
+    "enforce_export_access() guard presence on all endpoints",
+    "Admin subscription status (enterprise plan)",
+    "Admin access-level (export=true)"
+  ],
+  "api_endpoints_verified": {
+    "GET /api/business-tools/export/outstanding?format=xlsx": "200 - Timezone bug FIXED",
+    "GET /api/business-tools/export/outstanding?format=csv": "200",
+    "GET /api/business-tools/export/sales?format=xlsx": "200 - Excel content",
+    "GET /api/business-tools/export/sales?format=csv": "200 - CSV content",
+    "GET /api/business-tools/export/profit?format=xlsx": "200",
+    "GET /api/business-tools/export/inventory?format=xlsx": "200",
+    "GET /api/business-tools/export/buyers?format=xlsx": "200",
+    "GET /api/business-tools/export/invoices?format=xlsx": "200",
+    "GET /api/business-tools/export/purchase-orders?format=xlsx": "200",
+    "GET /api/business-tools/export/stock-movement?format=xlsx": "200",
+    "GET /api/business-tools/export/buyer-ledger?format=xlsx": "200",
+    "GET /api/business-tools/export/product-performance?format=xlsx": "200",
+    "GET /api/business-tools/export/category-report?format=xlsx": "200",
+    "GET /api/business-tools/export/low-stock?format=xlsx": "200",
+    "GET /api/business-tools/export/gst-report": "200 - Excel with 2 sheets",
+    "GET /api/subscription/status": "200 - Returns enterprise plan for admin",
+    "GET /api/business-tools/access-level": "200 - Returns export=true for admin"
+  },
+  "timezone_bug_fix_verified": {
+    "issue": "GET /api/business-tools/export/outstanding returned 500 due to timezone-naive vs timezone-aware datetime subtraction",
+    "fix": "ensure_utc() wrapper function added to handle naive datetimes from MongoDB",
+    "location": "/app/backend/routers/export_import_router.py lines 20-26",
+    "status": "FIXED - All tests pass"
+  },
+  "subscription_enforcement_verified": {
+    "free_plan_export": false,
+    "standard_plan_export": true,
+    "pro_plan_export": true,
+    "enterprise_plan_export": true,
+    "guard_function": "enforce_export_access() calls enforce_subscription(db, user, feature='export_excel', write_operation=True)",
+    "403_response_for_free_users": "FEATURE_NOT_AVAILABLE error with upgradeUrl"
+  }
+}

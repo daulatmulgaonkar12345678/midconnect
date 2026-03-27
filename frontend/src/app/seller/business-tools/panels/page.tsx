@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePermissions } from '../layout';
 import { toast } from 'sonner';
-import { SubscriptionBanner } from '@/components/SubscriptionGates';
+import { SubscriptionBanner, useUpgradeModal } from '@/components/SubscriptionGates';
 import {
   LayoutGrid, Plus, Pencil, Trash2, ChevronRight, Loader2,
   Type, Hash, Calendar, ListFilter, CheckSquare, AlignLeft,
@@ -77,6 +77,7 @@ interface LinkableTarget {
 export default function PanelsPage() {
   const { token, isAdmin, loading: permLoading } = usePermissions();
   const router = useRouter();
+  const { guardAction, isFree, UpgradeModal } = useUpgradeModal();
   const [panels, setPanels] = useState<Panel[]>([]);
   const [loading, setLoading] = useState(true);
   const [accessLevel, setAccessLevel] = useState('standard');
@@ -385,7 +386,7 @@ export default function PanelsPage() {
         </div>
         {isAdmin && (maxPanels === -1 || panels.length < maxPanels) && (
           <button
-            onClick={openCreateModal}
+            onClick={() => guardAction('create_panel', openCreateModal)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
             data-testid="create-panel-btn"
           >
@@ -943,6 +944,9 @@ export default function PanelsPage() {
           </div>
         </div>
       )}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal />
     </div>
   );
 }

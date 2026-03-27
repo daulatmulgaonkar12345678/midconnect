@@ -7,6 +7,7 @@ import { usePermissions } from '../layout';
 import { useNetworkContext } from '@/context/NetworkContext';
 import { useOfflineInvoices } from '@/hooks/useOfflineInvoices';
 import { toast } from 'sonner';
+import { useUpgradeModal } from '@/components/SubscriptionGates';
 import {
   FileText, Plus, X, Download, Eye, Trash2, Send, CreditCard,
   IndianRupee, ChevronDown, ChevronUp, Clock, CheckCircle2,
@@ -102,6 +103,7 @@ export default function InvoicesPage() {
   const { getIdToken, user } = useAuth();
   const { hasPermission, canAction: canActionPerm } = usePermissions();
   const canCreateInvoice = canActionPerm('invoices');
+  const { guardAction, UpgradeModal } = useUpgradeModal();
   const { isOnline } = useNetworkContext();
   const searchParams = useSearchParams();
   const prefillApplied = useRef(false);
@@ -720,7 +722,7 @@ export default function InvoicesPage() {
           <button onClick={() => setShowReminderSettings(true)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100" title="Reminder Settings" data-testid="reminder-settings-btn">
             <Settings className="w-4 h-4" />
           </button>
-          <button onClick={() => setShowForm(true)} disabled={!canCreateInvoice} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${canCreateInvoice ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`} data-testid="create-invoice-btn" title={!canCreateInvoice ? 'No permission to create invoices' : ''}>
+          <button onClick={() => guardAction('create_invoice', () => setShowForm(true))} disabled={!canCreateInvoice} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${canCreateInvoice ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`} data-testid="create-invoice-btn" title={!canCreateInvoice ? 'No permission to create invoices' : ''}>
             <Plus className="w-4 h-4" /> New Invoice
           </button>
         </div>
@@ -1594,6 +1596,9 @@ export default function InvoicesPage() {
           </div>
         </div>
       )}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal />
     </div>
   );
 }

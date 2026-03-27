@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePermissions } from "../layout";
+import { useUpgradeModal } from '@/components/SubscriptionGates';
+import { toast } from 'sonner';
 import {
   BarChart3, TrendingUp, Package, Users, Calendar, Filter,
   IndianRupee, DollarSign, PieChart, Download, Upload, FileSpreadsheet,
@@ -86,6 +88,7 @@ type ImportType = "products" | "inventory" | "suppliers" | "buyers";
 
 export default function ReportsPage() {
   const { hasPermission, token } = usePermissions();
+  const { guardAction, UpgradeModal } = useUpgradeModal();
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const initialTab = (searchParams?.get("tab") as Tab) || "outstanding";
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -272,7 +275,20 @@ export default function ReportsPage() {
       const dateParams = `startDate=${new Date(startDate).toISOString()}&endDate=${new Date(endDate).toISOString()}`;
       const url = `${API_URL}/api/business-tools/export/${exportType}?format=${format}&${dateParams}&period=${period}`;
       const res = await fetch(url, { headers: authHeaders() });
-      if (!res.ok) { alert("Export failed"); setExporting(false); return; }
+      if (!res.ok) {
+        try {
+          const err = await res.json();
+          if (err.detail?.error === 'FEATURE_NOT_AVAILABLE' || err.detail?.error === 'SUBSCRIPTION_EXPIRED') {
+            toast.error(err.detail.message || "Export requires a paid plan");
+          } else {
+            toast.error("Export failed. Please try again.");
+          }
+        } catch {
+          toast.error("Export failed. Please try again.");
+        }
+        setExporting(false);
+        return;
+      }
       const blob = await res.blob();
       const downloadUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -280,7 +296,7 @@ export default function ReportsPage() {
       a.download = `${exportType}-report.${format}`;
       a.click();
       URL.revokeObjectURL(downloadUrl);
-    } catch { alert("Export failed"); }
+    } catch { toast.error("Export failed. Network error."); }
     setExporting(false);
   };
 
@@ -368,11 +384,11 @@ export default function ReportsPage() {
         </div>
         <div className="flex items-center gap-2">
           {/* Export Buttons */}
-          <button onClick={() => handleExport("csv")} disabled={exporting || loading}
+          <button onClick={() => guardAction('export_excel', () => handleExport("csv"))} disabled={exporting || loading}
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-50" data-testid="export-csv-btn">
             <FileText className="w-4 h-4" /> Export CSV
           </button>
-          <button onClick={() => handleExport("xlsx")} disabled={exporting || loading}
+          <button onClick={() => guardAction('export_excel', () => handleExport("xlsx"))} disabled={exporting || loading}
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-50" data-testid="export-excel-btn">
             <FileSpreadsheet className="w-4 h-4 text-green-600" /> Export Excel
           </button>
@@ -1665,6 +1681,9 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePermissions } from '../../layout';
 import { toast } from 'sonner';
+import { useUpgradeModal } from '@/components/SubscriptionGates';
 import Link from 'next/link';
 import {
   Plus, Pencil, Trash2, Eye, Loader2, X, Save, Search,
@@ -53,6 +54,7 @@ export default function PanelDetailPage() {
   const router = useRouter();
   const panelId = params.panelId as string;
   const { token, isAdmin, loading: permLoading } = usePermissions();
+  const { guardAction, UpgradeModal } = useUpgradeModal();
 
   const [panel, setPanel] = useState<Panel | null>(null);
   const [records, setRecords] = useState<PanelRecord[]>([]);
@@ -297,7 +299,7 @@ export default function PanelDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleExport('excel')}
+            onClick={() => guardAction('export_excel', () => handleExport('excel'))}
             disabled={exportingExcel || total === 0}
             className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
             data-testid="export-excel-btn"
@@ -306,7 +308,7 @@ export default function PanelDetailPage() {
             {exportingExcel ? 'Exporting...' : 'Excel'}
           </button>
           <button
-            onClick={() => handleExport('pdf')}
+            onClick={() => guardAction('export_pdf', () => handleExport('pdf'))}
             disabled={exportingPdf || total === 0}
             className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
             data-testid="export-pdf-btn"
@@ -314,7 +316,7 @@ export default function PanelDetailPage() {
             <FileDown className="h-4 w-4" />
             {exportingPdf ? 'Exporting...' : 'PDF'}
           </button>
-          <button onClick={openCreate}
+          <button onClick={() => guardAction('create_record', openCreate)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
             data-testid="create-record-btn"
           >
@@ -339,7 +341,7 @@ export default function PanelDetailPage() {
         <div className="text-center py-16 bg-white rounded-xl border" data-testid="empty-records">
           <h3 className="text-lg font-semibold text-gray-700">No records yet</h3>
           <p className="text-gray-400 text-sm mt-1">Create your first record to start tracking data.</p>
-          <button onClick={openCreate}
+          <button onClick={() => guardAction('create_record', openCreate)}
             className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
             data-testid="create-first-record-btn"
           >
@@ -594,6 +596,9 @@ export default function PanelDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal />
     </div>
   );
 }
