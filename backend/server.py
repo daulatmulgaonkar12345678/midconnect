@@ -9848,7 +9848,8 @@ async def admin_list_sellers_with_limits(
         # Check expiry
         is_expired = status in ("expired", "cancelled", "suspended")
         if not is_expired and end_date and effective_plan != "free":
-            if end_date.replace(tzinfo=timezone.utc) if end_date.tzinfo is None else end_date < datetime.now(timezone.utc):
+            aware_end = end_date.replace(tzinfo=timezone.utc) if end_date.tzinfo is None else end_date
+            if aware_end < datetime.now(timezone.utc):
                 is_expired = True
                 status = "expired"
 
