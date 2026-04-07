@@ -334,6 +334,8 @@ class SubscriptionEngine:
             action = "reactivated"
             # Reset usage on reactivation
             enquiries_used = 0
+            # Also refresh the reset date
+            update_doc_extra = {"enquiriesResetAt": next_reset}
         elif old_plan != plan_name:
             action = "upgraded" if PLAN_CONFIG.get(plan_name, {}).get("subscription_weight", 0) > PLAN_CONFIG.get(old_plan, {}).get("subscription_weight", 0) else "changed"
             enquiries_used = existing.get("enquiriesUsed", 0)
@@ -351,6 +353,10 @@ class SubscriptionEngine:
             "enquiriesUsed": enquiries_used,
             "updatedAt": now
         }
+        
+        # Merge reactivation extras (e.g., enquiriesResetAt)
+        if action == "reactivated":
+            update_doc.update(update_doc_extra)
         
         # Only update paymentId if provided
         if payment_id:
