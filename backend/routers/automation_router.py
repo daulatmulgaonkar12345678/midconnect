@@ -457,7 +457,7 @@ def init_automation_router(db, verify_token_func):
                 "trigger_panel_id": panel_id,
                 "is_active": True,
                 "trigger_type": {"$in": list(valid_triggers)},
-            }).sort("priority", 1).to_list(MAX_RULES_PER_BUSINESS)
+            }).sort("priority", 1).to_list(500)
 
             if not rules:
                 return
@@ -494,7 +494,7 @@ def init_automation_router(db, verify_token_func):
                 )
 
         except Exception as e:
-            logger.error(f"Automation engine error: {e}")
+            logger.error(f"Automation engine error: {e}", exc_info=True)
 
     async def get_source_field_info(panel_id: str, field_key: str) -> dict:
         """Get field definition from source panel to determine if it's a relation."""
