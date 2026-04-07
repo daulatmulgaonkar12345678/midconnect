@@ -40,6 +40,8 @@ export class ApiError extends Error {
         return 'The requested resource was not found';
       case 408:
         return 'Request timed out. Please try again';
+      case 422:
+        return this.message || 'Please check your input and try again';
       case 429:
         return 'Too many requests. Please wait a moment';
       case 500:

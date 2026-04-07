@@ -291,7 +291,7 @@ async function fetchAPI<T = unknown>(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        let errorData: { detail?: string; message?: string; errorCode?: string } = {};
+        let errorData: { detail?: string | Record<string, unknown> | Array<{ msg?: string; loc?: string[] }>; message?: string; errorCode?: string } = {};
         
         try {
           errorData = await response.json();
@@ -299,8 +299,25 @@ async function fetchAPI<T = unknown>(
           errorData = { detail: `HTTP ${response.status}` };
         }
 
+        // Handle different error response formats
+        let errorMessage: string;
+        if (Array.isArray(errorData.detail)) {
+          // Pydantic 422 validation errors (detail is an array of {msg, loc})
+          errorMessage = errorData.detail
+            .map((e) => e.msg || 'Validation error')
+            .join('. ');
+        } else if (typeof errorData.detail === 'object' && errorData.detail !== null) {
+          // Subscription guard / structured errors (detail is an object with message)
+          const detailObj = errorData.detail as Record<string, unknown>;
+          errorMessage = (detailObj.message as string) || (detailObj.error as string) || JSON.stringify(errorData.detail);
+        } else {
+          errorMessage = (typeof errorData.detail === 'string' ? errorData.detail : null)
+            || errorData.message
+            || `Request failed with status ${response.status}`;
+        }
+
         const error = new ApiError(
-          errorData.detail || errorData.message || `Request failed with status ${response.status}`,
+          errorMessage,
           response.status,
           errorData.errorCode
         );

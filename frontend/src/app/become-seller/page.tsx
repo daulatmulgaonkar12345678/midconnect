@@ -119,8 +119,8 @@ function BecomeSellerContent() {
         method: 'POST',
         body: {
           businessName: businessName.trim(),
-          business_location: businessLocation.trim(),
-          gst_number: gstNumber.toUpperCase().trim(),
+          businessLocation: businessLocation.trim(),
+          gstNumber: gstNumber.toUpperCase().trim(),
         },
       });
 
@@ -129,11 +129,11 @@ function BecomeSellerContent() {
       setSuccess(true);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.getUserMessage());
+        setError(err.message || err.getUserMessage());
       } else if (err instanceof Error) {
-        setError(err.message || "We couldn't save your business details right now. This is a temporary issue. Please try again in a moment.");
+        setError(err.message || "We couldn't save your business details right now. Please try again.");
       } else {
-        setError("We couldn't save your business details right now. This is a temporary issue. Please try again in a moment.");
+        setError("We couldn't save your business details right now. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
