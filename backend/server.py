@@ -3334,12 +3334,28 @@ async def admin_get_pending_gst(
     - gst.status = "pending"
     - gst.verified = false
     """
-    # SSOT: Use unified gst schema only
+    # Flexible query: check multiple possible field locations for GST data
+    # Some users may have gst.status, others may have gstStatus at root
     query = {
-        "roles": "seller",
-        "gst.number": {"$exists": True, "$nin": [None, ""]},
-        "gst.status": "pending",
-        "gst.verified": {"$ne": True}
+        "$or": [
+            {"roles": "seller"},
+            {"isSeller": True}
+        ],
+        "$and": [
+            # GST number exists in at least one location
+            {"$or": [
+                {"gst.number": {"$exists": True, "$nin": [None, ""]}},
+                {"gstNumber": {"$exists": True, "$nin": [None, ""]}},
+                {"business.gst": {"$exists": True, "$nin": [None, ""]}}
+            ]},
+            # GST status is pending in at least one location
+            {"$or": [
+                {"gst.status": "pending"},
+                {"gstStatus": "pending"}
+            ]},
+            # GST is not verified
+            {"gst.verified": {"$ne": True}}
+        ]
     }
     
     skip = (page - 1) * limit
@@ -3349,21 +3365,25 @@ async def admin_get_pending_gst(
     
     results = []
     for user in users:
-        gst = user.get("gst", {})
+        gst = user.get("gst", {}) or {}
         profile = user.get("profile", {}) or {}
+        business = user.get("business", {}) or {}
+        
+        # Resolve GST number from multiple locations
+        gst_number = gst.get("number") or business.get("gst") or user.get("gstNumber") or ""
+        gst_status = gst.get("status") or user.get("gstStatus") or "pending"
         
         results.append({
             "_id": str(user["_id"]),
             "email": user.get("email", ""),
-            "businessName": profile.get("businessName", ""),
-            "gstNumber": gst.get("number", ""),
-            "gstStatus": gst.get("status", "pending"),
-            "gstVerified": gst.get("verified", False),
-            "phone": profile.get("phone", ""),
-            "city": profile.get("city", ""),
-            "state": profile.get("state", ""),
-            "createdAt": user.get("createdAt", ""),
-            "updatedAt": user.get("updatedAt", "")
+            "business_name": profile.get("businessName") or business.get("name") or user.get("businessName") or "",
+            "gst_number": gst_number,
+            "gst_status": gst_status,
+            "owner_name": profile.get("businessName") or user.get("name") or "",
+            "business_location": ", ".join(filter(None, [profile.get("city"), profile.get("state")])),
+            "phone": profile.get("phone") or user.get("phone") or "",
+            "created_at": user.get("createdAt", ""),
+            "updated_at": user.get("updatedAt", "")
         })
     
     # Response format matching frontend: setRequests(data.pending_reviews || [])
@@ -3414,14 +3434,16 @@ async def admin_verify_gst(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Check if user is a seller
+    # Check if user is a seller (flexible: check roles OR isSeller flag)
     roles = target_user.get("roles", [])
-    if "seller" not in roles:
+    is_seller = target_user.get("isSeller", False)
+    if "seller" not in roles and not is_seller:
         raise HTTPException(status_code=400, detail="User is not a seller")
     
-    # Check GST number exists
-    gst = target_user.get("gst", {})
-    gst_number = gst.get("number")
+    # Check GST number exists (flexible: check nested and root locations)
+    gst = target_user.get("gst", {}) or {}
+    business = target_user.get("business", {}) or {}
+    gst_number = gst.get("number") or business.get("gst") or target_user.get("gstNumber")
     if not gst_number:
         raise HTTPException(status_code=400, detail="User has no GST number to verify")
     
@@ -3429,14 +3451,22 @@ async def admin_verify_gst(
     new_status = "verified" if verified else "rejected"
     
     update_data = {
+        "gst.number": gst_number,
         "gst.status": new_status,
         "gst.verified": verified,
         "updatedAt": datetime.now(timezone.utc)
     }
     
+    # Normalize: ensure "seller" is in roles and isSeller is set
+    update_ops: dict = {"$set": update_data}
+    if "seller" not in roles:
+        update_ops["$addToSet"] = {"roles": "seller"}
+    if not is_seller:
+        update_data["isSeller"] = True
+    
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
-        {"$set": update_data}
+        update_ops
     )
     
     listings_published = 0

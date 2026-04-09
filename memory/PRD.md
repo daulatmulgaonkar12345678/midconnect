@@ -58,6 +58,11 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Draft listings hidden from public search, visible to seller only
     - Toggle button on seller listings page + "Move to Draft" on edit page
     - Tests: 9/9 passed (iteration_123)
+49. **GST Verification Bug Fix (Apr 2026)**
+    - Fixed GST pending query to check multiple data locations (gst.status, gstStatus, isSeller, roles)
+    - Fixed field name mismatch: backend now returns snake_case matching frontend interface
+    - Verify endpoint now normalizes user data (adds "seller" to roles, sets isSeller)
+    - Root cause: some production users have GST data in legacy field locations
 
 ## Prioritized Backlog
 ### P0 (Next)
