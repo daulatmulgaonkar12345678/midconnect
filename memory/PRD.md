@@ -63,6 +63,13 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Fixed field name mismatch: backend now returns snake_case matching frontend interface
     - Verify endpoint now normalizes user data (adds "seller" to roles, sets isSeller)
     - Root cause: some production users have GST data in legacy field locations
+50. **Employee Access Enforcement (Apr 2026)**
+    - Admin-controlled employee blocking when `maxEmployees=0` in subscription overrides
+    - Guard added in both `require_auth` (server.py) and `authenticate_user` (utils/permissions.py)
+    - Covers ALL endpoints: server.py routes + business-tool routers (panels, invoices, POs, etc.)
+    - Link employee endpoint also enforces maxEmployees limit before linking
+    - Seller/admin users NOT blocked; only employees of that seller
+    - Tests: 11/11 passed (iteration_124)
 
 ## Prioritized Backlog
 ### P0 (Next)
