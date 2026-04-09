@@ -48,6 +48,16 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Wired guards into Panels, Records, Reports, Invoices pages
     - Free users blocked from create/download with formal upgrade popup
     - Tests: 26/26 passed
+47. **Admin Employees Page + Become-Seller Location Selector (Apr 2026)**
+    - Admin Employee Management page at /admin/employees (list/delete employees)
+    - Become-seller flow updated with State/City/Pincode location selector
+    - Fixed deployment: backend SyntaxError in server.py, frontend TS null check
+    - Added sidebar link for Employees in admin layout
+48. **Seller Listing Publish/Draft Toggle (Apr 2026)**
+    - POST /api/listings/{listing_id}/unpublish — active/paused → draft
+    - Draft listings hidden from public search, visible to seller only
+    - Toggle button on seller listings page + "Move to Draft" on edit page
+    - Tests: 9/9 passed (iteration_123)
 
 ## Prioritized Backlog
 ### P0 (Next)
