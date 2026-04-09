@@ -1161,7 +1161,7 @@ def get_cors_origins():
         "http://127.0.0.1:3001",
         # Emergent preview URLs
         "https://app.emergent.sh",
-        "https://plan-limits-5.preview.emergentagent.com",
+        "https://admin-emp-mgmt.preview.emergentagent.com",
     ]
     
     # In both dev and prod, return explicit list (credentials require it)
@@ -3184,14 +3184,12 @@ class BecomeSellerRequest(BaseModel):
     """Request model for becoming a seller - SSOT: camelCase fields
     
     NOTE: No seller_type field - badge comes from each product's sellerRoleForProduct
-    A single seller can have different roles for different products:
-    - Manufacturer of Product A
-    - Dealer of Product B
-    - Distributor of Product C
     """
     businessName: str
-    businessLocation: str
-    gstNumber: str  # MANDATORY for sellers
+    state: str
+    city: str
+    pincode: str
+    gstNumber: str
     
     model_config = {"populate_by_name": True}
     
@@ -3202,11 +3200,25 @@ class BecomeSellerRequest(BaseModel):
             raise ValueError('Business name must be at least 2 characters')
         return v.strip()
     
-    @field_validator('businessLocation')
+    @field_validator('state')
     @classmethod
-    def validate_business_location(cls, v):
+    def validate_state(cls, v):
         if not v or len(v.strip()) < 2:
-            raise ValueError('Business location is required')
+            raise ValueError('State is required')
+        return v.strip()
+    
+    @field_validator('city')
+    @classmethod
+    def validate_city(cls, v):
+        if not v or len(v.strip()) < 2:
+            raise ValueError('City is required')
+        return v.strip()
+    
+    @field_validator('pincode')
+    @classmethod
+    def validate_pincode(cls, v):
+        if not v or len(v.strip()) != 6 or not v.strip().isdigit():
+            raise ValueError('Please enter a valid 6-digit PIN code')
         return v.strip()
     
     @field_validator('gstNumber')
@@ -3263,7 +3275,9 @@ async def become_seller(
     update_data = {
         "isSeller": True,
         "profile.businessName": seller_data.businessName,
-        "profile.city": seller_data.businessLocation,
+        "profile.state": seller_data.state,
+        "profile.city": seller_data.city,
+        "profile.pincode": seller_data.pincode,
         "gst.number": seller_data.gstNumber,
         "gst.status": "pending",
         "gst.verified": False,
@@ -9792,6 +9806,191 @@ async def admin_set_business_tool_access(
         result = await db.users.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": {"businessToolAccess": level, "updatedAt": datetime.now(timezone.utc)}}
+
+# === Admin: Employee Management ===
+@api_router.get("/admin/employees")
+async def admin_list_employees(
+    admin: dict = Depends(require_admin),
+    search: str = Query("", description="Search by employee name/email or company name"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+):
+    """
+    List all employees across all sellers with their seller/company info.
+    Used by the Admin Employee Management UI.
+    """
+    skip_val = (page - 1) * limit
+
+    # Build employee query
+    emp_query: dict = {"companyOwnerId": {"$exists": True, "$ne": None}}
+
+    if search:
+        emp_query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+        ]
+
+    total = await db.users.count_documents(emp_query)
+    employees = await db.users.find(
+        emp_query,
+        projection={"firebaseUid": 0, "passwordHash": 0}
+    ).sort("createdAt", -1).skip(skip_val).limit(limit).to_list(length=limit)
+
+    results = []
+    # Cache seller lookups
+    seller_cache: dict = {}
+    for emp in employees:
+        owner_id = emp.get("companyOwnerId")
+        if owner_id and str(owner_id) not in seller_cache:
+            seller_doc = await db.users.find_one(
+                {"_id": ObjectId(owner_id) if isinstance(owner_id, str) else owner_id},
+                projection={"profile": 1, "email": 1, "companyName": 1, "gst": 1}
+            )
+            seller_cache[str(owner_id)] = seller_doc
+
+        seller = seller_cache.get(str(owner_id), {}) if owner_id else {}
+
+        results.append({
+            "employeeId": str(emp["_id"]),
+            "name": emp.get("name", ""),
+            "email": emp.get("email", ""),
+            "phone": emp.get("phone", ""),
+            "status": "active" if emp.get("isActive", True) else "deactivated",
+            "permissions": emp.get("permissions", {}),
+            "createdAt": emp.get("createdAt").isoformat() if emp.get("createdAt") else None,
+            "sellerId": str(owner_id) if owner_id else None,
+            "sellerEmail": seller.get("email", "") if seller else "",
+            "companyName": (seller.get("profile", {}) or {}).get("businessName", "") or seller.get("companyName", "") if seller else "",
+        })
+
+    # If search includes company name, also search via sellers
+    if search and not results:
+        sellers_match = await db.users.find(
+            {"roles": "seller", "$or": [
+                {"profile.businessName": {"$regex": search, "$options": "i"}},
+                {"companyName": {"$regex": search, "$options": "i"}},
+            ]},
+            projection={"_id": 1}
+        ).to_list(50)
+        seller_ids = [s["_id"] for s in sellers_match]
+        if seller_ids:
+            emp_query2 = {"companyOwnerId": {"$in": seller_ids}}
+            employees2 = await db.users.find(
+                emp_query2,
+                projection={"firebaseUid": 0, "passwordHash": 0}
+            ).sort("createdAt", -1).skip(skip_val).limit(limit).to_list(length=limit)
+            for emp in employees2:
+                owner_id = emp.get("companyOwnerId")
+                seller = seller_cache.get(str(owner_id))
+                if not seller:
+                    seller = await db.users.find_one(
+                        {"_id": ObjectId(owner_id) if isinstance(owner_id, str) else owner_id},
+                        projection={"profile": 1, "email": 1, "companyName": 1}
+                    )
+                results.append({
+                    "employeeId": str(emp["_id"]),
+                    "name": emp.get("name", ""),
+                    "email": emp.get("email", ""),
+                    "phone": emp.get("phone", ""),
+                    "status": "active" if emp.get("isActive", True) else "deactivated",
+                    "permissions": emp.get("permissions", {}),
+                    "createdAt": emp.get("createdAt").isoformat() if emp.get("createdAt") else None,
+                    "sellerId": str(owner_id) if owner_id else None,
+                    "sellerEmail": seller.get("email", "") if seller else "",
+                    "companyName": (seller.get("profile", {}) or {}).get("businessName", "") or seller.get("companyName", "") if seller else "",
+                })
+            total = len(results)
+
+    # Get seller employee counts
+    pipeline = [
+        {"$match": {"companyOwnerId": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": "$companyOwnerId", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 50}
+    ]
+    seller_counts = await db.users.aggregate(pipeline).to_list(50)
+    top_sellers = []
+    for sc in seller_counts:
+        sid = sc["_id"]
+        s = seller_cache.get(str(sid))
+        if not s:
+            s = await db.users.find_one(
+                {"_id": ObjectId(sid) if isinstance(sid, str) else sid},
+                projection={"profile": 1, "email": 1, "companyName": 1}
+            )
+        top_sellers.append({
+            "sellerId": str(sid),
+            "companyName": (s.get("profile", {}) or {}).get("businessName", "") or s.get("companyName", "") if s else "",
+            "email": s.get("email", "") if s else "",
+            "employeeCount": sc["count"],
+        })
+
+    total_employees = await db.users.count_documents({"companyOwnerId": {"$exists": True, "$ne": None}})
+    total_active = await db.users.count_documents({"companyOwnerId": {"$exists": True, "$ne": None}, "isActive": True})
+
+    return {
+        "employees": results,
+        "total": total,
+        "page": page,
+        "pages": math.ceil(total / limit) if total > 0 else 1,
+        "stats": {
+            "totalEmployees": total_employees,
+            "activeEmployees": total_active,
+            "totalSellersWithEmployees": len(seller_counts),
+        },
+        "topSellers": top_sellers,
+    }
+
+
+@api_router.delete("/admin/employees/{employee_id}")
+async def admin_delete_employee(
+    employee_id: str,
+    admin: dict = Depends(require_admin)
+):
+    """Admin: Delete/unlink an employee from their company."""
+    try:
+        emp_oid = ObjectId(employee_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid employee ID")
+
+    emp = await db.users.find_one({"_id": emp_oid})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    owner_id = emp.get("companyOwnerId")
+    if not owner_id:
+        raise HTTPException(status_code=400, detail="User is not an employee")
+
+    now = datetime.now(timezone.utc)
+
+    # Remove employee link
+    await db.users.update_one(
+        {"_id": emp_oid},
+        {"$set": {
+            "companyOwnerId": None,
+            "isActive": False,
+            "permissions": {},
+            "updatedAt": now,
+            "removedByAdmin": True,
+            "adminRemovalDate": now,
+        }}
+    )
+
+    # Log audit
+    await db.admin_audit_log.insert_one({
+        "action": "delete_employee",
+        "targetUserId": emp_oid,
+        "targetEmail": emp.get("email"),
+        "sellerId": owner_id,
+        "adminId": ObjectId(admin["_id"]) if isinstance(admin["_id"], str) else admin["_id"],
+        "timestamp": now,
+    })
+
+    logger.info(f"[ADMIN] Employee {employee_id} removed by admin {admin.get('email')}")
+
+    return {"message": "Employee removed successfully", "employeeId": employee_id}
+
+
         )
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid user ID")
