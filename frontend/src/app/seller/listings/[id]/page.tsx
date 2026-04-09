@@ -9,6 +9,7 @@ import {
   updateSellerListing,
   updateSellerPricing,
   publishSellerListing,
+  unpublishSellerListing,
   uploadProductImages,
   uploadProductVideos,
   uploadProductDatasheet
@@ -33,7 +34,8 @@ import {
   Save,
   AlertTriangle,
   Video,
-  Play
+  Play,
+  EyeOff
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -658,6 +660,24 @@ export default function EditSellerListingPage() {
       }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to publish listing');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Unpublish listing (move to draft)
+  const handleUnpublish = async () => {
+    if (!token || !form) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await unpublishSellerListing(token, listingId);
+      setForm(prev => prev ? { ...prev, status: 'draft' } : prev);
+      setSuccessToast('Listing moved to draft. It is now hidden from buyers.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unpublish listing');
     } finally {
       setSubmitting(false);
     }
@@ -1402,6 +1422,21 @@ export default function EditSellerListingPage() {
                       <Check className="h-4 w-4" />
                     )}
                     {form.status === 'paused' ? 'Republish' : 'Publish'}
+                  </button>
+                )}
+                {form.status === 'active' && (
+                  <button
+                    onClick={handleUnpublish}
+                    disabled={submitting}
+                    className="px-8 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2"
+                    data-testid="unpublish-listing"
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <EyeOff className="h-4 w-4" />
+                    )}
+                    Move to Draft
                   </button>
                 )}
               </div>

@@ -1255,6 +1255,13 @@ export const pauseSellerListing = (token: string, listingId: string): Promise<{
   method: 'POST' 
 });
 
+export const unpublishSellerListing = (token: string, listingId: string): Promise<{
+  message: string;
+  status: string;
+}> => fetchWithAuth(`/listings/${encodeURIComponent(listingId)}/unpublish`, token, { 
+  method: 'POST' 
+});
+
 export const deleteSellerListing = (token: string, listingId: string, hardDelete = false): Promise<{
   message: string;
 }> => fetchWithAuth(

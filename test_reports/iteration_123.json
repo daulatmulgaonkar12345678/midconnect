@@ -1,0 +1,70 @@
+{
+  "summary": "Iteration 123: Unpublish Listing Feature Testing. All 9 backend tests passed. The unpublish endpoint (POST /api/listings/{listing_id}/unpublish) correctly sets active listings to draft status. Draft listings are excluded from public search but remain visible in seller's own listings page. Frontend code has correct toggle button implementation.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Frontend compiles successfully. Seller listings page is behind Firebase auth gate - cannot visually test toggle buttons in preview environment. Code review confirms correct implementation of handleToggleStatus and handleUnpublish functions with proper data-testid attributes."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_unpublish_listing.py",
+    "/app/test_reports/pytest/unpublish_listing_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ POST /api/listings/{listing_id}/unpublish returns 200 and sets status to 'draft'",
+    "✓ Unpublish rejects already-draft listings with 400 error",
+    "✓ Unpublish rejects non-existent listings with 404 error",
+    "✓ Unpublish rejects unauthorized requests (no token) with 401 error",
+    "✓ Draft listings are excluded from public search (status='active' filter in search endpoint)",
+    "✓ Draft listings remain visible in seller's own listings (GET /api/seller/listings)",
+    "✓ Publish endpoint (POST /api/listings/{listing_id}/publish) requires GST verification - expected behavior",
+    "✓ Frontend page.tsx has handleToggleStatus function calling unpublishSellerListing API",
+    "✓ Frontend [id]/page.tsx has handleUnpublish function with 'Move to Draft' button",
+    "✓ Toggle buttons have data-testid='toggle-status-btn-{id}' for testing",
+    "✓ Frontend builds successfully without TypeScript errors"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_unpublish_listing.py"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "Compiles successfully. Auth gate prevents visual testing."
+  },
+  "test_credentials": "dev-test-token (admin user)",
+  "seed_data_creation": "Tests use existing listings: 69b57c730ed7999c085b3656, 69b5c25c2972a896e0a78417, 69b57c730ed7999c085b3657",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 123 tested the unpublish listing feature. Key findings: (1) POST /api/listings/{listing_id}/unpublish works correctly - sets active/paused listings to draft status. (2) Endpoint rejects: already-draft listings (400), non-existent listings (404), unauthorized requests (401). (3) Search endpoint filters by status='active' so draft listings are excluded from public search. (4) GET /api/seller/listings returns all seller's listings including drafts. (5) Publish endpoint requires GST verification (expected behavior per agent context). (6) Frontend has correct implementation: handleToggleStatus in page.tsx, handleUnpublish in [id]/page.tsx, unpublishSellerListing API function. (7) Toggle buttons have data-testid attributes for testing. (8) Frontend builds without errors.",
+  "features_tested": [
+    "POST /api/listings/{listing_id}/unpublish - sets active listing to draft status",
+    "Unpublish rejects already-draft listings with 400",
+    "Unpublish rejects non-existent listings with 404",
+    "Unpublish rejects unauthorized users with 401",
+    "Draft listings excluded from public search (GET /api/search)",
+    "Draft listings visible in seller's listings (GET /api/seller/listings)",
+    "Publish endpoint requires GST verification (expected)",
+    "Toggle flow: active -> draft -> active (if GST verified)",
+    "Frontend code review: handleToggleStatus, handleUnpublish, unpublishSellerListing API"
+  ],
+  "api_endpoints_verified": {
+    "POST /api/listings/{listing_id}/unpublish (active)": "200 - Sets status to 'draft'",
+    "POST /api/listings/{listing_id}/unpublish (draft)": "400 - Cannot unpublish draft listing",
+    "POST /api/listings/{listing_id}/unpublish (nonexistent)": "404 - Listing not found",
+    "POST /api/listings/{listing_id}/unpublish (no auth)": "401 - Authorization required",
+    "GET /api/seller/listings": "200 - Returns all seller listings including drafts",
+    "GET /api/search?q=motor": "200 - Returns only active listings (draft excluded)",
+    "POST /api/listings/{listing_id}/publish": "400/403 - Requires GST verification (expected)"
+  },
+  "frontend_code_verified": {
+    "page.tsx handleToggleStatus": "Line 94 - Calls unpublishSellerListing for active listings",
+    "page.tsx toggle button": "Line 394-411 - Shows Draft/Publish toggle with data-testid",
+    "[id]/page.tsx handleUnpublish": "Line 669 - Calls unpublishSellerListing API",
+    "[id]/page.tsx Move to Draft button": "Line 1429-1440 - Shows for active listings",
+    "api.ts unpublishSellerListing": "Line 1258 - POST /listings/{id}/unpublish"
+  }
+}

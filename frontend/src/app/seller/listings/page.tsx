@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { 
   getSellerListings,
+  publishSellerListing,
+  unpublishSellerListing,
   SellerListing,
   PricingTier
 } from '@/lib/api';
@@ -14,6 +16,7 @@ import {
   Loader2, 
   AlertCircle, 
   Eye,
+  EyeOff,
   PauseCircle,
   FileText,
   Archive,
@@ -41,6 +44,7 @@ export default function SellerListingsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedPricing, setExpandedPricing] = useState<Set<string>>(new Set());
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
   const loadListings = useCallback(async () => {
     try {
@@ -85,6 +89,28 @@ export default function SellerListingsPage() {
       }
       return newSet;
     });
+  };
+
+  const handleToggleStatus = async (listingId: string, currentStatus: string) => {
+    try {
+      const token = await getIdToken();
+      if (!token) return;
+      setTogglingIds(prev => new Set(prev).add(listingId));
+      if (currentStatus === 'active') {
+        await unpublishSellerListing(token, listingId);
+      } else {
+        await publishSellerListing(token, listingId);
+      }
+      await loadListings();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update listing status');
+    } finally {
+      setTogglingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(listingId);
+        return newSet;
+      });
+    }
   };
 
   const statusColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
@@ -362,6 +388,28 @@ export default function SellerListingsPage() {
                   {/* Action Buttons */}
                   <div className="px-4 pb-4">
                     <div className="flex items-center gap-2 pt-3 border-t">
+                      {/* Publish / Unpublish Toggle */}
+                      {(listing.status === 'active' || listing.status === 'draft') && (
+                        <button
+                          onClick={() => handleToggleStatus(listing._id, listing.status)}
+                          disabled={togglingIds.has(listing._id)}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium rounded-lg transition ${
+                            listing.status === 'active'
+                              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              : 'bg-green-600 text-white hover:bg-green-700'
+                          } disabled:opacity-50`}
+                          title={listing.status === 'active' ? 'Move to draft — hides from buyers' : 'Publish — make visible to buyers'}
+                          data-testid={`toggle-status-btn-${listing._id}`}
+                        >
+                          {togglingIds.has(listing._id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : listing.status === 'active' ? (
+                            <><EyeOff className="h-4 w-4" /> Draft</>
+                          ) : (
+                            <><Eye className="h-4 w-4" /> Publish</>
+                          )}
+                        </button>
+                      )}
                       <Link
                         href={`/seller/pricing?listing=${listing._id}`}
                         className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-yellow-500 text-white text-sm font-medium rounded-lg hover:bg-yellow-600 transition"

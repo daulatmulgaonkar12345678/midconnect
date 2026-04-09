@@ -6355,7 +6355,47 @@ async def publish_listing(listing_id: str, user: dict = Depends(require_verified
         }}
     )
     
-    return {"message": "Listing published successfully"}
+    return {"message": "Listing published successfully", "status": "active", "publishedAt": now.isoformat()}
+
+
+@api_router.post("/listings/{listing_id}/unpublish")
+async def unpublish_listing(listing_id: str, user: dict = Depends(require_auth)):
+    """
+    Unpublish an active listing — sets status to 'draft'.
+    The listing becomes invisible to public but remains visible to the seller.
+    """
+    seller_oid = ObjectId(user["_id"])
+    listing_oid = ObjectId(listing_id)
+
+    listing = await db.sellerListings.find_one({
+        "_id": listing_oid,
+        "sellerId": seller_oid
+    })
+
+    if not listing:
+        exists = await db.sellerListings.find_one({"_id": listing_oid})
+        if exists:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.get("status") not in ("active", "paused"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot unpublish a listing with status '{listing.get('status')}'. Only active or paused listings can be moved to draft."
+        )
+
+    now = datetime.now(timezone.utc)
+    await db.sellerListings.update_one(
+        {"_id": listing_oid, "sellerId": seller_oid},
+        {"$set": {
+            "status": "draft",
+            "updatedAt": now
+        }}
+    )
+
+    logger.info(f"[SELLER] Listing {listing_id} unpublished (moved to draft) by seller {user.get('email')}")
+    return {"message": "Listing moved to draft", "status": "draft"}
+
 
 @api_router.delete("/listings/{listing_id}")
 async def delete_listing(listing_id: str, user: dict = Depends(require_verified_user)):
