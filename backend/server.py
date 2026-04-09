@@ -3272,7 +3272,10 @@ async def become_seller(
     
     result = await db.users.update_one(
         {"_id": ObjectId(user["_id"])},
-        {"$set": update_data}
+        {
+            "$set": update_data,
+            "$addToSet": {"roles": "seller"}
+        }
     )
     
     if result.modified_count == 0:
@@ -3320,9 +3323,9 @@ async def admin_get_pending_gst(
     # SSOT: Use unified gst schema only
     query = {
         "roles": "seller",
-        "gst.number": {"$exists": True, "$ne": None, "$ne": ""},
+        "gst.number": {"$exists": True, "$nin": [None, ""]},
         "gst.status": "pending",
-        "gst.verified": False
+        "gst.verified": {"$ne": True}
     }
     
     skip = (page - 1) * limit
