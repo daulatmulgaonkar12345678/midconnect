@@ -157,4 +157,28 @@ async def authenticate_user(db, verify_token_func, authorization: str) -> dict:
         raise HTTPException(status_code=403, detail="Employee account is inactive")
     if user.get("employeeStatus") == "disabled" and user.get("companyId"):
         raise HTTPException(status_code=403, detail="Employee account is disabled")
+    
+    # EMPLOYEE ACCESS ENFORCEMENT: Check if boss's maxEmployees allows employee access
+    company_id = user.get("companyId") or user.get("companyOwnerId")
+    employee_status = user.get("employeeStatus")
+    if company_id and employee_status in ("active", "disabled"):
+        if not is_platform_admin(user):
+            try:
+                from config.plan_features import get_effective_limits
+                boss_user = {"_id": company_id, "roles": ["seller"], "isSeller": True}
+                limits = await get_effective_limits(db, boss_user)
+                max_employees = limits.get("maxEmployees", 0)
+                if max_employees == 0:
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "error": "EMPLOYEE_ACCESS_BLOCKED",
+                            "message": "Your employer's subscription does not include employee access. Please contact your employer to upgrade their plan.",
+                        }
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f"[EMPLOYEE_GUARD] Error checking employee limits: {e}")
+    
     return user

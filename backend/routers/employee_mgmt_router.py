@@ -190,6 +190,23 @@ def init_employee_mgmt_router(db, verify_token_func, resolve_seller_id_func, sio
     async def link_employee(data: LinkEmployeeRequest, authorization: str = Header(...)):
         admin = await get_current_user(authorization)
         seller_id = await get_seller_id(admin)
+        
+        # CHECK maxEmployees limit before linking
+        from config.plan_features import get_effective_limits
+        boss_user = {"_id": seller_id, "roles": ["seller"], "isSeller": True}
+        limits = await get_effective_limits(db, boss_user)
+        max_employees = limits.get("maxEmployees", 0)
+        if max_employees != -1:  # -1 = unlimited
+            current_count = await db.users.count_documents({
+                "companyId": ObjectId(seller_id),
+                "employeeStatus": {"$in": ["active", "disabled"]}
+            })
+            if current_count >= max_employees:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Employee limit reached ({max_employees}). Upgrade your plan to add more employees."
+                )
+        
         target = await db.users.find_one({"email": data.email.lower().strip()})
         if not target:
             raise HTTPException(status_code=404, detail="User not found. They must register first.")

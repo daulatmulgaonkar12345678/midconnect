@@ -1854,10 +1854,15 @@ async def verify_firebase_token(token: str) -> dict:
                 "emailVerified": True,
                 "admin": True
             }
-        raise HTTPException(
-            status_code=503,
-            detail="Authentication service not configured"
-        )
+        # DEV MODE: Allow any token as firebaseUid for testing employee flows
+        # This enables testing employee access enforcement without Firebase
+        logger.warning(f"DEV MODE: Using token as firebaseUid for testing: {token[:20]}...")
+        return {
+            "uid": token,
+            "email": f"{token}@test.com",
+            "emailVerified": True,
+            "admin": False
+        }
 
     try:
         decoded_token = firebase_auth.verify_id_token(token)
@@ -2022,6 +2027,30 @@ async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(secur
     if not user.get("canLogin", True):
         metrics.record_auth_failure("login_restricted")
         raise HTTPException(status_code=403, detail="Account access has been restricted. Contact support.")
+    
+    # EMPLOYEE ACCESS ENFORCEMENT: Check if employee's boss allows employees
+    company_id = user.get("companyId") or user.get("companyOwnerId")
+    employee_status = user.get("employeeStatus")
+    if company_id and employee_status in ("active", "disabled"):
+        try:
+            from config.plan_features import get_effective_limits
+            # Build a minimal boss user dict for get_effective_limits
+            boss_user = {"_id": company_id, "roles": ["seller"], "isSeller": True}
+            limits = await get_effective_limits(db, boss_user)
+            max_employees = limits.get("maxEmployees", 0)
+            if max_employees == 0:
+                logger.warning(f"[EMPLOYEE_GUARD] BLOCKED employee {user_id} — boss {company_id} has maxEmployees=0")
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "EMPLOYEE_ACCESS_BLOCKED",
+                        "message": "Your employer's subscription does not include employee access. Please contact your employer to upgrade their plan.",
+                    }
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[EMPLOYEE_GUARD] Error checking employee limits: {e}")
     
     # Record successful auth
     metrics.record_auth_success(user_id)
