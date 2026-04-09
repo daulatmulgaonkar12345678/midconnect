@@ -18,7 +18,7 @@
     "critical_bugs": [
       {
         "component": "External URL Access",
-        "issue": "Frontend URL https://plan-limits-5.preview.emergentagent.com shows 520 Cloudflare error",
+        "issue": "Frontend URL https://admin-emp-mgmt.preview.emergentagent.com shows 520 Cloudflare error",
         "impact": "External users cannot access the application",
         "fix_priority": "CRITICAL",
         "affected_selectors": ["entire frontend"],

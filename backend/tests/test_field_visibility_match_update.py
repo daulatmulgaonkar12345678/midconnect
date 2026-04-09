@@ -16,7 +16,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://plan-limits-5.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://admin-emp-mgmt.preview.emergentagent.com').rstrip('/')
 AUTH_HEADER = {"Authorization": "Bearer dev-test-token", "Content-Type": "application/json"}
 
 # Test panel ID from context - Visibility Test Panel

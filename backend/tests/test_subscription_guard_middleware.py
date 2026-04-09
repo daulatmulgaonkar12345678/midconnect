@@ -28,7 +28,7 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://plan-limits-5.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://admin-emp-mgmt.preview.emergentagent.com').rstrip('/')
 DEV_TOKEN = "dev-test-token"  # Admin access in dev mode
 
 @pytest.fixture

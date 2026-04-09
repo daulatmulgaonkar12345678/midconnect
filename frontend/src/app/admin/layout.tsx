@@ -22,7 +22,8 @@ import {
   Ruler,
   Beaker,
   Wallet,
-  CreditCard
+  CreditCard,
+  UserCheck
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -110,6 +111,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: '/admin/product-requests', label: 'Product Requests', icon: FileText },
     { href: '/admin/payouts', label: 'Payouts', icon: Wallet },
     { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
+    { href: '/admin/employees', label: 'Employees', icon: UserCheck },
     { href: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 

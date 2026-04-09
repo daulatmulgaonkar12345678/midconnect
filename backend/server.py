@@ -9806,6 +9806,15 @@ async def admin_set_business_tool_access(
         result = await db.users.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": {"businessToolAccess": level, "updatedAt": datetime.now(timezone.utc)}}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {"success": True, "message": f"Business tool access set to '{level}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # === Admin: Employee Management ===
 @api_router.get("/admin/employees")
@@ -9989,16 +9998,6 @@ async def admin_delete_employee(
     logger.info(f"[ADMIN] Employee {employee_id} removed by admin {admin.get('email')}")
 
     return {"message": "Employee removed successfully", "employeeId": employee_id}
-
-
-        )
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid user ID")
-
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {"message": f"Business tool access set to '{level}'", "businessToolAccess": level}
 
 
 # === Admin: List Sellers with Subscription + Effective Limits ===

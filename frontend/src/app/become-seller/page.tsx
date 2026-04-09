@@ -81,6 +81,7 @@ function BecomeSellerContent() {
     setIsSubmitting(true);
     try {
       const token = await getIdToken();
+      if (!token) throw new Error('Authentication failed. Please log in again.');
       await fetchWithAuth('/users/become-seller', token, {
         method: 'POST',
         body: {
