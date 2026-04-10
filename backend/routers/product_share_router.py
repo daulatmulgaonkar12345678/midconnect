@@ -96,7 +96,7 @@ def init_product_share_router(db, verify_token_func):
         seller_id = await get_seller_id(user)
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
             {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
             {"$group": {"_id": {"$ifNull": ["$prod.categoryName", "Uncategorized"]}, "count": {"$sum": 1}}},
@@ -127,7 +127,7 @@ def init_product_share_router(db, verify_token_func):
         # Get products with details
         product_oids = [ObjectId(pid) for pid in data.productIds if ObjectId.is_valid(pid)]
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "productId": {"$in": product_oids}, "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "productId": {"$in": product_oids}, "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
             {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
             {"$project": {

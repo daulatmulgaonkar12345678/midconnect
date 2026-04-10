@@ -88,7 +88,7 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         
         # Build aggregation pipeline
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {
                 "from": "products",
                 "localField": "productId",
@@ -186,7 +186,7 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
             "total": total,
             "lowStockCount": await db.sellerListings.count_documents({
                 "sellerId": ObjectId(seller_id),
-                "status": {"$in": ["active", "paused"]},
+                "status": {"$in": ["active", "paused", "draft"]},
                 "$expr": {"$lte": ["$stock", {"$cond": {
                     "if": {"$gt": [{"$ifNull": ["$minStock", 0]}, 0]},
                     "then": {"$ifNull": ["$minStock", 0]},
@@ -477,7 +477,7 @@ def init_inventory_router(db, verify_token_func, activity_log_service=None, comp
         pipeline = [
             {"$match": {
                 "sellerId": ObjectId(seller_id),
-                "status": {"$in": ["active", "paused"]},
+                "status": {"$in": ["active", "paused", "draft"]},
                 "$expr": {"$lte": ["$stock", {"$cond": {
                     "if": {"$gt": [{"$ifNull": ["$minStock", 0]}, 0]},
                     "then": {"$ifNull": ["$minStock", 0]},

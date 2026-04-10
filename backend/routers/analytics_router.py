@@ -64,7 +64,7 @@ def init_analytics_router(db, verify_token_func):
         seller_id = await get_seller_id(user)
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "pd"}},
             {"$unwind": {"path": "$pd", "preserveNullAndEmptyArrays": True}},
             {"$project": {
@@ -353,7 +353,7 @@ def init_analytics_router(db, verify_token_func):
         seller_id = await get_seller_id(user)
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "product"}},
             {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
             {"$lookup": {"from": "categories", "localField": "product.categoryId", "foreignField": "_id", "as": "cat"}},

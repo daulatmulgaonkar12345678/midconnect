@@ -1244,7 +1244,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
         if target == "inventory":
             # Inventory items are in sellerListings, joined with products for names
             pipeline = [
-                {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+                {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
                 {"$lookup": {
                     "from": "products",
                     "localField": "productId",

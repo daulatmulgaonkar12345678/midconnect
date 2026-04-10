@@ -71,11 +71,10 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Seller/admin users NOT blocked; only employees of that seller
     - Tests: 11/11 passed (iteration_124)
 51. **Draft Products in Seller Business Tools (Apr 2026)**
-    - Draft products now visible in all seller-side tools: dashboard, inventory, invoices, panels, reports, exports, composite products
-    - Draft products remain hidden from public search and product pages
-    - Updated 7 routers: home_router, invoice_router, composite_products_router, export_import_router, reports_router, panel_router, server.py (admin counts)
-    - Public-facing endpoints (search, enterprise_products) unchanged — only show active
-    - Tests: 22/22 passed (iteration_125)
+    - Draft products now visible in ALL seller-side tools: dashboard, inventory, invoices, panels, reports, exports, composite products, analytics, product shares
+    - Updated 9 routers: inventory_router, home_router, invoice_router, composite_products_router, export_import_router, reports_router, panel_router, product_share_router, analytics_router + server.py admin counts
+    - Draft products remain hidden from public search and product pages (enterprise_products, search endpoints)
+    - Tests: 22/22 passed (iteration_125), inventory endpoint manually verified with draft listings
 
 ## Prioritized Backlog
 ### P0 (Next)

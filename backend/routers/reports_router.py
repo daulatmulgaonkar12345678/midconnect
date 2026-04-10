@@ -338,7 +338,7 @@ def init_reports_router(db, verify_token_func):
         seller_id = await get_seller_id(user)
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
             {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
             {"$project": {
@@ -575,7 +575,7 @@ def init_reports_router(db, verify_token_func):
         seller_id = await get_seller_id(user)
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
             {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
             {"$project": {
