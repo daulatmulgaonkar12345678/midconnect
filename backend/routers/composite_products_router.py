@@ -223,7 +223,7 @@ def init_composite_products_router(db, verify_token_func, activity_log_service):
 
         listings = await db.sellerListings.find({
             "sellerId": ObjectId(seller_id),
-            "status": {"$in": ["active", "paused"]},
+            "status": {"$in": ["active", "paused", "draft"]},
             "productType": {"$ne": "composite"}
         }).to_list(500)
 

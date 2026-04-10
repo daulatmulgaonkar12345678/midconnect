@@ -236,7 +236,7 @@ def init_export_import_router(db, verify_token_func):
         seller_id = await get_seller_id(user)
 
         pipeline = [
-            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
             {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
             {"$project": {
@@ -756,7 +756,7 @@ def init_export_import_router(db, verify_token_func):
         seller_oid = ObjectId(seller_id)
 
         listings = await db.sellerListings.aggregate([
-            {"$match": {"sellerId": seller_oid, "status": "active"}},
+            {"$match": {"sellerId": seller_oid, "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "prod"}},
             {"$unwind": {"path": "$prod", "preserveNullAndEmptyArrays": True}},
             {"$project": {"productName": {"$ifNull": ["$prod.name", "Unknown"]}, "stock": {"$ifNull": ["$stock", 0]}, "lowStockAlert": {"$ifNull": ["$lowStockAlert", 10]}}}

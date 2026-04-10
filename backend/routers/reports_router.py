@@ -98,7 +98,7 @@ def init_reports_router(db, verify_token_func):
 
         # 3. Low stock count
         low_stock_pipeline = [
-            {"$match": {"sellerId": seller_oid, "status": "active"}},
+            {"$match": {"sellerId": seller_oid, "status": {"$in": ["active", "paused", "draft"]}}},
             {"$match": {"$expr": {"$lte": ["$stock", {"$ifNull": ["$lowStockAlert", 10]}]}}},
             {"$count": "count"}
         ]
@@ -1458,7 +1458,7 @@ def init_reports_router(db, verify_token_func):
 
         # Get all active listings with product names
         listings_pipeline = [
-            {"$match": {"sellerId": seller_oid, "status": "active"}},
+            {"$match": {"sellerId": seller_oid, "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {
                 "from": "products",
                 "localField": "productId",

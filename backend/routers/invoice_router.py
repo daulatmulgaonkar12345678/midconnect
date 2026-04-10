@@ -229,7 +229,7 @@ def init_invoice_router(db, verify_token_func, activity_log_service, composite_r
 
         listings = await db.sellerListings.find({
             "sellerId": ObjectId(seller_id),
-            "status": {"$in": ["active", "paused"]}
+            "status": {"$in": ["active", "paused", "draft"]}
         }).to_list(500)
 
         items = []

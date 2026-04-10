@@ -33,11 +33,11 @@ def init_home_router(db, verify_token_func):
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         total_products = await db.sellerListings.count_documents({
-            "sellerId": seller_oid, "status": {"$in": ["active", "paused"]}
+            "sellerId": seller_oid, "status": {"$in": ["active", "paused", "draft"]}
         })
 
         low_stock_pipeline = [
-            {"$match": {"sellerId": seller_oid, "status": {"$in": ["active", "paused"]}, "minStock": {"$gt": 0}}},
+            {"$match": {"sellerId": seller_oid, "status": {"$in": ["active", "paused", "draft"]}, "minStock": {"$gt": 0}}},
             {"$match": {"$expr": {"$lt": ["$stock", "$minStock"]}}},
             {"$count": "count"}
         ]
@@ -128,7 +128,7 @@ def init_home_router(db, verify_token_func):
 
         # 4. Stock Distribution by Category
         stock_pipeline = [
-            {"$match": {"sellerId": seller_oid, "status": {"$in": ["active", "paused"]}}},
+            {"$match": {"sellerId": seller_oid, "status": {"$in": ["active", "paused", "draft"]}}},
             {"$lookup": {"from": "products", "localField": "productId", "foreignField": "_id", "as": "product"}},
             {"$unwind": {"path": "$product", "preserveNullAndEmptyArrays": True}},
             {"$lookup": {"from": "categories", "localField": "product.categoryId", "foreignField": "_id", "as": "cat"}},

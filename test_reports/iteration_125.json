@@ -1,0 +1,90 @@
+{
+  "summary": "Iteration 125: Draft Products Feature Testing. All 22 backend tests passed. Draft products correctly appear in seller's business tools (listings, dashboard, invoices, composite products) but are excluded from public search and product pages.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Backend-only testing as requested. No frontend testing performed."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_draft_products_feature.py",
+    "/app/test_reports/pytest/draft_products_feature_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ GET /api/seller/listings returns all statuses (active, paused, draft) - draft listing 69b5c25c2972a896e0a78417 included",
+    "✓ GET /api/business-tools/home/summary counts all products including draft (totalProducts=3)",
+    "✓ GET /api/business-tools/invoice-products returns all products including draft",
+    "✓ GET /api/business-tools/composite-products returns draft composite with listingStatus='draft'",
+    "✓ GET /api/search excludes draft listings (returns 0 results when only draft matches)",
+    "✓ POST /api/listings/{id}/unpublish correctly sets active->draft",
+    "✓ POST /api/listings/{id}/unpublish rejects already-draft with 400",
+    "✓ POST /api/listings/{id}/unpublish rejects non-existent with 404",
+    "✓ POST /api/listings/{id}/unpublish requires auth (401 without token)",
+    "✓ POST /api/listings/{id}/publish requires email verification (expected behavior)",
+    "✓ home_router.py uses status:{$in:['active','paused','draft']} for seller queries",
+    "✓ invoice_router.py uses status:{$in:['active','paused','draft']} for invoice products",
+    "✓ composite_products_router.py uses status:{$in:['active','paused','draft']}",
+    "✓ export_import_router.py uses status:{$in:['active','paused','draft']}",
+    "✓ reports_router.py uses status:{$in:['active','paused','draft']}",
+    "✓ panel_router.py uses status:{$in:['active','paused','draft']}",
+    "✓ enterprise_products.py (public) uses status:'active' only - draft excluded",
+    "✓ server.py search endpoint uses status:'active' only - draft excluded"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_draft_products_feature.py"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 tests passed)",
+    "frontend": "N/A (backend-only testing)"
+  },
+  "test_credentials": {
+    "admin_token": "dev-test-token (maps to seller 69a0ac1089b696c2337c5a6e)"
+  },
+  "seed_data_creation": "Used existing listings: 69b57c730ed7999c085b3656 (now draft after test), 69b5c25c2972a896e0a78417 (draft), 69b57c730ed7999c085b3657 (active)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 125 tested the draft products feature. Key findings: (1) All seller-side business tool routers (home, invoice, composite_products, export_import, reports, panel) now include draft status in queries: status:{$in:['active','paused','draft']}. (2) Public-facing endpoints (search, enterprise_products) correctly use status:'active' only, excluding draft products. (3) Unpublish endpoint (POST /api/listings/{id}/unpublish) works correctly for active->draft. (4) Publish endpoint requires email verification. (5) Test listings: 69b57c730ed7999c085b3656 and 69b5c25c2972a896e0a78417 are now in draft status, 69b57c730ed7999c085b3657 is active. (6) Note: Running unpublish tests may change listing status - publish requires email/GST verification to restore.",
+  "features_tested": [
+    "Draft products appear in seller's own listings (GET /api/seller/listings)",
+    "Draft products counted in dashboard summary (GET /api/business-tools/home/summary)",
+    "Draft products appear in invoice products (GET /api/business-tools/invoice-products)",
+    "Draft products appear in composite products (GET /api/business-tools/composite-products)",
+    "Draft products do NOT appear in public search (GET /api/search)",
+    "Draft products do NOT appear in public product pages (enterprise_products)",
+    "Unpublish endpoint works (POST /api/listings/{id}/unpublish)",
+    "Publish endpoint requires verification (POST /api/listings/{id}/publish)",
+    "Active products still work normally in all endpoints"
+  ],
+  "api_endpoints_verified": {
+    "GET /api/seller/listings": "200 - Returns all listings including draft",
+    "GET /api/business-tools/home/summary": "200 - Counts all products including draft (totalProducts=3)",
+    "GET /api/business-tools/invoice-products": "200 - Returns all products including draft",
+    "GET /api/business-tools/composite-products": "200 - Returns draft composite with listingStatus='draft'",
+    "GET /api/business-tools/panels": "200 - Accessible",
+    "GET /api/search?q=motor": "200 - Returns only active listings (draft excluded)",
+    "POST /api/listings/{id}/unpublish (active)": "200 - Sets status to 'draft'",
+    "POST /api/listings/{id}/unpublish (draft)": "400 - Cannot unpublish draft listing",
+    "POST /api/listings/{id}/unpublish (nonexistent)": "404 - Listing not found",
+    "POST /api/listings/{id}/unpublish (no auth)": "401 - Authorization required",
+    "POST /api/listings/{id}/publish (draft)": "400 - Email verification required"
+  },
+  "code_review_verified": {
+    "home_router.py line 36": "status:{$in:['active','paused','draft']} for totalProducts",
+    "home_router.py line 40": "status:{$in:['active','paused','draft']} for lowStockItems",
+    "home_router.py line 131": "status:{$in:['active','paused','draft']} for charts",
+    "invoice_router.py line 232": "status:{$in:['active','paused','draft']} for invoice products",
+    "composite_products_router.py line 226": "status:{$in:['active','paused','draft']}",
+    "export_import_router.py line 239": "status:{$in:['active','paused','draft']}",
+    "export_import_router.py line 759": "status:{$in:['active','paused','draft']}",
+    "reports_router.py line 101": "status:{$in:['active','paused','draft']}",
+    "reports_router.py line 1461": "status:{$in:['active','paused','draft']}",
+    "panel_router.py line 951": "status:{$in:['active','paused','draft']}",
+    "enterprise_products.py": "status:'active' only (public pages)",
+    "server.py line 6522": "status:'active' only (public search)"
+  }
+}

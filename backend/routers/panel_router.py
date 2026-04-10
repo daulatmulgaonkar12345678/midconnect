@@ -948,7 +948,7 @@ def init_panel_router(db, verify_token_func, automation_executor=None):
                     exists = False
                     try:
                         if target == "inventory":
-                            exists = bool(await db.sellerListings.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused"]}}, {"_id": 1}))
+                            exists = bool(await db.sellerListings.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id), "status": {"$in": ["active", "paused", "draft"]}}, {"_id": 1}))
                         elif target == "invoices":
                             exists = bool(await db.invoices.find_one({"_id": ObjectId(val), "sellerId": ObjectId(seller_id)}, {"_id": 1}))
                         elif target == "buyers":

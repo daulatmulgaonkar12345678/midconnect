@@ -8248,7 +8248,7 @@ async def admin_list_categories(
             ]
         })
         # SSOT: Use seller_listings collection
-        serialized["listingCount"] = await db.sellerListings.count_documents({"status": "active"})
+        serialized["listingCount"] = await db.sellerListings.count_documents({"status": {"$in": ["active", "paused", "draft"]}})
         serialized_categories.append(serialized)
     
     return {"categories": serialized_categories, "total": len(serialized_categories)}
@@ -8532,7 +8532,7 @@ async def admin_delete_category(
     
     # Check for existing products - SSOT: Use seller_listings for listing count
     product_count = await db.products.count_documents({"category_id": category_id})
-    listing_count = await db.sellerListings.count_documents({"status": "active"})
+    listing_count = await db.sellerListings.count_documents({"status": {"$in": ["active", "paused", "draft"]}})
     
     if (product_count > 0 or listing_count > 0) and not force:
         raise HTTPException(
