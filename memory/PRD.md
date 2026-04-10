@@ -70,6 +70,12 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Link employee endpoint also enforces maxEmployees limit before linking
     - Seller/admin users NOT blocked; only employees of that seller
     - Tests: 11/11 passed (iteration_124)
+51. **Draft Products in Seller Business Tools (Apr 2026)**
+    - Draft products now visible in all seller-side tools: dashboard, inventory, invoices, panels, reports, exports, composite products
+    - Draft products remain hidden from public search and product pages
+    - Updated 7 routers: home_router, invoice_router, composite_products_router, export_import_router, reports_router, panel_router, server.py (admin counts)
+    - Public-facing endpoints (search, enterprise_products) unchanged — only show active
+    - Tests: 22/22 passed (iteration_125)
 
 ## Prioritized Backlog
 ### P0 (Next)
