@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger("seo_service")
 
 # Current SEO version — bump when content templates change
-SEO_VERSION = 6
+SEO_VERSION = 7
 
 # Supported programmatic SEO intents (single source of truth)
 SUPPORTED_INTENTS = ["price", "buy", "suppliers", "wholesale", "cheap"]
@@ -531,6 +531,71 @@ class SEOService:
 
 {clean_name} is typically used for {use_case_prose}. Procurement teams choose {cls.SITE_NAME} to compare multiple verified sellers in one place, lock in bulk pricing, and shortlist local suppliers for faster delivery and on-site support."""
         sections.append(intro.strip())
+
+        # ===== Template-variant highlight block (MARKET / BUYER / LOCAL / TECH) =====
+        # Picks one of 4 variants deterministically by product hash. Existing
+        # sections below are kept — this is an ADDITIONAL section, not a replacement.
+        product_slug_hash = cls.generate_seo_slug(product_name, category_name)
+        template_type = get_template_type(product_slug_hash)
+        price_display = f"₹{cls._format_price(min_price)}" if min_price else "competitive market rates"
+        seller_phrase = f"{seller_count}+" if seller_count > 1 else "multiple"
+
+        if template_type == "MARKET":
+            variant_block = f"""## {clean_name} Price Trends & Market Snapshot
+
+Current market price for {clean_name} starts from {price_display}. Prices vary based on grade, brand, specifications, and order quantity — bulk-procurement contracts typically unlock 10-20% savings versus spot rates.
+
+### Supplier Availability
+
+{seller_phrase} verified suppliers are currently active on {cls.SITE_NAME}, each with its own MOQ, delivery timeline, and payment terms. Multi-quote comparison is the fastest way to benchmark prices in real time.
+
+### Demand Across Industrial Hubs
+
+High demand is observed from manufacturing units, EPC contractors, and OEM procurement teams. Monthly price movement is driven by raw-material index trends, forex (for imported variants), and seasonal capex cycles."""
+        elif template_type == "BUYER":
+            buyer_profiles = cls.BUYER_PROFILES.get(category_key, cls.BUYER_PROFILES["default"])[:3]
+            buyer_bullets = "\n".join(f"- {bp[0].upper()+bp[1:]} handling industrial-scale projects" for bp in buyer_profiles)
+            variant_block = f"""## Who Typically Buys {clean_name}?
+
+{buyer_bullets}
+- Factory maintenance teams for recurring replacement needs
+- Contract manufacturers sourcing for OEM programmes
+
+### Where is {clean_name} Used?
+
+{clean_name} is commonly specified for {use_case_prose} — the exact choice depends on load conditions, environmental exposure, and compliance requirements on the project.
+
+### Buying Tips
+
+Before ordering, compare suppliers on MOQ, lead time, GST-inclusive landed cost, and warranty. Ask for mill-test certificates or sample batches for first-time suppliers — this is the single biggest quality safeguard."""
+        elif template_type == "LOCAL":
+            variant_block = f"""## Why Source {clean_name} Locally
+
+Buying {clean_name} from a local supplier cuts freight cost by 3-7%, shrinks lead time to 24-48 hours for in-stock items, and simplifies on-site quality inspection.
+
+### Industrial Zones & Local Supply
+
+Common supply zones include MIDC estates, GIDC estates, SIDCO areas, and neighbourhood industrial clusters — each hosts a different mix of manufacturers, stockists, and authorised dealers. Local sellers on {cls.SITE_NAME} display their GST, business type, and fulfilment area upfront.
+
+### Nearby City Coverage
+
+Sellers also serve nearby regions for quick dispatch — state capital buyers often get same-day delivery, while surrounding districts receive {clean_name} within 1-2 business days from {cls.SITE_NAME} verified suppliers."""
+        else:  # TECH / EDUCATION
+            variant_block = f"""## {clean_name} Specifications & Real-World Usage
+
+{clean_name} is built for industrial-grade duty — selected on dimensions, material grade, certification (ISO/BIS/IS-equivalent), and warranty. {price_display.capitalize() if isinstance(price_display, str) else 'Pricing'} applies to standard-spec variants; custom/premium grades carry a 15-40% uplift.
+
+### Technical Benefits
+
+- Consistent performance under rated industrial loads
+- Compatible with multiple end-use applications (see list below)
+- Reliable service life when installed per manufacturer spec
+
+### Common End-Use Applications
+
+Used for {use_case_prose}. Selecting the right spec for each end-use — not just the lowest-priced SKU — directly affects uptime, safety, and total cost of ownership."""
+
+        sections.append(variant_block.strip())
         
         # ===== H2: Types & Variants =====
         type_variants = cls._generate_type_variants(clean_name, category_key)
