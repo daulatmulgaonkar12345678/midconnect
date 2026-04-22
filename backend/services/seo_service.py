@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger("seo_service")
 
 # Current SEO version — bump when content templates change
-SEO_VERSION = 5
+SEO_VERSION = 6
 
 # Supported programmatic SEO intents (single source of truth)
 SUPPORTED_INTENTS = ["price", "buy", "suppliers", "wholesale", "cheap"]
@@ -109,19 +109,54 @@ class SEOService:
     
     # Industry applications mapping for different product categories
     INDUSTRY_APPLICATIONS = {
-        "motors": ["manufacturing plants", "industrial automation", "pumps and compressors", "conveyors", "HVAC systems"],
-        "electrical": ["power distribution", "industrial wiring", "construction projects", "renewable energy", "building automation"],
-        "steel": ["construction", "fabrication", "manufacturing", "infrastructure projects", "automotive industry"],
-        "chemicals": ["textile processing", "water treatment", "pharmaceuticals", "food processing", "paper manufacturing"],
-        "cables": ["power transmission", "telecommunications", "industrial wiring", "construction", "renewable energy"],
-        "pipes": ["plumbing", "industrial piping", "construction", "irrigation", "HVAC systems"],
-        "pumps": ["water supply", "industrial processing", "irrigation", "HVAC", "chemical handling"],
-        "valves": ["oil and gas", "water treatment", "chemical processing", "HVAC systems", "fire protection"],
-        "bearings": ["automotive", "industrial machinery", "conveyor systems", "pumps", "compressors"],
-        "fasteners": ["construction", "automotive", "machinery assembly", "furniture", "electronics"],
-        "tools": ["manufacturing", "construction", "maintenance", "automotive repair", "fabrication"],
-        "safety": ["manufacturing plants", "construction sites", "chemical plants", "oil and gas", "mining"],
-        "default": ["manufacturing", "construction", "industrial applications", "engineering projects", "commercial use"]
+        "motors": ["CNC lathes and milling machines", "textile spinning units", "HVAC blowers and cooling towers", "packaging machinery", "cement mill drives"],
+        "electrical": ["distribution panel wiring", "VFD control panels", "solar plant string wiring", "industrial lighting circuits", "sub-station switchgear"],
+        "steel": ["structural fabrication for warehouses", "automotive chassis components", "construction rebar and beams", "pressure vessel fabrication", "heavy equipment frames"],
+        "chemicals": ["textile dyeing baths", "effluent treatment plants", "API pharmaceutical synthesis", "soap and detergent lines", "boiler water treatment"],
+        "cables": ["LT/HT power distribution", "control panel wiring", "fiber-optic backbone networks", "solar DC harness runs", "lift and elevator controls"],
+        "pipes": ["process plant piping headers", "potable water supply mains", "fire sprinkler risers", "agricultural drip irrigation", "compressed air lines"],
+        "pumps": ["boiler feed water circulation", "chemical dosing on ETPs", "building cold-water boosters", "farm irrigation systems", "CIP lines in food plants"],
+        "valves": ["steam header isolation in boilers", "oil and gas flow control", "chemical injection skid isolation", "chiller water modulation", "fire-suppression shutoff"],
+        "bearings": ["conveyor belt idlers", "electric motor spindles", "CNC machine tool spindles", "automotive wheel hubs", "textile ring frames"],
+        "fasteners": ["steel structural connections", "machine base mounting", "automotive chassis assembly", "PCB and electronics housing", "modular furniture joinery"],
+        "tools": ["sheet-metal cutting and bending", "die-and-mould finishing", "automotive MRO workshops", "pipeline welding and fabrication", "panel wiring and crimping"],
+        "safety": ["chemical plant lockout/tagout", "high-rise construction sites", "welding and cutting workshops", "oil refinery turnarounds", "warehouse forklift operations"],
+        "default": ["panel wiring", "machine installation", "industrial automation", "factory maintenance", "OEM manufacturing"]
+    }
+
+    # Specific use-case one-liners (drop-in sentence fragments, not bullet lists)
+    # Used to replace generic phrases like "used in many industries".
+    INDUSTRY_USE_CASES_PROSE = {
+        "motors":     "driving CNC machines, industrial fans, textile looms, water pumps, and material-handling conveyors",
+        "electrical": "panel-board wiring, switchgear assembly, solar plant connections, and factory-floor distribution",
+        "steel":      "structural fabrication, automotive components, construction reinforcement, and pressure-vessel manufacturing",
+        "chemicals":  "dyeing and finishing, effluent treatment, pharmaceutical synthesis, and boiler-water treatment",
+        "cables":     "LT/HT power distribution, control panels, solar installations, and elevator control wiring",
+        "pipes":      "process plants, water supply, fire-safety networks, irrigation systems, and compressed-air lines",
+        "pumps":      "boiler circulation, chemical dosing, building water supply, farm irrigation, and food-plant CIP",
+        "valves":     "steam isolation, oil and gas flow control, chemical injection, chiller circuits, and fire shutoff",
+        "bearings":   "conveyor idlers, motor spindles, CNC tool-holders, automotive hubs, and textile machinery",
+        "fasteners":  "steel structural joints, machine bases, automotive chassis, electronics housings, and modular furniture",
+        "tools":      "sheet-metal work, mould finishing, workshop MRO, pipeline welding, and panel wiring",
+        "safety":     "chemical-plant lockout, high-rise construction, welding shops, oil-refinery turnarounds, and warehouses",
+        "default":    "panel wiring, machine installation, industrial automation, factory maintenance, and OEM assembly",
+    }
+
+    # Who typically buys each category — used in the "Who should buy this?" section.
+    BUYER_PROFILES = {
+        "motors":     ["OEM machine builders", "factory maintenance engineers", "HVAC contractors", "pump integrators", "automation system integrators"],
+        "electrical": ["electrical contractors", "panel builders", "MEP consultants", "solar EPC firms", "industrial plant engineers"],
+        "steel":      ["fabricators and structural shops", "EPC contractors", "real-estate builders", "automotive tier-1/2 suppliers", "equipment manufacturers"],
+        "chemicals":  ["process plant operators", "textile dye houses", "ETP/STP operators", "pharmaceutical manufacturers", "water-treatment contractors"],
+        "cables":     ["electrical contractors", "panel-board assemblers", "solar EPC firms", "telecom operators", "industrial MRO teams"],
+        "pipes":      ["plumbing contractors", "HVAC/MEP installers", "EPC contractors", "irrigation dealers", "process plant operators"],
+        "pumps":      ["mechanical contractors", "building MEP teams", "irrigation retailers", "food-processing plants", "chemical plant engineers"],
+        "valves":     ["process plant engineers", "EPC contractors", "boiler operators", "fire-safety contractors", "MEP system integrators"],
+        "bearings":   ["machine OEMs", "maintenance and reliability teams", "CNC workshop owners", "automotive dealers", "conveyor installers"],
+        "fasteners":  ["fabricators", "OEM assembly lines", "automotive suppliers", "electronics contract manufacturers", "furniture makers"],
+        "tools":      ["fabrication workshops", "automotive MRO", "electrical contractors", "die-and-mould makers", "industrial maintenance teams"],
+        "safety":     ["plant safety officers", "EHS consultants", "construction contractors", "refinery shutdown teams", "warehouse supervisors"],
+        "default":    ["contractors", "manufacturers", "factory maintenance teams", "OEM buyers", "MRO supervisors"],
     }
     
     # Major industrial cities for internal linking
@@ -471,9 +506,9 @@ class SEOService:
         # ===== H1 =====
         sections.append(f"# {clean_name} Suppliers in India — Verified Manufacturers & Dealers ({year})")
         
-        # ===== Introduction (80-120 words) =====
+        # ===== Introduction — human-style opener with real use-case prose =====
         seller_text = f"{seller_count}+ verified" if seller_count > 1 else "verified"
-        app_list_short = ", ".join(applications[:3])
+        use_case_prose = cls.INDUSTRY_USE_CASES_PROSE.get(category_key, cls.INDUSTRY_USE_CASES_PROSE["default"])
         price_mention = f" Prices start from ₹{cls._format_price(min_price)}." if min_price else ""
         # City availability signal — boosts "{product} in {city}" queries
         # Always mention 3-5 top cities (falls back to MAJOR_CITIES when no seller-city data yet)
@@ -482,10 +517,19 @@ class SEOService:
             fallback = [c for c in ["Pune", "Mumbai", "Delhi", "Ahmedabad", "Bangalore"] if c not in top_cities_for_intro]
             top_cities_for_intro = (top_cities_for_intro + fallback)[:5]
         city_names = ", ".join(c.title() for c in top_cities_for_intro)
-        city_avail_line = f" Available from verified suppliers in {city_names} and other major industrial cities."
-        intro = f"""{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India.{price_mention}{city_avail_line} Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
 
-{clean_name} is a critical component used in {app_list_short} and many other industrial applications. Sourcing from reliable suppliers ensures consistent quality, timely delivery, and compliance with industry standards. With our B2B marketplace, procurement teams can compare offers from multiple sellers and negotiate directly to get the best value."""
+        # Rotate between 3 intro openers (deterministic per product) to avoid AI-template patterns
+        opener_variants = [
+            f"Looking for {clean_name} suppliers across India?",
+            f"Need {clean_name} for your next project?",
+            f"Sourcing {clean_name} at competitive rates?",
+        ]
+        opener_idx = sum(ord(c) for c in product_name.lower()) % len(opener_variants)
+        opener_line = opener_variants[opener_idx]
+
+        intro = f"""{opener_line} {cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across {city_names} and other major industrial hubs.{price_mention}
+
+{clean_name} is typically used for {use_case_prose}. Procurement teams choose {cls.SITE_NAME} to compare multiple verified sellers in one place, lock in bulk pricing, and shortlist local suppliers for faster delivery and on-site support."""
         sections.append(intro.strip())
         
         # ===== H2: Types & Variants =====
@@ -543,20 +587,29 @@ Here is a real-time snapshot of the {clean_name} market on {cls.SITE_NAME}:
 These figures are updated as new suppliers join and pricing changes. Check the product page for the latest data."""
             sections.append(market_section.strip())
         
-        # ===== H2: Applications =====
-        app_list = ", ".join(applications[:4])
-        app_section = f"""## Applications of {clean_name}
+        # ===== H2: Real Use Cases (category-specific, not generic) =====
+        real_apps = applications[:5]
+        app_bullets = "\n".join(f"- {a[0].upper() + a[1:]}" for a in real_apps)
+        app_section = f"""## Real-World Applications of {clean_name}
 
-{clean_name} is widely used across multiple industries including {app_list}. Key application areas include:
+{clean_name} is most commonly specified for {use_case_prose}. On the ground, procurement teams source {clean_name} for:
 
-- **Manufacturing**: Factory automation, production lines, industrial machinery, and assembly operations
-- **Construction**: Building projects, infrastructure development, civil engineering, and structural works
-- **Engineering**: Fabrication shops, maintenance operations, equipment assembly, and testing facilities
-- **Energy & Utilities**: Power generation, distribution systems, renewable energy installations, and grid maintenance
-- **Commercial & OEM**: Office buildings, retail establishments, and original equipment manufacturing
+{app_bullets}
 
-The versatility of {clean_name} makes it indispensable across India's growing industrial sector. Whether for new installations or replacement parts, quality sourcing is essential for operational efficiency."""
+Each of these end-uses carries different spec requirements (grade, tolerance, certification), MOQ expectations, and delivery urgency — which is why comparing multiple verified suppliers on {cls.SITE_NAME} helps you match the right seller to the exact application, not just the headline price."""
         sections.append(app_section.strip())
+
+        # ===== H2: Who Should Buy This =====
+        buyer_profiles = cls.BUYER_PROFILES.get(category_key, cls.BUYER_PROFILES["default"])
+        buyer_bullets = "\n".join(f"- **{bp[0].upper() + bp[1:]}** — typically placing {'recurring' if i < 2 else 'project-based'} orders for {'in-stock' if i % 2 == 0 else 'made-to-order'} variants" for i, bp in enumerate(buyer_profiles[:5]))
+        who_section = f"""## Who Should Buy {clean_name}?
+
+{clean_name} on {cls.SITE_NAME} is most often sourced by:
+
+{buyer_bullets}
+
+Whether you order a single piece for a repair or a full truckload for a site, our verified sellers handle both — with transparent MOQ, unit pricing, and GST-compliant invoicing on every transaction."""
+        sections.append(who_section.strip())
         
         # ===== H2: Buying Guide =====
         buying_section = f"""## How to Buy {clean_name} at Best Price
