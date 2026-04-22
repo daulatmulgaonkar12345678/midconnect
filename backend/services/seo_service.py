@@ -860,40 +860,47 @@ Start sourcing {clean_name} today and get competitive quotes from verified suppl
     def should_regenerate_seo(cls, product: Dict[str, Any]) -> bool:
         """
         Check if a product's SEO data needs regeneration.
-        Returns True if SEO is missing, weak, or auto-generated and outdated.
+        Returns True if SEO is missing, weak, outdated version, or auto-generated and outdated.
         Does NOT overwrite manually edited SEO (if marked).
         """
         # Never overwrite manual edits
         if product.get("seoManuallyEdited"):
             return False
-        
+
+        # Version check — triggers regeneration when template/schema evolves
+        current_version = product.get("seoVersion", 0) or 0
+        if current_version < SEO_VERSION:
+            return True
+
         # Check if core SEO fields exist
         seo_title = product.get("seoTitle") or ""
         seo_desc = product.get("seoDescription") or ""
         seo_content = product.get("seoContent") or ""
         slug = product.get("slug") or ""
-        
+
         # Missing any core field
         if not seo_title or not seo_desc or not seo_content or not slug:
             return True
-        
+
         # Weak title (too short or generic)
-        if len(seo_title) < 20:
+        if len(seo_title) < 30:
             return True
-        
+
         # Weak description (too short)
-        if len(seo_desc) < 80:
+        if len(seo_desc) < 120:
             return True
-        
-        # Weak content (< 400 words)
+
+        # Weak content (< 400 words) or missing FAQ block
         word_count = len(seo_content.split())
-        if word_count < 350:
+        if word_count < 400:
             return True
-        
+        if "frequently asked" not in seo_content.lower() and "faq" not in seo_content.lower():
+            return True
+
         # Slug doesn't follow v2.1 format
         if not slug.endswith("-supplier-india") and not re.match(r'^[a-z0-9-]+$', slug):
             return True
-        
+
         return False
     
     # ==================== COMPLETE SEO DATA GENERATION ====================
@@ -1007,7 +1014,9 @@ Start sourcing {clean_name} today and get competitive quotes from verified suppl
             "canonicalUrl": f"{cls.SITE_URL}/product/{product.get('slug', '')}",
             
             # Generation timestamp
-            "seoGeneratedAt": datetime.now(timezone.utc).isoformat()
+            "seoGeneratedAt": datetime.now(timezone.utc).isoformat(),
+            # Version marker for bulk upgrade tracking
+            "seoVersion": SEO_VERSION
         }
         
         return seo_data

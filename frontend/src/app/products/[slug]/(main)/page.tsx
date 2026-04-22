@@ -14,7 +14,7 @@ import {
   ProductFacetsResponse,
   FilterRequest
 } from '@/lib/api';
-import { ProductJsonLd, CitySellerGroup, SEOContentSection, InternalLinksSection } from '@/components/ProductSEO';
+import { CitySellerGroup, SEOContentSection, InternalLinksSection } from '@/components/ProductSEO';
 import MaterialCalculatorCard, { CalculationResult } from '@/components/calculator/MaterialCalculatorCard';
 import SellerPriceComparison, { RawMaterialSeller } from '@/components/calculator/SellerPriceComparison';
 import ModernDynamicCalculator from '@/components/calculator/ModernDynamicCalculator';
@@ -1641,8 +1641,7 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
       )}
       
       {/* ==================== SECTION 5: SEO CONTENT (MARKETPLACE v2.0) ==================== */}
-      {/* JSON-LD Structured Data for Google Rich Snippets */}
-      {productId && <ProductJsonLd slug={productId} />}
+      {/* NOTE: JSON-LD structured data is injected server-side in layout.tsx (not here) */}
       
       {/* City-wise Seller Grouping */}
       {seoData?.sellersByCity && Object.keys(seoData.sellersByCity).length > 1 && (

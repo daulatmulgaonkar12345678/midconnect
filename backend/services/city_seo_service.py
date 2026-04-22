@@ -228,7 +228,21 @@ class CitySEOService:
         seo_content = self.generate_city_seo_content(
             product_name, city, seller_count, min_price, product.get("categoryName")
         )
-        
+
+        # Build JSON-LD schemas for city page
+        city_json_ld = self._build_city_json_ld(
+            product_name=product_name,
+            product_slug=product_slug,
+            city_title=city_title,
+            city_slug=city_slug,
+            seller_count=seller_count,
+            min_price=min_price,
+            max_price=max_price,
+            category_name=product.get("categoryName"),
+            sellers=sellers,
+            city_page_url=city_page_url,
+        )
+
         return {
             "product": {
                 "_id": str(product["_id"]),
@@ -252,7 +266,10 @@ class CitySEOService:
                 "description": seo_description,
                 "seoContent": seo_content,
                 "canonicalUrl": canonical_url,
-                "cityPageUrl": city_page_url
+                "cityPageUrl": city_page_url,
+                "jsonLd": city_json_ld["product"],
+                "breadcrumbJsonLd": city_json_ld["breadcrumb"],
+                "faqJsonLd": city_json_ld["faq"],
             },
             "internalLinks": {
                 "mainProductPage": f"{self.SITE_URL}/products/{product_slug}",
@@ -377,6 +394,141 @@ Start sourcing {product_name} from {city_title} suppliers today — compare quot
 """
         
         return content
+
+    def _build_city_json_ld(
+        self,
+        product_name: str,
+        product_slug: str,
+        city_title: str,
+        city_slug: str,
+        seller_count: int,
+        min_price: Optional[float],
+        max_price: Optional[float],
+        category_name: Optional[str],
+        sellers: List[Dict[str, Any]],
+        city_page_url: str,
+    ) -> Dict[str, Any]:
+        """Build Product + Breadcrumb + FAQ JSON-LD for a city page."""
+        from services.seo_service import seo_service as _seo
+
+        # --- Product schema with AggregateOffer scoped to the city ---
+        product_schema: Dict[str, Any] = {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": f"{product_name} in {city_title}",
+            "description": (
+                f"Buy {product_name} from {seller_count} verified suppliers in {city_title}. "
+                f"Compare prices and get quotes on UdyogConnect."
+            )[:500],
+            "url": city_page_url,
+            "category": category_name or "Industrial Products",
+            "brand": {"@type": "Brand", "name": "Various Manufacturers"},
+            "areaServed": {
+                "@type": "City",
+                "name": city_title,
+                "containedInPlace": {"@type": "Country", "name": "India"},
+            },
+        }
+
+        if min_price and max_price and max_price > min_price and seller_count > 1:
+            product_schema["offers"] = {
+                "@type": "AggregateOffer",
+                "priceCurrency": "INR",
+                "lowPrice": round(float(min_price), 2),
+                "highPrice": round(float(max_price), 2),
+                "offerCount": seller_count,
+                "availability": "https://schema.org/InStock",
+                "eligibleRegion": {"@type": "City", "name": city_title},
+                "seller": {
+                    "@type": "Organization",
+                    "name": f"Verified Suppliers on UdyogConnect ({city_title})"
+                },
+            }
+        elif min_price:
+            product_schema["offers"] = {
+                "@type": "Offer",
+                "priceCurrency": "INR",
+                "price": round(float(min_price), 2),
+                "availability": "https://schema.org/InStock",
+                "eligibleRegion": {"@type": "City", "name": city_title},
+                "seller": {
+                    "@type": "Organization",
+                    "name": (sellers[0].get("companyName") if sellers else "Verified Supplier"),
+                },
+            }
+        else:
+            product_schema["offers"] = {
+                "@type": "Offer",
+                "priceCurrency": "INR",
+                "availability": "https://schema.org/InStock",
+                "priceSpecification": {
+                    "@type": "PriceSpecification",
+                    "price": "Request Quote",
+                    "priceCurrency": "INR",
+                },
+            }
+
+        # --- Breadcrumb ---
+        breadcrumb_schema = {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {"@type": "ListItem", "position": 1, "name": "Home", "item": self.SITE_URL},
+                {"@type": "ListItem", "position": 2, "name": "Products", "item": f"{self.SITE_URL}/products"},
+                {
+                    "@type": "ListItem", "position": 3, "name": product_name,
+                    "item": f"{self.SITE_URL}/products/{product_slug}"
+                },
+                {"@type": "ListItem", "position": 4, "name": city_title, "item": city_page_url},
+            ],
+        }
+
+        # --- FAQ schema scoped to the city ---
+        price_text = f"₹{_seo._format_price(min_price)}" if min_price else "varies by seller"
+        faq_schema = {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+                {
+                    "@type": "Question",
+                    "name": f"Where can I buy {product_name} in {city_title}?",
+                    "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": (
+                            f"You can buy {product_name} from {seller_count} verified suppliers in "
+                            f"{city_title} listed on UdyogConnect. Compare prices, check ratings, "
+                            f"and request quotes directly."
+                        ),
+                    },
+                },
+                {
+                    "@type": "Question",
+                    "name": f"What is the price of {product_name} in {city_title}?",
+                    "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": (
+                            f"The price of {product_name} in {city_title} starts from {price_text}. "
+                            f"Pricing depends on specifications, order quantity, and supplier. "
+                            f"Request quotations from multiple sellers to compare."
+                        ),
+                    },
+                },
+                {
+                    "@type": "Question",
+                    "name": f"How fast is {product_name} delivery in {city_title}?",
+                    "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": (
+                            f"Local suppliers in {city_title} typically offer same-day or next-day "
+                            f"delivery within city limits. Contact the supplier to confirm exact "
+                            f"lead time for your order size."
+                        ),
+                    },
+                },
+            ],
+        }
+
+        return {"product": product_schema, "breadcrumb": breadcrumb_schema, "faq": faq_schema}
 
 
 # Factory function
