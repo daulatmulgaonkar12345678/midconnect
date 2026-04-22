@@ -76,6 +76,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // SEO v2.1: ONLY use slug-based URLs with /products/ and /categories/ (plural)
   let productPages: MetadataRoute.Sitemap = [];
   let categoryPages: MetadataRoute.Sitemap = [];
+  let allProducts: Product[] = [];
 
   try {
     // Fetch products with a short timeout to avoid blocking
@@ -89,6 +90,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const products: Product[] = Array.isArray(productsData) 
         ? productsData 
         : productsData.products || [];
+      allProducts = products;
 
       // SEO v2.1: ONLY include products with slugs - use /products/{slug} (plural)
       productPages = products
@@ -143,12 +145,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
   
   const cityPages: MetadataRoute.Sitemap = [];
-  for (const product of products) {
+  for (const product of allProducts) {
     const productSlug = product.slug || product.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     if (!productSlug) continue;
     for (const city of cities) {
       cityPages.push({
-        url: `${siteUrl}/products/${productSlug}/in/${city}`,
+        url: `${SITE_URL}/products/${productSlug}/in/${city}`,
         lastModified: new Date(),
         changeFrequency: 'weekly' as const,
         priority: 0.6,
