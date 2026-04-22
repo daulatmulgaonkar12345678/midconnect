@@ -13304,6 +13304,167 @@ async def get_sitemap_city_pages(max_cities: int = Query(10, ge=1, le=20)):
     }
 
 
+@api_router.post("/admin/seo/bulk-regenerate")
+async def admin_bulk_regenerate_seo(
+    force: bool = Query(False, description="Regenerate even manually-edited SEO"),
+    dry_run: bool = Query(False, description="Preview without writing"),
+    admin: dict = Depends(require_admin),
+):
+    """
+    Admin-only: Regenerate SEO (title/description/content) for products with
+    seoVersion < SEO_VERSION OR weak content OR missing FAQ.
+
+    Mirrors `scripts/update_seo_for_all_products.py` but runs against the
+    backend's currently-connected MongoDB — so hitting this on the production
+    API regenerates production data. Preserves `seoManuallyEdited` unless force=true.
+    """
+    from services.seo_service import seo_service, SEO_VERSION
+    from datetime import datetime as _dt, timezone as _tz
+
+    def needs_regen(product: dict) -> tuple[bool, str]:
+        if force:
+            return True, "force"
+        if product.get("seoManuallyEdited"):
+            return False, "manually edited"
+        current_version = product.get("seoVersion", 0) or 0
+        if current_version < SEO_VERSION:
+            return True, f"seoVersion {current_version} < {SEO_VERSION}"
+        title = product.get("seoTitle") or ""
+        desc = product.get("seoDescription") or ""
+        content = product.get("seoContent") or ""
+        slug = product.get("slug") or ""
+        if not title or len(title) < 30:
+            return True, "weak title"
+        if not desc or len(desc) < 120:
+            return True, "weak description"
+        if not content:
+            return True, "missing content"
+        if len(content.split()) < 400:
+            return True, "short content"
+        if "frequently asked" not in content.lower() and "faq" not in content.lower():
+            return True, "missing FAQ"
+        if not slug:
+            return True, "missing slug"
+        return False, "fresh"
+
+    products = await db.products.find({"isActive": {"$ne": False}}).to_list(length=20000)
+    existing_slugs = set(s for s in await db.products.distinct("slug") if s)
+
+    updated = []
+    skipped = 0
+    reason_counts: dict = {}
+    errors = 0
+
+    for product in products:
+        product_id = product["_id"]
+        product_name = product.get("name", "Unknown")
+
+        needs, reason = needs_regen(product)
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        if not needs:
+            skipped += 1
+            continue
+
+        try:
+            category = None
+            if product.get("categoryId"):
+                category = await db.categories.find_one({"_id": product["categoryId"]})
+            category_name = category.get("name") if category else None
+
+            # Seller stats for richer content
+            stats_agg = await db.sellerListings.aggregate([
+                {"$match": {"productId": product_id, "status": "active"}},
+                {"$group": {
+                    "_id": None,
+                    "sellerCount": {"$sum": 1},
+                    "minPrice": {"$min": {"$min": "$pricingTiers.pricePerUnit"}},
+                    "maxPrice": {"$max": {"$max": "$pricingTiers.pricePerUnit"}},
+                }}
+            ]).to_list(1)
+            stats = stats_agg[0] if stats_agg else {}
+            seller_count = stats.get("sellerCount", 0) or 0
+            min_price = stats.get("minPrice")
+            max_price = stats.get("maxPrice")
+
+            # Available cities
+            cities_agg = await db.sellerListings.aggregate([
+                {"$match": {"productId": product_id, "status": "active"}},
+                {"$lookup": {
+                    "from": "users", "localField": "sellerId",
+                    "foreignField": "_id", "as": "seller"
+                }},
+                {"$unwind": {"path": "$seller", "preserveNullAndEmptyArrays": True}},
+                {"$group": {"_id": {"$ifNull": ["$seller.profile.city", None]}}},
+                {"$match": {"_id": {"$ne": None}}},
+                {"$limit": 20}
+            ]).to_list(20)
+            available_cities = [c["_id"].title() for c in cities_agg if c.get("_id")]
+
+            # Remove own slug from uniqueness set so we don't append "-1"
+            own_slug = product.get("slug")
+            if own_slug and own_slug in existing_slugs:
+                existing_slugs.discard(own_slug)
+
+            new_slug = seo_service.generate_seo_slug(product_name, category_name, list(existing_slugs))
+            new_title = seo_service.generate_seo_title(
+                product_name, category_name, min_price=min_price, seller_count=seller_count
+            )
+            new_desc = seo_service.generate_seo_description(
+                product_name, category_name, seller_count, min_price, max_price
+            )
+            new_content = seo_service.generate_seo_content(
+                product_name, category_name,
+                product.get("specifications", {}),
+                product.get("description"),
+                seller_count, available_cities,
+                min_price=min_price, max_price=max_price
+            )
+
+            if not dry_run:
+                update_data = {
+                    "seoTitle": new_title,
+                    "seoDescription": new_desc,
+                    "seoContent": new_content,
+                    "seoVersion": SEO_VERSION,
+                    "seoGeneratedAt": _dt.now(_tz.utc).isoformat(),
+                }
+                if not own_slug or not own_slug.endswith("-supplier-india"):
+                    update_data["slug"] = new_slug
+                    existing_slugs.add(new_slug)
+                else:
+                    existing_slugs.add(own_slug)
+
+                await db.products.update_one({"_id": product_id}, {"$set": update_data})
+
+            updated.append({
+                "name": product_name,
+                "words": len(new_content.split()),
+                "titleLen": len(new_title),
+                "reason": reason,
+            })
+        except Exception as e:
+            logger.error(f"[bulk-seo] Failed for {product_name}: {e}")
+            errors += 1
+
+    logger.info(
+        f"[bulk-seo] Admin {admin.get('email')} triggered regen. "
+        f"Updated={len(updated)} Skipped={skipped} Errors={errors} DryRun={dry_run} Force={force}"
+    )
+
+    return {
+        "success": True,
+        "targetVersion": SEO_VERSION,
+        "totalProducts": len(products),
+        "updated": len(updated),
+        "skipped": skipped,
+        "errors": errors,
+        "reasonCounts": reason_counts,
+        "dryRun": dry_run,
+        "force": force,
+        "sample": updated[:5],  # First 5 updates for verification
+    }
+
+
 # ================================================================
 # MIGRATION ENDPOINT REMOVED - 2026-02-25
 # The temporary populate-listing-locations-2024-temp endpoint

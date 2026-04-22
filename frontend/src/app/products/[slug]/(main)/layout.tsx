@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || '';
+const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 function isObjectId(str: string): boolean {
   return /^[a-f0-9]{24}$/i.test(str);
