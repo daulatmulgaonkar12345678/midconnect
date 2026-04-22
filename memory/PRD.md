@@ -75,6 +75,14 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Updated 9 routers: inventory_router, home_router, invoice_router, composite_products_router, export_import_router, reports_router, panel_router, product_share_router, analytics_router + server.py admin counts
     - Draft products remain hidden from public search and product pages (enterprise_products, search endpoints)
     - Tests: 22/22 passed (iteration_125), inventory endpoint manually verified with draft listings
+52. **SEO System Overhaul (Apr 2026)**
+    - Enhanced `seo_service.py`: titles (55-65 chars, city-aware), descriptions (140-160 chars), content (400-800 words with 5 H2 sections: Types, Applications, Buying Guide, Cities, Why UdyogConnect)
+    - City location pages: `/products/{slug}/city/{city}` with unique 400+ word content, city-specific titles, internal cross-linking
+    - Auto-SEO on product update: regenerates if fields weak/missing (skip manual edits)
+    - Bulk update script: `scripts/update_seo_for_all_products.py` (--dry-run, --force)
+    - City pages added to frontend sitemap
+    - Fixed city_seo_service.py: now uses $lookup to match seller.profile.city
+    - Tests: 18/18 passed (iteration_126)
 
 ## Prioritized Backlog
 ### P0 (Next)
