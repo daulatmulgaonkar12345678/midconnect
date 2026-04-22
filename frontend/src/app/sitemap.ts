@@ -3,6 +3,10 @@ import { MetadataRoute } from 'next';
 const SITE_URL = 'https://www.udyogconnect.in';
 const API_URL = process.env.REACT_APP_BACKEND_URL || 'https://midconnect.onrender.com';
 
+// Cap city pages to top N cities globally (by seller volume) — prevents sitemap bloat.
+// Only (product, city) pairs that have active sellers are included.
+const MAX_CITIES = 10;
+
 interface Product {
   _id: string;
   name: string;
@@ -17,84 +21,46 @@ interface Category {
   updatedAt?: string;
 }
 
+interface SitemapCityPair {
+  productSlug: string;
+  citySlug: string;
+  lastModified?: string | null;
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date().toISOString();
-  
+
   // Static pages - always included
   const staticPages: MetadataRoute.Sitemap = [
-    {
-      url: SITE_URL,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 1.0,
-    },
-    {
-      url: `${SITE_URL}/products`,
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 0.9,
-    },
-    {
-      url: `${SITE_URL}/categories`,
-      lastModified: now,
-      changeFrequency: 'weekly',
-      priority: 0.9,
-    },
-    {
-      url: `${SITE_URL}/about`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${SITE_URL}/contact`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${SITE_URL}/pricing`,
-      lastModified: now,
-      changeFrequency: 'monthly',
-      priority: 0.6,
-    },
-    {
-      url: `${SITE_URL}/privacy`,
-      lastModified: now,
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/terms`,
-      lastModified: now,
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
+    { url: SITE_URL, lastModified: now, changeFrequency: 'daily', priority: 1.0 },
+    { url: `${SITE_URL}/products`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE_URL}/categories`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${SITE_URL}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${SITE_URL}/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${SITE_URL}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${SITE_URL}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${SITE_URL}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
   ];
 
-  // Dynamic pages - fetch from API with timeout
-  // SEO v2.1: ONLY use slug-based URLs with /products/ and /categories/ (plural)
   let productPages: MetadataRoute.Sitemap = [];
   let categoryPages: MetadataRoute.Sitemap = [];
-  let allProducts: Product[] = [];
+  let cityPages: MetadataRoute.Sitemap = [];
 
+  // --- Products ---
   try {
-    // Fetch products with a short timeout to avoid blocking
     const productsResponse = await fetch(`${API_URL}/api/products?limit=1000`, {
-      next: { revalidate: 3600 }, // Cache for 1 hour
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000),
     });
 
     if (productsResponse.ok) {
       const productsData = await productsResponse.json();
-      const products: Product[] = Array.isArray(productsData) 
-        ? productsData 
+      const products: Product[] = Array.isArray(productsData)
+        ? productsData
         : productsData.products || [];
-      allProducts = products;
 
-      // SEO v2.1: ONLY include products with slugs - use /products/{slug} (plural)
       productPages = products
-        .filter((p) => p.slug && p.slug.length > 0) // Must have a valid slug
+        .filter((p) => p.slug && p.slug.length > 0)
         .map((product) => ({
           url: `${SITE_URL}/products/${product.slug}`,
           lastModified: product.updatedAt || now,
@@ -104,14 +70,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   } catch (error) {
     console.error('Sitemap: Failed to fetch products:', error);
-    // Continue with static pages even if products fail
   }
 
+  // --- Categories ---
   try {
-    // Fetch categories with a short timeout
     const categoriesResponse = await fetch(`${API_URL}/api/categories`, {
-      next: { revalidate: 3600 }, // Cache for 1 hour
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000),
     });
 
     if (categoriesResponse.ok) {
@@ -120,9 +85,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? categoriesData
         : categoriesData.categories || [];
 
-      // SEO v2.1: ONLY include categories with slugs - use /categories/{slug} (plural)
       categoryPages = categories
-        .filter((c) => c.slug && c.slug.length > 0) // Must have a valid slug
+        .filter((c) => c.slug && c.slug.length > 0)
         .map((category) => ({
           url: `${SITE_URL}/categories/${category.slug}`,
           lastModified: category.updatedAt || now,
@@ -132,30 +96,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   } catch (error) {
     console.error('Sitemap: Failed to fetch categories:', error);
-    // Continue with static pages even if categories fail
   }
 
-  // Combine all pages
-  // Generate city/location pages for each product
-  const cities = [
-    "pune", "mumbai", "delhi", "bangalore", "hyderabad",
-    "chennai", "kolkata", "ahmedabad", "jaipur", "indore",
-    "nagpur", "surat", "lucknow", "coimbatore", "ludhiana",
-    "rajkot", "vadodara", "nashik", "faridabad", "ghaziabad"
-  ];
-  
-  const cityPages: MetadataRoute.Sitemap = [];
-  for (const product of allProducts) {
-    const productSlug = product.slug || product.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    if (!productSlug) continue;
-    for (const city of cities) {
-      cityPages.push({
-        url: `${SITE_URL}/products/${productSlug}/in/${city}`,
-        lastModified: new Date(),
+  // --- City pages (only valid pairs with active sellers, capped to top N cities) ---
+  try {
+    const cityRes = await fetch(
+      `${API_URL}/api/seo/sitemap-city-pages?max_cities=${MAX_CITIES}`,
+      {
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
+    if (cityRes.ok) {
+      const cityData = await cityRes.json();
+      const pairs: SitemapCityPair[] = cityData.pairs || [];
+      cityPages = pairs.map((p) => ({
+        url: `${SITE_URL}/products/${p.productSlug}/in/${p.citySlug}`,
+        lastModified: p.lastModified || now,
         changeFrequency: 'weekly' as const,
         priority: 0.6,
-      });
+      }));
     }
+  } catch (error) {
+    console.error('Sitemap: Failed to fetch city pages:', error);
   }
 
   return [...staticPages, ...productPages, ...categoryPages, ...cityPages];

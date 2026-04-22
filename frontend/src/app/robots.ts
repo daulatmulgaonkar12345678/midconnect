@@ -5,16 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: [
-          '/',
-          '/products',
-          '/products/',
-          '/categories',
-          '/categories/',
-          '/about',
-          '/contact',
-          '/pricing',
-        ],
+        allow: '/',
         disallow: [
           '/api/',
           '/admin/',
@@ -23,10 +14,7 @@ export default function robots(): MetadataRoute.Robots {
           '/login',
           '/register',
           '/verify-email',
-          '/inquiries',
           '/cart/',
-          '/product/',   // Old format - redirect to /products/
-          '/category/',  // Old format - redirect to /categories/
         ],
       },
     ],
