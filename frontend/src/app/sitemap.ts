@@ -28,18 +28,23 @@ interface SitemapCityPair {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date().toISOString();
+  // Google Search Console flags full ISO timestamps; use YYYY-MM-DD only.
+  const today = new Date().toISOString().split('T')[0];
+  const toDateOnly = (iso?: string | null): string => {
+    if (!iso) return today;
+    return iso.split('T')[0] || today;
+  };
 
   // Static pages - always included
   const staticPages: MetadataRoute.Sitemap = [
-    { url: SITE_URL, lastModified: now, changeFrequency: 'daily', priority: 1.0 },
-    { url: `${SITE_URL}/products`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
-    { url: `${SITE_URL}/categories`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
-    { url: `${SITE_URL}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${SITE_URL}/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${SITE_URL}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${SITE_URL}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
-    { url: `${SITE_URL}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
+    { url: SITE_URL, lastModified: today, changeFrequency: 'daily', priority: 1.0 },
+    { url: `${SITE_URL}/products`, lastModified: today, changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE_URL}/categories`, lastModified: today, changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${SITE_URL}/about`, lastModified: today, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${SITE_URL}/contact`, lastModified: today, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${SITE_URL}/pricing`, lastModified: today, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${SITE_URL}/privacy`, lastModified: today, changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${SITE_URL}/terms`, lastModified: today, changeFrequency: 'yearly', priority: 0.3 },
   ];
 
   let productPages: MetadataRoute.Sitemap = [];
@@ -63,7 +68,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         .filter((p) => p.slug && p.slug.length > 0)
         .map((product) => ({
           url: `${SITE_URL}/products/${product.slug}`,
-          lastModified: product.updatedAt || now,
+          lastModified: toDateOnly(product.updatedAt),
           changeFrequency: 'weekly' as const,
           priority: 0.8,
         }));
@@ -89,7 +94,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         .filter((c) => c.slug && c.slug.length > 0)
         .map((category) => ({
           url: `${SITE_URL}/categories/${category.slug}`,
-          lastModified: category.updatedAt || now,
+          lastModified: toDateOnly(category.updatedAt),
           changeFrequency: 'weekly' as const,
           priority: 0.7,
         }));
@@ -112,7 +117,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const pairs: SitemapCityPair[] = cityData.pairs || [];
       cityPages = pairs.map((p) => ({
         url: `${SITE_URL}/products/${p.productSlug}/in/${p.citySlug}`,
-        lastModified: p.lastModified || now,
+        lastModified: toDateOnly(p.lastModified),
         changeFrequency: 'weekly' as const,
         priority: 0.6,
       }));

@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger("seo_service")
 
 # Current SEO version — bump when content templates change
-SEO_VERSION = 3
+SEO_VERSION = 4
 
 
 class SEOService:
@@ -335,7 +335,13 @@ class SEOService:
         seller_text = f"{seller_count}+ verified" if seller_count > 1 else "verified"
         app_list_short = ", ".join(applications[:3])
         price_mention = f" Prices start from ₹{cls._format_price(min_price)}." if min_price else ""
-        intro = f"""{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India.{price_mention} Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
+        # City availability signal — boosts "{product} in {city}" queries
+        top_cities_for_intro = (available_cities or [])[:5]
+        city_avail_line = ""
+        if top_cities_for_intro:
+            city_names = ", ".join(c.title() for c in top_cities_for_intro)
+            city_avail_line = f" Available from verified suppliers in {city_names} and other major Indian cities."
+        intro = f"""{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India.{price_mention}{city_avail_line} Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
 
 {clean_name} is a critical component used in {app_list_short} and many other industrial applications. Sourcing from reliable suppliers ensures consistent quality, timely delivery, and compliance with industry standards. With our B2B marketplace, procurement teams can compare offers from multiple sellers and negotiate directly to get the best value."""
         sections.append(intro.strip())
@@ -425,24 +431,50 @@ Buying directly from manufacturers on {cls.SITE_NAME} can save 10-30% compared t
         sections.append(buying_section.strip())
         
         # ===== H2: Available Cities =====
+        # Per-city H3 sections boost "{product} in {city}" query rankings.
         if available_cities and len(available_cities) > 0:
             cities = available_cities[:15]
         else:
             cities = cls.MAJOR_CITIES[:15]
-        
-        # Generate city page links
+
         product_slug = cls.generate_seo_slug(product_name, category_name)
-        city_links = ", ".join(
-            f"[{c}](/products/{product_slug}/in/{c.lower().replace(' ', '-')})" for c in cities[:10]
+        top_cities_detail = cities[:5]
+        detail_blocks = []
+        for city in top_cities_detail:
+            city_slug = city.lower().replace(' ', '-')
+            city_link = f"/products/{product_slug}/in/{city_slug}"
+            price_note = (
+                f" starting from ₹{cls._format_price(min_price)}"
+                if min_price else ""
+            )
+            detail_blocks.append(
+                f"### {clean_name} Suppliers in {city}\n\n"
+                f"Looking for {clean_name} suppliers in {city}? Connect with verified "
+                f"local manufacturers, dealers, and distributors{price_note}. Local "
+                f"suppliers in {city} offer faster delivery, easier returns, and on-site "
+                f"support. [View all {clean_name} suppliers in {city} →]({city_link})"
+            )
+
+        remaining = cities[5:10]
+        remaining_links = ", ".join(
+            f"[{c}](/products/{product_slug}/in/{c.lower().replace(' ', '-')})"
+            for c in remaining
+        ) if remaining else ""
+
+        other_cities_line = (
+            f"Also available in {remaining_links}." if remaining_links else ""
         )
-        
+
         city_section = f"""## {clean_name} Suppliers by City
 
-Find {clean_name} suppliers in major industrial cities across India:
+Find {clean_name} suppliers in major industrial cities across India. Sourcing locally
+gives you faster delivery, easier returns, and on-site technical support.
 
-{city_links}
+{chr(10) + chr(10).join(detail_blocks)}
 
-Our network spans all major industrial hubs, ensuring quick delivery and local support for your procurement needs. Local suppliers offer the advantage of faster delivery, easier returns, and on-site support."""
+{other_cities_line}
+
+Our network spans all major industrial hubs, ensuring quick delivery and local support for your procurement needs."""
         sections.append(city_section.strip())
         
         # ===== H2: Why Choose UdyogConnect =====
