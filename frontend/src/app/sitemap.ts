@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 
 const SITE_URL = 'https://www.udyogconnect.in';
-const API_URL = process.env.REACT_APP_BACKEND_URL || 'https://midconnect.onrender.com';
+const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
 
 // Cap city pages to top N cities globally (by seller volume) — prevents sitemap bloat.
 // Only (product, city) pairs that have active sellers are included.

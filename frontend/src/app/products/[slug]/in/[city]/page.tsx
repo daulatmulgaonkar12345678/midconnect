@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-const API = process.env.REACT_APP_BACKEND_URL || '';
+const API = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 interface CityPageProps {
   params: Promise<{ slug: string; city: string }>;
