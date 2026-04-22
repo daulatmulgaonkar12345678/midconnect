@@ -21,6 +21,13 @@ interface Product {
   updatedAt?: string;
 }
 
+// Simple slugify for categories/products that don't have a stored slug.
+const slugify = (s: string): string =>
+  (s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
 interface Category {
   _id: string;
   name: string;
@@ -97,14 +104,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? categoriesData
         : categoriesData.categories || [];
 
+      // Use stored slug when available, otherwise slugify the name
+      // (prod DB currently stores slug=null for all categories — we still emit URLs).
       categoryPages = categories
-        .filter((c) => c.slug && c.slug.length > 0)
-        .map((category) => ({
-          url: `${SITE_URL}/categories/${category.slug}`,
-          lastModified: toDateOnly(category.updatedAt),
-          changeFrequency: 'weekly' as const,
-          priority: 0.7,
-        }));
+        .filter((c) => c.name && c.name.length > 0)
+        .map((category) => {
+          const slug = (category.slug && category.slug.length > 0)
+            ? category.slug
+            : slugify(category.name);
+          return {
+            url: `${SITE_URL}/categories/${slug}`,
+            lastModified: toDateOnly(category.updatedAt),
+            changeFrequency: 'weekly' as const,
+            priority: 0.7,
+          };
+        });
+
+      console.log(`[sitemap] Categories added: ${categoryPages.length}/${categories.length}`);
     }
   } catch (error) {
     console.error('Sitemap: Failed to fetch categories:', error);
