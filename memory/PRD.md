@@ -83,6 +83,16 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - City pages added to frontend sitemap
     - Fixed city_seo_service.py: now uses $lookup to match seller.profile.city
     - Tests: 18/18 passed (iteration_126)
+53. **SEO Phase 2 — Enterprise Rich Snippets (Apr 2026)**
+    - SEO_VERSION bumped to 3; content now 500-900 words with FAQ + Market Insights sections, titles include intent words (Best/Top/Compare) + pricing + year when available
+    - City pages now emit full JSON-LD (Product with `areaServed`, AggregateOffer/Offer, city-scoped Breadcrumb, city-scoped FAQ, Organization)
+    - Frontend SSR: moved JSON-LD from client `ProductJsonLd` → Next.js App Router layouts. Used route group `(main)` so city pages don't inherit main-product JSON-LD (zero duplicates)
+    - Bulk script v3: queries `seoVersion < SEO_VERSION` OR weak content, writes `seoVersion` + `seoGeneratedAt`, preserves manually edited SEO
+    - All JSON-LD validated against schema.org; graceful fallback when product data missing (defaults to "Request Quote" offer)
+    - Tests: 23/23 passed (iteration_127)
+    - Sample URLs:
+      - Main: `/products/ss304-round-bar-steel-raw-materials-supplier-india`
+      - City: `/products/ss304-round-bar-steel-raw-materials-supplier-india/in/mumbai`
 
 ## Prioritized Backlog
 ### P0 (Next)
