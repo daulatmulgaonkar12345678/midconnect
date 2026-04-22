@@ -4980,12 +4980,13 @@ async def create_product(
     # Generate keyword-rich, SEO-friendly slug
     slug = seo_service.generate_seo_slug(product.name, category_name_for_slug, existing_slugs)
     
-    # Pre-generate ALL SEO data for storage (SEO v2 enforcement)
+    # Pre-generate ALL SEO data for storage (SEO v5 enforcement)
     seo_title = seo_service.generate_seo_title(product.name, category_name_for_slug)
     seo_description = seo_service.generate_seo_description(product.name, category_name_for_slug, 0)
     seo_content = seo_service.generate_seo_content(
         product.name, category_name_for_slug, product.specifications or {}, product.description, 0, []
     )
+    from services.seo_service import SEO_VERSION as _SEO_VERSION_CREATE
     
     # === Build product document with CANONICAL schema ===
     now = datetime.now(timezone.utc)
@@ -5005,10 +5006,12 @@ async def create_product(
         "moq": product.moq,
         "images": product.images[:10],  # Max 10 images
         "specifications": product.specifications,
-        # SEO v2 fields - pre-generated for performance
+        # SEO v5 fields - pre-generated for performance
         "seoTitle": seo_title,
         "seoDescription": seo_description,
         "seoContent": seo_content,
+        "seoVersion": _SEO_VERSION_CREATE,
+        "seoGeneratedAt": now.isoformat(),
         "legacyIds": [],  # For 301 redirect mapping
         "status": "active",
         "isActive": True,  # SSOT: camelCase
@@ -9285,11 +9288,11 @@ async def admin_create_product(
     category_name = category.get("name", "Unknown") if category else "Unknown"
     
     # Generate SEO-optimized slug
-    from services.seo_service import seo_service
+    from services.seo_service import seo_service, SEO_VERSION as _SEO_V_ADMIN_CREATE
     existing_slugs = await db.products.distinct("slug")
     seo_slug = seo_service.generate_seo_slug(product.name, category_name, existing_slugs)
     
-    # Pre-generate ALL SEO data for storage (SEO v2 enforcement)
+    # Pre-generate ALL SEO data for storage (SEO v5 enforcement)
     seo_title = seo_service.generate_seo_title(product.name, category_name)
     seo_description = seo_service.generate_seo_description(product.name, category_name, 0)
     seo_content = seo_service.generate_seo_content(
@@ -9304,10 +9307,12 @@ async def admin_create_product(
         "categoryId": ObjectId(product.categoryId),
         "categoryName": category_name,  # SSOT: Include category name
         "description": product.description,
-        # SEO fields - pre-generated for performance (SEO v2)
+        # SEO fields - pre-generated for performance (SEO v5)
         "seoTitle": seo_title,
         "seoDescription": seo_description,
         "seoContent": seo_content,
+        "seoVersion": _SEO_V_ADMIN_CREATE,
+        "seoGeneratedAt": now.isoformat(),
         "legacyIds": [],  # Will store old IDs for 301 redirects
         # Admin provides mandatory product cover image - Firebase URL
         "coverImageUrl": product.coverImageUrl,  # SSOT: camelCase
@@ -9412,7 +9417,7 @@ async def admin_update_product(
     updated = await db.products.find_one({"_id": ObjectId(product_id)})
     
     # Auto-regenerate SEO if product name changed or SEO is weak
-    from services.seo_service import seo_service
+    from services.seo_service import seo_service, SEO_VERSION as _SEO_V
     if "name" in update_data or seo_service.should_regenerate_seo(updated):
         category = await db.categories.find_one({"_id": updated.get("categoryId")})
         category_name = category.get("name") if category else None
@@ -9425,6 +9430,7 @@ async def admin_update_product(
                 updated["name"], category_name, updated.get("specifications", {}),
                 updated.get("description"), 0, []
             ),
+            "seoVersion": _SEO_V,
             "seoGeneratedAt": datetime.now(timezone.utc).isoformat()
         }
         # Only update slug if name changed or slug is missing

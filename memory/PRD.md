@@ -90,6 +90,18 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Bulk script v3: queries `seoVersion < SEO_VERSION` OR weak content, writes `seoVersion` + `seoGeneratedAt`, preserves manually edited SEO
     - All JSON-LD validated against schema.org; graceful fallback when product data missing (defaults to "Request Quote" offer)
     - Tests: 23/23 passed (iteration_127)
+54. **SEO v5 — Global Ranking Overhaul (Apr 2026)**
+    - SEO_VERSION=5; thresholds tightened (title<50, desc<120, content<600 triggers regen)
+    - Title fallback chain now carries intent+year even when no price (e.g. "Best GRN Test Product Prices in India (2026) | UdyogConnect")
+    - Description v5 template: "{Product} suppliers in {region}. Prices start from ₹X. Compare verified manufacturers, dealers & distributors on UdyogConnect. Get best deals today."
+    - SEO content 700-1124 words with mandatory 5-city H3 sections (Pune/Mumbai/Delhi/Ahmedabad/Bangalore) even when no seller data — boosts `{product} in {city}` rankings
+    - Auto-SEO on CREATE + UPDATE now writes `seoVersion` + `seoGeneratedAt` fields; all 3 product creation paths in `server.py` updated
+    - Sitemap `<lastmod>` format YYYY-MM-DD only (Google-compliant)
+    - Removed legacy `/api/sitemap.xml` + `/api/robots.txt` (404s); only Next.js `/sitemap.xml` and `/robots.txt` remain
+    - robots.txt cleaned: removed `/product/`, `/category/`, `/inquiries` disallows (unblocked indexing)
+    - Admin endpoint `POST /api/admin/seo/bulk-regenerate` (supports `?dry_run=true` and `?force=true`) for one-shot production regen
+    - Backend endpoint `GET /api/seo/sitemap-city-pages` returns only (productSlug, citySlug) pairs with active sellers — no thin pages
+    - 14 dev products regenerated to v5
     - Sample URLs:
       - Main: `/products/ss304-round-bar-steel-raw-materials-supplier-india`
       - City: `/products/ss304-round-bar-steel-raw-materials-supplier-india/in/mumbai`

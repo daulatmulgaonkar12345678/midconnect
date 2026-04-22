@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 logger = logging.getLogger("seo_service")
 
 # Current SEO version — bump when content templates change
-SEO_VERSION = 4
+SEO_VERSION = 5
 
 
 class SEOService:
@@ -207,7 +207,17 @@ class SEOService:
             full = f"{intent} {clean_name} Prices ({year}) | {price_str} | {cls.SITE_NAME}"
             if len(full) <= 65:
                 return full
-        
+
+        # Try: {Intent} {Product} Prices in India ({year}) | UdyogConnect — keeps intent+year even without price
+        intent_year = f"{intent} {clean_name} Prices in India ({year}) | {cls.SITE_NAME}"
+        if len(intent_year) <= 65:
+            return intent_year
+
+        # Try: {Intent} {Product} in India ({year}) | UdyogConnect — shorter form that still carries intent+year
+        intent_short = f"{intent} {clean_name} in India ({year}) | {cls.SITE_NAME}"
+        if len(intent_short) <= 65:
+            return intent_short
+
         # Try: Buy {Product} Online | {Category} Suppliers India | UdyogConnect
         if category_keyword:
             cat_title = f"Buy {clean_name} Online | {category_keyword} Suppliers India | {cls.SITE_NAME}"
@@ -246,49 +256,60 @@ class SEOService:
         city: str = None
     ) -> str:
         """
-        Generate CTR-optimized meta description (140-160 characters).
-        Includes: product name, city, starting price, CTA (Compare/Get Quote/Buy Now).
+        Generate CTR-optimized meta description (140-160 characters, v5 format).
+
+        v5 format:
+          "{Product} suppliers in {City/India}. Prices start from ₹{price}.
+           Compare verified manufacturers, dealers & distributors on UdyogConnect.
+           Get best deals today."
         """
         clean_name = cls._clean_product_name(product_name)
-        city_text = f" in {city.strip().title()}" if city else ""
-        
-        # Pick CTA based on product hash for variation
-        ctas = [
-            f"Compare prices & get quotes on {cls.SITE_NAME}.",
-            f"Get quotes from verified suppliers on {cls.SITE_NAME}.",
-            f"Request quotes instantly on {cls.SITE_NAME}.",
-        ]
-        cta = ctas[sum(ord(c) for c in product_name.lower()) % len(ctas)]
-        
-        # Build with price if available
-        if min_price and seller_count > 1:
-            desc = f"Compare prices of {clean_name}{city_text} starting from ₹{cls._format_price(min_price)}. {seller_count}+ verified industrial suppliers. {cta}"
-        elif min_price:
-            desc = f"Buy {clean_name}{city_text} starting from ₹{cls._format_price(min_price)}. Verified industrial suppliers. {cta}"
+        region = city.strip().title() if city else "India"
+        cta = "Compare verified manufacturers, dealers & distributors on UdyogConnect."
+        close = "Get best deals today."
+
+        if min_price:
+            desc = (
+                f"{clean_name} suppliers in {region}. "
+                f"Prices start from ₹{cls._format_price(min_price)}. "
+                f"{cta} {close}"
+            )
         elif seller_count > 1:
-            desc = f"Find {seller_count}+ verified {clean_name} suppliers{city_text or ' in India'}. {cta}"
+            desc = (
+                f"{clean_name} suppliers in {region}. "
+                f"{seller_count}+ verified sellers with transparent pricing. "
+                f"{cta}"
+            )
         else:
-            desc = f"Find verified industrial suppliers of {clean_name}{city_text or ' in India'}. {cta}"
-        
-        # Trim to 160 chars
+            desc = (
+                f"{clean_name} suppliers in {region}. "
+                f"{cta} {close}"
+            )
+
+        # Trim to 160 chars — try tightened variant first
         if len(desc) > 160:
-            # Shorter version without count
             if min_price:
-                desc = f"Compare {clean_name}{city_text} from ₹{cls._format_price(min_price)}. Verified suppliers. {cta}"
+                desc = (
+                    f"{clean_name} suppliers in {region}. From ₹{cls._format_price(min_price)}. "
+                    f"Compare verified sellers on UdyogConnect. {close}"
+                )
             else:
-                desc = f"Find verified {clean_name} suppliers{city_text or ' in India'}. {cta}"
-        
+                desc = (
+                    f"{clean_name} suppliers in {region}. "
+                    f"Compare verified sellers on UdyogConnect. {close}"
+                )
         if len(desc) > 160:
-            desc = desc[:157] + "..."
-        
-        # Pad if too short
+            desc = desc[:157].rstrip() + "..."
+
+        # Pad if too short (< 140)
         if len(desc) < 140:
-            pads = [" Bulk orders welcome.", " Free quotes.", " Best deals guaranteed."]
+            pads = [" Bulk orders welcome.", " Free RFQ.", " Pan-India delivery."]
             for pad in pads:
                 if len(desc) + len(pad) <= 160:
                     desc = desc.rstrip('.') + '.' + pad
-                    break
-        
+                    if len(desc) >= 140:
+                        break
+
         return desc
     
     # ==================== STRUCTURED ON-PAGE CONTENT ====================
@@ -336,11 +357,13 @@ class SEOService:
         app_list_short = ", ".join(applications[:3])
         price_mention = f" Prices start from ₹{cls._format_price(min_price)}." if min_price else ""
         # City availability signal — boosts "{product} in {city}" queries
+        # Always mention 3-5 top cities (falls back to MAJOR_CITIES when no seller-city data yet)
         top_cities_for_intro = (available_cities or [])[:5]
-        city_avail_line = ""
-        if top_cities_for_intro:
-            city_names = ", ".join(c.title() for c in top_cities_for_intro)
-            city_avail_line = f" Available from verified suppliers in {city_names} and other major Indian cities."
+        if len(top_cities_for_intro) < 3:
+            fallback = [c for c in ["Pune", "Mumbai", "Delhi", "Ahmedabad", "Bangalore"] if c not in top_cities_for_intro]
+            top_cities_for_intro = (top_cities_for_intro + fallback)[:5]
+        city_names = ", ".join(c.title() for c in top_cities_for_intro)
+        city_avail_line = f" Available from verified suppliers in {city_names} and other major industrial cities."
         intro = f"""{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India.{price_mention}{city_avail_line} Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
 
 {clean_name} is a critical component used in {app_list_short} and many other industrial applications. Sourcing from reliable suppliers ensures consistent quality, timely delivery, and compliance with industry standards. With our B2B marketplace, procurement teams can compare offers from multiple sellers and negotiate directly to get the best value."""
@@ -432,10 +455,14 @@ Buying directly from manufacturers on {cls.SITE_NAME} can save 10-30% compared t
         
         # ===== H2: Available Cities =====
         # Per-city H3 sections boost "{product} in {city}" query rankings.
-        if available_cities and len(available_cities) > 0:
+        # Always generate for top 3-5 cities (use seller cities first, fall back to MAJOR_CITIES).
+        if available_cities and len(available_cities) >= 3:
             cities = available_cities[:15]
         else:
-            cities = cls.MAJOR_CITIES[:15]
+            seller_cities_lower = {c.lower() for c in (available_cities or [])}
+            fallback_cities = [c for c in ["Pune", "Mumbai", "Delhi", "Ahmedabad", "Bangalore"] if c.lower() not in seller_cities_lower]
+            cities = (available_cities or []) + fallback_cities
+            cities = cities[:15]
 
         product_slug = cls.generate_seo_slug(product_name, category_name)
         top_cities_detail = cities[:5]
@@ -452,7 +479,8 @@ Buying directly from manufacturers on {cls.SITE_NAME} can save 10-30% compared t
                 f"Looking for {clean_name} suppliers in {city}? Connect with verified "
                 f"local manufacturers, dealers, and distributors{price_note}. Local "
                 f"suppliers in {city} offer faster delivery, easier returns, and on-site "
-                f"support. [View all {clean_name} suppliers in {city} →]({city_link})"
+                f"support for your industrial procurement. [View all {clean_name} "
+                f"suppliers in {city} →]({city_link})"
             )
 
         remaining = cities[5:10]
@@ -892,8 +920,16 @@ Start sourcing {clean_name} today and get competitive quotes from verified suppl
     def should_regenerate_seo(cls, product: Dict[str, Any]) -> bool:
         """
         Check if a product's SEO data needs regeneration.
-        Returns True if SEO is missing, weak, outdated version, or auto-generated and outdated.
+        Returns True if SEO is missing, weak, outdated version.
         Does NOT overwrite manually edited SEO (if marked).
+
+        v5 thresholds:
+          - seoVersion < SEO_VERSION
+          - OR title length < 50
+          - OR description missing / < 120
+          - OR content word count < 600
+          - OR missing FAQ block
+          - OR slug missing
         """
         # Never overwrite manual edits
         if product.get("seoManuallyEdited"):
@@ -904,32 +940,23 @@ Start sourcing {clean_name} today and get competitive quotes from verified suppl
         if current_version < SEO_VERSION:
             return True
 
-        # Check if core SEO fields exist
         seo_title = product.get("seoTitle") or ""
         seo_desc = product.get("seoDescription") or ""
         seo_content = product.get("seoContent") or ""
         slug = product.get("slug") or ""
 
-        # Missing any core field
-        if not seo_title or not seo_desc or not seo_content or not slug:
+        if not seo_title or len(seo_title) < 50:
             return True
-
-        # Weak title (too short or generic)
-        if len(seo_title) < 30:
+        if not seo_desc or len(seo_desc) < 120:
             return True
-
-        # Weak description (too short)
-        if len(seo_desc) < 120:
+        if not seo_content:
             return True
-
-        # Weak content (< 400 words) or missing FAQ block
-        word_count = len(seo_content.split())
-        if word_count < 400:
+        if len(seo_content.split()) < 600:
             return True
         if "frequently asked" not in seo_content.lower() and "faq" not in seo_content.lower():
             return True
-
-        # Slug doesn't follow v2.1 format
+        if not slug:
+            return True
         if not slug.endswith("-supplier-india") and not re.match(r'^[a-z0-9-]+$', slug):
             return True
 
