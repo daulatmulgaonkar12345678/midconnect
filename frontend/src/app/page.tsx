@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getPublicCategories, searchProducts } from '@/lib/api';
+import { getPublicCategories, searchProducts, getProducts } from '@/lib/api';
 import CategoryCard from '@/components/CategoryCard';
 import { ArrowRight, Shield, Truck, BadgeCheck, MapPin, TrendingUp, Package } from 'lucide-react';
 import { SearchListing, Category } from '@/types';
@@ -7,10 +7,16 @@ import HeroSearchSection from '@/components/HeroSearchSection';
 
 export const revalidate = 3600; // Revalidate every hour
 
+// Top Indian industrial cities used for the homepage "Popular by City" internal links.
+// Keep in sync with backend SUPPORTED_INTENTS & top cities for consistency.
+const TOP_CITIES = ['Pune', 'Mumbai', 'Delhi', 'Ahmedabad', 'Bangalore'];
+
 export default async function HomePage() {
   // Use Category type - compatible with PublicCategory response
   let categories: Category[] = [];
   let featuredProducts: SearchListing[] = [];
+  // Slug-bearing products for SEO-friendly internal links ("Popular Industrial Products" section).
+  let popularProducts: Array<{ _id: string; name: string; slug: string }> = [];
 
   try {
     // Use getPublicCategories to only show categories with active seller listings
@@ -23,6 +29,12 @@ export default async function HomePage() {
     }));
     const searchResult = await searchProducts('');
     featuredProducts = searchResult.products?.slice(0, 8) || [];
+
+    // Fetch top 20 products with slugs for SEO internal links. Reuses existing API.
+    const allProducts = await getProducts();
+    popularProducts = allProducts
+      .filter(p => p.slug && p.slug.length > 0)
+      .slice(0, 20);
   } catch (error) {
     console.error('Failed to fetch data:', error);
   }
@@ -159,6 +171,52 @@ export default async function HomePage() {
                 </Link>
               ))}
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* Popular Industrial Products — SEO internal linking (crawlable anchor links) */}
+      {popularProducts.length > 0 && (
+        <section className="py-12 bg-white border-t border-gray-100" data-testid="popular-products-seo">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Popular Industrial Products</h2>
+            <p className="text-gray-500 mb-6 text-sm">
+              Discover verified suppliers of top industrial products across India.
+            </p>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 list-none">
+              {popularProducts.map((p) => (
+                <li key={p._id}>
+                  <a
+                    href={`/products/${p.slug}`}
+                    className="text-blue-600 hover:text-blue-800 hover:underline text-sm"
+                    data-testid={`popular-product-link-${p.slug}`}
+                  >
+                    {p.name} Suppliers in India
+                  </a>
+                </li>
+              ))}
+            </ul>
+
+            {/* Popular by City — top 4 products × 5 cities = 20 crawlable city URLs */}
+            <h3 className="text-lg font-semibold text-gray-900 mt-10 mb-4">Popular Products by City</h3>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2 list-none">
+              {popularProducts.slice(0, 4).flatMap((p) =>
+                TOP_CITIES.map((city) => {
+                  const citySlug = city.toLowerCase();
+                  return (
+                    <li key={`${p._id}-${citySlug}`}>
+                      <a
+                        href={`/products/${p.slug}/in/${citySlug}`}
+                        className="text-gray-700 hover:text-blue-700 hover:underline text-sm"
+                        data-testid={`popular-city-link-${p.slug}-${citySlug}`}
+                      >
+                        {p.name} in {city}
+                      </a>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
           </div>
         </section>
       )}

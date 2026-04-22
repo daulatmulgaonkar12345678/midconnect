@@ -415,6 +415,7 @@ export default function EnterpriseProductPage() {
       category: { name: string; url: string } | null;
       similarProducts: Array<{ name: string; url: string }>;
       cityPages: Array<{ name: string; url: string }>;
+      intentCityPages?: Array<{ name: string; intent: string; url: string }>;
       topRated: string;
     };
     minPrice?: number | null;
@@ -1650,12 +1651,13 @@ ${inquiryNote ? `\nNote: ${inquiryNote}` : ''}`;
         </div>
       )}
       
-      {/* Internal Links for SEO (Category, Similar Products, City Pages) */}
+      {/* Internal Links for SEO (Category, Similar Products, City Pages, Related Searches) */}
       {seoData?.internalLinks && product && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <InternalLinksSection 
             internalLinks={seoData.internalLinks} 
-            productName={product.product?.name || 'Product'} 
+            productName={product.product?.name || 'Product'}
+            productSlug={product.product?.slug || productId || undefined}
           />
         </div>
       )}

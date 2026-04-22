@@ -192,20 +192,77 @@ interface InternalLinksProps {
     category: InternalLink | null;
     similarProducts: InternalLink[];
     cityPages: InternalLink[];
+    intentCityPages?: Array<{ name: string; intent: string; url: string }>;
     topRated: string;
   };
   productName: string;
+  productSlug?: string;
 }
 
-export function InternalLinksSection({ internalLinks, productName }: InternalLinksProps) {
+// Top cities for the "Related Searches" internal-links block. Kept inline to
+// avoid new files; matches backend top-cities policy.
+const RELATED_CITIES = ['Pune', 'Mumbai', 'Delhi', 'Ahmedabad', 'Bangalore'];
+const RELATED_INTENTS: Array<{ key: string; label: string }> = [
+  { key: 'price', label: 'Price' },
+  { key: 'suppliers', label: 'Suppliers' },
+  { key: 'buy', label: 'Buy' },
+  { key: 'wholesale', label: 'Wholesale' },
+  { key: 'cheap', label: 'Cheap' },
+];
+
+export function InternalLinksSection({ internalLinks, productName, productSlug }: InternalLinksProps) {
   if (!internalLinks) return null;
-  
+
   const hasSimilarProducts = internalLinks.similarProducts && internalLinks.similarProducts.length > 0;
   const hasCityPages = internalLinks.cityPages && internalLinks.cityPages.length > 0;
-  
-  if (!hasSimilarProducts && !hasCityPages && !internalLinks.category) {
+  const hasIntentCityPages = (internalLinks.intentCityPages || []).length > 0;
+
+  if (!hasSimilarProducts && !hasCityPages && !hasIntentCityPages && !internalLinks.category) {
     return null;
   }
+
+  // Build "Related Searches" links. Prefer backend-provided intentCityPages (real
+  // seller-backed combos) and fall back to a generated set so NEW products without
+  // sellers still get crawlable internal links on day 1.
+  type RelatedLink = { href: string; label: string; key: string };
+  let relatedSearches: RelatedLink[] = [];
+
+  if (hasIntentCityPages) {
+    relatedSearches = internalLinks.intentCityPages!.slice(0, 15).map((l) => ({
+      href: l.url.replace('https://www.udyogconnect.in', ''),
+      label: l.name,
+      key: `${l.intent}-${l.url}`,
+    }));
+  } else if (productSlug) {
+    // Fallback: 5 cities × 3 key intents = 15 crawlable related links
+    const cities = RELATED_CITIES.slice(0, 5);
+    const intents = RELATED_INTENTS.slice(0, 3);
+    for (const city of cities) {
+      const citySlug = city.toLowerCase();
+      // Plain city link
+      relatedSearches.push({
+        href: `/products/${productSlug}/in/${citySlug}`,
+        label: `${productName} in ${city}`,
+        key: `city-${citySlug}`,
+      });
+      // Intent+city links
+      for (const intent of intents) {
+        relatedSearches.push({
+          href: `/products/${productSlug}/${intent.key}/in/${citySlug}`,
+          label: `${productName} ${intent.label} in ${city}`,
+          key: `intent-${intent.key}-${citySlug}`,
+        });
+      }
+    }
+  }
+
+  // Dedupe by href to guarantee no duplicate anchors
+  const seen = new Set<string>();
+  relatedSearches = relatedSearches.filter((l) => {
+    if (seen.has(l.href)) return false;
+    seen.add(l.href);
+    return true;
+  });
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mt-6">
@@ -262,6 +319,26 @@ export function InternalLinksSection({ internalLinks, productName }: InternalLin
                 </Link>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Related Searches — programmatic SEO internal linking (crawlable anchors) */}
+        {relatedSearches.length > 0 && (
+          <div data-testid="related-searches">
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Related Searches</h3>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 list-none">
+              {relatedSearches.map((l) => (
+                <li key={l.key}>
+                  <a
+                    href={l.href}
+                    className="text-blue-600 hover:text-blue-800 hover:underline text-sm"
+                    data-testid={`related-search-${l.key}`}
+                  >
+                    {l.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
