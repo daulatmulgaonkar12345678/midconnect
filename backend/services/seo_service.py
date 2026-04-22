@@ -141,21 +141,32 @@ class SEOService:
     # ==================== TITLE TAG OPTIMIZATION ====================
     
     @classmethod
-    def generate_seo_title(cls, product_name: str, category_name: str = None) -> str:
+    def generate_seo_title(
+        cls, 
+        product_name: str, 
+        category_name: str = None,
+        city: str = None
+    ) -> str:
         """
         Generate SEO-optimized title tag (55-65 characters).
         
-        Format: Buy {Product Name} Online | {Category Keyword} Suppliers in India | UdyogConnect
-        
-        Constraints:
-        - 55-65 characters ideal
-        - Must include primary keyword
-        - Must include "India"
-        
-        Example:
-        "Buy Industrial Water Pump Online | Pump Suppliers India | UdyogConnect"
+        Format (with city): {Product Name} in {City} | Industrial Supplier | UdyogConnect
+        Format (no city):   Buy {Product Name} Online | {Category} Suppliers India | UdyogConnect
         """
         clean_name = cls._clean_product_name(product_name)
+        
+        # City-aware title (for city pages or seller-specific)
+        if city:
+            city_title = city.strip().title()
+            full_title = f"{clean_name} in {city_title} | Industrial Supplier | {cls.SITE_NAME}"
+            if len(full_title) <= 65:
+                return full_title
+            short_title = f"{clean_name} in {city_title} | {cls.SITE_NAME}"
+            if len(short_title) <= 65:
+                return short_title
+            # Truncate product name to fit
+            max_len = 65 - len(f" in {city_title} | {cls.SITE_NAME}") - 3
+            return f"{clean_name[:max_len]}... in {city_title} | {cls.SITE_NAME}"
         
         # Build primary title with full format
         if category_name:
@@ -198,63 +209,57 @@ class SEOService:
         seller_count: int = 0,
         min_price: float = None,
         max_price: float = None,
-        min_moq: int = None
+        min_moq: int = None,
+        city: str = None
     ) -> str:
         """
-        Generate dynamic meta description (150-160 characters).
-        
-        Template:
-        "Explore {sellerCount}+ verified suppliers of {productName} in India. 
-        Compare prices, specifications & MOQ. Get best deals instantly on UdyogConnect."
-        
-        Includes:
-        - Product name
-        - Seller count
-        - Price range (if available)
-        - MOQ (if available)
-        - Call-to-action
-        
-        Constraints:
-        - 150-160 characters
-        - Readable, not keyword-stuffed
+        Generate dynamic meta description (140-160 characters).
+        Includes product name, city (if available), industrial keywords, and CTA.
         """
         clean_name = cls._clean_product_name(product_name)
+        city_text = f" in {city.strip().title()}" if city else " in India"
         
         # Build description parts
         parts = []
         
-        # Start with seller count if available
         if seller_count > 1:
-            parts.append(f"Explore {seller_count}+ verified suppliers of {clean_name} in India.")
+            parts.append(f"Explore {seller_count}+ verified suppliers of {clean_name}{city_text}.")
         else:
-            parts.append(f"Find verified suppliers of {clean_name} in India.")
+            parts.append(f"Find verified industrial suppliers of {clean_name}{city_text}.")
         
-        # Add price range if available
         if min_price and max_price and min_price != max_price:
             parts.append(f"Prices from ₹{cls._format_price(min_price)} to ₹{cls._format_price(max_price)}.")
         elif min_price:
             parts.append(f"Starting from ₹{cls._format_price(min_price)}.")
         
-        # Add MOQ if available
         if min_moq and min_moq > 1:
             parts.append(f"MOQ: {min_moq} units.")
         
-        # Always add CTA
         parts.append(f"Compare prices & get best deals on {cls.SITE_NAME}.")
         
-        # Join and truncate
         description = " ".join(parts)
         
-        # Ensure within limit
+        # Ensure 140-160 character range
         if len(description) > 160:
-            # Build shorter version
             if seller_count > 1:
-                description = f"Explore {seller_count}+ verified {clean_name} suppliers in India. Compare prices, specs & MOQ. Get best deals on {cls.SITE_NAME}."
+                description = f"Explore {seller_count}+ verified {clean_name} suppliers{city_text}. Compare prices, specs & MOQ. Get best deals on {cls.SITE_NAME}."
             else:
-                description = f"Find verified {clean_name} suppliers in India. Compare prices, specs & MOQ. Get best deals on {cls.SITE_NAME}."
+                description = f"Find verified {clean_name} suppliers{city_text}. Compare prices, specs & MOQ. Get best deals on {cls.SITE_NAME}."
         
         if len(description) > 160:
             description = description[:157] + "..."
+        
+        # Pad if too short (< 140 chars)
+        if len(description) < 140:
+            pad_options = [
+                " Free quotations from verified sellers.",
+                " Request quotes instantly.",
+                " Bulk orders welcome.",
+            ]
+            for pad in pad_options:
+                if len(description) + len(pad) <= 160:
+                    description = description.rstrip('.') + '.' + pad
+                    break
         
         return description
     
@@ -271,25 +276,17 @@ class SEOService:
         available_cities: List[str] = None
     ) -> str:
         """
-        Generate 300-500 word structured SEO content block.
+        Generate 400-800 word structured SEO content block.
         
-        Required Structure:
-        H1: {Product Name} Suppliers in India
-        
-        Paragraph 1: Overview of product and industry relevance
-        
-        H2: Specifications of {Product Name}
-        
-        H2: Applications of {Product Name}
-        
+        Structure:
+        H1: {Product Name} Suppliers in India (with city keyword)
+        Introduction: product + industrial use
+        H2: Types (if applicable)
+        H2: Specifications
+        H2: Applications (industrial use cases)
+        H2: Buying Guide
         H2: Available Cities
-        
         H2: Why Choose UdyogConnect
-        
-        Content must:
-        - Be structured with proper headings
-        - Avoid duplication
-        - Add marketplace context
         """
         clean_name = cls._clean_product_name(product_name)
         category_key = cls._get_category_key(category_name)
@@ -300,83 +297,154 @@ class SEOService:
         # ===== H1: Main Heading =====
         sections.append(f"# {clean_name} Suppliers in India")
         
-        # ===== Paragraph 1: Overview =====
+        # ===== Introduction (expanded, 80-120 words) =====
         seller_text = f"{seller_count}+ verified" if seller_count > 1 else "verified"
-        overview = f"""
-{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India. Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
-"""
-        sections.append(overview.strip())
+        app_list_short = ", ".join(applications[:3])
+        intro = f"""{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India. Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
+
+{clean_name} is a critical component used in {app_list_short} and many other industrial applications. Sourcing from reliable suppliers ensures consistent quality, timely delivery, and compliance with industry standards. With our B2B marketplace, procurement teams can compare offers from multiple sellers and negotiate directly to get the best value."""
+        sections.append(intro.strip())
+        
+        # ===== H2: Types & Variants =====
+        type_variants = cls._generate_type_variants(clean_name, category_key)
+        if type_variants:
+            types_section = f"""## Types of {clean_name}
+
+Industrial {clean_name} is available in several variants to meet diverse requirements:
+
+{type_variants}
+
+Each variant serves specific industrial needs. Contact our verified suppliers to find the right type of {clean_name} for your application."""
+            sections.append(types_section.strip())
         
         # ===== H2: Specifications =====
         if specifications and len(specifications) > 0:
             spec_lines = []
-            for key, value in list(specifications.items())[:8]:
+            for key, value in list(specifications.items())[:10]:
                 label = cls._format_spec_label(key)
                 if value:
                     spec_lines.append(f"- **{label}**: {value}")
             
             if spec_lines:
-                spec_section = f"""
-## Specifications of {clean_name}
+                spec_section = f"""## Specifications of {clean_name}
 
 Our suppliers offer {clean_name} with various specifications to meet your requirements:
 
 {chr(10).join(spec_lines)}
 
-Contact sellers directly to discuss custom specifications for your specific needs.
-"""
+Specifications vary by manufacturer and model. Contact sellers directly to discuss custom specifications for your specific project needs. Bulk orders may qualify for customized products tailored to your exact requirements."""
                 sections.append(spec_section.strip())
         
-        # ===== H2: Applications =====
+        # ===== H2: Applications (expanded) =====
         app_list = ", ".join(applications[:4])
         
-        app_section = f"""
-## Applications of {clean_name}
+        app_section = f"""## Applications of {clean_name}
 
 {clean_name} is widely used across multiple industries including {app_list}. Key application areas include:
 
-- **Manufacturing**: Factory automation, production lines, and industrial machinery
-- **Construction**: Building projects, infrastructure development, and civil engineering
-- **Engineering**: Fabrication shops, maintenance operations, and equipment assembly
-- **Commercial**: Office buildings, retail establishments, and hospitality industry
-"""
+- **Manufacturing**: Factory automation, production lines, industrial machinery, and assembly operations
+- **Construction**: Building projects, infrastructure development, civil engineering, and structural works
+- **Engineering**: Fabrication shops, maintenance operations, equipment assembly, and testing facilities
+- **Energy & Utilities**: Power generation, distribution systems, renewable energy installations, and grid maintenance
+- **Commercial & OEM**: Office buildings, retail establishments, and original equipment manufacturing
+
+The versatility of {clean_name} makes it indispensable across India's growing industrial sector. Whether for new installations or replacement parts, quality sourcing is essential for operational efficiency."""
         sections.append(app_section.strip())
+        
+        # ===== H2: Buying Guide =====
+        buying_section = f"""## How to Buy {clean_name} at Best Price
+
+Follow these steps to source {clean_name} efficiently through {cls.SITE_NAME}:
+
+1. **Define Requirements**: Specify exact specifications, quantity, and delivery timeline
+2. **Compare Suppliers**: Browse multiple verified sellers and compare prices, MOQ, and lead times
+3. **Request Quotations**: Send RFQ to shortlisted suppliers for competitive quotes
+4. **Verify Quality**: Check seller ratings, certifications, and sample availability
+5. **Negotiate & Order**: Negotiate pricing for bulk orders and confirm delivery terms
+
+Buying directly from manufacturers on {cls.SITE_NAME} can save 10-30% compared to traditional distribution channels. Our platform ensures price transparency and eliminates middlemen."""
+        sections.append(buying_section.strip())
         
         # ===== H2: Available Cities =====
         if available_cities and len(available_cities) > 0:
-            cities = available_cities[:12]
+            cities = available_cities[:15]
         else:
-            cities = cls.MAJOR_CITIES[:12]
+            cities = cls.MAJOR_CITIES[:15]
         
         cities_text = ", ".join(cities)
-        city_section = f"""
-## {clean_name} Suppliers by City
+        city_section = f"""## {clean_name} Suppliers by City
 
 Find {clean_name} suppliers in major industrial cities across India:
 
 {cities_text}
 
-Our network spans all major industrial hubs, ensuring quick delivery and local support for your procurement needs.
-"""
+Our network spans all major industrial hubs, ensuring quick delivery and local support for your procurement needs. Local suppliers offer the advantage of faster delivery, easier returns, and on-site support."""
         sections.append(city_section.strip())
         
         # ===== H2: Why Choose UdyogConnect =====
-        why_section = f"""
-## Why Choose {cls.SITE_NAME} for {clean_name}?
+        why_section = f"""## Why Choose {cls.SITE_NAME} for {clean_name}?
 
 {cls.SITE_NAME} is India's trusted B2B marketplace for industrial products. When sourcing {clean_name} through our platform, you benefit from:
 
-1. **Verified Suppliers**: All sellers undergo strict verification before listing
-2. **Price Transparency**: Compare quotes from multiple suppliers instantly
-3. **Direct Communication**: Connect directly with manufacturers and distributors
-4. **Pan-India Network**: Access suppliers across all major industrial cities
-5. **Quality Assurance**: Trusted brands and certified products
+1. **Verified Suppliers**: All sellers undergo strict verification including GST and business registration checks
+2. **Price Transparency**: Compare quotes from multiple suppliers instantly with no hidden charges
+3. **Direct Communication**: Connect directly with manufacturers and distributors — no brokers involved
+4. **Pan-India Network**: Access suppliers across all major industrial cities with nationwide delivery
+5. **Quality Assurance**: Trusted brands, certified products, and seller ratings for informed decisions
+6. **Bulk Pricing**: Special rates for industrial quantities and long-term procurement contracts
 
-Start sourcing {clean_name} today and get competitive quotes from verified suppliers.
-"""
+Start sourcing {clean_name} today and get competitive quotes from verified suppliers across India."""
         sections.append(why_section.strip())
         
         return "\n\n".join(sections)
+
+    @classmethod
+    def _generate_type_variants(cls, product_name: str, category_key: str) -> str:
+        """Generate product type/variant list based on category."""
+        variants_map = {
+            "motors": [
+                "**AC Motors**: Induction motors, synchronous motors for industrial drives",
+                "**DC Motors**: Brushed and brushless DC motors for precision control",
+                "**Servo Motors**: High-precision motors for CNC machines and robotics",
+                "**Gear Motors**: Speed reduction motors for conveyors and material handling",
+            ],
+            "electrical": [
+                "**Switch Gear**: MCBs, MCCBs, contactors, and relay panels",
+                "**Distribution Boards**: LT panels, PCC panels, and MCC panels",
+                "**Wiring Accessories**: Switches, sockets, junction boxes, and conduits",
+                "**Transformers**: Step-up, step-down, and isolation transformers",
+            ],
+            "steel": [
+                "**Flat Products**: Sheets, plates, coils, and strips in various grades",
+                "**Long Products**: Bars, rods, angles, channels, and beams",
+                "**Tubular Products**: Pipes, tubes, and hollow sections",
+                "**Stainless Steel**: SS304, SS316, and other corrosion-resistant grades",
+            ],
+            "pipes": [
+                "**GI Pipes**: Galvanized iron pipes for water supply and plumbing",
+                "**CPVC Pipes**: Chemical-resistant pipes for industrial applications",
+                "**HDPE Pipes**: High-density polyethylene pipes for drainage and irrigation",
+                "**SS Pipes**: Stainless steel pipes for food, pharma, and chemical industries",
+            ],
+            "tools": [
+                "**Hand Tools**: Wrenches, pliers, screwdrivers, and hammers",
+                "**Power Tools**: Drills, grinders, saws, and sanders",
+                "**Measuring Tools**: Calipers, micrometers, gauges, and levels",
+                "**Cutting Tools**: Blades, bits, end mills, and reamers",
+            ],
+            "safety": [
+                "**Head Protection**: Safety helmets, hard hats, and bump caps",
+                "**Eye Protection**: Safety goggles, face shields, and welding shields",
+                "**Respiratory Protection**: Dust masks, gas masks, and air-purifying respirators",
+                "**Hand Protection**: Industrial gloves — leather, rubber, and cut-resistant",
+            ],
+        }
+        
+        variants = variants_map.get(category_key)
+        if not variants:
+            return ""
+        
+        return "\n".join(f"- {v}" for v in variants)
     
     # ==================== INTERNAL LINKING SYSTEM ====================
     
@@ -681,6 +749,48 @@ Start sourcing {clean_name} today and get competitive quotes from verified suppl
                 for faq in faqs
             ]
         }
+    
+    # ==================== SEO QUALITY CHECK ====================
+    
+    @classmethod
+    def should_regenerate_seo(cls, product: Dict[str, Any]) -> bool:
+        """
+        Check if a product's SEO data needs regeneration.
+        Returns True if SEO is missing, weak, or auto-generated and outdated.
+        Does NOT overwrite manually edited SEO (if marked).
+        """
+        # Never overwrite manual edits
+        if product.get("seoManuallyEdited"):
+            return False
+        
+        # Check if core SEO fields exist
+        seo_title = product.get("seoTitle") or ""
+        seo_desc = product.get("seoDescription") or ""
+        seo_content = product.get("seoContent") or ""
+        slug = product.get("slug") or ""
+        
+        # Missing any core field
+        if not seo_title or not seo_desc or not seo_content or not slug:
+            return True
+        
+        # Weak title (too short or generic)
+        if len(seo_title) < 20:
+            return True
+        
+        # Weak description (too short)
+        if len(seo_desc) < 80:
+            return True
+        
+        # Weak content (< 400 words)
+        word_count = len(seo_content.split())
+        if word_count < 350:
+            return True
+        
+        # Slug doesn't follow v2.1 format
+        if not slug.endswith("-supplier-india") and not re.match(r'^[a-z0-9-]+$', slug):
+            return True
+        
+        return False
     
     # ==================== COMPLETE SEO DATA GENERATION ====================
     

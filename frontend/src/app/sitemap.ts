@@ -134,5 +134,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // Combine all pages
-  return [...staticPages, ...productPages, ...categoryPages];
+  // Generate city/location pages for each product
+  const cities = [
+    "pune", "mumbai", "delhi", "bangalore", "hyderabad",
+    "chennai", "kolkata", "ahmedabad", "jaipur", "indore",
+    "nagpur", "surat", "lucknow", "coimbatore", "ludhiana",
+    "rajkot", "vadodara", "nashik", "faridabad", "ghaziabad"
+  ];
+  
+  const cityPages: MetadataRoute.Sitemap = [];
+  for (const product of products) {
+    const productSlug = product.slug || product.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    if (!productSlug) continue;
+    for (const city of cities) {
+      cityPages.push({
+        url: `${siteUrl}/products/${productSlug}/in/${city}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.6,
+      });
+    }
+  }
+
+  return [...staticPages, ...productPages, ...categoryPages, ...cityPages];
 }

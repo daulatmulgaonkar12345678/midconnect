@@ -82,15 +82,27 @@ class CitySEOService:
         if not normalized_city:
             return False, 0
         
-        # Count active sellers in this city
-        seller_count = await self.db.sellerListings.count_documents({
-            "productId": product_id,
-            "status": "active",
-            "$or": [
-                {"city": {"$regex": f"^{normalized_city}$", "$options": "i"}},
-                {"sellerCity": {"$regex": f"^{normalized_city}$", "$options": "i"}}
-            ]
-        })
+        # Count active sellers in this city via user profile
+        pipeline = [
+            {"$match": {"productId": product_id, "status": "active"}},
+            {"$lookup": {
+                "from": "users",
+                "localField": "sellerId",
+                "foreignField": "_id",
+                "as": "seller"
+            }},
+            {"$unwind": {"path": "$seller", "preserveNullAndEmptyArrays": True}},
+            {"$match": {
+                "$or": [
+                    {"city": {"$regex": f"^{normalized_city}$", "$options": "i"}},
+                    {"sellerCity": {"$regex": f"^{normalized_city}$", "$options": "i"}},
+                    {"seller.profile.city": {"$regex": f"^{normalized_city}$", "$options": "i"}}
+                ]
+            }},
+            {"$count": "total"}
+        ]
+        result = await self.db.sellerListings.aggregate(pipeline).to_list(1)
+        seller_count = result[0]["total"] if result else 0
         
         # City page eligible if at least 1 seller
         return seller_count > 0, seller_count
@@ -137,11 +149,7 @@ class CitySEOService:
         sellers = await self.db.sellerListings.aggregate([
             {"$match": {
                 "productId": product["_id"],
-                "status": "active",
-                "$or": [
-                    {"city": {"$regex": f"^{normalized_city}$", "$options": "i"}},
-                    {"sellerCity": {"$regex": f"^{normalized_city}$", "$options": "i"}}
-                ]
+                "status": "active"
             }},
             {"$lookup": {
                 "from": "users",
@@ -150,6 +158,13 @@ class CitySEOService:
                 "as": "seller"
             }},
             {"$unwind": {"path": "$seller", "preserveNullAndEmptyArrays": True}},
+            {"$match": {
+                "$or": [
+                    {"city": {"$regex": f"^{normalized_city}$", "$options": "i"}},
+                    {"sellerCity": {"$regex": f"^{normalized_city}$", "$options": "i"}},
+                    {"seller.profile.city": {"$regex": f"^{normalized_city}$", "$options": "i"}}
+                ]
+            }},
             {"$project": {
                 "_id": 1,
                 "sellerId": 1,
@@ -159,7 +174,9 @@ class CitySEOService:
                 "stock": 1,
                 "images": {"$slice": ["$images", 2]},
                 "companyName": {"$ifNull": ["$seller.profile.businessName", "Verified Seller"]},
-                "badgeType": {"$ifNull": ["$seller.badgeType", "none"]}
+                "city": {"$ifNull": ["$city", {"$ifNull": ["$sellerCity", "$seller.profile.city"]}]},
+                "badgeType": {"$ifNull": ["$seller.badgeType", "none"]},
+                "listingId": {"$toString": "$_id"}
             }},
             {"$limit": 50}
         ]).to_list(50)
@@ -186,21 +203,31 @@ class CitySEOService:
         product_name = product.get("name", "Product")
         city_title = city.title()
         
-        seo_title = f"Buy {product_name} in {city_title} | {seller_count} Suppliers | UdyogConnect"
+        # Title: {Product Name} in {City} | Industrial Supplier | UdyogConnect
+        seo_title = f"{product_name} in {city_title} | Industrial Supplier | UdyogConnect"
         if len(seo_title) > 65:
-            seo_title = f"{product_name} Suppliers in {city_title} | UdyogConnect"
+            seo_title = f"{product_name} in {city_title} | UdyogConnect"
+        if len(seo_title) > 65:
+            max_pn = 65 - len(f" in {city_title} | UdyogConnect") - 3
+            seo_title = f"{product_name[:max_pn]}... in {city_title} | UdyogConnect"
         
-        seo_description = f"Find {seller_count} verified {product_name} suppliers in {city_title}. "
-        if min_price:
-            seo_description += f"Prices from ₹{min_price:,.0f}. "
-        seo_description += f"Compare quotes and get best deals on UdyogConnect."
-        seo_description = seo_description[:160]
+        # Description: 140-160 chars with city keyword
+        from services.seo_service import seo_service
+        seo_description = seo_service.generate_seo_description(
+            product_name, product.get("categoryName"),
+            seller_count, min_price, max_price, city=city_title
+        )
         
         # Canonical URL - always the main product page
         canonical_url = f"{self.SITE_URL}/products/{product_slug}"
         
         # City page URL (for this specific page)
         city_page_url = f"{self.SITE_URL}/products/{product_slug}/{city_slug}"
+        
+        # Generate city-specific SEO content (400+ words unique)
+        seo_content = self.generate_city_seo_content(
+            product_name, city, seller_count, min_price, product.get("categoryName")
+        )
         
         return {
             "product": {
@@ -223,8 +250,13 @@ class CitySEOService:
             "seo": {
                 "title": seo_title,
                 "description": seo_description,
-                "canonicalUrl": canonical_url,  # Points to main product page
+                "seoContent": seo_content,
+                "canonicalUrl": canonical_url,
                 "cityPageUrl": city_page_url
+            },
+            "internalLinks": {
+                "mainProductPage": f"{self.SITE_URL}/products/{product_slug}",
+                "categoryPage": f"{self.SITE_URL}/categories/{product.get('categoryName', '').lower().replace(' ', '-')}" if product.get("categoryName") else None
             }
         }
     
@@ -285,42 +317,63 @@ class CitySEOService:
         category_name: str = None
     ) -> str:
         """
-        Generate structured SEO content for city page.
-        
-        Content includes:
-        - City-specific H1
-        - Local market context
-        - Why buy from this city
+        Generate 400-800 word structured SEO content for city page.
+        Unique per city — NOT duplicate of main product page.
         """
         city_title = city.title()
         
         content = f"""# {product_name} Suppliers in {city_title}
 
-Find {seller_count} verified {product_name} suppliers and manufacturers in {city_title}. UdyogConnect connects you with local dealers offering competitive pricing and fast delivery.
+Looking for reliable {product_name} suppliers in {city_title}? UdyogConnect connects you with {seller_count} verified manufacturers, dealers, and distributors offering {product_name} in {city_title} and surrounding areas. Get competitive pricing, fast local delivery, and trusted quality from pre-verified sellers.
 
 ## {product_name} Price in {city_title}
 
 """
         if min_price:
-            content += f"Prices for {product_name} in {city_title} start from ₹{min_price:,.0f}. Compare quotes from multiple suppliers to get the best deal.\n\n"
+            content += f"""Prices for {product_name} in {city_title} start from ₹{min_price:,.0f}. Pricing varies based on specifications, quantity ordered, and the supplier. Compare quotes from {seller_count} suppliers on UdyogConnect to find the most competitive rates. Bulk orders and long-term contracts often qualify for additional discounts.
+
+"""
         else:
-            content += f"Contact suppliers directly to get the latest prices for {product_name} in {city_title}.\n\n"
+            content += f"""Contact {city_title}-based suppliers directly on UdyogConnect to get the latest pricing for {product_name}. Request quotations from multiple sellers to compare and negotiate the best deal for your requirements.
+
+"""
         
         content += f"""## Why Buy {product_name} from {city_title} Suppliers?
 
-1. **Local Support**: Get after-sales service and support from nearby suppliers
-2. **Faster Delivery**: Reduced shipping time from local warehouses
-3. **Competitive Pricing**: Compare {seller_count} local suppliers for best rates
-4. **Verified Sellers**: All suppliers on UdyogConnect are verified
+Sourcing {product_name} from local suppliers in {city_title} offers several advantages for businesses:
 
-## How to Buy {product_name} in {city_title}
+1. **Faster Delivery**: Local warehouses and manufacturing units mean reduced transit time — often same-day or next-day delivery within {city_title}
+2. **Lower Logistics Cost**: Proximity reduces freight charges, especially for bulk industrial orders
+3. **After-Sales Support**: On-site service, maintenance support, and easy returns from nearby suppliers
+4. **Competitive Pricing**: {seller_count} verified suppliers competing for your business ensures the best rates
+5. **Quality Inspection**: Visit supplier premises for physical quality checks before placing large orders
 
-1. Browse {seller_count} verified suppliers above
-2. Compare prices, MOQ, and specifications
-3. Request quotes from multiple sellers
-4. Choose the best offer and place your order
+## {product_name} Applications in {city_title}
 
-Start sourcing {product_name} from {city_title} suppliers today!
+{city_title}'s industrial sector uses {product_name} across multiple applications:
+
+- **Manufacturing Units**: Factory production lines, assembly operations, and process automation
+- **Construction Projects**: Infrastructure development, commercial buildings, and residential complexes
+- **Engineering Workshops**: Fabrication, maintenance, and repair operations
+- **OEM & Export**: Original equipment manufacturing and export-oriented production facilities
+
+{city_title} is one of India's key industrial hubs, making it an ideal location to source quality {product_name} at competitive prices.
+
+## How to Source {product_name} in {city_title}
+
+Follow these steps to find the right {product_name} supplier in {city_title} through UdyogConnect:
+
+1. **Browse Sellers**: View {seller_count} verified {product_name} suppliers listed above
+2. **Compare Offers**: Check prices, minimum order quantity (MOQ), lead times, and certifications
+3. **Request Quotations**: Send RFQ to multiple suppliers for competitive bidding
+4. **Verify & Order**: Check ratings, reviews, and GST verification status before placing your order
+5. **Get Delivery**: Enjoy fast local delivery from {city_title}-based suppliers
+
+## About UdyogConnect B2B Marketplace
+
+UdyogConnect is India's trusted B2B platform for industrial procurement. All suppliers undergo strict verification including GST registration, business legitimacy, and quality checks. Whether you need {product_name} in {city_title} or any other industrial city, our network of verified sellers ensures reliable sourcing with price transparency.
+
+Start sourcing {product_name} from {city_title} suppliers today — compare quotes and place your order on UdyogConnect!
 """
         
         return content

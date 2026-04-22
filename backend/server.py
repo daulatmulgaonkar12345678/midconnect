@@ -9568,6 +9568,30 @@ async def admin_update_product(
     
     updated = await db.products.find_one({"_id": ObjectId(product_id)})
     
+    # Auto-regenerate SEO if product name changed or SEO is weak
+    from services.seo_service import seo_service
+    if "name" in update_data or seo_service.should_regenerate_seo(updated):
+        category = await db.categories.find_one({"_id": updated.get("categoryId")})
+        category_name = category.get("name") if category else None
+        existing_slugs = await db.products.distinct("slug", {"_id": {"$ne": ObjectId(product_id)}})
+        
+        seo_update = {
+            "seoTitle": seo_service.generate_seo_title(updated["name"], category_name),
+            "seoDescription": seo_service.generate_seo_description(updated["name"], category_name, 0),
+            "seoContent": seo_service.generate_seo_content(
+                updated["name"], category_name, updated.get("specifications", {}),
+                updated.get("description"), 0, []
+            ),
+            "seoGeneratedAt": datetime.now(timezone.utc).isoformat()
+        }
+        # Only update slug if name changed or slug is missing
+        if "name" in update_data or not updated.get("slug"):
+            seo_update["slug"] = seo_service.generate_seo_slug(updated["name"], category_name, existing_slugs)
+        
+        await db.products.update_one({"_id": ObjectId(product_id)}, {"$set": seo_update})
+        updated = await db.products.find_one({"_id": ObjectId(product_id)})
+        logger.info(f"SEO auto-regenerated for product {product_id}")
+    
     # Safe serialization
     serialized = serialize_mongo_doc(updated)
     
