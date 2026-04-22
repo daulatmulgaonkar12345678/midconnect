@@ -36,7 +36,7 @@ import os
 from datetime import datetime, timezone
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://admin-emp-mgmt.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://seo-phase2-enhance.preview.emergentagent.com').rstrip('/')
 DEV_TOKEN = "dev-test-token"
 TEST_SELLER_ID = "699cb1d8ded1c6446549c19f"
 

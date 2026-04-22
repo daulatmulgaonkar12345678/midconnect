@@ -11,7 +11,7 @@ import os
 # Get BASE_URL from environment - use external URL for proper testing
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://admin-emp-mgmt.preview.emergentagent.com"
+    BASE_URL = "https://seo-phase2-enhance.preview.emergentagent.com"
 
 # Dev mode admin token - creates user with isAdmin:true and roles:['admin','seller','buyer']
 DEV_TEST_TOKEN = "dev-test-token"

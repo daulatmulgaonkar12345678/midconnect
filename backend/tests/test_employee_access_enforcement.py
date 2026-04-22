@@ -18,7 +18,7 @@ from bson import ObjectId
 from pymongo import MongoClient
 
 # Get base URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://admin-emp-mgmt.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://seo-phase2-enhance.preview.emergentagent.com').rstrip('/')
 
 # MongoDB connection for test setup
 MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')

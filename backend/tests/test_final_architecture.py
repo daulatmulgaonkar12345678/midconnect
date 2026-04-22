@@ -19,7 +19,7 @@ from bson import ObjectId
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', os.environ.get('EXPO_PUBLIC_BACKEND_URL', '')).rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://admin-emp-mgmt.preview.emergentagent.com"
+    BASE_URL = "https://seo-phase2-enhance.preview.emergentagent.com"
 
 
 class TestHealthAndPublicAPIs:

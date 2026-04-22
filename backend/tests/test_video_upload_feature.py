@@ -24,7 +24,7 @@ import requests
 import os
 
 # Use environment variable for BASE_URL
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://admin-emp-mgmt.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://seo-phase2-enhance.preview.emergentagent.com')
 
 
 class TestVideoValidationGuard:

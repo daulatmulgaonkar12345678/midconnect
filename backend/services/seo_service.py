@@ -1,26 +1,30 @@
 """
-ENTERPRISE SEO SERVICE v2.0
+ENTERPRISE SEO SERVICE v3.0
 ============================
 Marketplace-standard SEO content generation for UdyogConnect.
 
 Features:
-- Keyword-rich, SEO-friendly slugs (IndiaMART/Alibaba level)
-- Optimized title tags (55-65 chars, CTR-focused)
-- Dynamic meta descriptions (seller count, price range, MOQ)
-- Structured on-page content (300-500 words, H1/H2 hierarchy)
+- CTR-optimized titles with intent words, pricing, and year
+- Dynamic meta descriptions (140-160 chars, CTA-driven)
+- 500-900 word on-page content with FAQ + Market Insights
 - Enhanced JSON-LD (Product, AggregateOffer, BreadcrumbList, Organization, FAQ)
-- Internal linking system
+- Internal linking with city page URLs
 - Category-based keyword injection
+- seoVersion tracking for bulk updates
 
 NO AI dependency - deterministic templates that Google loves.
 """
 
 import re
 import logging
+import hashlib
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timezone
 
 logger = logging.getLogger("seo_service")
+
+# Current SEO version — bump when content templates change
+SEO_VERSION = 3
 
 
 class SEOService:
@@ -145,59 +149,88 @@ class SEOService:
         cls, 
         product_name: str, 
         category_name: str = None,
-        city: str = None
+        city: str = None,
+        min_price: float = None,
+        seller_count: int = 0
     ) -> str:
         """
-        Generate SEO-optimized title tag (55-65 characters).
+        Generate CTR-optimized title tag (55-65 characters).
         
-        Format (with city): {Product Name} in {City} | Industrial Supplier | UdyogConnect
-        Format (no city):   Buy {Product Name} Online | {Category} Suppliers India | UdyogConnect
+        Format (with city+price): Best {Product} in {City} (2026) | From ₹{price} | UdyogConnect
+        Format (with city):       Best {Product} in {City} | Industrial Supplier | UdyogConnect
+        Format (no city+price):   Compare {Product} Prices (2026) | From ₹{price} | UdyogConnect
+        Format (no city):         Buy {Product} Online | {Category} Suppliers India | UdyogConnect
+        
+        Uses dynamic intent words: Best, Top, Compare based on product hash.
         """
         clean_name = cls._clean_product_name(product_name)
+        year = datetime.now(timezone.utc).year
         
-        # City-aware title (for city pages or seller-specific)
+        # Pick an intent word deterministically based on product name
+        intent_words = ["Best", "Top", "Compare"]
+        intent = intent_words[sum(ord(c) for c in product_name.lower()) % len(intent_words)]
+        
+        price_str = f"From ₹{cls._format_price(min_price)}" if min_price else None
+        
+        # ===== CITY TITLE (city pages or seller-specific) =====
         if city:
             city_title = city.strip().title()
-            full_title = f"{clean_name} in {city_title} | Industrial Supplier | {cls.SITE_NAME}"
-            if len(full_title) <= 65:
-                return full_title
-            short_title = f"{clean_name} in {city_title} | {cls.SITE_NAME}"
-            if len(short_title) <= 65:
-                return short_title
-            # Truncate product name to fit
+            
+            # Try full: Best {Product} in {City} (2026) | From ₹X | UdyogConnect
+            if price_str:
+                full = f"{intent} {clean_name} in {city_title} ({year}) | {price_str} | {cls.SITE_NAME}"
+                if len(full) <= 65:
+                    return full
+            
+            # Try: Best {Product} in {City} (2026) | UdyogConnect
+            mid = f"{intent} {clean_name} in {city_title} ({year}) | {cls.SITE_NAME}"
+            if len(mid) <= 65:
+                return mid
+            
+            # Try: Best {Product} in {City} | UdyogConnect
+            short = f"{intent} {clean_name} in {city_title} | {cls.SITE_NAME}"
+            if len(short) <= 65:
+                return short
+            
+            # Truncate: {Product} in {City} | UdyogConnect
+            minimal = f"{clean_name} in {city_title} | {cls.SITE_NAME}"
+            if len(minimal) <= 65:
+                return minimal
             max_len = 65 - len(f" in {city_title} | {cls.SITE_NAME}") - 3
-            return f"{clean_name[:max_len]}... in {city_title} | {cls.SITE_NAME}"
+            return f"{clean_name[:max(max_len,10)]}... in {city_title} | {cls.SITE_NAME}"
         
-        # Build primary title with full format
-        if category_name:
-            category_keyword = cls._extract_category_keyword(category_name)
-            full_title = f"Buy {clean_name} Online | {category_keyword} Suppliers India | {cls.SITE_NAME}"
+        # ===== GENERAL TITLE (no city) =====
+        category_keyword = cls._extract_category_keyword(category_name) if category_name else None
+        
+        # Try full: Compare {Product} Prices (2026) | From ₹X | UdyogConnect
+        if price_str:
+            full = f"{intent} {clean_name} Prices ({year}) | {price_str} | {cls.SITE_NAME}"
+            if len(full) <= 65:
+                return full
+        
+        # Try: Buy {Product} Online | {Category} Suppliers India | UdyogConnect
+        if category_keyword:
+            cat_title = f"Buy {clean_name} Online | {category_keyword} Suppliers India | {cls.SITE_NAME}"
         else:
-            full_title = f"Buy {clean_name} Online | Verified Suppliers India | {cls.SITE_NAME}"
+            cat_title = f"Buy {clean_name} Online | Verified Suppliers India | {cls.SITE_NAME}"
+        if len(cat_title) <= 65:
+            return cat_title
         
-        # If within limit, return full title
-        if len(full_title) <= 65:
-            return full_title
-        
-        # Try shorter version without "Online"
-        if category_name:
-            category_keyword = cls._extract_category_keyword(category_name)
-            short_title = f"Buy {clean_name} | {category_keyword} Suppliers India | {cls.SITE_NAME}"
+        # Shorter: {Product} | {Category} Suppliers India | UdyogConnect
+        if category_keyword:
+            short = f"{clean_name} | {category_keyword} Suppliers India | {cls.SITE_NAME}"
         else:
-            short_title = f"Buy {clean_name} | Suppliers India | {cls.SITE_NAME}"
+            short = f"{clean_name} | Suppliers India | {cls.SITE_NAME}"
+        if len(short) <= 65:
+            return short
         
-        if len(short_title) <= 65:
-            return short_title
+        # Minimal
+        minimal = f"{clean_name} Suppliers India | {cls.SITE_NAME}"
+        if len(minimal) <= 65:
+            return minimal
         
-        # Minimal version
-        minimal_title = f"{clean_name} Suppliers India | {cls.SITE_NAME}"
-        if len(minimal_title) <= 65:
-            return minimal_title
-        
-        # Last resort - truncate product name
-        max_product_len = 65 - len(f" Suppliers India | {cls.SITE_NAME}") - 3
-        truncated_name = clean_name[:max_product_len] + "..."
-        return f"{truncated_name} Suppliers India | {cls.SITE_NAME}"
+        max_len = 65 - len(f" Suppliers India | {cls.SITE_NAME}") - 3
+        return f"{clean_name[:max(max_len,10)]}... Suppliers India | {cls.SITE_NAME}"
     
     # ==================== META DESCRIPTION ENHANCEMENT ====================
     
@@ -213,55 +246,50 @@ class SEOService:
         city: str = None
     ) -> str:
         """
-        Generate dynamic meta description (140-160 characters).
-        Includes product name, city (if available), industrial keywords, and CTA.
+        Generate CTR-optimized meta description (140-160 characters).
+        Includes: product name, city, starting price, CTA (Compare/Get Quote/Buy Now).
         """
         clean_name = cls._clean_product_name(product_name)
-        city_text = f" in {city.strip().title()}" if city else " in India"
+        city_text = f" in {city.strip().title()}" if city else ""
         
-        # Build description parts
-        parts = []
+        # Pick CTA based on product hash for variation
+        ctas = [
+            f"Compare prices & get quotes on {cls.SITE_NAME}.",
+            f"Get quotes from verified suppliers on {cls.SITE_NAME}.",
+            f"Request quotes instantly on {cls.SITE_NAME}.",
+        ]
+        cta = ctas[sum(ord(c) for c in product_name.lower()) % len(ctas)]
         
-        if seller_count > 1:
-            parts.append(f"Explore {seller_count}+ verified suppliers of {clean_name}{city_text}.")
-        else:
-            parts.append(f"Find verified industrial suppliers of {clean_name}{city_text}.")
-        
-        if min_price and max_price and min_price != max_price:
-            parts.append(f"Prices from ₹{cls._format_price(min_price)} to ₹{cls._format_price(max_price)}.")
+        # Build with price if available
+        if min_price and seller_count > 1:
+            desc = f"Compare prices of {clean_name}{city_text} starting from ₹{cls._format_price(min_price)}. {seller_count}+ verified industrial suppliers. {cta}"
         elif min_price:
-            parts.append(f"Starting from ₹{cls._format_price(min_price)}.")
+            desc = f"Buy {clean_name}{city_text} starting from ₹{cls._format_price(min_price)}. Verified industrial suppliers. {cta}"
+        elif seller_count > 1:
+            desc = f"Find {seller_count}+ verified {clean_name} suppliers{city_text or ' in India'}. {cta}"
+        else:
+            desc = f"Find verified industrial suppliers of {clean_name}{city_text or ' in India'}. {cta}"
         
-        if min_moq and min_moq > 1:
-            parts.append(f"MOQ: {min_moq} units.")
-        
-        parts.append(f"Compare prices & get best deals on {cls.SITE_NAME}.")
-        
-        description = " ".join(parts)
-        
-        # Ensure 140-160 character range
-        if len(description) > 160:
-            if seller_count > 1:
-                description = f"Explore {seller_count}+ verified {clean_name} suppliers{city_text}. Compare prices, specs & MOQ. Get best deals on {cls.SITE_NAME}."
+        # Trim to 160 chars
+        if len(desc) > 160:
+            # Shorter version without count
+            if min_price:
+                desc = f"Compare {clean_name}{city_text} from ₹{cls._format_price(min_price)}. Verified suppliers. {cta}"
             else:
-                description = f"Find verified {clean_name} suppliers{city_text}. Compare prices, specs & MOQ. Get best deals on {cls.SITE_NAME}."
+                desc = f"Find verified {clean_name} suppliers{city_text or ' in India'}. {cta}"
         
-        if len(description) > 160:
-            description = description[:157] + "..."
+        if len(desc) > 160:
+            desc = desc[:157] + "..."
         
-        # Pad if too short (< 140 chars)
-        if len(description) < 140:
-            pad_options = [
-                " Free quotations from verified sellers.",
-                " Request quotes instantly.",
-                " Bulk orders welcome.",
-            ]
-            for pad in pad_options:
-                if len(description) + len(pad) <= 160:
-                    description = description.rstrip('.') + '.' + pad
+        # Pad if too short
+        if len(desc) < 140:
+            pads = [" Bulk orders welcome.", " Free quotes.", " Best deals guaranteed."]
+            for pad in pads:
+                if len(desc) + len(pad) <= 160:
+                    desc = desc.rstrip('.') + '.' + pad
                     break
         
-        return description
+        return desc
     
     # ==================== STRUCTURED ON-PAGE CONTENT ====================
     
@@ -273,34 +301,41 @@ class SEOService:
         specifications: Dict[str, Any] = None,
         description: str = None,
         seller_count: int = 0,
-        available_cities: List[str] = None
+        available_cities: List[str] = None,
+        min_price: float = None,
+        max_price: float = None,
+        avg_delivery_days: int = None
     ) -> str:
         """
-        Generate 400-800 word structured SEO content block.
+        Generate 500-900 word structured SEO content block.
         
         Structure:
-        H1: {Product Name} Suppliers in India (with city keyword)
+        H1: {Product Name} Suppliers in India
         Introduction: product + industrial use
         H2: Types (if applicable)
         H2: Specifications
-        H2: Applications (industrial use cases)
+        H2: Market Insights (real data: sellers, prices, delivery)
+        H2: Applications (industry-based)
         H2: Buying Guide
         H2: Available Cities
         H2: Why Choose UdyogConnect
+        H2: FAQ (min 3 questions with answers)
         """
         clean_name = cls._clean_product_name(product_name)
         category_key = cls._get_category_key(category_name)
         applications = cls.INDUSTRY_APPLICATIONS.get(category_key, cls.INDUSTRY_APPLICATIONS["default"])
+        year = datetime.now(timezone.utc).year
         
         sections = []
         
-        # ===== H1: Main Heading =====
-        sections.append(f"# {clean_name} Suppliers in India")
+        # ===== H1 =====
+        sections.append(f"# {clean_name} Suppliers in India — Verified Manufacturers & Dealers ({year})")
         
-        # ===== Introduction (expanded, 80-120 words) =====
+        # ===== Introduction (80-120 words) =====
         seller_text = f"{seller_count}+ verified" if seller_count > 1 else "verified"
         app_list_short = ", ".join(applications[:3])
-        intro = f"""{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India. Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
+        price_mention = f" Prices start from ₹{cls._format_price(min_price)}." if min_price else ""
+        intro = f"""{cls.SITE_NAME} connects you with {seller_text} suppliers, manufacturers, and dealers of {clean_name} across India.{price_mention} Whether you need bulk quantities for industrial projects or are looking for competitive pricing, our platform offers direct access to trusted sellers with transparent pricing and specifications.
 
 {clean_name} is a critical component used in {app_list_short} and many other industrial applications. Sourcing from reliable suppliers ensures consistent quality, timely delivery, and compliance with industry standards. With our B2B marketplace, procurement teams can compare offers from multiple sellers and negotiate directly to get the best value."""
         sections.append(intro.strip())
@@ -335,9 +370,33 @@ Our suppliers offer {clean_name} with various specifications to meet your requir
 Specifications vary by manufacturer and model. Contact sellers directly to discuss custom specifications for your specific project needs. Bulk orders may qualify for customized products tailored to your exact requirements."""
                 sections.append(spec_section.strip())
         
-        # ===== H2: Applications (expanded) =====
-        app_list = ", ".join(applications[:4])
+        # ===== H2: Market Insights (NEW — real data injection) =====
+        insights_parts = []
+        if seller_count > 0:
+            insights_parts.append(f"Currently, {seller_count} verified sellers offer {clean_name} on {cls.SITE_NAME}")
+        if min_price and max_price and min_price != max_price:
+            insights_parts.append(f"Market price ranges from ₹{cls._format_price(min_price)} to ₹{cls._format_price(max_price)} depending on specifications, brand, and order quantity")
+        elif min_price:
+            insights_parts.append(f"Prices start from ₹{cls._format_price(min_price)} for standard variants")
+        if avg_delivery_days:
+            insights_parts.append(f"Average delivery time is {avg_delivery_days}-{avg_delivery_days + 2} business days across India")
+        if available_cities and len(available_cities) > 0:
+            top_cities = ", ".join(available_cities[:5])
+            insights_parts.append(f"Top supply hubs include {top_cities}")
         
+        if insights_parts:
+            bullet_lines = "\n".join(f"- {p}." for p in insights_parts)
+            market_section = f"""## {clean_name} Market Insights ({year})
+
+Here is a real-time snapshot of the {clean_name} market on {cls.SITE_NAME}:
+
+{bullet_lines}
+
+These figures are updated as new suppliers join and pricing changes. Check the product page for the latest data."""
+            sections.append(market_section.strip())
+        
+        # ===== H2: Applications =====
+        app_list = ", ".join(applications[:4])
         app_section = f"""## Applications of {clean_name}
 
 {clean_name} is widely used across multiple industries including {app_list}. Key application areas include:
@@ -371,12 +430,17 @@ Buying directly from manufacturers on {cls.SITE_NAME} can save 10-30% compared t
         else:
             cities = cls.MAJOR_CITIES[:15]
         
-        cities_text = ", ".join(cities)
+        # Generate city page links
+        product_slug = cls.generate_seo_slug(product_name, category_name)
+        city_links = ", ".join(
+            f"[{c}](/products/{product_slug}/in/{c.lower().replace(' ', '-')})" for c in cities[:10]
+        )
+        
         city_section = f"""## {clean_name} Suppliers by City
 
 Find {clean_name} suppliers in major industrial cities across India:
 
-{cities_text}
+{city_links}
 
 Our network spans all major industrial hubs, ensuring quick delivery and local support for your procurement needs. Local suppliers offer the advantage of faster delivery, easier returns, and on-site support."""
         sections.append(city_section.strip())
@@ -396,7 +460,47 @@ Our network spans all major industrial hubs, ensuring quick delivery and local s
 Start sourcing {clean_name} today and get competitive quotes from verified suppliers across India."""
         sections.append(why_section.strip())
         
+        # ===== H2: FAQ Section (min 3 questions) =====
+        faq_section = cls._generate_faq_content(clean_name, category_name, seller_count, min_price)
+        sections.append(faq_section)
+        
         return "\n\n".join(sections)
+    
+    @classmethod
+    def _generate_faq_content(
+        cls, clean_name: str, category_name: str = None, 
+        seller_count: int = 0, min_price: float = None
+    ) -> str:
+        """Generate FAQ section embedded in content (not just JSON-LD)."""
+        seller_text = str(seller_count) if seller_count > 0 else "multiple"
+        price_text = f"₹{cls._format_price(min_price)}" if min_price else "varies based on specifications"
+        
+        faqs = [
+            (
+                f"What is {clean_name} used for?",
+                f"{clean_name} is used in manufacturing, construction, engineering, and industrial maintenance. Common applications include factory automation, production lines, infrastructure projects, and equipment assembly. It plays a vital role in India's industrial supply chain."
+            ),
+            (
+                f"What is the price of {clean_name} in India?",
+                f"The price of {clean_name} starts from {price_text} on {cls.SITE_NAME}. Final pricing depends on specifications, quantity, brand, and the supplier. Request quotes from multiple sellers to compare and find the best deal."
+            ),
+            (
+                f"Which is the best {clean_name} for industrial use?",
+                f"The best {clean_name} depends on your specific application, required specifications, and budget. {cls.SITE_NAME} lists {seller_text} verified suppliers offering various brands and grades. Compare seller ratings and product specifications to make an informed choice."
+            ),
+            (
+                f"How do I get a quote for {clean_name}?",
+                f"Visit the {clean_name} product page on {cls.SITE_NAME}, select a supplier, and click 'Request Quote'. Specify your requirements including quantity, delivery location, and timeline. You will receive competitive quotes directly from verified sellers."
+            ),
+        ]
+        
+        qa_lines = []
+        for q, a in faqs:
+            qa_lines.append(f"**Q: {q}**\n\n{a}")
+        
+        return f"""## Frequently Asked Questions about {clean_name}
+
+{chr(10) + chr(10).join(qa_lines)}"""
 
     @classmethod
     def _generate_type_variants(cls, product_name: str, category_key: str) -> str:
