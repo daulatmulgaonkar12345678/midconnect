@@ -46,6 +46,46 @@ INTENT_CTAS = {
 # Template types drive content variation (prevents duplicate content at scale)
 TEMPLATE_TYPES = ["MARKET", "BUYER", "LOCAL", "EDUCATION"]
 
+# Top 20 Indian cities for programmatic SEO (single source of truth, used by
+# sitemap, internal linking, and content generation).
+TOP_CITIES = [
+    "mumbai", "delhi", "bangalore", "pune", "hyderabad",
+    "chennai", "ahmedabad", "kolkata", "surat", "jaipur",
+    "nagpur", "indore", "bhopal", "lucknow", "kanpur",
+    "coimbatore", "vadodara", "rajkot", "visakhapatnam", "nashik",
+]
+
+# Local SEO signals per city: industrial zones + nearby cities.
+# Curated (not AI-generated) to avoid factual errors. Used to enrich
+# city pages with locality signals that Google rewards.
+CITY_LOCAL_DATA: Dict[str, Dict[str, List[str]]] = {
+    "mumbai":       {"zones": ["Andheri MIDC", "Bhandup Industrial Estate", "Taloja MIDC", "Navi Mumbai"], "nearby": ["Thane", "Navi Mumbai", "Kalyan", "Vasai"]},
+    "delhi":        {"zones": ["Okhla Industrial Area", "Naraina", "Mayapuri", "Bawana"], "nearby": ["Gurgaon", "Noida", "Faridabad", "Ghaziabad"]},
+    "bangalore":    {"zones": ["Peenya Industrial Area", "Bommasandra", "Jigani", "Electronics City"], "nearby": ["Hosur", "Tumkur", "Mysore", "Bidadi"]},
+    "pune":         {"zones": ["Bhosari MIDC", "Chakan MIDC", "Pimpri Chinchwad", "Hinjewadi"], "nearby": ["Pimpri", "Chakan", "Talegaon", "Satara"]},
+    "hyderabad":    {"zones": ["Balanagar", "Jeedimetla", "Nacharam", "Medchal"], "nearby": ["Secunderabad", "Medchal", "Sangareddy", "Rangareddy"]},
+    "chennai":      {"zones": ["Ambattur Industrial Estate", "Guindy", "Sriperumbudur", "Oragadam"], "nearby": ["Kanchipuram", "Sriperumbudur", "Tiruvallur", "Chengalpattu"]},
+    "ahmedabad":    {"zones": ["Naroda GIDC", "Vatva GIDC", "Odhav", "Sanand GIDC"], "nearby": ["Gandhinagar", "Sanand", "Kalol", "Mehsana"]},
+    "kolkata":      {"zones": ["Howrah Industrial Area", "Dum Dum", "Kasba", "Salt Lake Sector V"], "nearby": ["Howrah", "Barrackpore", "Dankuni", "Hooghly"]},
+    "surat":        {"zones": ["Sachin GIDC", "Pandesara GIDC", "Hazira", "Udhna"], "nearby": ["Navsari", "Bharuch", "Vapi", "Ankleshwar"]},
+    "jaipur":       {"zones": ["Sitapura Industrial Area", "VKI Area", "Malviya Industrial Area", "Bagru"], "nearby": ["Kishangarh", "Ajmer", "Alwar", "Dausa"]},
+    "nagpur":       {"zones": ["MIDC Hingna", "Butibori MIDC", "Kamptee", "Wadi"], "nearby": ["Wardha", "Kamptee", "Bhandara", "Amravati"]},
+    "indore":       {"zones": ["Pithampur Industrial Area", "Sanwer Road", "Rau", "Palda"], "nearby": ["Pithampur", "Dewas", "Ujjain", "Mhow"]},
+    "bhopal":       {"zones": ["Govindpura Industrial Area", "Mandideep", "Bagroda", "Piplani"], "nearby": ["Mandideep", "Sehore", "Vidisha", "Raisen"]},
+    "lucknow":      {"zones": ["Amausi Industrial Area", "Chinhat", "Talkatora", "Scooter India"], "nearby": ["Kanpur", "Unnao", "Barabanki", "Sitapur"]},
+    "kanpur":       {"zones": ["Dada Nagar", "Panki", "Jajmau", "Fazalganj"], "nearby": ["Unnao", "Lucknow", "Fatehpur", "Kanpur Dehat"]},
+    "coimbatore":   {"zones": ["SIDCO Industrial Estate", "Peelamedu", "Kurichi", "Singanallur"], "nearby": ["Tirupur", "Pollachi", "Salem", "Erode"]},
+    "vadodara":     {"zones": ["Makarpura GIDC", "Gorwa", "Savli", "Halol"], "nearby": ["Halol", "Padra", "Anand", "Bharuch"]},
+    "rajkot":       {"zones": ["Aji GIDC", "Lodhika GIDC", "Metoda", "Shapar-Veraval"], "nearby": ["Morbi", "Jamnagar", "Gondal", "Jetpur"]},
+    "visakhapatnam":{"zones": ["Visakhapatnam Special Economic Zone", "Auto Nagar", "Gajuwaka", "Duvvada"], "nearby": ["Vizianagaram", "Anakapalle", "Srikakulam", "Tuni"]},
+    "nashik":       {"zones": ["Ambad MIDC", "Satpur MIDC", "Sinnar MIDC", "Ozar"], "nearby": ["Sinnar", "Igatpuri", "Niphad", "Dindori"]},
+}
+
+
+def get_city_local_data(city: str) -> Dict[str, List[str]]:
+    """Return industrial zones + nearby cities for a city (empty lists if unknown)."""
+    return CITY_LOCAL_DATA.get((city or "").strip().lower(), {"zones": [], "nearby": []})
+
 
 def get_template_type(slug: str, city: Optional[str] = None, intent: Optional[str] = None) -> str:
     """

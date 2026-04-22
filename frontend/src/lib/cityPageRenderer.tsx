@@ -49,6 +49,9 @@ export function renderCityPage(
   const mainProductUrl = data.internalLinks?.mainProductPage || `/products/${slug}`;
   const categoryUrl = data.internalLinks?.categoryPage;
   const relatedIntents: Array<{ intent: string; url: string }> = data.internalLinks?.relatedIntents || [];
+  const otherCities: Array<{ city: string; slug: string; url: string }> = data.internalLinks?.otherCities || [];
+  const industrialZones: string[] = data.localSignals?.industrialZones || [];
+  const nearbyCities: string[] = data.localSignals?.nearbyCities || [];
   const templateType = data.seo?.templateType;
 
   const productJsonLd = data.seo?.jsonLd;
@@ -180,6 +183,53 @@ export function renderCityPage(
                 </a>
               ))}
             </div>
+          </nav>
+        )}
+
+        {/* Local Signals (industrial zones + nearby cities) — boosts local SEO */}
+        {(industrialZones.length > 0 || nearbyCities.length > 0) && (
+          <section className="border-t pt-6 mt-8" data-testid="city-local-signals">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">
+              {productName} in {cityName} — Local Areas
+            </h2>
+            {industrialZones.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-600 mb-2">Top industrial zones in {cityName}</h3>
+                <ul className="flex flex-wrap gap-2">
+                  {industrialZones.map((z) => (
+                    <li key={z} className="inline-block px-3 py-1 bg-gray-100 text-gray-700 rounded text-sm">
+                      {z}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {nearbyCities.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-600 mb-2">Nearby cities also served</h3>
+                <p className="text-sm text-gray-600">{nearbyCities.join(', ')}</p>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Other Cities — inter-city internal linking (high-value SEO) */}
+        {otherCities.length > 0 && (
+          <nav className="border-t pt-6 mt-8" data-testid="city-other-cities">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">{productName} in Other Cities</h2>
+            <ul className="flex flex-wrap gap-2 list-none">
+              {otherCities.map((c) => (
+                <li key={c.slug}>
+                  <a
+                    href={c.url.replace('https://www.udyogconnect.in', '')}
+                    className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm hover:bg-blue-100"
+                    data-testid={`other-city-${c.slug}`}
+                  >
+                    {productName} in {c.city}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </nav>
         )}
 

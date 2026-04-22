@@ -199,9 +199,9 @@ interface InternalLinksProps {
   productSlug?: string;
 }
 
-// Top cities for the "Related Searches" internal-links block. Kept inline to
-// avoid new files; matches backend top-cities policy.
-const RELATED_CITIES = ['Pune', 'Mumbai', 'Delhi', 'Ahmedabad', 'Bangalore'];
+// Top cities for the "Related Searches" internal-links block. Mirrors backend
+// TOP_CITIES so new products get crawlable internal links even without sellers.
+const RELATED_CITIES = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Hyderabad'];
 const RELATED_INTENTS: Array<{ key: string; label: string }> = [
   { key: 'price', label: 'Price' },
   { key: 'suppliers', label: 'Suppliers' },

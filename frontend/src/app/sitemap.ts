@@ -3,12 +3,13 @@ import { MetadataRoute } from 'next';
 const SITE_URL = 'https://www.udyogconnect.in';
 const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
 
-// Cap city pages to top N cities globally (by seller volume) — prevents sitemap bloat.
-// Only (product, city) pairs that have active sellers are included.
-const MAX_CITIES = 10;
+// Cap city pages to top N cities (programmatic scale). Full 20-city coverage
+// per product. Backend endpoint generates all active products × TOP_CITIES.
+const MAX_CITIES = 20;
 
-// Programmatic intents that get their own indexable URLs (matches backend SUPPORTED_INTENTS).
-const SUPPORTED_INTENTS = ['price', 'buy', 'suppliers', 'wholesale', 'cheap'] as const;
+// Programmatic intents emitted in the sitemap (subset of backend SUPPORTED_INTENTS).
+// Only high-commercial-value intents are crawled to keep sitemap focused.
+const SUPPORTED_INTENTS = ['price', 'suppliers'] as const;
 
 // Google recommends ≤ 50 000 URLs per sitemap. We self-cap much lower for crawl efficiency.
 const MAX_URLS = 45000;
@@ -113,7 +114,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let cityPairs: SitemapCityPair[] = [];
   try {
     const cityRes = await fetch(
-      `${API_URL}/api/seo/sitemap-city-pages?max_cities=${MAX_CITIES}`,
+      `${API_URL}/api/seo/sitemap-city-pages?max_cities=${MAX_CITIES}&mode=all`,
       {
         next: { revalidate: 3600 },
         signal: AbortSignal.timeout(5000),

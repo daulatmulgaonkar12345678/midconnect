@@ -13246,14 +13246,47 @@ async def get_product_available_cities(product_slug: str):
 
 
 @api_router.get("/seo/sitemap-city-pages")
-async def get_sitemap_city_pages(max_cities: int = Query(10, ge=1, le=20)):
+async def get_sitemap_city_pages(
+    max_cities: int = Query(20, ge=1, le=20),
+    mode: str = Query("all", description="`all` = all products × TOP_CITIES; `seller-backed` = only pairs with active sellers"),
+):
     """
-    Returns ONLY (productSlug, citySlug) pairs that have active sellers.
-    Used by the frontend sitemap.ts to avoid thin/duplicate city pages.
+    Returns (productSlug, citySlug) pairs for the sitemap.
 
-    `max_cities` caps the number of distinct cities (top by seller volume)
-    to prevent sitemap bloat. Defaults to top 10.
+    Modes:
+      - `all` (default) — every active product × TOP_CITIES (capped). Used
+        for scale SEO: new products get indexable city URLs day 1.
+      - `seller-backed` — only pairs with active sellers in that city (legacy;
+        tighter but much fewer URLs).
     """
+    from services.seo_service import TOP_CITIES
+
+    # ===== Mode: all — all active products × TOP_CITIES (scale SEO) =====
+    if mode == "all":
+        cities_use = TOP_CITIES[:max_cities]
+        active_products = await db.products.find(
+            {"isActive": {"$ne": False}, "slug": {"$exists": True, "$ne": None, "$ne": ""}},
+            {"slug": 1, "updatedAt": 1}
+        ).to_list(10000)
+
+        pairs_out = []
+        for p in active_products:
+            for c in cities_use:
+                pairs_out.append({
+                    "productSlug": p["slug"],
+                    "citySlug": c,
+                    "lastModified": p.get("updatedAt").isoformat() if p.get("updatedAt") else None
+                })
+
+        return {
+            "pairs": pairs_out,
+            "cities": cities_use,
+            "totalPairs": len(pairs_out),
+            "maxCities": max_cities,
+            "mode": "all",
+        }
+
+    # ===== Mode: seller-backed — original behaviour =====
     # 1. Get top N cities by active seller volume (global)
     top_cities_pipeline = [
         {"$match": {"status": "active"}},

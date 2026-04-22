@@ -138,13 +138,14 @@ class CitySEOService:
         if not product:
             return None
         
-        # Check eligibility
+        # Check eligibility — allow pages to render even with 0 sellers (scale SEO).
+        # Content still gets the full city-specific treatment (zones, nearby, content).
         is_eligible, seller_count = await self.check_city_page_eligibility(
             product["_id"], city
         )
-        
-        if not is_eligible:
-            return None
+        # No hard 404 when no sellers — we still want the page indexed with quote-request CTA.
+        # Returning None here previously caused all non-seller cities to 404.
+        _ = is_eligible  # eligibility kept for analytics; rendering proceeds either way
         
         # Get city-specific sellers
         sellers = await self.db.sellerListings.aggregate([
@@ -206,7 +207,10 @@ class CitySEOService:
 
         # Generate city-specific SEO using the programmatic template system.
         # Reuses seo_service wherever possible — no new architecture.
-        from services.seo_service import seo_service, SUPPORTED_INTENTS, get_template_type
+        from services.seo_service import (
+            seo_service, SUPPORTED_INTENTS, get_template_type,
+            TOP_CITIES, get_city_local_data,
+        )
 
         normalized_intent = intent.lower() if intent and intent.lower() in SUPPORTED_INTENTS else None
         template_type = get_template_type(product_slug, city, normalized_intent)
@@ -255,6 +259,34 @@ class CitySEOService:
             intent=normalized_intent,
             template_type=template_type,
         )
+
+        # Inject local SEO signals (industrial zones + nearby cities) — city-specific,
+        # not AI-generated (to prevent factual errors at scale).
+        local = get_city_local_data(city_title)
+        zones = local.get("zones", [])
+        nearby = local.get("nearby", [])
+        if zones or nearby:
+            signal_block = f"\n\n## {product_name} in {city_title} — Local Areas & Nearby Cities\n\n"
+            if zones:
+                signal_block += f"**Top industrial zones serving {city_title}:**\n"
+                for z in zones:
+                    signal_block += f"- {z}\n"
+                signal_block += "\n"
+                signal_block += (
+                    f"Sellers in these zones supply {product_name} across {city_title} "
+                    f"with typical delivery within 24-48 hours for in-stock items.\n\n"
+                )
+            if nearby:
+                signal_block += f"**Nearby cities also served:** {', '.join(nearby)}.\n\n"
+                signal_block += (
+                    f"Buyers from {nearby[0] if nearby else ''}, {nearby[1] if len(nearby)>1 else ''} and "
+                    f"other surrounding areas frequently source {product_name} from {city_title} suppliers "
+                    f"due to proximity, competitive pricing, and established industrial supply chains.\n"
+                )
+            seo_content += signal_block
+
+        # Other-Cities internal-link block (4-5 hand-picked top cities, excluding current)
+        other_cities = [c for c in TOP_CITIES if c != city_slug][:5]
 
         # Build JSON-LD schemas for city page
         city_json_ld = self._build_city_json_ld(
@@ -308,6 +340,18 @@ class CitySEOService:
                     {"intent": i, "url": f"{self.SITE_URL}/products/{product_slug}/{i}/in/{city_slug}"}
                     for i in SUPPORTED_INTENTS if i != normalized_intent
                 ],
+                "otherCities": [
+                    {
+                        "city": c.title(),
+                        "slug": c,
+                        "url": f"{self.SITE_URL}/products/{product_slug}/in/{c}",
+                    }
+                    for c in other_cities
+                ],
+            },
+            "localSignals": {
+                "industrialZones": zones,
+                "nearbyCities": nearby,
             }
         }
     
