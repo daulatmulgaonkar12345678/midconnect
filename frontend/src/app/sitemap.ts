@@ -7,6 +7,12 @@ const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API
 // Only (product, city) pairs that have active sellers are included.
 const MAX_CITIES = 10;
 
+// Programmatic intents that get their own indexable URLs (matches backend SUPPORTED_INTENTS).
+const SUPPORTED_INTENTS = ['price', 'buy', 'suppliers', 'wholesale', 'cheap'] as const;
+
+// Google recommends ≤ 50 000 URLs per sitemap. We self-cap much lower for crawl efficiency.
+const MAX_URLS = 45000;
+
 interface Product {
   _id: string;
   name: string;
@@ -104,6 +110,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // --- City pages (only valid pairs with active sellers, capped to top N cities) ---
+  let cityPairs: SitemapCityPair[] = [];
   try {
     const cityRes = await fetch(
       `${API_URL}/api/seo/sitemap-city-pages?max_cities=${MAX_CITIES}`,
@@ -114,8 +121,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     );
     if (cityRes.ok) {
       const cityData = await cityRes.json();
-      const pairs: SitemapCityPair[] = cityData.pairs || [];
-      cityPages = pairs.map((p) => ({
+      cityPairs = cityData.pairs || [];
+      cityPages = cityPairs.map((p) => ({
         url: `${SITE_URL}/products/${p.productSlug}/in/${p.citySlug}`,
         lastModified: toDateOnly(p.lastModified),
         changeFrequency: 'weekly' as const,
@@ -126,5 +133,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('Sitemap: Failed to fetch city pages:', error);
   }
 
-  return [...staticPages, ...productPages, ...categoryPages, ...cityPages];
+  // --- Intent + City pages (programmatic SEO scale: 5 intents × N cityPairs) ---
+  // Each (product, city) gets 5 intent variants at lower priority. We cap total.
+  const intentPages: MetadataRoute.Sitemap = [];
+  for (const p of cityPairs) {
+    for (const intent of SUPPORTED_INTENTS) {
+      intentPages.push({
+        url: `${SITE_URL}/products/${p.productSlug}/${intent}/in/${p.citySlug}`,
+        lastModified: toDateOnly(p.lastModified),
+        changeFrequency: 'weekly' as const,
+        priority: 0.5,
+      });
+    }
+  }
+
+  const all = [
+    ...staticPages,
+    ...productPages,
+    ...categoryPages,
+    ...cityPages,
+    ...intentPages,
+  ];
+  // Safety cap well below Google's 50 000-URL limit.
+  return all.slice(0, MAX_URLS);
 }

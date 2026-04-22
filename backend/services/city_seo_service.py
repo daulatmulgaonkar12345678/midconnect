@@ -110,7 +110,8 @@ class CitySEOService:
     async def get_city_page_data(
         self,
         product_slug: str,
-        city: str
+        city: str,
+        intent: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Get data for city-specific product page.
@@ -198,35 +199,61 @@ class CitySEOService:
         
         min_price = min(prices) if prices else None
         max_price = max(prices) if prices else None
-        
-        # Generate city-specific SEO
+
+        # Common vars used by SEO generation and JSON-LD
         product_name = product.get("name", "Product")
-        city_title = city.title()
-        
-        # Title: {Product Name} in {City} | Industrial Supplier | UdyogConnect
-        seo_title = f"{product_name} in {city_title} | Industrial Supplier | UdyogConnect"
-        if len(seo_title) > 65:
+        city_title = city.strip().title()
+
+        # Generate city-specific SEO using the programmatic template system.
+        # Reuses seo_service wherever possible — no new architecture.
+        from services.seo_service import seo_service, SUPPORTED_INTENTS, get_template_type
+
+        normalized_intent = intent.lower() if intent and intent.lower() in SUPPORTED_INTENTS else None
+        template_type = get_template_type(product_slug, city, normalized_intent)
+
+        # City-aware, intent-aware title (55-65 chars)
+        seo_title = seo_service.generate_seo_title(
+            product_name, product.get("categoryName"),
+            city=city_title, min_price=min_price, seller_count=seller_count,
+            intent=normalized_intent,
+        )
+        # Fallback for very long names
+        if len(seo_title) > 65 or len(seo_title) < 30:
             seo_title = f"{product_name} in {city_title} | UdyogConnect"
-        if len(seo_title) > 65:
-            max_pn = 65 - len(f" in {city_title} | UdyogConnect") - 3
-            seo_title = f"{product_name[:max_pn]}... in {city_title} | UdyogConnect"
-        
-        # Description: 140-160 chars with city keyword
-        from services.seo_service import seo_service
+            if len(seo_title) > 65:
+                max_pn = 65 - len(f" in {city_title} | UdyogConnect") - 3
+                seo_title = f"{product_name[:max_pn]}... in {city_title} | UdyogConnect"
+
+        # City-aware, intent-aware description (140-160 chars)
         seo_description = seo_service.generate_seo_description(
             product_name, product.get("categoryName"),
-            seller_count, min_price, max_price, city=city_title
+            seller_count, min_price, max_price, city=city_title,
+            intent=normalized_intent,
         )
-        
-        # Canonical URL - always the main product page
+
+        # Canonical URL — always the main product page (prevents duplicate indexing)
         canonical_url = f"{self.SITE_URL}/products/{product_slug}"
-        
-        # City page URL (for this specific page)
-        city_page_url = f"{self.SITE_URL}/products/{product_slug}/{city_slug}"
-        
-        # Generate city-specific SEO content (400+ words unique)
-        seo_content = self.generate_city_seo_content(
-            product_name, city, seller_count, min_price, product.get("categoryName")
+
+        # Specific URL for this page (city page or intent+city page)
+        if normalized_intent:
+            page_url = f"{self.SITE_URL}/products/{product_slug}/{normalized_intent}/in/{city_slug}"
+        else:
+            page_url = f"{self.SITE_URL}/products/{product_slug}/in/{city_slug}"
+        # Back-compat alias (older code in this file uses `city_page_url`)
+        city_page_url = page_url
+
+        # Template-aware content (400-800 words unique per city/intent/template combo)
+        seo_content = seo_service.generate_programmatic_content(
+            product_name=product_name,
+            category_name=product.get("categoryName"),
+            specifications=product.get("specifications"),
+            seller_count=seller_count,
+            available_cities=[city_title] + [c for c in ["Mumbai", "Delhi", "Pune", "Bangalore"] if c != city_title][:4],
+            min_price=min_price,
+            max_price=max_price,
+            city=city_title,
+            intent=normalized_intent,
+            template_type=template_type,
         )
 
         # Build JSON-LD schemas for city page
@@ -267,13 +294,20 @@ class CitySEOService:
                 "seoContent": seo_content,
                 "canonicalUrl": canonical_url,
                 "cityPageUrl": city_page_url,
+                "pageUrl": page_url,
+                "intent": normalized_intent,
+                "templateType": template_type,
                 "jsonLd": city_json_ld["product"],
                 "breadcrumbJsonLd": city_json_ld["breadcrumb"],
                 "faqJsonLd": city_json_ld["faq"],
             },
             "internalLinks": {
                 "mainProductPage": f"{self.SITE_URL}/products/{product_slug}",
-                "categoryPage": f"{self.SITE_URL}/categories/{product.get('categoryName', '').lower().replace(' ', '-')}" if product.get("categoryName") else None
+                "categoryPage": f"{self.SITE_URL}/categories/{product.get('categoryName', '').lower().replace(' ', '-')}" if product.get("categoryName") else None,
+                "relatedIntents": [
+                    {"intent": i, "url": f"{self.SITE_URL}/products/{product_slug}/{i}/in/{city_slug}"}
+                    for i in SUPPORTED_INTENTS if i != normalized_intent
+                ],
             }
         }
     

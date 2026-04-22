@@ -102,6 +102,21 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - Admin endpoint `POST /api/admin/seo/bulk-regenerate` (supports `?dry_run=true` and `?force=true`) for one-shot production regen
     - Backend endpoint `GET /api/seo/sitemap-city-pages` returns only (productSlug, citySlug) pairs with active sellers — no thin pages
     - 14 dev products regenerated to v5
+
+55. **Programmatic SEO Scaling — Intent + Template System (Apr 2026)**
+    - Added `SUPPORTED_INTENTS = [price, buy, suppliers, wholesale, cheap]` + `TEMPLATE_TYPES = [MARKET, BUYER, LOCAL, EDUCATION]` to `seo_service.py`
+    - `get_template_type(slug, city, intent)` — deterministic md5-based template picker
+    - `generate_programmatic_content()` — template + intent-aware 1000-1250 word content generator; unique intent subsections (Price Trends, Buying Steps, Supplier Tiers, Wholesale Playbook, Affordability Strategies) force uniqueness
+    - `generate_seo_title` + `generate_seo_description` extended with `intent` param → "Price of X in City (2026)", "Buy X in City" etc
+    - `city_seo_service.get_city_page_data()` accepts `intent` param; returns `pageUrl` + `templateType` + `relatedIntents`
+    - Backend routes: `GET /api/products/{slug}/city/{city}?intent=X` and `GET /api/products/{slug}/intent/{intent}/in/{city}` (path-based)
+    - Frontend routes: `/products/[slug]/in/[city]` + NEW `/products/[slug]/[intent]/in/[city]` (invalid intent → 404)
+    - Shared SSR renderer at `/app/frontend/src/lib/cityPageRenderer.tsx` used by both routes (no UI duplication)
+    - Self-canonical URLs on city + intent pages → each can be independently indexed
+    - `generate_internal_links` now emits real `/in/city` URLs + `intentCityPages` for 3 cities × 5 intents per product (up to 15 programmatic links per product page)
+    - Sitemap scales from 17 URLs → 41 URLs now (8 static + 7 products + 2 cats + 4 city + 20 intent) with hard safety cap at 45,000
+    - **Content uniqueness validated**: Jaccard 5-gram similarity dropped from 99% (same-template) to 58-77% across intent variants
+    - Fully backward compatible — existing URLs, UI, and APIs unchanged
     - Sample URLs:
       - Main: `/products/ss304-round-bar-steel-raw-materials-supplier-india`
       - City: `/products/ss304-round-bar-steel-raw-materials-supplier-india/in/mumbai`

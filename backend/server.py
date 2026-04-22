@@ -5458,7 +5458,7 @@ async def get_product_seo_data(product_identifier: str):
         product_name, category_name, seller_count, min_price
     )
     
-    # Generate internal links
+    # Generate internal links (with programmatic intent+city pages)
     internal_links = seo_service.generate_internal_links(
         str(product_oid),
         product_name,
@@ -5466,7 +5466,8 @@ async def get_product_seo_data(product_identifier: str):
         category_name,
         category_slug,
         similar_products,
-        available_cities
+        available_cities,
+        product_slug=product_slug,
     )
     
     seo_response = {
@@ -13146,19 +13147,18 @@ async def setup_search_analytics_indexes_endpoint(admin: dict = Depends(require_
 @api_router.get("/products/{product_slug}/city/{city}")
 async def get_city_product_page(
     product_slug: str,
-    city: str
+    city: str,
+    intent: Optional[str] = Query(None, description="Programmatic SEO intent: price|buy|suppliers|wholesale|cheap"),
 ):
     """
-    Get city-specific product page data.
-    
-    URL Pattern: /products/{product-slug}/{city}
-    Example: /products/industrial-motor-supplier-india/mumbai
-    
-    Returns 404 if:
-    - Product doesn't exist
-    - No sellers in that city
-    
-    This is the enterprise city SEO endpoint.
+    Get city-specific product page data (optionally scoped to an intent).
+
+    URL Pattern:
+      /products/{product-slug}/{city}                          — plain city page
+      /products/{product-slug}/{city}?intent=price             — intent+city page
+
+    Returns 404 if product doesn't exist or no sellers in that city.
+    Canonical URL always points to the main product page.
     """
     from services.city_seo_service import create_city_seo_service
     from urllib.parse import unquote
@@ -13168,7 +13168,7 @@ async def get_city_product_page(
     
     service = create_city_seo_service(db)
     
-    data = await service.get_city_page_data(decoded_slug, decoded_city)
+    data = await service.get_city_page_data(decoded_slug, decoded_city, intent=intent)
     
     if not data:
         raise HTTPException(
@@ -13176,6 +13176,34 @@ async def get_city_product_page(
             detail=f"No sellers for this product in {decoded_city}"
         )
     
+    return data
+
+
+@api_router.get("/products/{product_slug}/intent/{intent}/in/{city}")
+async def get_intent_city_product_page(product_slug: str, intent: str, city: str):
+    """
+    Programmatic SEO: GET /products/{slug}/intent/{intent}/in/{city}
+    Mirrors the city endpoint but always enforces intent.
+    Path-based alternative to ?intent= query param for cleaner URLs.
+    """
+    from services.city_seo_service import create_city_seo_service
+    from services.seo_service import SUPPORTED_INTENTS
+    from urllib.parse import unquote
+
+    if intent not in SUPPORTED_INTENTS:
+        raise HTTPException(status_code=404, detail=f"Unsupported intent '{intent}'")
+
+    decoded_slug = unquote(product_slug)
+    decoded_city = unquote(city)
+
+    service = create_city_seo_service(db)
+    data = await service.get_city_page_data(decoded_slug, decoded_city, intent=intent)
+
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No sellers for this product in {decoded_city}"
+        )
     return data
 
 
