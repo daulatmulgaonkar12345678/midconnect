@@ -121,6 +121,16 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
       - Main: `/products/ss304-round-bar-steel-raw-materials-supplier-india`
       - City: `/products/ss304-round-bar-steel-raw-materials-supplier-india/in/mumbai`
 
+48. **Homepage Console Cleanup (Apr 2026)**
+    - Removed 35 `preload but not used` warnings + 1 `null:1 404` on www.udyogconnect.in
+    - Converted `HeroSearchSection` from Client → Server Component (removed `'use client'`)
+    - Replaced deprecated `priority` prop with `fetchPriority="high"` + `loading="eager"` on hero `<Image>`
+    - Removed duplicate `icons` from `layout.tsx` metadata (kept only manual `<link rel="icon">` tags)
+    - Added `loading="lazy"` + `fetchPriority="low"` to Featured Products `<img>` tags on homepage
+    - Added explicit `loading="lazy"` to CategoryCard `<Image>` component
+    - Preview smoke test: 0 console warnings, 0 errors, 0 4xx responses
+    - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`
+
 ## Prioritized Backlog
 ### P0 (Next)
 1. Session Control (Device tracking + max devices per plan)

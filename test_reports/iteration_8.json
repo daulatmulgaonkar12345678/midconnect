@@ -65,7 +65,7 @@
   "context_for_next_testing_agent": "Legacy getSpecTemplateById migration to getCategorySpecTemplate completed. New architecture: getCategorySpecTemplate(token, categoryId) returns { specTemplate, category } where specTemplate.fields contains field definitions. All frontend code updated to use this pattern.",
 
   "test_environment": {
-    "api_url": "https://seo-phase2-enhance.preview.emergentagent.com",
+    "api_url": "https://seo-scaling-hub.preview.emergentagent.com",
     "frontend_build": "SUCCESS",
     "firebase_status": "NOT CONFIGURED",
     "mongodb_status": "CONNECTED"

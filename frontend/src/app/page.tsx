@@ -138,6 +138,9 @@ export default async function HomePage() {
                         src={listing.images[0]}
                         alt={listing.productName}
                         className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                        fetchPriority="low"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">

@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
@@ -15,7 +13,8 @@ export default function HeroSearchSection() {
           alt="Industrial Equipment - Motors, Bearings, Pumps, Valves, Safety Equipment"
           fill
           className="object-cover"
-          priority
+          fetchPriority="high"
+          loading="eager"
           sizes="100vw"
           style={{ objectPosition: 'center center' }}
         />
