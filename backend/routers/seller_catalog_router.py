@@ -58,8 +58,10 @@ async def get_seller_by_slug(db, slug: str) -> Optional[Dict]:
     """
     Get seller by slug.
     Falls back to legacy sellers collection, then ObjectId lookup if slug not found.
+    Also matches slugified companyName / sellerName for sellers with missing sellerSlug,
+    and returns inactive sellers if they have active listings.
     """
-    # First try by slug in users collection
+    # First try by slug in users collection (active)
     seller = await db.users.find_one({
         "sellerSlug": slug,
         "roles": "seller",
@@ -102,31 +104,39 @@ async def get_seller_by_slug(db, slug: str) -> Optional[Dict]:
     except Exception:
         pass
 
-    # Fallback: match slugified companyName / sellerName / displayName for sellers with null sellerSlug
-    # Iterate through active sellers that have no sellerSlug and compare slugified names
+    # Fallback: match slugified name fields on ANY user that has a seller role
+    # (relaxed accountStatus) - the catalog is only shown if they have active listings,
+    # so inactive profiles with legitimate products still render their catalog.
     name_fields = ["companyName", "sellerName", "displayName", "name", "fullName"]
     cursor = db.users.find(
-        {
-            "roles": "seller",
-            "accountStatus": "active",
-            "$or": [{"sellerSlug": None}, {"sellerSlug": {"$exists": False}}, {"sellerSlug": ""}],
-        },
-        {f: 1 for f in name_fields}
+        {"roles": "seller"},
+        {f: 1 for f in name_fields + ["sellerSlug", "accountStatus"]}
     )
     async for candidate in cursor:
         for field in name_fields:
             value = candidate.get(field)
             if value and _slugify(value) == slug:
-                # Backfill the slug for future fast lookups
+                # Check this seller has at least one active listing before serving
+                has_listing = await db.sellerListings.find_one(
+                    {"sellerId": candidate["_id"], "status": "active"},
+                    {"_id": 1}
+                )
+                if not has_listing:
+                    continue
+                # Backfill the slug and ensure accountStatus for downstream usage
                 try:
+                    update_doc = {"sellerSlug": slug}
+                    if not candidate.get("accountStatus"):
+                        update_doc["accountStatus"] = "active"
                     await db.users.update_one(
                         {"_id": candidate["_id"]},
-                        {"$set": {"sellerSlug": slug}}
+                        {"$set": update_doc}
                     )
                 except Exception:
                     pass
                 full = await db.users.find_one({"_id": candidate["_id"]})
                 if full:
+                    full["accountStatus"] = full.get("accountStatus") or "active"
                     return full
     return None
 
