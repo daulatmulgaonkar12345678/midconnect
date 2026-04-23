@@ -139,6 +139,21 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
     - **Production requires Vercel redeploy AND backend redeploy on Render**
     - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`, `SellerCatalogPage.tsx`, `seller_catalog_router.py`
 
+49. **User Sync Script: Firebase <-> MongoDB (Apr 2026)**
+    - **Goal**: Reconcile user inconsistency between Firebase Auth and MongoDB; backfill null `sellerSlug`; normalise roles/status/verification
+    - **Outputs**:
+      - `/app/backend/scripts/sync_firebase_mongo_users.py` — standalone idempotent script (supports `--dry-run`)
+      - `POST /api/admin/users/sync-firebase-mongo` — admin-only endpoint wrapping the same logic (supports `?dry_run=true`)
+    - **Behaviour per user**:
+      1. Sync from Firebase: `email`, `isEmailVerified`, `name` (only when DB missing)
+      2. Roles: add `"seller"` if `businessName` exists OR user has active listings; default `["buyer"]` when empty
+      3. Seller fields: `isSeller = "seller" in roles`; `sellerSlug = slugify(businessName)` when missing
+      4. Verification: `isVerified = gst.verified === true` (never uses emailVerified)
+      5. Status: normalised to single `status` field; removes redundant `accountStatus`/`isActive` only when equivalent
+    - **Safety**: Idempotent (2nd run = 0 updates), preserves existing GST, only adds missing roles, never removes data
+    - **Tested on preview DB**: 27 users → 16 sellerSlugs backfilled, 2 seller roles added, 17 status normalised, 27 isVerified recomputed. 2nd run = 0 updates ✅
+    - **Production usage**: After deploy, call `POST /api/admin/users/sync-firebase-mongo?dry_run=true` to preview, then without `dry_run` to apply.
+
 ## Prioritized Backlog
 ### P0 (Next)
 1. Session Control (Device tracking + max devices per plan)

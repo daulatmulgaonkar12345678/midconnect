@@ -13671,6 +13671,40 @@ async def _REMOVED_admin_populate_listing_locations_temp(admin: dict = Depends(r
 # ============================================================
 
 
+@api_router.post("/admin/users/sync-firebase-mongo")
+async def admin_sync_firebase_mongo_users(
+    dry_run: bool = Query(False, description="Preview without writing"),
+    admin: dict = Depends(require_admin),
+):
+    """
+    Admin-only: Idempotent sync between Firebase Auth and MongoDB users.
+
+    Fixes:
+      - email, isEmailVerified, name pulled from Firebase (name only when missing locally).
+      - Adds role "seller" for users with businessName OR active listings.
+      - Sets isSeller and backfills sellerSlug (slugify(businessName)) for sellers.
+      - isVerified is reset to gst.verified === true (never uses emailVerified).
+      - Normalises status field to "active" and removes redundant flags.
+
+    Safe to call repeatedly.
+    """
+    from scripts.sync_firebase_mongo_users import sync_users
+
+    try:
+        summary = await sync_users(dry_run=dry_run)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("User sync failed")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
+
+    logger.info(
+        "[USER SYNC] Admin=%s dry_run=%s summary=%s",
+        admin.get("email"),
+        dry_run,
+        {k: v for k, v in summary.items() if k != "errors"},
+    )
+    return summary
+
+
 # ================== ENTERPRISE MIGRATION ENDPOINTS ==================
 
 @api_router.get("/admin/enterprise/status")
