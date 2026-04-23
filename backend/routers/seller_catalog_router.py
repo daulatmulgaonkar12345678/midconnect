@@ -44,6 +44,16 @@ def serialize_doc(doc):
     return doc
 
 
+def _slugify(text: str) -> str:
+    """Convert text to URL-safe slug (matches frontend slugify behavior)."""
+    if not text:
+        return ""
+    s = text.lower().strip()
+    s = re.sub(r"[^a-z0-9\s-]", "", s)
+    s = re.sub(r"[\s_-]+", "-", s)
+    return s.strip("-")
+
+
 async def get_seller_by_slug(db, slug: str) -> Optional[Dict]:
     """
     Get seller by slug.
@@ -91,7 +101,33 @@ async def get_seller_by_slug(db, slug: str) -> Optional[Dict]:
             return seller
     except Exception:
         pass
-    
+
+    # Fallback: match slugified companyName / sellerName / displayName for sellers with null sellerSlug
+    # Iterate through active sellers that have no sellerSlug and compare slugified names
+    name_fields = ["companyName", "sellerName", "displayName", "name", "fullName"]
+    cursor = db.users.find(
+        {
+            "roles": "seller",
+            "accountStatus": "active",
+            "$or": [{"sellerSlug": None}, {"sellerSlug": {"$exists": False}}, {"sellerSlug": ""}],
+        },
+        {f: 1 for f in name_fields}
+    )
+    async for candidate in cursor:
+        for field in name_fields:
+            value = candidate.get(field)
+            if value and _slugify(value) == slug:
+                # Backfill the slug for future fast lookups
+                try:
+                    await db.users.update_one(
+                        {"_id": candidate["_id"]},
+                        {"$set": {"sellerSlug": slug}}
+                    )
+                except Exception:
+                    pass
+                full = await db.users.find_one({"_id": candidate["_id"]})
+                if full:
+                    return full
     return None
 
 

@@ -121,21 +121,22 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
       - Main: `/products/ss304-round-bar-steel-raw-materials-supplier-india`
       - City: `/products/ss304-round-bar-steel-raw-materials-supplier-india/in/mumbai`
 
-48. **Homepage Console Cleanup + null:1 404 Fix + Seller Catalog Full Products (Apr 2026)**
-    - Removed 35+ `preload but not used` warnings + `null:1 404` error on www.udyogconnect.in
-    - **Root cause #1 (preload warnings)**: React 19's `ReactDOM.preload()` auto-preloaded ALL image URLs serialized in RSC Flight payload — even for data fetched but not visually rendered
-    - **Root cause #2 (`null:1 404`)**: Broken `<Link>` in `SellerCatalogPage.tsx:343` — rendered `href=/seller-catalog/.../category/null` when `category.categorySlug` was null in DB. Next.js auto-prefetched it → 404 → browser console showed `null:1 404`
-    - **Seller Catalog now shows ALL products** (previously limited to 4 per category): backend `products_per_category` max raised from 20 → 500; frontend fetches with 500.
+48. **Homepage Console Cleanup + null:1 404 + Seller Catalog Fixes (Apr 2026)**
+    - Removed preload warnings + `null:1 404` + fixed seller catalog 404 for null-slug sellers
+    - **Root cause #1 (preload warnings)**: React 19's `ReactDOM.preload()` auto-preloaded image URLs from RSC Flight payload
+    - **Root cause #2 (`null:1 404`)**: Broken `<Link>` rendered `href=/seller-catalog/.../category/null` when `categorySlug` was null
+    - **Root cause #3 (seller 404)**: Sellers like `Matrix Green Enterprise Private Limited` had `sellerSlug: null` in DB but URLs used slugified company name. Backend's `get_seller_by_slug` only checked DB `sellerSlug` field, didn't try matching by slugified companyName.
+    - **Seller Catalog** now shows ALL products per category (previously capped at 4).
     - **Fixes:**
-      - `HeroSearchSection.tsx` → Server Component + `fetchPriority="high"` instead of `priority`
+      - `HeroSearchSection.tsx` → Server Component + `fetchPriority="high"`
       - `layout.tsx` → Removed duplicate `icons` metadata
-      - `page.tsx` → Stripped `popularProducts` to `{_id,name,slug}`; trimmed `featuredProducts`; pre-sliced `categories`; converted Featured Products `<img>` → `<Image>`
+      - `page.tsx` → Stripped RSC payload; converted Featured Products `<img>` → `<Image>`
       - `CategoryCard.tsx` → Explicit `loading="lazy"`
-      - `SellerCatalogPage.tsx:343` → Only render `<Link>` when `category.categorySlug` exists; added `|| product.productId` fallback on product slug links
-      - `SellerCatalogPage.tsx:34` → Fetch all products (`500` per category)
-      - `seller_catalog_router.py` → Raised `le=20` → `le=500` on both endpoints
-    - Preview verified: 0 console warnings, 0 errors
-    - **Production requires Vercel redeploy** (Save to GitHub) to take effect
+      - `SellerCatalogPage.tsx:343` → Guarded `<Link>` for null `categorySlug`; `|| product.productId` fallback for product slug links
+      - `SellerCatalogPage.tsx:34` → Fetches `products_per_category=500`
+      - `seller_catalog_router.py` → Raised limit `le=20` → `le=500`; added `_slugify()` + name-based fallback in `get_seller_by_slug` with auto-backfill of `sellerSlug` on first match
+    - Preview verified: 0 console warnings, 0 errors; slugify matches all test cases
+    - **Production requires Vercel redeploy AND backend redeploy on Render**
     - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`, `SellerCatalogPage.tsx`, `seller_catalog_router.py`
 
 ## Prioritized Backlog
