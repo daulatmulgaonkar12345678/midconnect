@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { getPublicCategories, searchProducts, getProducts } from '@/lib/api';
 import CategoryCard from '@/components/CategoryCard';
 import { ArrowRight, Shield, Truck, BadgeCheck, MapPin, TrendingUp, Package } from 'lucide-react';
@@ -21,20 +22,32 @@ export default async function HomePage() {
   try {
     // Use getPublicCategories to only show categories with active seller listings
     const publicCategories = await getPublicCategories();
-    // Map to Category type (all required fields are present in response)
-    categories = publicCategories.map(cat => ({
+    // Slice early + strip unused fields so React 19 doesn't auto-preload images of hidden categories
+    categories = publicCategories.slice(0, 8).map(cat => ({
       ...cat,
       description: '',
       isActive: true
     }));
     const searchResult = await searchProducts('');
-    featuredProducts = searchResult.products?.slice(0, 8) || [];
+    // Map to minimal shape to avoid React 19 auto-preloading unused image URLs from serialized RSC payload
+    featuredProducts = (searchResult.products?.slice(0, 8) || []).map((p) => ({
+      _id: p._id,
+      productId: p.productId,
+      productName: p.productName,
+      price: p.price,
+      city: p.city,
+      state: p.state,
+      inStock: p.inStock,
+      images: p.images?.[0] ? [p.images[0]] : undefined,
+    })) as SearchListing[];
 
     // Fetch top 20 products with slugs for SEO internal links. Reuses existing API.
     const allProducts = await getProducts();
+    // Strip images/description to prevent React 19 from auto-preloading them (links are text-only)
     popularProducts = allProducts
       .filter(p => p.slug && p.slug.length > 0)
-      .slice(0, 20);
+      .slice(0, 20)
+      .map(p => ({ _id: p._id, name: p.name, slug: p.slug }));
   } catch (error) {
     console.error('Failed to fetch data:', error);
   }
@@ -134,13 +147,13 @@ export default async function HomePage() {
                 >
                   <div className="aspect-[4/3] bg-gray-100 relative">
                     {listing.images?.[0] ? (
-                      <img
+                      <Image
                         src={listing.images[0]}
                         alt={listing.productName}
-                        className="w-full h-full object-cover"
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                        className="object-cover"
                         loading="lazy"
-                        decoding="async"
-                        fetchPriority="low"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">

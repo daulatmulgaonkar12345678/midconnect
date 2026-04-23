@@ -123,12 +123,14 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
 
 48. **Homepage Console Cleanup (Apr 2026)**
     - Removed 35 `preload but not used` warnings + 1 `null:1 404` on www.udyogconnect.in
-    - Converted `HeroSearchSection` from Client → Server Component (removed `'use client'`)
-    - Replaced deprecated `priority` prop with `fetchPriority="high"` + `loading="eager"` on hero `<Image>`
-    - Removed duplicate `icons` from `layout.tsx` metadata (kept only manual `<link rel="icon">` tags)
-    - Added `loading="lazy"` + `fetchPriority="low"` to Featured Products `<img>` tags on homepage
-    - Added explicit `loading="lazy"` to CategoryCard `<Image>` component
-    - Preview smoke test: 0 console warnings, 0 errors, 0 4xx responses
+    - **Root cause**: React 19's `ReactDOM.preload()` auto-preloaded ALL image URLs serialized in RSC Flight payload — even for data that was fetched but not visually rendered (e.g., full product objects used only for name/slug text links)
+    - **Fixes** (all in `/app/frontend/src/app/page.tsx`):
+      - `HeroSearchSection.tsx` → Server Component + `fetchPriority="high"` instead of `priority`
+      - `layout.tsx` → Removed duplicate `icons` metadata
+      - `page.tsx` → Stripped `popularProducts` to `{_id,name,slug}` only (removed 19 phantom preloads); trimmed `featuredProducts` to minimal fields; pre-sliced `categories` at source to 8; converted Featured Products `<img>` to `<Image>` (URLs wrapped by `/_next/image`, no raw Cloudinary preloads)
+      - `CategoryCard.tsx` → Explicit `loading="lazy"`
+    - Preview verified: 0 console warnings, 0 errors
+    - **Production requires Vercel redeploy** to take effect
     - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`
 
 ## Prioritized Backlog
