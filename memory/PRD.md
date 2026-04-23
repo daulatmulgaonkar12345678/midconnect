@@ -121,19 +121,22 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
       - Main: `/products/ss304-round-bar-steel-raw-materials-supplier-india`
       - City: `/products/ss304-round-bar-steel-raw-materials-supplier-india/in/mumbai`
 
-48. **Homepage Console Cleanup + null:1 404 Fix (Apr 2026)**
+48. **Homepage Console Cleanup + null:1 404 Fix + Seller Catalog Full Products (Apr 2026)**
     - Removed 35+ `preload but not used` warnings + `null:1 404` error on www.udyogconnect.in
     - **Root cause #1 (preload warnings)**: React 19's `ReactDOM.preload()` auto-preloaded ALL image URLs serialized in RSC Flight payload — even for data fetched but not visually rendered
     - **Root cause #2 (`null:1 404`)**: Broken `<Link>` in `SellerCatalogPage.tsx:343` — rendered `href=/seller-catalog/.../category/null` when `category.categorySlug` was null in DB. Next.js auto-prefetched it → 404 → browser console showed `null:1 404`
+    - **Seller Catalog now shows ALL products** (previously limited to 4 per category): backend `products_per_category` max raised from 20 → 500; frontend fetches with 500.
     - **Fixes:**
       - `HeroSearchSection.tsx` → Server Component + `fetchPriority="high"` instead of `priority`
       - `layout.tsx` → Removed duplicate `icons` metadata
-      - `page.tsx` → Stripped `popularProducts` to `{_id,name,slug}`; trimmed `featuredProducts` to minimal fields; pre-sliced `categories` at source; converted Featured Products `<img>` → `<Image>`
+      - `page.tsx` → Stripped `popularProducts` to `{_id,name,slug}`; trimmed `featuredProducts`; pre-sliced `categories`; converted Featured Products `<img>` → `<Image>`
       - `CategoryCard.tsx` → Explicit `loading="lazy"`
-      - **`SellerCatalogPage.tsx:343`** → Only render `<Link>` when `category.categorySlug` exists; added `|| product.productId` fallback for product slug links
+      - `SellerCatalogPage.tsx:343` → Only render `<Link>` when `category.categorySlug` exists; added `|| product.productId` fallback on product slug links
+      - `SellerCatalogPage.tsx:34` → Fetch all products (`500` per category)
+      - `seller_catalog_router.py` → Raised `le=20` → `le=500` on both endpoints
     - Preview verified: 0 console warnings, 0 errors
     - **Production requires Vercel redeploy** (Save to GitHub) to take effect
-    - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`, `SellerCatalogPage.tsx`
+    - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`, `SellerCatalogPage.tsx`, `seller_catalog_router.py`
 
 ## Prioritized Backlog
 ### P0 (Next)

@@ -31,7 +31,8 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
     const fetchCatalog = async () => {
       try {
         setLoading(true);
-        const data = await getSellerCatalog(slug, 4);
+        // Fetch all products per category (seller catalog shows the seller's full portfolio)
+        const data = await getSellerCatalog(slug, 500);
         setCatalog(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load seller catalog');

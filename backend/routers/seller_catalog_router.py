@@ -283,7 +283,7 @@ def init_seller_catalog_routes(app_db):
     @router.get("/{slug}")
     async def get_seller_catalog(
         slug: str,
-        products_per_category: int = Query(4, ge=1, le=20)
+        products_per_category: int = Query(4, ge=1, le=500)
     ):
         """
         Get seller catalog page data.
@@ -469,7 +469,7 @@ def init_seller_catalog_routes(app_db):
     @router.get("/by-id/{seller_id}")
     async def get_seller_catalog_by_id(
         seller_id: str,
-        products_per_category: int = Query(4, ge=1, le=20)
+        products_per_category: int = Query(4, ge=1, le=500)
     ):
         """
         Get seller catalog by seller ID (ObjectId).
