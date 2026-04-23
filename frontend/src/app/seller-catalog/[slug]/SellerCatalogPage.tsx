@@ -340,7 +340,7 @@ export default function SellerCatalogPage({ slug }: SellerCatalogPageProps) {
                     </div>
                   </div>
                   
-                  {category.totalProducts > 4 && (
+                  {category.totalProducts > 4 && category.categorySlug && (
                     <Link
                       href={`/seller-catalog/${slug}/category/${category.categorySlug}`}
                       className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
@@ -451,7 +451,7 @@ function ProductCard({ product, sellerSlug, sellerName, onInquiry }: ProductCard
   return (
     <div className="group relative bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-shadow">
       {/* Image */}
-      <Link href={`/products/${product.productSlug}`}>
+      <Link href={`/products/${product.productSlug || product.productId}`}>
         <div className="aspect-square relative bg-gray-100">
           {firstImage ? (
             <Image
@@ -483,7 +483,7 @@ function ProductCard({ product, sellerSlug, sellerName, onInquiry }: ProductCard
 
       {/* Info */}
       <div className="p-3">
-        <Link href={`/products/${product.productSlug}`}>
+        <Link href={`/products/${product.productSlug || product.productId}`}>
           <h4 className="font-medium text-gray-900 text-sm line-clamp-2 hover:text-blue-600 transition mb-1">
             {product.productName}
           </h4>

@@ -121,17 +121,19 @@ Build a B2B marketplace for Indian industrial products with seller tools includi
       - Main: `/products/ss304-round-bar-steel-raw-materials-supplier-india`
       - City: `/products/ss304-round-bar-steel-raw-materials-supplier-india/in/mumbai`
 
-48. **Homepage Console Cleanup (Apr 2026)**
-    - Removed 35 `preload but not used` warnings + 1 `null:1 404` on www.udyogconnect.in
-    - **Root cause**: React 19's `ReactDOM.preload()` auto-preloaded ALL image URLs serialized in RSC Flight payload — even for data that was fetched but not visually rendered (e.g., full product objects used only for name/slug text links)
-    - **Fixes** (all in `/app/frontend/src/app/page.tsx`):
+48. **Homepage Console Cleanup + null:1 404 Fix (Apr 2026)**
+    - Removed 35+ `preload but not used` warnings + `null:1 404` error on www.udyogconnect.in
+    - **Root cause #1 (preload warnings)**: React 19's `ReactDOM.preload()` auto-preloaded ALL image URLs serialized in RSC Flight payload — even for data fetched but not visually rendered
+    - **Root cause #2 (`null:1 404`)**: Broken `<Link>` in `SellerCatalogPage.tsx:343` — rendered `href=/seller-catalog/.../category/null` when `category.categorySlug` was null in DB. Next.js auto-prefetched it → 404 → browser console showed `null:1 404`
+    - **Fixes:**
       - `HeroSearchSection.tsx` → Server Component + `fetchPriority="high"` instead of `priority`
       - `layout.tsx` → Removed duplicate `icons` metadata
-      - `page.tsx` → Stripped `popularProducts` to `{_id,name,slug}` only (removed 19 phantom preloads); trimmed `featuredProducts` to minimal fields; pre-sliced `categories` at source to 8; converted Featured Products `<img>` to `<Image>` (URLs wrapped by `/_next/image`, no raw Cloudinary preloads)
+      - `page.tsx` → Stripped `popularProducts` to `{_id,name,slug}`; trimmed `featuredProducts` to minimal fields; pre-sliced `categories` at source; converted Featured Products `<img>` → `<Image>`
       - `CategoryCard.tsx` → Explicit `loading="lazy"`
+      - **`SellerCatalogPage.tsx:343`** → Only render `<Link>` when `category.categorySlug` exists; added `|| product.productId` fallback for product slug links
     - Preview verified: 0 console warnings, 0 errors
-    - **Production requires Vercel redeploy** to take effect
-    - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`
+    - **Production requires Vercel redeploy** (Save to GitHub) to take effect
+    - Files: `HeroSearchSection.tsx`, `layout.tsx`, `page.tsx`, `CategoryCard.tsx`, `SellerCatalogPage.tsx`
 
 ## Prioritized Backlog
 ### P0 (Next)
