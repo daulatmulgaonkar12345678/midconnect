@@ -1,35 +1,13 @@
 import { Metadata } from 'next';
 
 import { canonicalSelfUrl, SITE_URL } from '@/lib/siteUrl';
+import { fetchProductSeoPayload, type ProductSeoPayload } from '@/lib/productSeoServer';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
-
-function isObjectId(str: string): boolean {
-  return /^[a-f0-9]{24}$/i.test(str);
-}
-
-type SeoPayload = {
-  productName?: string;
-  seoTitle?: string;
-  seoDescription?: string;
-  canonicalUrl?: string;
-  categoryName?: string;
-  jsonLd?: Record<string, unknown>;
-  breadcrumbJsonLd?: Record<string, unknown>;
-  faqJsonLd?: Record<string, unknown>;
-};
-
-async function fetchSeo(slug: string): Promise<SeoPayload | null> {
-  try {
-    const response = await fetch(`${API_URL}/api/products/${slug}/seo`, {
-      next: { revalidate: 3600 },
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as SeoPayload;
-  } catch {
-    return null;
-  }
-}
+// Batch 3 (2026-11-19): the /seo payload fetch moved to the shared
+// server-only helper `fetchProductSeoPayload` (same URL, same
+// `next: { revalidate: 3600 }` cache policy, null on failure) so the page
+// shell can fetch the identical payload for the server-rendered hero without
+// a second upstream call (request memoization dedupes within a render).
 
 // Static Organization schema — SSR, single instance
 const ORGANIZATION_SCHEMA = {
@@ -62,8 +40,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  if (isObjectId(slug)) return getDefaultMetadata();
-  const seoData = await fetchSeo(slug);
+  const seoData: ProductSeoPayload | null = await fetchProductSeoPayload(slug);
   if (!seoData || !seoData.seoTitle) return getDefaultMetadata();
   // Batch 2: re-anchor the payload's absolute canonical URL on the approved
   // apex origin. A cached payload fetched before the backend switched from
@@ -120,7 +97,7 @@ export default async function MainProductLayout({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const seoData = isObjectId(slug) ? null : await fetchSeo(slug);
+  const seoData = await fetchProductSeoPayload(slug);
 
   return (
     <>
