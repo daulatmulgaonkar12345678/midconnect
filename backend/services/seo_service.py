@@ -24,7 +24,8 @@ from datetime import datetime, timezone
 logger = logging.getLogger("seo_service")
 
 # Current SEO version — bump when content templates change
-SEO_VERSION = 7
+# v8: de-templated per-product meta descriptions + plural /products/ URL contract
+SEO_VERSION = 8
 
 # Supported programmatic SEO intents (single source of truth)
 SUPPORTED_INTENTS = ["price", "buy", "suppliers", "wholesale", "cheap"]
@@ -102,7 +103,7 @@ class SEOService:
     """Enterprise SEO content generator using marketplace-standard templates."""
     
     SITE_NAME = "UdyogConnect"
-    SITE_URL = "https://www.udyogconnect.in"
+    SITE_URL = "https://udyogconnect.in"
     
     # SEO v2.1 - Max slug length
     MAX_SLUG_LENGTH = 90
@@ -158,7 +159,73 @@ class SEOService:
         "safety":     ["plant safety officers", "EHS consultants", "construction contractors", "refinery shutdown teams", "warehouse supervisors"],
         "default":    ["contractors", "manufacturers", "factory maintenance teams", "OEM buyers", "MRO supervisors"],
     }
-    
+
+    # Per-product description seeds (B5). Keyed by canonical product slug; each
+    # entry is a short factual summary of what the product is for. Derived from
+    # the live catalog and the accepted 2026-11-18 audit — no invented
+    # manufacturer, model, specification or certification. Seller counts and
+    # prices are deliberately NOT baked in: they are appended live from caller
+    # data so the text never contradicts the page. OWNER ACTION: confirm/tune
+    # these summaries per supplier listing (see Round 1 report).
+    PRODUCT_DESCRIPTION_SEEDS: Dict[str, str] = {
+        "dishwash-cleaning-products-supplier-india": "Dishwash cleaning concentrate for commercial kitchens, canteens and food-processing wash areas.",
+        "cleaning-products-supplier-india": "Handwash and hygiene supplies for factory floors, offices and workforce facilities.",
+        "surface-cleaner-cleaning-products-supplier-india": "Surface cleaner solutions for floors, worktops and equipment in industrial and facility housekeeping programmes.",
+        "toilet-cleaner-cleaning-products-supplier-india": "Toilet and washroom cleaner for facility maintenance teams in factories, offices and commercial establishments.",
+        "connectors-electrical-equipment-supplies-supplier-india": "Electrical connectors and terminal hardware for panel wiring, machine control and general electrical installations.",
+        "electrical-boxes-electrical-equipment-supplies-supplier-india": "Electrical enclosure boxes and junction boxes for housing wiring, switchgear and control components in plants and buildings.",
+        "laptop-stand-electronics-it-industrial-automation-supplier-india": "Ergonomic laptop stands for office workstations, IT rooms and industrial offices.",
+        "led-batten-lights-lighting-accessories-supplier-india": "LED batten fittings for factories, warehouses, shops and offices — energy-efficient linear lighting for work interiors.",
+        "led-bulbs-lights-lighting-accessories-supplier-india": "LED bulbs for general lighting in homes, shops, offices and industrial facilities.",
+        "led-flood-light-lights-lighting-accessories-supplier-india": "LED flood lights for outdoor yards, building facades, sports areas and industrial premises.",
+        "led-panel-lights-lighting-accessories-supplier-india": "LED panel lights for false ceilings in offices, clinics, showrooms and control rooms — even, glare-controlled illumination.",
+        "led-street-light-lights-lighting-accessories-supplier-india": "LED street and area lights for roads, campuses, industrial townships and parking areas.",
+        "led-strip-light-lights-lighting-accessories-supplier-india": "LED strip lights for cove lighting, signage, display cases and task illumination in commercial and industrial spaces.",
+        "mcpcb-lights-lighting-accessories-supplier-india": "MCPCB metal-core circuit boards for LED luminaires and power electronics, feeding the lighting manufacturing chain.",
+        "rechargeable-inverter-bulb-lights-lighting-accessories-supplier-india": "Rechargeable inverter bulbs that keep essential lighting on through power cuts — for homes, shops and small facilities.",
+        "ms-square-bar-metals-industrial-raw-materials-supplier-india": "Mild steel square bars for fabrication shops, structural frames, gates, grills and general engineering work.",
+        "ss302-circular-bar-metals-industrial-raw-materials-supplier-india": "SS302 stainless circular bars for shafts, machined components and corrosion-resistant fabrication work.",
+        "raw-material-metals-industrial-raw-materials-supplier-india": "SS302 stainless square bars for machining and fabrication of corrosion-resistant components and structures.",
+        "connectors-electrical-panel-meters-and-accessories-supplier-india": "Panel connectors and terminal blocks for control-panel wiring, metering assemblies and switchboard installations.",
+        "crimping-tool-panel-meters-and-accessories-supplier-india": "Crimping tools for reliable lug and ferrule terminations in panel wiring, solar installations and electrical maintenance.",
+        "din-rail-connectors-panel-meters-and-accessories-supplier-india": "DIN-rail connectors and terminal blocks for neat, serviceable wiring in distribution boards and control panels.",
+        "industrial-meter-panel-meters-and-accessories-supplier-india": "Industrial meters — panel, energy and process instruments — for monitoring electrical and utility parameters in plants.",
+        "industrial-switches-panel-meters-and-accessories-supplier-india": "Industrial switches — rotary, cam, selector and limit types — for machine control, isolation and panel operations.",
+        "panel-fan-panel-meters-and-accessories-supplier-india": "Panel ventilation fans for control panels and enclosures, dissipating heat from drives, PLCs and terminal blocks.",
+        "cable-drums-panel-meters-and-accessories-supplier-india": "Cable drums and reels for storing, transporting and paying out power and control cable on sites and in plants.",
+        "industrial-nose-mask-safety-products-supplier-india": "Industrial nose masks and dust covers for shopfloors, construction sites and material-handling areas.",
+        "safety-apron-safety-products-supplier-india": "Industrial safety aprons for welding shops, chemical handling, food processing and splash- or spark-prone work.",
+        "industrial-safety-helmet-safety-products-supplier-india": "Industrial safety helmets for head protection on construction sites, plant floors and maintenance work.",
+        "industrial-safety-leg-guard-safety-products-supplier-india": "Industrial leg guards for welders, fitters and site workers exposed to sparks, hot particles and impact.",
+        "safety-hand-gloves-safety-products-supplier-india": "Safety hand gloves for material handling, fabrication, maintenance and chemical-duty work across industrial sites.",
+        "acdb-solar-equipment-panels-supplier-india": "AC distribution boxes (ACDB) for solar plants — grid-side combiner and protection enclosures for inverters and metering.",
+        "cable-lugs-solar-equipment-panels-supplier-india": "Cable lugs and ferrules for terminating solar DC and AC cables at combiner boxes, inverters and distribution boards.",
+        "dc-spd-solar-equipment-panels-supplier-india": "DC surge protection devices that shield solar arrays, combiner boxes and inverters from lightning and switching surges.",
+        "dcdb-solar-equipment-panels-supplier-india": "DC distribution boxes (DCDB) for solar plants — string combining, fusing and surge protection on the array side.",
+        "energy-meter-solar-equipment-panels-supplier-india": "Energy meters for solar net-metering, plant monitoring and industrial sub-metering of power consumption.",
+        "copper-bonded-rod-solar-equipment-panels-supplier-india": "Copper-bonded earthing rods and lightning-arrestor electrodes for solar plants, substations and building earthing.",
+        "solar-fuse-solar-equipment-panels-supplier-india": "Solar fuses and fuse links for string and array protection in DC combiner boxes and PV circuits.",
+        "solar-mcb-solar-equipment-panels-supplier-india": "Solar-rated MCBs for DC and AC circuit protection in PV systems, combiner boxes and inverter connections.",
+        "solar-dc-cables-solar-equipment-panels-supplier-india": "Solar DC cables for PV module strings, combiner boxes and inverter connections in rooftop and ground-mounted plants.",
+        "solar-on-grid-inverter-solar-equipment-panels-supplier-india": "On-grid solar inverters that feed rooftop and ground-mounted PV power into the utility grid for homes and businesses.",
+        "surge-protection-device-solar-equipment-panels-supplier-india": "Surge protection devices guarding solar plants, distribution panels and sensitive equipment from transient voltages.",
+        "hmi-vfd-plc-hmi-control-equipments-supplier-india": "Human-machine interfaces (HMI) for operator control and visualization of machines, production lines and process plants.",
+        "industrial-routers-vfd-plc-hmi-control-equipments-supplier-india": "Industrial routers for secure machine networking, remote monitoring and IIoT connectivity on the plant floor.",
+        "network-gateway-vfd-plc-hmi-control-equipments-supplier-india": "Network gateways for protocol conversion between PLCs, drives, meters and SCADA or IIoT systems.",
+        "plc-vfd-plc-hmi-control-equipments-supplier-india": "Programmable logic controllers (PLC) for machine automation, sequencing and process control across industries.",
+        "smsp-vfd-plc-hmi-control-equipments-supplier-india": "Switched-mode power supplies delivering regulated DC control power for panels, automation cabinets and electronics.",
+        "switchgear-vfd-plc-hmi-control-equipments-supplier-india": "Switchgear — breakers, contactors and isolation equipment — for safe distribution and protection of industrial power.",
+        "vfd-vfd-plc-hmi-control-equipments-supplier-india": "Variable frequency drives (VFD) for smooth motor speed control, energy saving and soft starting of machines and pumps.",
+    }
+
+    # Rotating factual CTAs used to top descriptions up to the length band.
+    DESC_CTAS = [
+        "Compare verified sellers on UdyogConnect.",
+        "Request quotes from verified sellers on UdyogConnect.",
+        "Get bulk pricing from verified sellers on UdyogConnect.",
+        "Shortlist suppliers and request quotes on UdyogConnect.",
+    ]
+
     # Major industrial cities for internal linking
     MAJOR_CITIES = [
         "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata", "Hyderabad", 
@@ -374,6 +441,65 @@ class SEOService:
         max_len = 65 - len(f" Suppliers India | {cls.SITE_NAME}") - 3
         return f"{clean_name[:max(max_len,10)]}... Suppliers India | {cls.SITE_NAME}"
     
+    # ==================== PER-PRODUCT META DESCRIPTION (B5) ====================
+
+    @classmethod
+    def generate_product_description(
+        cls,
+        product_name: str,
+        product_slug: str = None,
+        seller_count: int = 0,
+        min_price: float = None,
+        max_price: float = None,
+        category_name: str = None,
+    ) -> str:
+        """
+        Generate a distinct, factual meta description for one product (B5).
+
+        - Uses the per-product seed as the factual base (never templated by
+          category alone), so every product gets a different opening fact.
+        - Appends live seller/price facts from caller data — never baked-in
+          numbers, so text cannot contradict the page.
+        - No invented manufacturer, model, specification or certification.
+        - Targets the natural 140-165 character band; never keyword-stuffed.
+        """
+        seed = cls.PRODUCT_DESCRIPTION_SEEDS.get((product_slug or "").strip().lower())
+        if not seed:
+            # Unmapped product: fall back to the (existing) templated generator.
+            return cls.generate_seo_description(
+                product_name, category_name, seller_count, min_price, max_price
+            )
+
+        base = " ".join(seed.split()).rstrip(".")
+        parts = [base]
+
+        facts = []
+        if seller_count and seller_count > 0:
+            facts.append(f"{seller_count} verified seller{"s" if seller_count != 1 else ""}")
+        if min_price and min_price > 0 and max_price and max_price > min_price:
+            facts.append(f"₹{cls._format_price(min_price)}–₹{cls._format_price(max_price)}")
+        elif min_price and min_price > 0:
+            facts.append(f"from ₹{cls._format_price(min_price)}")
+        if facts:
+            parts.append("Listed with " + " and ".join(facts) + ".")
+
+        # Top up with rotating factual CTAs until inside the natural band.
+        cta_idx = sum(ord(c) for c in (product_slug or product_name)) % len(cls.DESC_CTAS)
+        for k in range(len(cls.DESC_CTAS)):
+            if len(" ".join(parts)) >= 140:
+                break
+            parts.append(cls.DESC_CTAS[(cta_idx + k) % len(cls.DESC_CTAS)])
+
+        desc = " ".join(parts)
+        if len(desc) > 165:
+            # Drop optional sentences (facts, then CTAs) before hard-truncating.
+            while len(desc) > 165 and len(parts) > 1:
+                parts.pop()
+                desc = " ".join(parts)
+            if len(desc) > 165:
+                desc = desc[:162].rstrip() + "..."
+        return desc
+
     # ==================== META DESCRIPTION ENHANCEMENT ====================
     
     @classmethod
@@ -1071,16 +1197,16 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
             "topRated": f"{cls.SITE_URL}/products?sort=rating"
         }
         
-        # Category link
+        # Category link — /categories/{slug} is the real frontend route
         if category_id and category_slug:
             links["category"] = {
                 "name": category_name or "Category",
-                "url": f"{cls.SITE_URL}/category/{category_slug}"
+                "url": f"{cls.SITE_URL}/categories/{category_slug}"
             }
         elif category_id:
             links["category"] = {
                 "name": category_name or "Category",
-                "url": f"{cls.SITE_URL}/category/{category_id}"
+                "url": f"{cls.SITE_URL}/categories/{category_id}"
             }
         
         # Similar products (up to 5)
@@ -1089,7 +1215,7 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
                 slug = product.get("slug") or product.get("_id")
                 links["similarProducts"].append({
                     "name": product.get("name", "Product"),
-                    "url": f"{cls.SITE_URL}/product/{slug}"
+                    "url": f"{cls.SITE_URL}/products/{slug}"
                 })
         
         # City pages — use real /products/{slug}/in/{city} URLs (not query-param filters)
@@ -1130,7 +1256,8 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
         cls,
         product: Dict[str, Any],
         sellers: List[Dict[str, Any]],
-        category_name: str = None
+        category_name: str = None,
+        seller_count: int = None,
     ) -> Dict[str, Any]:
         """
         Generate enhanced JSON-LD structured data for Google rich snippets.
@@ -1140,10 +1267,21 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
         - AggregateOffer for multiple sellers
         - offerCount
         - priceCurrency: INR
+
+        F1: `seller_count` lets the caller pass the authoritative distinct
+        eligible-seller count so the generated description never bakes in a
+        raw listing count. Defaults to len(sellers) for legacy callers.
         """
         product_name = product.get("name", "Industrial Product")
         product_slug = product.get("slug", "")
-        description = product.get("description") or product.get("seoDescription") or f"Buy {product_name} from verified suppliers on {cls.SITE_NAME}"
+        description = (
+            cls.usable_stored_description(product, product_name)
+            or cls.generate_product_description(
+                product_name, product_slug,
+                seller_count if seller_count is not None else len(sellers),
+                category_name=category_name
+            )
+        )
         
         # Get price range from sellers
         prices = []
@@ -1178,7 +1316,7 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
             "@type": "Product",
             "name": product_name,
             "description": description[:500],
-            "url": f"{cls.SITE_URL}/product/{product_slug}",
+            "url": f"{cls.SITE_URL}/products/{product_slug}",
             "brand": {
                 "@type": "Brand",
                 "name": brand_name
@@ -1268,20 +1406,20 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
                 "@type": "ListItem",
                 "position": 3,
                 "name": category_name,
-                "item": f"{cls.SITE_URL}/category/{category_slug}"
+                "item": f"{cls.SITE_URL}/categories/{category_slug}"
             })
             items.append({
                 "@type": "ListItem",
                 "position": 4,
                 "name": product_name,
-                "item": f"{cls.SITE_URL}/product/{product_slug}"
+                "item": f"{cls.SITE_URL}/products/{product_slug}"
             })
         else:
             items.append({
                 "@type": "ListItem",
                 "position": 3,
                 "name": product_name,
-                "item": f"{cls.SITE_URL}/product/{product_slug}"
+                "item": f"{cls.SITE_URL}/products/{product_slug}"
             })
         
         return {
@@ -1479,14 +1617,15 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
             specifications = sellers[0].get("specifications", {}) or sellers[0].get("searchableAttributes", {})
         
         # Generate all SEO components
-        existing_slugs = []  # In production, query DB for existing slugs
-        
+        # seoSlug uniqueness is enforced at persistence time (slug_resolver_service),
+        # not here: this generator is deterministic and has no DB access.
         seo_data = {
             # Core SEO fields
-            "seoSlug": cls.generate_seo_slug(product_name, category_name, existing_slugs),
+            "seoSlug": cls.generate_seo_slug(product_name, category_name),
             "seoTitle": cls.generate_seo_title(product_name, category_name),
-            "seoDescription": cls.generate_seo_description(
-                product_name, category_name, seller_count, min_price, max_price, min_moq
+            "seoDescription": cls.generate_product_description(
+                product_name, product.get("slug"), seller_count, min_price, max_price,
+                category_name=category_name,
             ),
             "seoContent": cls.generate_seo_content(
                 product_name, category_name, specifications, 
@@ -1521,8 +1660,8 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
             "minMoq": min_moq,
             "availableCities": available_cities,
             
-            # Canonical URL
-            "canonicalUrl": f"{cls.SITE_URL}/product/{product.get('slug', '')}",
+            # Canonical URL — /products/{slug} is the canonical route (B2)
+            "canonicalUrl": f"{cls.SITE_URL}/products/{product.get('slug', '')}",
             
             # Generation timestamp
             "seoGeneratedAt": datetime.now(timezone.utc).isoformat(),
@@ -1534,6 +1673,28 @@ Looking for the most cost-effective {clean_name} options in {region}? Here is ho
     
     # ==================== HELPER METHODS ====================
     
+    @staticmethod
+    def usable_stored_description(product: Dict[str, Any], product_name: str) -> Optional[str]:
+        """
+        Return the stored product description only when it is a usable,
+        non-templated sentence: a string of at least 40 characters that is not
+        just the product name repeated. B5: panel-fan emitted a 9-character
+        JSON-LD description ("Panel fan"); broken stored values return None so
+        callers fall back to generated copy instead of publishing them.
+        """
+        name_normalized = " ".join((product_name or "").split()).strip().lower()
+        for key in ("description", "seoDescription"):
+            value = product.get(key)
+            if not isinstance(value, str):
+                continue
+            normalized = " ".join(value.split()).strip()
+            if len(normalized) < 40:
+                continue
+            if normalized.lower() == name_normalized:
+                continue
+            return normalized
+        return None
+
     @staticmethod
     def _clean_product_name(name: str) -> str:
         """Clean and normalize product name."""

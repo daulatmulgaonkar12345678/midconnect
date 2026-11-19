@@ -5,6 +5,8 @@
  *   /products/[slug]/[intent]/in/[city]/page.tsx
  */
 
+import { SITE_URL, toRelativeUrl } from './siteUrl';
+
 const API = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 export async function fetchCityData(slug: string, city: string, intent?: string) {
@@ -28,8 +30,54 @@ const INTENT_H1: Record<string, string> = {
   cheap: 'Cheap',
 };
 
+interface CityPageSeller {
+  companyName?: string;
+  businessName?: string;
+  city?: string;
+  price?: number | string;
+  unit?: string;
+  listingId?: string;
+}
+
+// Minimal typed shape of the backend city-page SEO payload.
+interface CityPagePayload {
+  product?: { name?: string };
+  city?: { name?: string; slug?: string };
+  sellers?: CityPageSeller[];
+  stats?: { sellerCount?: number; minPrice?: number | string };
+  seo?: {
+    seoContent?: string;
+    templateType?: string;
+    jsonLd?: Record<string, unknown>;
+    breadcrumbJsonLd?: Record<string, unknown>;
+    faqJsonLd?: Record<string, unknown>;
+  };
+  internalLinks?: {
+    mainProductPage?: string;
+    categoryPage?: string | null;
+    relatedIntents?: Array<{ intent: string; url: string }>;
+    otherCities?: Array<{ city: string; slug: string; url: string }>;
+  };
+  localSignals?: { industrialZones?: string[]; nearbyCities?: string[] };
+}
+
+interface CityPageFaqEntry {
+  name?: string;
+  acceptedAnswer?: { text?: string };
+}
+
+/** Visible FAQ items extracted from the backend FAQPage JSON-LD, so the
+ * rendered questions/answers always match the structured data exactly. */
+function extractCityFaqItems(faqJsonLd: unknown): Array<{ q: string; a: string }> {
+  const mainEntity = (faqJsonLd as { mainEntity?: CityPageFaqEntry[] } | null | undefined)?.mainEntity;
+  if (!Array.isArray(mainEntity)) return [];
+  return mainEntity
+    .map((qa) => ({ q: (qa?.name || '').trim(), a: (qa?.acceptedAnswer?.text || '').trim() }))
+    .filter((qa) => qa.q && qa.a);
+}
+
 export function renderCityPage(
-  data: any,
+  data: CityPagePayload,
   slug: string,
   city: string,
   intent?: string,
@@ -53,6 +101,8 @@ export function renderCityPage(
   const industrialZones: string[] = data.localSignals?.industrialZones || [];
   const nearbyCities: string[] = data.localSignals?.nearbyCities || [];
   const templateType = data.seo?.templateType;
+  const faqItems = extractCityFaqItems(data.seo?.faqJsonLd);
+  const sellerCount = data.stats?.sellerCount ?? 0;
 
   const productJsonLd = data.seo?.jsonLd;
   const breadcrumbJsonLd = data.seo?.breadcrumbJsonLd;
@@ -61,8 +111,8 @@ export function renderCityPage(
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'UdyogConnect',
-    url: 'https://www.udyogconnect.in',
-    logo: 'https://www.udyogconnect.in/logo.png',
+    url: SITE_URL,
+    logo: `${SITE_URL}/logo.png`,
     description: "India's trusted B2B marketplace for industrial products.",
   };
 
@@ -121,9 +171,13 @@ export function renderCityPage(
         </h1>
 
         <div className="flex flex-wrap gap-4 mb-8 text-sm" data-testid="city-stats">
-          <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium">
-            {data.stats?.sellerCount || 0} Verified Suppliers
-          </span>
+          {/* B4: never publish a "0 Verified Suppliers" claim — chip only when
+              the backend reports real eligible sellers. */}
+          {sellerCount > 0 && (
+            <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium">
+              {sellerCount} Verified Supplier{sellerCount === 1 ? '' : 's'}
+            </span>
+          )}
           {data.stats?.minPrice && (
             <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-medium">
               Starting from ₹{Number(data.stats.minPrice).toLocaleString('en-IN')}
@@ -137,7 +191,7 @@ export function renderCityPage(
               Top {productName} Suppliers in {cityName}
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {sellers.map((seller: any, i: number) => (
+              {sellers.map((seller: CityPageSeller, i: number) => (
                 <div key={i} className="border rounded-lg p-4 hover:shadow-md transition bg-white" data-testid={`city-seller-${i}`}>
                   <h3 className="font-semibold text-gray-900">{seller.companyName || seller.businessName || 'Verified Supplier'}</h3>
                   <p className="text-sm text-gray-500 mt-1">{seller.city || cityName}</p>
@@ -160,6 +214,22 @@ export function renderCityPage(
           </section>
         )}
 
+        {/* Visible FAQ — kept in lockstep with faqJsonLd so the FAQPage
+            structured data only marks up content shown on the page. */}
+        {faqItems.length > 0 && (
+          <section className="mb-10 border-t pt-6" data-testid="city-faq">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              {productName} in {cityName} — Frequently Asked Questions
+            </h2>
+            {faqItems.map((qa, i) => (
+              <div key={i} className="mb-4">
+                <h3 className="font-medium text-gray-900">{qa.q}</h3>
+                <p className="text-sm text-gray-600 mt-1">{qa.a}</p>
+              </div>
+            ))}
+          </section>
+        )}
+
         {seoContent && (
           <article
             className="prose prose-gray max-w-none mb-10"
@@ -175,7 +245,7 @@ export function renderCityPage(
               {relatedIntents.map((ri) => (
                 <a
                   key={ri.intent}
-                  href={ri.url.replace('https://www.udyogconnect.in', '')}
+                  href={toRelativeUrl(ri.url)}
                   className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm hover:bg-blue-100 capitalize"
                   data-testid={`related-intent-${ri.intent}`}
                 >
@@ -221,7 +291,7 @@ export function renderCityPage(
               {otherCities.map((c) => (
                 <li key={c.slug}>
                   <a
-                    href={c.url.replace('https://www.udyogconnect.in', '')}
+                    href={toRelativeUrl(c.url)}
                     className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm hover:bg-blue-100"
                     data-testid={`other-city-${c.slug}`}
                   >

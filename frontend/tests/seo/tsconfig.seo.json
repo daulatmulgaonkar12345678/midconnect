@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "incremental": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2020",
+    "jsx": "react-jsx",
+    "rootDir": "../../src",
+    "outDir": "./dist"
+  },
+  "files": [
+    "../../src/app/sitemap.ts",
+    "../../src/app/robots.ts",
+    "../../src/app/layout.tsx",
+    "../../src/app/tools/angle-weight-calculator/page.tsx",
+    "../../src/app/tools/beam-weight-calculator/page.tsx",
+    "../../src/app/tools/channel-weight-calculator/page.tsx",
+    "../../src/app/tools/hex-bar-weight-calculator/page.tsx",
+    "../../src/app/tools/pipe-weight-calculator/page.tsx",
+    "../../src/app/tools/plate-weight-calculator/page.tsx",
+    "../../src/app/tools/round-bar-weight-calculator/page.tsx",
+    "../../src/app/tools/steel-weight-calculator/page.tsx",
+    "../../src/lib/siteUrl.ts"
+  ],
+  "include": []
+}

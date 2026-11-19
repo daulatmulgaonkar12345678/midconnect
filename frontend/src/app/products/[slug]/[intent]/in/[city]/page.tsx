@@ -45,5 +45,8 @@ export default async function IntentCityProductPage({ params }: IntentCityPagePr
   if (!isValidIntent(intent)) notFound();
 
   const data = await fetchCityData(slug, city, intent);
+  // B4: a product-city pair without eligible supply is a real 404, not a
+  // soft-404 rendered with HTTP 200.
+  if (!data) notFound();
   return renderCityPage(data, slug, city, intent);
 }

@@ -1,5 +1,7 @@
 import { Metadata } from 'next';
 
+import { SITE_URL } from '@/lib/siteUrl';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 function isObjectId(str: string): boolean {
@@ -34,8 +36,8 @@ const ORGANIZATION_SCHEMA = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'UdyogConnect',
-  url: 'https://www.udyogconnect.in',
-  logo: 'https://www.udyogconnect.in/logo.png',
+  url: SITE_URL,
+  logo: `${SITE_URL}/logo.png`,
   description:
     "India's trusted B2B marketplace for industrial products. Connect with verified manufacturers, dealers, and distributors.",
   address: {

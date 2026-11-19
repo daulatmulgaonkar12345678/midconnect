@@ -463,7 +463,16 @@ MONGO_URL = _raw_mongo_url.strip() if _raw_mongo_url else None
 _raw_db_name = os.getenv("DB_NAME", "b2b_marketplace")  # Default to b2b_marketplace
 DB_NAME = _raw_db_name.strip()
 
+# NOTE: Motor (3.7.1) resolves its asyncio event loop LAZILY at the first
+# operation (motor.core.MotorCoreBase.io_loop), not at construction, so an
+# import-time client still binds to the loop that actually serves requests.
+# Import-time creation is required: the ~30 module-level router factories
+# below capture `db` eagerly (e.g. create_seller_router(db, ...) ->
+# ProductVariantService(db).productVariants). `client = None` keeps shutdown
+# safe when Mongo is not configured. Tests must keep one shared TestClient
+# (one portal loop) per app so the client is never bound to two loops.
 db = None
+client = None
 mongo_connected = False
 
 if not MONGO_URL:
@@ -5236,6 +5245,11 @@ async def get_product_with_sellers(product_identifier: str):
         else:
             safe_images.append(img)
     
+    # F1: sellerCount is the DISTINCT ELIGIBLE seller count (authoritative,
+    # approved Phase 1 rules) — never the number of listing cards.
+    from services.seller_stats_service import fetch_product_seller_stats
+    seller_stats = await fetch_product_seller_stats(db, product_oid)
+
     response_data = {
         "productId": str(product_info["_id"]),
         "productName": product_info.get("name"),
@@ -5247,7 +5261,9 @@ async def get_product_with_sellers(product_identifier: str):
         "images": safe_images,
         "specSchema": spec_schema,
         "normalized_spec_hash": product_info.get("normalized_spec_hash"),
-        "sellerCount": len(sellers),
+        "sellerCount": seller_stats["sellerCount"],
+        "listingCount": seller_stats["listingCount"],
+        "verifiedSellerCount": seller_stats["verifiedSellerCount"],
         "sellers": sellers
     }
     
@@ -5256,7 +5272,7 @@ async def get_product_with_sellers(product_identifier: str):
         response_data["redirect"] = {
             "needed": True,
             "canonicalSlug": canonical_slug,
-            "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}"
+            "canonicalUrl": f"https://udyogconnect.in/products/{canonical_slug}"
         }
     
     return response_data
@@ -5282,8 +5298,9 @@ async def get_product_seo_data(product_identifier: str):
     PUBLIC endpoint - no auth required.
     """
     from urllib.parse import unquote
-    from services.seo_service import seo_service
+    from services.seo_service import seo_service, SEO_VERSION
     from services.slug_resolver_service import create_slug_resolver
+    from services.seller_stats_service import fetch_product_seller_stats
     
     decoded_identifier = unquote(product_identifier)
     
@@ -5319,7 +5336,17 @@ async def get_product_seo_data(product_identifier: str):
         except:
             pass
     
-    # Get active seller listings with seller info
+    # F1: authoritative seller stats — one $facet aggregation per product
+    # (no per-seller queries). sellerCount = DISTINCT ELIGIBLE sellers under
+    # the approved Phase 1 rules; listingCount = total active listings;
+    # verifiedSellerCount = eligible sellers with users.gst.verified.
+    seller_stats = await fetch_product_seller_stats(db, product_oid)
+
+    # Get eligible seller listings with seller info. Mirrors the approved
+    # Phase 1 seller rules (inner join on users; excludes deleted /
+    # deactivated / suspended / banned accounts) so every card and every
+    # derived price/MOQ/city stat comes from a counted eligible seller and
+    # can never contradict sellerCount.
     pipeline = [
         {"$match": {"productId": product_oid, "status": "active"}},
         {"$lookup": {
@@ -5328,7 +5355,12 @@ async def get_product_seo_data(product_identifier: str):
             "foreignField": "_id",
             "as": "sellerData"
         }},
-        {"$unwind": {"path": "$sellerData", "preserveNullAndEmptyArrays": True}},
+        {"$unwind": "$sellerData"},
+        {"$match": {
+            "sellerData.accountStatus": {"$ne": "deleted"},
+            "sellerData.isActive": {"$ne": False},
+            "sellerData.sellerStatus": {"$nin": ["suspended", "banned"]},
+        }},
         {"$project": {
             "_id": 1,
             "sellerId": 1,
@@ -5387,7 +5419,9 @@ async def get_product_seo_data(product_identifier: str):
     max_price = max(all_prices) if all_prices else None
     min_moq = min(all_moqs) if all_moqs else None
     available_cities = list(all_cities)
-    seller_count = len(sellers_for_jsonld)
+    # F1: the authoritative supplier count is the distinct eligible seller
+    # count — never the number of listing cards.
+    seller_count = seller_stats["sellerCount"]
     
     # Group sellers by city for UI
     sellers_by_city = {}
@@ -5431,9 +5465,21 @@ async def get_product_seo_data(product_identifier: str):
     # Generate SEO data using MARKETPLACE STANDARD v2.0
     # Use stored SEO data if available, otherwise generate fresh
     seo_title = product_info.get("seoTitle") or seo_service.generate_seo_title(product_name, category_name)
-    seo_description = product_info.get("seoDescription") or seo_service.generate_seo_description(
-        product_name, category_name, seller_count, min_price, max_price, min_moq
+    # B5: a stored description is served only when it is usable (not broken, not
+    # a name repeat) AND it is either manually edited or written by the current
+    # SEO version. Otherwise a distinct per-product description is generated.
+    stored_description = seo_service.usable_stored_description(product_info, product_name)
+    stored_is_current = stored_description and (
+        product_info.get("seoManuallyEdited")
+        or (product_info.get("seoVersion") or 0) >= SEO_VERSION
     )
+    if stored_is_current:
+        seo_description = stored_description
+    else:
+        seo_description = seo_service.generate_product_description(
+            product_name, product_slug, seller_count, min_price, max_price,
+            category_name=category_name,
+        )
     seo_content = product_info.get("seoContent") or seo_service.generate_seo_content(
         product_name, category_name, specifications, 
         product_info.get("description"), seller_count, available_cities
@@ -5443,7 +5489,8 @@ async def get_product_seo_data(product_identifier: str):
     product_json_ld = seo_service.generate_json_ld(
         product_info,
         sellers_for_jsonld,
-        category_name
+        category_name,
+        seller_count=seller_count,
     )
     
     breadcrumb_json_ld = seo_service.generate_breadcrumb_json_ld(
@@ -5484,12 +5531,14 @@ async def get_product_seo_data(product_identifier: str):
         "faqJsonLd": faq_json_ld,
         "internalLinks": internal_links,
         "sellerCount": seller_count,
+        "listingCount": seller_stats["listingCount"],
+        "verifiedSellerCount": seller_stats["verifiedSellerCount"],
         "sellersByCity": sellers_by_city,
         "minPrice": min_price,
         "maxPrice": max_price,
         "minMoq": min_moq,
         "availableCities": available_cities,
-        "canonicalUrl": f"https://www.udyogconnect.in/products/{product_slug}"
+        "canonicalUrl": f"https://udyogconnect.in/products/{product_slug}"
     }
     
     # Add redirect info for frontend canonical URL handling
@@ -5497,7 +5546,7 @@ async def get_product_seo_data(product_identifier: str):
         seo_response["redirect"] = {
             "needed": True,
             "canonicalSlug": canonical_slug,
-            "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}"
+            "canonicalUrl": f"https://udyogconnect.in/products/{canonical_slug}"
         }
     
     return seo_response
@@ -12988,7 +13037,7 @@ async def resolve_product_endpoint(identifier: str):
         "redirect": {
             "needed": needs_redirect,
             "canonicalSlug": canonical_slug,
-            "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}" if canonical_slug else None
+            "canonicalUrl": f"https://udyogconnect.in/products/{canonical_slug}" if canonical_slug else None
         }
     }
 
@@ -13039,7 +13088,7 @@ async def resolve_category_endpoint(identifier: str):
         "redirect": {
             "needed": needs_redirect,
             "canonicalSlug": canonical_slug,
-            "canonicalUrl": f"https://www.udyogconnect.in/categories/{canonical_slug}" if canonical_slug else None
+            "canonicalUrl": f"https://udyogconnect.in/categories/{canonical_slug}" if canonical_slug else None
         }
     }
 
@@ -13245,6 +13294,30 @@ async def get_product_available_cities(product_slug: str):
     }
 
 
+MAX_SITEMAP_PAIRS = 50000  # Phase 1: explicit overflow bound for eligibility pairs
+MAX_SITEMAP_PRODUCTS = 50000  # explicit overflow bound for sitemap product URLs
+
+
+@api_router.get("/seo/sitemap-products")
+async def get_sitemap_products():
+    """Visible product slugs for the sitemap, independent of seller listings.
+
+    Used only for product URLs. City, price and supplier URLs still come from
+    /api/seo/sitemap-city-pages (grouped eligibility). /api/products is unchanged.
+    """
+    from services.sitemap_product_service import fetch_sitemap_products, SitemapProductOverflowError
+    from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout
+    try:
+        products = await fetch_sitemap_products(db, MAX_SITEMAP_PRODUCTS)
+    except SitemapProductOverflowError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except (ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout):
+        # Generic detail only: no connection string, host or stack trace is exposed.
+        logger.error("sitemap-products: database unavailable")
+        raise HTTPException(status_code=503, detail="Sitemap product data temporarily unavailable")
+    return {"products": products, "totalProducts": len(products)}
+
+
 @api_router.get("/seo/sitemap-city-pages")
 async def get_sitemap_city_pages(
     max_cities: int = Query(20, ge=1, le=20),
@@ -13263,20 +13336,26 @@ async def get_sitemap_city_pages(
 
     # ===== Mode: all — all active products × TOP_CITIES (scale SEO) =====
     if mode == "all":
+        # Phase 1: only genuinely eligible product-city pairs (seller-backed,
+        # approved exclusions, grouped in MongoDB). Overflow raises, never truncates.
+        from services.city_eligibility_service import fetch_eligible_pairs, PairOverflowError
         cities_use = TOP_CITIES[:max_cities]
-        active_products = await db.products.find(
-            {"isActive": {"$ne": False}, "slug": {"$exists": True, "$ne": None, "$ne": ""}},
-            {"slug": 1, "updatedAt": 1}
-        ).to_list(10000)
+        try:
+            eligible = await fetch_eligible_pairs(db, cities_use, MAX_SITEMAP_PAIRS)
+        except PairOverflowError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
 
-        pairs_out = []
-        for p in active_products:
-            for c in cities_use:
-                pairs_out.append({
-                    "productSlug": p["slug"],
-                    "citySlug": c,
-                    "lastModified": p.get("updatedAt").isoformat() if p.get("updatedAt") else None
-                })
+        pairs_out = [
+            {
+                "productSlug": e["productSlug"],
+                "citySlug": e["citySlug"],
+                "lastModified": e["lastModified"],
+                "cityEligible": e["cityEligible"],
+                "priceEligible": e["priceEligible"],
+                "suppliersEligible": e["suppliersEligible"],
+            }
+            for e in eligible
+        ]
 
         return {
             "pairs": pairs_out,
@@ -13438,18 +13517,21 @@ async def admin_bulk_regenerate_seo(
                 category = await db.categories.find_one({"_id": product["categoryId"]})
             category_name = category.get("name") if category else None
 
-            # Seller stats for richer content
-            stats_agg = await db.sellerListings.aggregate([
+            # Seller stats for richer content. F1: seller_count is the
+            # DISTINCT ELIGIBLE seller count (approved Phase 1 rules) so
+            # stored copy can never bake in a raw listing count.
+            from services.seller_stats_service import fetch_product_seller_stats
+            seller_stats = await fetch_product_seller_stats(db, product_id)
+            seller_count = seller_stats["sellerCount"]
+            price_agg = await db.sellerListings.aggregate([
                 {"$match": {"productId": product_id, "status": "active"}},
                 {"$group": {
                     "_id": None,
-                    "sellerCount": {"$sum": 1},
                     "minPrice": {"$min": {"$min": "$pricingTiers.pricePerUnit"}},
                     "maxPrice": {"$max": {"$max": "$pricingTiers.pricePerUnit"}},
                 }}
             ]).to_list(1)
-            stats = stats_agg[0] if stats_agg else {}
-            seller_count = stats.get("sellerCount", 0) or 0
+            stats = price_agg[0] if price_agg else {}
             min_price = stats.get("minPrice")
             max_price = stats.get("maxPrice")
 
@@ -14005,7 +14087,12 @@ async def root_health_alt():
 @app.on_event("startup")
 async def startup_db_client():
     """Initialize database connection on startup"""
+    global client, db, mongo_connected
     logger.info("Application starting up...")
+
+    # The Motor client already exists from import time (required by the
+    # module-level router wiring above) and binds to THIS serving loop at its
+    # first operation (see the NOTE above); it must never be created twice.
     logger.info("✅ Application ready to receive requests")
     
     # IMPORTANT: Don't block startup waiting for MongoDB operations
@@ -14196,7 +14283,12 @@ async def startup_db_client():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     """Close database connection on shutdown"""
-    client.close()
+    global client, db, mongo_connected
+    if client is not None:
+        client.close()
+    client = None
+    db = None
+    mongo_connected = False
     logger.info("Application shut down")
 
 

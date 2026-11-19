@@ -128,12 +128,45 @@ def create_enterprise_product_router(db):
         # OPTIMIZED AGGREGATION - Two-phase approach for better performance
         skip = (page - 1) * limit
         
-        # Phase 1: Get summary statistics (no $lookup needed)
+        # Phase 1: Get summary statistics.
+        # F1: uniqueSellers is the DISTINCT ELIGIBLE seller count — the
+        # approved Phase 1 seller rules (inner join on users; excludes deleted
+        # / deactivated / suspended / banned accounts) are applied so the
+        # displayed supplier count matches the product SEO payload and the
+        # seller-stats service. totalCount stays the raw active-listing count.
         summary_pipeline = [
             {"$match": {"productId": product_oid, "status": "active"}},
+            {"$lookup": {
+                "from": "users",
+                "localField": "sellerId",
+                "foreignField": "_id",
+                "as": "seller"
+            }},
+            {"$unwind": {"path": "$seller", "preserveNullAndEmptyArrays": True}},
+            {"$addFields": {
+                "sellerEligible": {"$and": [
+                    {"$ne": [{"$ifNull": ["$seller", None]}, None]},
+                    {"$ne": ["$seller.accountStatus", "deleted"]},
+                    {"$ne": ["$seller.isActive", False]},
+                    {"$not": {"$in": [
+                        {"$ifNull": ["$seller.sellerStatus", None]},
+                        ["suspended", "banned"]
+                    ]}},
+                ]},
+                "sellerVerified": {"$and": [
+                    {"$ne": [{"$ifNull": ["$seller", None]}, None]},
+                    {"$eq": [{"$ifNull": ["$seller.gst.verified", False]}, True]},
+                ]},
+            }},
             {"$facet": {
                 "totalCount": [{"$count": "count"}],
                 "uniqueSellers": [
+                    {"$match": {"sellerEligible": True}},
+                    {"$group": {"_id": "$sellerId"}},
+                    {"$count": "count"}
+                ],
+                "verifiedSellers": [
+                    {"$match": {"sellerEligible": True, "sellerVerified": True}},
                     {"$group": {"_id": "$sellerId"}},
                     {"$count": "count"}
                 ],
@@ -215,13 +248,14 @@ def create_enterprise_product_router(db):
         summary_result, listings = await asyncio.gather(summary_task, listings_task)
         
         if not summary_result:
-            summary_result = [{"totalCount": [], "uniqueSellers": [], "minPrice": [], "variantCount": [], "facets": []}]
+            summary_result = [{"totalCount": [], "uniqueSellers": [], "verifiedSellers": [], "minPrice": [], "variantCount": [], "facets": []}]
         
         agg_result = summary_result[0]
         
         # Extract values
         total_count = agg_result["totalCount"][0]["count"] if agg_result["totalCount"] else 0
         unique_seller_count = agg_result["uniqueSellers"][0]["count"] if agg_result["uniqueSellers"] else 0
+        verified_seller_count = agg_result["verifiedSellers"][0]["count"] if agg_result["verifiedSellers"] else 0
         min_price = agg_result["minPrice"][0]["min"] if agg_result["minPrice"] else None
         variant_count = agg_result["variantCount"][0]["count"] if agg_result["variantCount"] else 0
         
@@ -313,8 +347,9 @@ def create_enterprise_product_router(db):
                 "version": spec_template.get("version", 1) if spec_template else None
             } if spec_template else None,
             "summary": {
-                "sellerCount": unique_seller_count,  # FIXED: Count unique sellers, not listings
-                "listingCount": total_count,  # Total listings
+                "sellerCount": unique_seller_count,  # F1: DISTINCT ELIGIBLE sellers (approved Phase 1 rules), not listings
+                "verifiedSellerCount": verified_seller_count,  # F1: eligible sellers with users.gst.verified == True
+                "listingCount": total_count,  # Total active listings
                 "minPrice": min_price,
                 "variantCount": variant_count,
                 "totalPages": (total_count + limit - 1) // limit if total_count > 0 else 1
@@ -334,7 +369,7 @@ def create_enterprise_product_router(db):
             response_data["redirect"] = {
                 "needed": True,
                 "canonicalSlug": canonical_slug,
-                "canonicalUrl": f"https://www.udyogconnect.in/products/{canonical_slug}"
+                "canonicalUrl": f"https://udyogconnect.in/products/{canonical_slug}"
             }
         
         return serialize_doc(response_data)

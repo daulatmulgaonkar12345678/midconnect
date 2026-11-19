@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next dev -p 3000",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test:seo": "tsc -p tests/seo/tsconfig.seo.json && node --test tests/seo/canonical-domain.test.mjs"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",

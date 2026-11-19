@@ -1,6 +1,7 @@
 'use client';
 
 import SEOCalculatorLayout from '@/components/seo/SEOCalculatorLayout';
+import { SITE_URL } from '@/lib/siteUrl';
 
 const educationalContent = (
   <>
@@ -134,7 +135,7 @@ const jsonLd = {
   "provider": {
     "@type": "Organization",
     "name": "UdyogConnect",
-    "url": "https://udyogconnect.com"
+    "url": SITE_URL
   }
 };
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, MapPin, Star, Shield } from 'lucide-react';
+import { SITE_URL, toRelativeUrl } from '@/lib/siteUrl';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.REACT_APP_BACKEND_URL || '';
 
@@ -26,6 +27,8 @@ interface ProductSEOData {
     topRated: string;
   };
   sellerCount: number;
+  listingCount?: number;
+  verifiedSellerCount?: number;
   sellersByCity: Record<string, Array<{
     companyName: string;
     state: string;
@@ -71,8 +74,8 @@ export function ProductJsonLd({ slug }: ProductJsonLdProps) {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "UdyogConnect",
-    "url": "https://www.udyogconnect.in",
-    "logo": "https://www.udyogconnect.in/logo.png",
+    "url": SITE_URL,
+    "logo": `${SITE_URL}/logo.png`,
     "description": "India's trusted B2B marketplace for industrial products",
     "address": {
       "@type": "PostalAddress",
@@ -229,7 +232,7 @@ export function InternalLinksSection({ internalLinks, productName, productSlug }
 
   if (hasIntentCityPages) {
     relatedSearches = internalLinks.intentCityPages!.slice(0, 15).map((l) => ({
-      href: l.url.replace('https://www.udyogconnect.in', ''),
+      href: toRelativeUrl(l.url),
       label: l.name,
       key: `${l.intent}-${l.url}`,
     }));
@@ -276,7 +279,7 @@ export function InternalLinksSection({ internalLinks, productName, productSlug }
           <div>
             <h4 className="text-sm font-medium text-gray-600 mb-2">Browse Category</h4>
             <Link 
-              href={internalLinks.category.url.replace('https://www.udyogconnect.in', '')}
+              href={toRelativeUrl(internalLinks.category.url)}
               className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
             >
               <ChevronRight className="h-4 w-4" />
@@ -293,7 +296,7 @@ export function InternalLinksSection({ internalLinks, productName, productSlug }
               {internalLinks.similarProducts.map((product, idx) => (
                 <Link
                   key={idx}
-                  href={product.url.replace('https://www.udyogconnect.in', '')}
+                  href={toRelativeUrl(product.url)}
                   className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   {product.name}
@@ -311,7 +314,7 @@ export function InternalLinksSection({ internalLinks, productName, productSlug }
               {internalLinks.cityPages.map((city, idx) => (
                 <Link
                   key={idx}
-                  href={city.url.replace('https://www.udyogconnect.in', '')}
+                  href={toRelativeUrl(city.url)}
                   className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 text-sm rounded-lg hover:bg-blue-100 transition-colors"
                 >
                   <MapPin className="h-3 w-3" />
@@ -399,6 +402,8 @@ export function SEOContentSection({ seoContent, productName }: SEOContentSection
 
 interface ProductMetaSummaryProps {
   sellerCount: number;
+  listingCount?: number;
+  verifiedSellerCount?: number;
   minPrice: number | null;
   maxPrice: number | null;
   minMoq: number | null;
@@ -407,6 +412,8 @@ interface ProductMetaSummaryProps {
 
 export function ProductMetaSummary({ 
   sellerCount, 
+  listingCount,
+  verifiedSellerCount,
   minPrice, 
   maxPrice, 
   minMoq,
@@ -417,6 +424,22 @@ export function ProductMetaSummary({
       {sellerCount > 0 && (
         <span className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
           {sellerCount} {sellerCount === 1 ? 'Supplier' : 'Suppliers'}
+        </span>
+      )}
+
+      {/* F1: verified unique sellers shown separately — never merged into
+          the supplier count, never shown as 0. */}
+      {typeof verifiedSellerCount === 'number' && verifiedSellerCount > 0 && (
+        <span className="inline-flex items-center px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full">
+          {verifiedSellerCount} Verified
+        </span>
+      )}
+
+      {/* F1: total active listings labelled as listings — distinct from the
+          supplier count, and only when it actually differs from it. */}
+      {typeof listingCount === 'number' && listingCount > 0 && listingCount !== sellerCount && (
+        <span className="inline-flex items-center px-3 py-1 bg-slate-100 text-slate-700 rounded-full">
+          {listingCount} {listingCount === 1 ? 'Listing' : 'Listings'}
         </span>
       )}
       

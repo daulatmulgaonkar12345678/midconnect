@@ -248,7 +248,7 @@ class TestCanonicalURLs:
         data = response.json()
         canonical_url = data["redirect"]["canonicalUrl"]
         
-        assert canonical_url.startswith("https://www.udyogconnect.in/products/")
+        assert canonical_url.startswith("https://udyogconnect.in/products/")
         assert canonical_url.endswith(TEST_PRODUCT_SLUG)
     
     def test_canonical_url_not_needed_for_exact_match(self):

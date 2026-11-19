@@ -3,7 +3,7 @@ Tests for HSN Code and WhatsApp Messaging Fixes
 Tests the specific bug fixes for:
 1. HSN code not showing in inventory page
 2. WhatsApp messages now using centralized templates
-3. BASE_URL changed to https://www.udyogconnect.in
+3. BASE_URL changed to https://udyogconnect.in
 4. doc_url properly generated with build_doc_url()
 5. Buyer names trimmed (strip())
 6. catalog_url fallback to BASE_URL
@@ -28,12 +28,12 @@ from utils.whatsapp_messages import (
 
 
 class TestBASEURLFix:
-    """Test that BASE_URL is correctly set to https://www.udyogconnect.in"""
+    """Test that BASE_URL is correctly set to https://udyogconnect.in"""
     
-    def test_base_url_is_www_domain(self):
-        """BASE_URL must use www.udyogconnect.in (not //udyogconnect.in)"""
-        assert BASE_URL == "https://www.udyogconnect.in", f"BASE_URL should be 'https://www.udyogconnect.in', got '{BASE_URL}'"
-        print("PASS: BASE_URL is https://www.udyogconnect.in")
+    def test_base_url_is_apex_domain(self):
+        """BASE_URL must use apex udyogconnect.in (not //udyogconnect.in)"""
+        assert BASE_URL == "https://udyogconnect.in", f"BASE_URL should be 'https://udyogconnect.in', got '{BASE_URL}'"
+        print("PASS: BASE_URL is https://udyogconnect.in")
     
     def test_base_url_has_https_protocol(self):
         """BASE_URL must have https:// protocol (not just //)"""
@@ -45,12 +45,12 @@ class TestBuildDocUrlFix:
     """Test that build_doc_url generates proper URLs"""
     
     def test_build_doc_url_returns_full_url(self):
-        """build_doc_url should return full URL with www domain"""
+        """build_doc_url should return full URL with apex domain"""
         token = "abc123xyz"
         url = build_doc_url(token)
-        expected = "https://www.udyogconnect.in/api/doc/abc123xyz"
+        expected = "https://udyogconnect.in/api/doc/abc123xyz"
         assert url == expected, f"Expected '{expected}', got '{url}'"
-        print("PASS: build_doc_url returns full URL with www domain")
+        print("PASS: build_doc_url returns full URL with apex domain")
     
     def test_build_doc_url_not_empty(self):
         """build_doc_url should never return empty string"""
@@ -66,7 +66,7 @@ class TestInvoiceWhatsAppMessage:
     
     def test_invoice_message_contains_doc_url(self):
         """Invoice message must contain the doc_url"""
-        doc_url = "https://www.udyogconnect.in/api/doc/abc123"
+        doc_url = "https://udyogconnect.in/api/doc/abc123"
         msg = invoice_message(
             invoice_number="INV-001",
             amount=10000.00,
@@ -82,7 +82,7 @@ class TestInvoiceWhatsAppMessage:
         msg = invoice_message(
             invoice_number="INV-001",
             amount=10000.00,
-            doc_url="https://www.udyogconnect.in/api/doc/abc123",
+            doc_url="https://udyogconnect.in/api/doc/abc123",
             business_name="ABC Industries",
             buyer_name="John"
         )
@@ -95,7 +95,7 @@ class TestInvoiceWhatsAppMessage:
         msg = invoice_message(
             invoice_number="INV-001",
             amount=10000.00,
-            doc_url="https://www.udyogconnect.in/api/doc/abc123",
+            doc_url="https://udyogconnect.in/api/doc/abc123",
             business_name="Test Business",
             buyer_name="John"
         )
@@ -108,7 +108,7 @@ class TestPaymentReminderMessages:
     
     def test_soft_reminder_contains_doc_url(self):
         """Soft reminder (followup) must contain doc_url"""
-        doc_url = "https://www.udyogconnect.in/api/doc/xyz789"
+        doc_url = "https://udyogconnect.in/api/doc/xyz789"
         msg = payment_reminder_soft(
             invoice_number="INV-001",
             pending_amount=5000.00,
@@ -122,7 +122,7 @@ class TestPaymentReminderMessages:
     
     def test_overdue_reminder_contains_doc_url(self):
         """Overdue reminder must contain doc_url"""
-        doc_url = "https://www.udyogconnect.in/api/doc/overdue123"
+        doc_url = "https://udyogconnect.in/api/doc/overdue123"
         msg = payment_reminder_strict(
             invoice_number="INV-001",
             pending_amount=5000.00,
@@ -140,14 +140,14 @@ class TestPaymentReminderMessages:
             invoice_number="INV-001",
             pending_amount=5000.00,
             due_date="15 Jan 2024",
-            doc_url="https://www.udyogconnect.in/api/doc/test",
+            doc_url="https://udyogconnect.in/api/doc/test",
             business_name="Test Business"
         )
         strict_msg = payment_reminder_strict(
             invoice_number="INV-001",
             pending_amount=5000.00,
             due_date="15 Jan 2024",
-            doc_url="https://www.udyogconnect.in/api/doc/test",
+            doc_url="https://udyogconnect.in/api/doc/test",
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in soft_msg, "Soft reminder missing footer"
@@ -155,15 +155,15 @@ class TestPaymentReminderMessages:
         print("PASS: Both reminder types contain 'Powered by Udyog Connect' footer")
 
 
-class TestAllDocURLsUseWWWDomain:
-    """Test that all doc URLs use https://www.udyogconnect.in domain"""
+class TestAllDocURLsUseCanonicalDomain:
+    """Test that all doc URLs use https://udyogconnect.in domain"""
     
-    def test_build_doc_url_uses_www(self):
-        """build_doc_url must use www.udyogconnect.in"""
+    def test_build_doc_url_uses_apex(self):
+        """build_doc_url must use apex udyogconnect.in"""
         url = build_doc_url("test123")
-        assert "www.udyogconnect.in" in url, f"URL should use www domain: {url}"
+        assert "udyogconnect.in" in url, f"URL should use apex domain: {url}"
         assert not url.startswith("//"), "URL should not start with //"
-        print("PASS: build_doc_url uses https://www.udyogconnect.in")
+        print("PASS: build_doc_url uses https://udyogconnect.in")
 
 
 class TestBuyerNameTrimming:
@@ -174,7 +174,7 @@ class TestBuyerNameTrimming:
         msg = invoice_message(
             invoice_number="INV-001",
             amount=10000.00,
-            doc_url="https://www.udyogconnect.in/api/doc/abc123",
+            doc_url="https://udyogconnect.in/api/doc/abc123",
             business_name="Test Business",
             buyer_name="Daulat  "  # Extra spaces
         )
@@ -189,7 +189,7 @@ class TestBuyerNameTrimming:
             invoice_number="INV-001",
             pending_amount=5000.00,
             due_date="15 Jan 2024",
-            doc_url="https://www.udyogconnect.in/api/doc/test",
+            doc_url="https://udyogconnect.in/api/doc/test",
             business_name="Test Business",
             buyer_name="  Customer Name  "  # Extra spaces both sides
         )
@@ -208,8 +208,8 @@ class TestCatalogURLFallback:
             business_name="Test Business",
             buyer_name="Customer"
         )
-        assert "www.udyogconnect.in" in msg, "BASE_URL not in message"
-        assert "/catalog" not in msg or "www.udyogconnect.in" in msg, "Should not use fake /catalog URL"
+        assert "udyogconnect.in" in msg, "BASE_URL not in message"
+        assert "/catalog" not in msg or "udyogconnect.in" in msg, "Should not use fake /catalog URL"
         print("PASS: catalog_marketing_message uses BASE_URL (not /catalog)")
 
 
@@ -222,7 +222,7 @@ class TestFooterStructure:
         # Check structure
         assert "---" in footer, "Footer missing separator"
         assert "Powered by Udyog Connect" in footer, "Footer missing 'Powered by Udyog Connect'"
-        assert "www.udyogconnect.in" in footer, "Footer missing website"
+        assert "udyogconnect.in" in footer, "Footer missing website"
         print("PASS: Footer has proper structure with separator, branding, and website")
 
 

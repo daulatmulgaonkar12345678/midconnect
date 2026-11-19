@@ -13,6 +13,10 @@ import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] });
 
 export const metadata: Metadata = {
+  // Owner-approved canonical origin (P1 apex alignment). metadataBase makes
+  // every RELATIVE canonical/openGraph URL resolve against the apex domain;
+  // without it Next.js falls back to VERCEL_URL or localhost:3000.
+  metadataBase: new URL('https://udyogconnect.in'),
   title: SEO.title,
   description: SEO.description,
   keywords: APP_KEYWORDS,

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import SteelWeightCalculatorClient from './client';
+import { SITE_URL } from '@/lib/siteUrl';
 
 export const metadata: Metadata = {
   title: 'Steel Weight Calculator | Calculate MS Steel, SS304, SS316 Weight - UdyogConnect',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
     title: 'Steel Weight Calculator | UdyogConnect',
     description: 'Calculate steel weight instantly and connect with verified suppliers across India.',
     type: 'website',
-    url: 'https://udyogconnect.com/tools/steel-weight-calculator',
+    url: `${SITE_URL}/tools/steel-weight-calculator`,
   },
   alternates: {
     canonical: '/tools/steel-weight-calculator',

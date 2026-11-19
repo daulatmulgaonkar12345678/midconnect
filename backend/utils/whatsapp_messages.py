@@ -8,7 +8,7 @@ import random
 import urllib.parse
 
 # All outgoing WhatsApp links MUST use this domain
-BASE_URL = "https://www.udyogconnect.in"
+BASE_URL = "https://udyogconnect.in"
 
 ROTATING_ADS = [
     "Digitize your business with Udyog Connect",
@@ -25,7 +25,7 @@ def build_footer() -> str:
         "\n---\n"
         "Powered by Udyog Connect\n"
         f"{random.choice(ROTATING_ADS)}\n"
-        "www.udyogconnect.in"
+        "udyogconnect.in"
     )
 
 

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import PipeWeightCalculatorClient from './client';
+import { SITE_URL } from '@/lib/siteUrl';
 
 export const metadata: Metadata = {
   title: 'Pipe Weight Calculator | Calculate Steel Pipe, MS Pipe Weight - UdyogConnect',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
     title: 'Pipe Weight Calculator | UdyogConnect',
     description: 'Calculate pipe weight instantly using outer diameter and wall thickness. Connect with verified suppliers.',
     type: 'website',
-    url: 'https://udyogconnect.com/tools/pipe-weight-calculator',
+    url: `${SITE_URL}/tools/pipe-weight-calculator`,
   },
   alternates: {
     canonical: '/tools/pipe-weight-calculator',

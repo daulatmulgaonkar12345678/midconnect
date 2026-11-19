@@ -241,7 +241,7 @@ def init_referral_router(db, verify_token_func):
             )
 
         # Build the link using the app domain
-        base_url = "https://www.udyogconnect.in"
+        base_url = "https://udyogconnect.in"
         link = f"{base_url}/register?ref={code}"
 
         return {

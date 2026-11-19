@@ -1,5 +1,7 @@
 import { MetadataRoute } from 'next';
 
+import { SITE_URL } from '@/lib/siteUrl';
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -18,6 +20,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: 'https://www.udyogconnect.in/sitemap.xml',
+    sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

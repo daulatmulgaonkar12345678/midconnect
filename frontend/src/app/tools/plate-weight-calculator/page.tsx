@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import PlateWeightCalculatorClient from './client';
+import { SITE_URL } from '@/lib/siteUrl';
 
 export const metadata: Metadata = {
   title: 'Plate Weight Calculator | Steel Plate, MS Plate Weight - UdyogConnect',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
     title: 'Plate Weight Calculator | UdyogConnect',
     description: 'Calculate steel plate and sheet metal weight instantly. Connect with verified suppliers.',
     type: 'website',
-    url: 'https://udyogconnect.com/tools/plate-weight-calculator',
+    url: `${SITE_URL}/tools/plate-weight-calculator`,
   },
   alternates: {
     canonical: '/tools/plate-weight-calculator',

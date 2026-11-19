@@ -36,7 +36,7 @@ class CitySEOService:
     /products/industrial-motor-supplier-india/mumbai
     """
     
-    SITE_URL = "https://www.udyogconnect.in"
+    SITE_URL = "https://udyogconnect.in"
     
     # Major cities for SEO
     MAJOR_CITIES = [
@@ -72,7 +72,10 @@ class CitySEOService:
         city: str
     ) -> Tuple[bool, int]:
         """
-        Check if city page should exist for this product.
+        Check if a city page has eligible supply for this product.
+        Counts DISTINCT eligible sellers using the approved Phase 1 seller
+        rules: excludes deleted / deactivated / suspended / banned seller
+        accounts and drops listings without a live seller document.
         
         Returns:
             (is_eligible, seller_count)
@@ -82,7 +85,9 @@ class CitySEOService:
         if not normalized_city:
             return False, 0
         
-        # Count active sellers in this city via user profile
+        # Count DISTINCT eligible sellers in this city via user profile,
+        # applying the approved Phase 1 seller rules so the page count can
+        # never contradict the sitemap eligibility service.
         pipeline = [
             {"$match": {"productId": product_id, "status": "active"}},
             {"$lookup": {
@@ -91,14 +96,20 @@ class CitySEOService:
                 "foreignField": "_id",
                 "as": "seller"
             }},
-            {"$unwind": {"path": "$seller", "preserveNullAndEmptyArrays": True}},
+            {"$unwind": "$seller"},  # inner join: listings without a seller doc are dropped
+            {"$match": {
+                "seller.accountStatus": {"$ne": "deleted"},
+                "seller.isActive": {"$ne": False},
+                "seller.sellerStatus": {"$nin": ["suspended", "banned"]},
+            }},
             {"$match": {
                 "$or": [
-                    {"city": {"$regex": f"^{normalized_city}$", "$options": "i"}},
-                    {"sellerCity": {"$regex": f"^{normalized_city}$", "$options": "i"}},
-                    {"seller.profile.city": {"$regex": f"^{normalized_city}$", "$options": "i"}}
+                    {"city": {"$regex": f"^{re.escape(normalized_city)}$", "$options": "i"}},
+                    {"sellerCity": {"$regex": f"^{re.escape(normalized_city)}$", "$options": "i"}},
+                    {"seller.profile.city": {"$regex": f"^{re.escape(normalized_city)}$", "$options": "i"}}
                 ]
             }},
+            {"$group": {"_id": "$sellerId"}},
             {"$count": "total"}
         ]
         result = await self.db.sellerListings.aggregate(pipeline).to_list(1)
@@ -138,16 +149,19 @@ class CitySEOService:
         if not product:
             return None
         
-        # Check eligibility — allow pages to render even with 0 sellers (scale SEO).
-        # Content still gets the full city-specific treatment (zones, nearby, content).
+        # B4: a city page without eligible supply must not exist — it would force
+        # misleading "0 Verified Suppliers" claims. Return None so the route 404s
+        # (and the pair stays out of the sitemap, matching Phase 1 eligibility).
+        # Pages with real seller availability keep rendering unchanged.
         is_eligible, seller_count = await self.check_city_page_eligibility(
             product["_id"], city
         )
-        # No hard 404 when no sellers — we still want the page indexed with quote-request CTA.
-        # Returning None here previously caused all non-seller cities to 404.
-        _ = is_eligible  # eligibility kept for analytics; rendering proceeds either way
+        if not is_eligible or seller_count <= 0:
+            return None
         
-        # Get city-specific sellers
+        # Get city-specific sellers. Mirrors the approved Phase 1 seller rules
+        # (inner join on users; excludes deleted / deactivated / suspended /
+        # banned accounts) so every displayed card is a counted eligible seller.
         sellers = await self.db.sellerListings.aggregate([
             {"$match": {
                 "productId": product["_id"],
@@ -159,12 +173,17 @@ class CitySEOService:
                 "foreignField": "_id",
                 "as": "seller"
             }},
-            {"$unwind": {"path": "$seller", "preserveNullAndEmptyArrays": True}},
+            {"$unwind": "$seller"},
+            {"$match": {
+                "seller.accountStatus": {"$ne": "deleted"},
+                "seller.isActive": {"$ne": False},
+                "seller.sellerStatus": {"$nin": ["suspended", "banned"]},
+            }},
             {"$match": {
                 "$or": [
-                    {"city": {"$regex": f"^{normalized_city}$", "$options": "i"}},
-                    {"sellerCity": {"$regex": f"^{normalized_city}$", "$options": "i"}},
-                    {"seller.profile.city": {"$regex": f"^{normalized_city}$", "$options": "i"}}
+                    {"city": {"$regex": f"^{re.escape(normalized_city)}$", "$options": "i"}},
+                    {"sellerCity": {"$regex": f"^{re.escape(normalized_city)}$", "$options": "i"}},
+                    {"seller.profile.city": {"$regex": f"^{re.escape(normalized_city)}$", "$options": "i"}}
                 ]
             }},
             {"$project": {
@@ -267,50 +286,16 @@ class CitySEOService:
         nearby = local.get("nearby", [])
         if zones or nearby:
             signal_block = f"\n\n## Why Buy {product_name} in {city_title}\n\n"
-            signal_block += (
-                f"Sourcing {product_name} locally from {city_title} cuts freight cost by "
-                f"3-7% vs. out-of-state suppliers and shortens typical lead times to 24-48 hours "
-                f"for in-stock items. {city_title}-based sellers also offer on-site delivery, "
-                f"easier returns, and face-to-face quality inspections — critical for first-time "
-                f"orders or custom specifications.\n\n"
-            )
             if zones:
                 signal_block += f"**Top industrial areas in {city_title} serving this product:**\n\n"
                 for z in zones:
                     signal_block += f"- {z}\n"
-                signal_block += (
-                    f"\nSellers operating from these zones supply {product_name} across {city_title} "
-                    f"and surrounding industrial belts with typical same-day or next-day delivery.\n\n"
-                )
+                signal_block += "\n"
             if nearby:
                 signal_block += f"**Nearby cities also served from {city_title}:** {', '.join(nearby)}.\n\n"
-                signal_block += (
-                    f"Buyers from {nearby[0]}"
-                )
-                if len(nearby) > 1:
-                    signal_block += f", {nearby[1]},"
-                signal_block += (
-                    f" and surrounding areas frequently source {product_name} from {city_title} "
-                    f"suppliers due to proximity, competitive pricing, and established logistics.\n\n"
-                )
-
-            # Recent buyer demand (synthetic but plausible, varies by product hash)
-            import hashlib as _h
-            demand_seed = int(_h.md5(f"{product_slug}|{city_slug}".encode()).hexdigest(), 16)
-            demand_hints = [
-                f"Bulk requirement for a new plant setup in {city_title}",
-                f"MRO purchase for an existing facility in {city_title}",
-                f"Project-specific procurement for an infrastructure build in {city_title}",
-                f"Replacement order for an industrial line in {city_title}",
-                f"Custom-spec request for an OEM programme in {city_title}",
-            ]
-            picks = [demand_hints[(demand_seed + i) % len(demand_hints)] for i in range(3)]
-            signal_block += f"**Recent buyer requirements in {city_title}:**\n\n"
-            for p in picks:
-                signal_block += f"- {p}\n"
             signal_block += (
-                f"\nSubmit an RFQ on {product_name} below and our verified {city_title} suppliers "
-                f"will respond with quotations within 24 hours.\n"
+                f"Compare listings from verified sellers, review prices and MOQs, and request "
+                f"quotations for {product_name} in {city_title} on UdyogConnect.\n"
             )
             seo_content += signal_block
 
@@ -408,12 +393,26 @@ class CitySEOService:
                 "as": "seller"
             }},
             {"$unwind": "$seller"},
+            # F2: apply the approved Phase 1 seller rules so every linked city
+            # actually has eligible supply (page would 404 otherwise).
+            {"$match": {
+                "seller.accountStatus": {"$ne": "deleted"},
+                "seller.isActive": {"$ne": False},
+                "seller.sellerStatus": {"$nin": ["suspended", "banned"]},
+            }},
             {"$group": {
                 "_id": {"$toLower": {"$ifNull": ["$seller.profile.city", "other"]}},
-                "sellerCount": {"$sum": 1},
+                "sellerIds": {"$addToSet": "$sellerId"},
                 "minPrice": {"$min": {"$arrayElemAt": ["$pricingTiers.pricePerUnit", 0]}}
             }},
-            {"$match": {"_id": {"$ne": "other"}}},
+            {"$project": {
+                "_id": 0,
+                "city": "$_id",
+                # F1: distinct eligible sellers, never a listing count.
+                "sellerCount": {"$size": "$sellerIds"},
+                "minPrice": 1,
+            }},
+            {"$match": {"city": {"$ne": "other"}}},
             {"$sort": {"sellerCount": -1}},
             {"$limit": 20}
         ]
@@ -422,7 +421,7 @@ class CitySEOService:
         
         cities = []
         for r in results:
-            city_name = r["_id"]
+            city_name = r["city"]
             cities.append({
                 "name": city_name.title(),
                 "slug": self.generate_city_slug(city_name),
@@ -524,7 +523,8 @@ Start sourcing {product_name} from {city_title} suppliers today — compare quot
             "@type": "Product",
             "name": f"{product_name} in {city_title}",
             "description": (
-                f"Buy {product_name} from {seller_count} verified suppliers in {city_title}. "
+                f"Buy {product_name} from {seller_count} verified "
+                f"{'supplier' if seller_count == 1 else 'suppliers'} in {city_title}. "
                 f"Compare prices and get quotes on UdyogConnect."
             )[:500],
             "url": city_page_url,
@@ -602,7 +602,8 @@ Start sourcing {product_name} from {city_title} suppliers today — compare quot
                     "acceptedAnswer": {
                         "@type": "Answer",
                         "text": (
-                            f"You can buy {product_name} from {seller_count} verified suppliers in "
+                            f"You can buy {product_name} from {seller_count} verified "
+                            f"{'supplier' if seller_count == 1 else 'suppliers'} in "
                             f"{city_title} listed on UdyogConnect. Compare prices, check ratings, "
                             f"and request quotes directly."
                         ),
@@ -626,9 +627,9 @@ Start sourcing {product_name} from {city_title} suppliers today — compare quot
                     "acceptedAnswer": {
                         "@type": "Answer",
                         "text": (
-                            f"Local suppliers in {city_title} typically offer same-day or next-day "
-                            f"delivery within city limits. Contact the supplier to confirm exact "
-                            f"lead time for your order size."
+                            f"Delivery timelines for {product_name} in {city_title} are set by "
+                            f"each supplier and depend on stock and order size. Contact the "
+                            f"supplier to confirm the exact lead time for your order."
                         ),
                     },
                 },

@@ -228,7 +228,7 @@ class TestCityProductPageEndpoint:
         assert "title" in data["seo"]
         assert "description" in data["seo"]
         assert "canonicalUrl" in data["seo"]
-        assert data["seo"]["canonicalUrl"].startswith("https://www.udyogconnect.in")
+        assert data["seo"]["canonicalUrl"].startswith("https://udyogconnect.in")
         
         print(f"✅ City page returns 200 with seller data - {data['stats']['sellerCount']} sellers in Delhi")
     
@@ -277,7 +277,7 @@ class TestEnterpriseResolverEndpoint:
         # Verify redirect/canonical info
         assert "redirect" in data
         assert "canonicalUrl" in data["redirect"]
-        assert data["redirect"]["canonicalUrl"].startswith("https://www.udyogconnect.in/products/")
+        assert data["redirect"]["canonicalUrl"].startswith("https://udyogconnect.in/products/")
         assert TEST_PRODUCT_SLUG in data["redirect"]["canonicalUrl"]
         
         # When accessed by slug, no redirect needed
@@ -385,11 +385,11 @@ class TestSitemapSlugUsage:
         assert "udyogconnect.in" in content, "Sitemap should contain udyogconnect.in domain"
         
         # Check that product URLs use slugs (contain hyphens), not ObjectIds (24 hex chars)
-        # Product URLs should be like /product/some-slug-here not /product/507f1f77bcf86cd799439011
+        # Product URLs are the canonical plural route: /products/some-slug-here
         import re
         
-        # Find all product URLs
-        product_urls = re.findall(r'<loc>https://www.udyogconnect.in/product/([^<]+)</loc>', content)
+        # Find all product URLs (B2: sitemap emits the real /products/{slug} route)
+        product_urls = re.findall(r'<loc>https://udyogconnect.in/products/([^<]+)</loc>', content)
         
         for url_path in product_urls:
             # Verify it's not a raw ObjectId (24 hex characters)

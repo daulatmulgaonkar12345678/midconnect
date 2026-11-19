@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import BeamWeightCalculatorClient from './client';
+import { SITE_URL } from '@/lib/siteUrl';
 
 export const metadata: Metadata = {
   title: 'Beam Weight Calculator | Calculate I Beam & H Beam Weight - UdyogConnect',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
     title: 'Beam Weight Calculator | UdyogConnect',
     description: 'Calculate I-beam and H-beam weight instantly and connect with verified suppliers across India.',
     type: 'website',
-    url: 'https://udyogconnect.com/tools/beam-weight-calculator',
+    url: `${SITE_URL}/tools/beam-weight-calculator`,
   },
   alternates: {
     canonical: '/tools/beam-weight-calculator',

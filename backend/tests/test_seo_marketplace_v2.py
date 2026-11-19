@@ -563,8 +563,10 @@ class TestSEOSlugGeneration:
         data = response.json()
         canonical_url = data.get("canonicalUrl", "")
         
-        assert canonical_url.startswith("https://www.udyogconnect.in/product/"), \
-            f"Canonical URL should start with site URL, got: {canonical_url}"
+        # B2: canonical is the real plural frontend route /products/{slug}
+        # (the legacy singular /product/{slug} only exists as a redirect).
+        assert canonical_url.startswith("https://udyogconnect.in/products/"), \
+            f"Canonical URL should start with site URL and plural products route, got: {canonical_url}"
         
         print(f"✅ Canonical URL: {canonical_url}")
 

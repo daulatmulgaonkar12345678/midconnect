@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getPublicCategories, getProducts } from '@/lib/api';
 import Link from 'next/link';
 import { Package, Users, ArrowRight, ArrowLeft, Shield, Star } from 'lucide-react';
+import { SITE_URL } from '@/lib/siteUrl';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
@@ -71,13 +72,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         openGraph: {
           title,
           description,
-          url: `https://www.udyogconnect.in/categories/${category.slug || slug}`,
+          url: `${SITE_URL}/categories/${category.slug || slug}`,
           siteName: 'UdyogConnect',
           type: 'website',
           locale: 'en_IN',
         },
         alternates: {
-          canonical: `https://www.udyogconnect.in/categories/${category.slug || slug}`,
+          canonical: `${SITE_URL}/categories/${category.slug || slug}`,
         },
         robots: {
           index: true,

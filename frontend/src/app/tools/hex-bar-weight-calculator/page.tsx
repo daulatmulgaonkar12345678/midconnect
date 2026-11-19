@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import HexBarWeightCalculatorClient from './client';
+import { SITE_URL } from '@/lib/siteUrl';
 
 export const metadata: Metadata = {
   title: 'Hex Bar Weight Calculator | Calculate Hexagonal Steel Bar Weight - UdyogConnect',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
     title: 'Hex Bar Weight Calculator | UdyogConnect',
     description: 'Calculate hexagonal bar weight instantly and connect with verified suppliers across India.',
     type: 'website',
-    url: 'https://udyogconnect.com/tools/hex-bar-weight-calculator',
+    url: `${SITE_URL}/tools/hex-bar-weight-calculator`,
   },
   alternates: {
     canonical: '/tools/hex-bar-weight-calculator',

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import ChannelWeightCalculatorClient from './client';
+import { SITE_URL } from '@/lib/siteUrl';
 
 export const metadata: Metadata = {
   title: 'Channel Weight Calculator | Calculate C Channel Steel Weight - UdyogConnect',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
     title: 'Channel Weight Calculator | UdyogConnect',
     description: 'Calculate C-channel section weight instantly and connect with verified suppliers across India.',
     type: 'website',
-    url: 'https://udyogconnect.com/tools/channel-weight-calculator',
+    url: `${SITE_URL}/tools/channel-weight-calculator`,
   },
   alternates: {
     canonical: '/tools/channel-weight-calculator',

@@ -3,7 +3,7 @@ WhatsApp Message Template Engine Tests
 Tests the centralized WhatsApp messaging templates for Udyog Connect.
 
 Features to test:
-1. build_footer() includes 'Powered by Udyog Connect' and 'www.udyogconnect.in'
+1. build_footer() includes 'Powered by Udyog Connect' and 'udyogconnect.in'
 2. build_footer() includes rotating ad from ROTATING_ADS list
 3. po_message() - Purchase Order template
 4. invoice_message() - Invoice template
@@ -48,10 +48,10 @@ class TestBuildFooter:
         print("PASS: Footer contains 'Powered by Udyog Connect'")
     
     def test_footer_contains_website_url(self):
-        """Footer must contain 'www.udyogconnect.in'"""
+        """Footer must contain 'udyogconnect.in'"""
         footer = build_footer()
-        assert "www.udyogconnect.in" in footer, "Footer missing website URL"
-        print("PASS: Footer contains 'www.udyogconnect.in'")
+        assert "udyogconnect.in" in footer, "Footer missing website URL"
+        print("PASS: Footer contains 'udyogconnect.in'")
     
     def test_footer_contains_separator(self):
         """Footer must start with separator"""
@@ -182,7 +182,7 @@ class TestPOMessage:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing from footer"
+        assert "udyogconnect.in" in msg, "Website URL missing from footer"
         print("PASS: PO message contains Udyog Connect footer")
     
     def test_po_message_with_supplier_name(self):
@@ -243,7 +243,7 @@ class TestInvoiceMessage:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing"
+        assert "udyogconnect.in" in msg, "Website URL missing"
         print("PASS: Invoice message contains Udyog Connect footer")
 
 
@@ -308,7 +308,7 @@ class TestPaymentReminderSoft:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing"
+        assert "udyogconnect.in" in msg, "Website URL missing"
         print("PASS: Soft reminder contains Udyog Connect footer")
 
 
@@ -364,7 +364,7 @@ class TestPaymentReminderStrict:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing"
+        assert "udyogconnect.in" in msg, "Website URL missing"
         print("PASS: Strict reminder contains Udyog Connect footer")
 
 
@@ -396,7 +396,7 @@ class TestCatalogMessage:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing"
+        assert "udyogconnect.in" in msg, "Website URL missing"
         print("PASS: Catalog message contains Udyog Connect footer")
     
     def test_catalog_message_with_recipient_name(self):
@@ -460,7 +460,7 @@ class TestSalesPushMessage:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing"
+        assert "udyogconnect.in" in msg, "Website URL missing"
         print("PASS: Sales push contains Udyog Connect footer")
     
     def test_sales_push_with_buyer_name(self):
@@ -505,7 +505,7 @@ class TestDispatchMessage:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing"
+        assert "udyogconnect.in" in msg, "Website URL missing"
         print("PASS: Dispatch message contains Udyog Connect footer")
 
 
@@ -540,7 +540,7 @@ class TestPendingOrderNotify:
             business_name="Test Business"
         )
         assert "Powered by Udyog Connect" in msg, "Footer missing"
-        assert "www.udyogconnect.in" in msg, "Website URL missing"
+        assert "udyogconnect.in" in msg, "Website URL missing"
         print("PASS: Pending order notification contains Udyog Connect footer")
     
     def test_pending_order_notify_with_buyer_name(self):

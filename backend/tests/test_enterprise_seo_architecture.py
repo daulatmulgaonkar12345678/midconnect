@@ -397,7 +397,7 @@ class TestCanonicalURLs:
         assert response.status_code == 200
         canonical_url = response.json()["redirect"]["canonicalUrl"]
         
-        # Canonical URL should follow format: https://www.udyogconnect.in/products/{slug}
+        # Canonical URL should follow format: https://udyogconnect.in/products/{slug}
         assert canonical_url is not None, "Canonical URL should not be None"
         assert "udyogconnect.in/products/" in canonical_url, f"Invalid canonical URL format: {canonical_url}"
         assert TEST_PRODUCT_SLUG in canonical_url, "Canonical URL should contain the slug"
@@ -411,7 +411,7 @@ class TestCanonicalURLs:
         assert response.status_code == 200
         canonical_url = response.json()["redirect"]["canonicalUrl"]
         
-        # Canonical URL should follow format: https://www.udyogconnect.in/categories/{slug}
+        # Canonical URL should follow format: https://udyogconnect.in/categories/{slug}
         assert canonical_url is not None
         assert "udyogconnect.in/categories/" in canonical_url
         assert TEST_CATEGORY_SLUG in canonical_url

@@ -1,7 +1,14 @@
 import { MetadataRoute } from 'next';
 
-const SITE_URL = 'https://www.udyogconnect.in';
+import { SITE_URL } from '@/lib/siteUrl';
 const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://midconnect.onrender.com';
+
+// Route-level ISR: re-evaluate the sitemap hourly (matches the per-fetch
+// revalidate below). At revalidation time a failed fetch now throws — Next
+// keeps serving the last-good sitemap and the error is logged; at build time
+// a failed fetch fails the build loudly. Either way a degraded API can never
+// silently produce a "successful" incomplete sitemap.
+export const revalidate = 3600;
 
 // Cap city pages to top N cities (programmatic scale). Full 20-city coverage
 // per product. Backend endpoint generates all active products × TOP_CITIES.
@@ -13,13 +20,6 @@ const SUPPORTED_INTENTS = ['price', 'suppliers'] as const;
 
 // Google recommends ≤ 50 000 URLs per sitemap. We self-cap much lower for crawl efficiency.
 const MAX_URLS = 45000;
-
-interface Product {
-  _id: string;
-  name: string;
-  slug?: string;
-  updatedAt?: string;
-}
 
 // Simple slugify for categories/products that don't have a stored slug.
 const slugify = (s: string): string =>
@@ -39,6 +39,43 @@ interface SitemapCityPair {
   productSlug: string;
   citySlug: string;
   lastModified?: string | null;
+  cityEligible?: boolean;
+  priceEligible?: boolean;
+  suppliersEligible?: boolean;
+}
+
+// Intent URL emitted only when the backend explicitly marks it eligible.
+// A missing or non-true flag is never treated as eligible.
+const INTENT_ELIGIBILITY_FIELD = {
+  price: 'priceEligible',
+  suppliers: 'suppliersEligible',
+} as const;
+
+// F3: fetch a sitemap data source and FAIL LOUDLY. A network error or a
+// non-2xx response (the backend returns 503 when the DB is unavailable or
+// eligibility overflows) must never silently degrade the sitemap to its
+// static pages. The error is logged and rethrown so Next.js marks the
+// sitemap route as errored instead of publishing an incomplete one.
+async function fetchSitemapJson(url: string, label: string): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (error) {
+    console.error(`[sitemap] ${label} fetch failed:`, error);
+    throw new Error(
+      `[sitemap] ${label} fetch failed — refusing to emit an incomplete sitemap`
+    );
+  }
+  if (!response.ok) {
+    console.error(`[sitemap] ${label} API responded ${response.status}`);
+    throw new Error(
+      `[sitemap] ${label} API responded ${response.status} — refusing to emit an incomplete sitemap`
+    );
+  }
+  return response.json();
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -64,97 +101,70 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let productPages: MetadataRoute.Sitemap = [];
   let categoryPages: MetadataRoute.Sitemap = [];
   let cityPages: MetadataRoute.Sitemap = [];
+  let cityPairs: SitemapCityPair[] = [];
 
-  // --- Products ---
-  try {
-    const productsResponse = await fetch(`${API_URL}/api/products?limit=1000`, {
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(5000),
-    });
+  // --- Products (independent of seller listings: visible products only) ---
+  const productsData = (await fetchSitemapJson(
+    `${API_URL}/api/seo/sitemap-products`,
+    'sitemap-products'
+  )) as { products?: { productSlug: string; lastModified?: string | null }[] };
+  const products: { productSlug: string; lastModified?: string | null }[] = productsData.products || [];
 
-    if (productsResponse.ok) {
-      const productsData = await productsResponse.json();
-      const products: Product[] = Array.isArray(productsData)
-        ? productsData
-        : productsData.products || [];
-
-      productPages = products
-        .filter((p) => p.slug && p.slug.length > 0)
-        .map((product) => ({
-          url: `${SITE_URL}/products/${product.slug}`,
-          lastModified: toDateOnly(product.updatedAt),
-          changeFrequency: 'weekly' as const,
-          priority: 0.8,
-        }));
-    }
-  } catch (error) {
-    console.error('Sitemap: Failed to fetch products:', error);
-  }
+  productPages = products
+    .filter((p) => p.productSlug && p.productSlug.length > 0)
+    .map((p) => ({
+      url: `${SITE_URL}/products/${p.productSlug}`,
+      lastModified: toDateOnly(p.lastModified),
+      changeFrequency: 'weekly' as const,
+      priority: 0.8,
+    }));
 
   // --- Categories ---
-  try {
-    const categoriesResponse = await fetch(`${API_URL}/api/categories`, {
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(5000),
+  const categoriesData = (await fetchSitemapJson(`${API_URL}/api/categories`, 'categories')) as
+    | Category[]
+    | { categories?: Category[] };
+  const categories: Category[] = Array.isArray(categoriesData)
+    ? categoriesData
+    : categoriesData.categories || [];
+
+  // Use stored slug when available, otherwise slugify the name
+  // (prod DB currently stores slug=null for all categories — we still emit URLs).
+  categoryPages = categories
+    .filter((c) => c.name && c.name.length > 0)
+    .map((category) => {
+      const slug = (category.slug && category.slug.length > 0)
+        ? category.slug
+        : slugify(category.name);
+      return {
+        url: `${SITE_URL}/categories/${slug}`,
+        lastModified: toDateOnly(category.updatedAt),
+        changeFrequency: 'weekly' as const,
+        priority: 0.7,
+      };
     });
 
-    if (categoriesResponse.ok) {
-      const categoriesData = await categoriesResponse.json();
-      const categories: Category[] = Array.isArray(categoriesData)
-        ? categoriesData
-        : categoriesData.categories || [];
-
-      // Use stored slug when available, otherwise slugify the name
-      // (prod DB currently stores slug=null for all categories — we still emit URLs).
-      categoryPages = categories
-        .filter((c) => c.name && c.name.length > 0)
-        .map((category) => {
-          const slug = (category.slug && category.slug.length > 0)
-            ? category.slug
-            : slugify(category.name);
-          return {
-            url: `${SITE_URL}/categories/${slug}`,
-            lastModified: toDateOnly(category.updatedAt),
-            changeFrequency: 'weekly' as const,
-            priority: 0.7,
-          };
-        });
-
-      console.log(`[sitemap] Categories added: ${categoryPages.length}/${categories.length}`);
-    }
-  } catch (error) {
-    console.error('Sitemap: Failed to fetch categories:', error);
-  }
+  console.log(`[sitemap] Categories added: ${categoryPages.length}/${categories.length}`);
 
   // --- City pages (only valid pairs with active sellers, capped to top N cities) ---
-  let cityPairs: SitemapCityPair[] = [];
-  try {
-    const cityRes = await fetch(
-      `${API_URL}/api/seo/sitemap-city-pages?max_cities=${MAX_CITIES}&mode=all`,
-      {
-        next: { revalidate: 3600 },
-        signal: AbortSignal.timeout(5000),
-      }
-    );
-    if (cityRes.ok) {
-      const cityData = await cityRes.json();
-      cityPairs = cityData.pairs || [];
-      cityPages = cityPairs.map((p) => ({
-        url: `${SITE_URL}/products/${p.productSlug}/in/${p.citySlug}`,
-        lastModified: toDateOnly(p.lastModified),
-        changeFrequency: 'weekly' as const,
-        priority: 0.6,
-      }));
-    }
-  } catch (error) {
-    console.error('Sitemap: Failed to fetch city pages:', error);
-  }
+  const cityData = (await fetchSitemapJson(
+    `${API_URL}/api/seo/sitemap-city-pages?max_cities=${MAX_CITIES}&mode=all`,
+    'sitemap-city-pages'
+  )) as { pairs?: SitemapCityPair[] };
+  // City URL only when the backend confirms city eligibility.
+  cityPairs = (cityData.pairs || []).filter((p: SitemapCityPair) => p.cityEligible === true);
+  cityPages = cityPairs.map((p) => ({
+    url: `${SITE_URL}/products/${p.productSlug}/in/${p.citySlug}`,
+    lastModified: toDateOnly(p.lastModified),
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
 
   // --- Intent + City pages (programmatic SEO scale: 5 intents × N cityPairs) ---
   // Each (product, city) gets 5 intent variants at lower priority. We cap total.
   const intentPages: MetadataRoute.Sitemap = [];
   for (const p of cityPairs) {
     for (const intent of SUPPORTED_INTENTS) {
+      if (p[INTENT_ELIGIBILITY_FIELD[intent]] !== true) continue;
       intentPages.push({
         url: `${SITE_URL}/products/${p.productSlug}/${intent}/in/${p.citySlug}`,
         lastModified: toDateOnly(p.lastModified),

@@ -2044,6 +2044,8 @@ export interface EnterpriseProductResponse {
   };
   summary: {
     sellerCount: number;
+    verifiedSellerCount?: number;
+    listingCount?: number;
     minPrice?: number;
     variantCount: number;
     totalPages: number;

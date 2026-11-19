@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { fetchCityData, renderCityPage } from '@/lib/cityPageRenderer';
 
 interface CityPageProps {
@@ -30,5 +31,8 @@ export async function generateMetadata({ params }: CityPageProps): Promise<Metad
 export default async function CityProductPage({ params }: CityPageProps) {
   const { slug, city } = await params;
   const data = await fetchCityData(slug, city);
+  // B4: a product-city pair without eligible supply is a real 404, not a
+  // soft-404 rendered with HTTP 200.
+  if (!data) notFound();
   return renderCityPage(data, slug, city, undefined);
 }
