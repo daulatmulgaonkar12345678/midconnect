@@ -8,7 +8,7 @@
     "start": "next dev -p 3000",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:seo": "tsc -p tests/seo/tsconfig.seo.json && node --test tests/seo/canonical-domain.test.mjs"
+    "test:seo": "tsc -p tests/seo/tsconfig.seo.json && node --test tests/seo/canonical-domain.test.mjs tests/seo/image-config.test.mjs"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",

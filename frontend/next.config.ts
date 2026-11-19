@@ -4,8 +4,20 @@ const nextConfig: NextConfig = {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
   
-  // Optimize images from external sources
+  // Optimize images from external sources.
+  //
+  // Batch 1 (2026-11-19): Vercel's image optimizer answers every uncached
+  // /_next/image request with HTTP 402 (response header
+  // X-Vercel-Error: OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED — image
+  // optimization quota/payment state on the Vercel account, external to this
+  // repo). Cached variants still serve 200, so breakage is intermittent and
+  // grows as new images/widths are requested. While the account is in this
+  // state we bypass the optimizer entirely: next/image emits the original
+  // source URLs as-is (Cloudinary URLs already carry f_auto,q_auto
+  // transformations, so format/quality optimization is preserved at the
+  // origin, and width/height attributes keep layout stable).
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
