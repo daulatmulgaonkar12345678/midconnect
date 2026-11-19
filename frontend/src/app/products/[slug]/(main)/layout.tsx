@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 
-import { SITE_URL } from '@/lib/siteUrl';
+import { canonicalSelfUrl, SITE_URL } from '@/lib/siteUrl';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
@@ -65,6 +65,12 @@ export async function generateMetadata({
   if (isObjectId(slug)) return getDefaultMetadata();
   const seoData = await fetchSeo(slug);
   if (!seoData || !seoData.seoTitle) return getDefaultMetadata();
+  // Batch 2: re-anchor the payload's absolute canonical URL on the approved
+  // apex origin. A cached payload fetched before the backend switched from
+  // www to apex can still carry the www host (no origin-aware invalidation on
+  // the fetch cache), so the emission point normalizes: canonical and og:url
+  // are derived from the SAME normalized value and always agree.
+  const canonicalUrl = canonicalSelfUrl(seoData.canonicalUrl, `/products/${slug}`);
   return {
     title: seoData.seoTitle,
     description: seoData.seoDescription,
@@ -72,7 +78,7 @@ export async function generateMetadata({
     openGraph: {
       title: seoData.seoTitle,
       description: seoData.seoDescription,
-      url: seoData.canonicalUrl,
+      url: canonicalUrl,
       siteName: 'UdyogConnect',
       type: 'website',
       locale: 'en_IN',
@@ -82,7 +88,7 @@ export async function generateMetadata({
       title: seoData.seoTitle,
       description: seoData.seoDescription,
     },
-    alternates: { canonical: seoData.canonicalUrl },
+    alternates: { canonical: canonicalUrl },
     robots: {
       index: true,
       follow: true,

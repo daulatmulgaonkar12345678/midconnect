@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { fetchCityData, renderCityPage } from '@/lib/cityPageRenderer';
 import { notFound } from 'next/navigation';
+import { canonicalSelfUrl } from '@/lib/siteUrl';
 
 const SUPPORTED_INTENTS = ['price', 'buy', 'suppliers', 'wholesale', 'cheap'] as const;
 type Intent = (typeof SUPPORTED_INTENTS)[number];
@@ -22,7 +23,12 @@ export async function generateMetadata({ params }: IntentCityPageProps): Promise
 
   // Self-canonical for intent+city pages — index ONLY if content is unique (handled via template variation on backend).
   // Fallback to main product page canonical if the backend indicates low uniqueness (future extension).
-  const pageUrl = data.seo?.pageUrl;
+  // Batch 2: re-anchor on the approved apex origin — cached payloads fetched
+  // before the backend apex switch can still carry the www host.
+  const pageUrl = canonicalSelfUrl(
+    data.seo?.pageUrl,
+    `/products/${slug}/${intent}/in/${city}`,
+  );
 
   return {
     title: data.seo?.title,

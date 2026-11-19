@@ -207,3 +207,33 @@ def test_two_eligible_sellers_flip_suppliers_intent_and_counts():
     faq = page["seo"]["faqJsonLd"]["mainEntity"]
     assert "2 verified suppliers" in faq[0]["acceptedAnswer"]["text"]
     assert "1 verified supplier" not in faq[0]["acceptedAnswer"]["text"]
+
+
+def test_city_payload_self_urls_use_apex_origin():
+    """Batch 2: city payload self URLs always use the approved apex origin.
+
+    Production evidence (2026-11-19): a cached city payload captured before the
+    backend apex switch served a stale www canonical/og:url from the frontend
+    for up to one revalidation window. Frontend emission now re-anchors every
+    payload URL on the apex origin via the frontend site URL helper
+    `canonicalSelfUrl`; this test additionally pins the payload source itself:
+    canonicalUrl, pageUrl, cityPageUrl and the intent+city link family must be
+    apex-anchored and never carry a www host.
+    """
+    seed, pairs, page_p, page_q, elig_p, elig_q, elig_p_upper = asyncio.run(_scenario())
+
+    assert page_p is not None
+    seo = page_p["seo"]
+    for key in ("canonicalUrl", "pageUrl", "cityPageUrl"):
+        url = seo[key]
+        assert url.startswith("https://udyogconnect.in/"), f"seo.{key} not apex: {url}"
+        assert "www." not in url, f"seo.{key} carries a www host: {url}"
+    assert seo["canonicalUrl"] == f"https://udyogconnect.in/products/{seed.slug_p}"
+    assert seo["pageUrl"] == f"https://udyogconnect.in/products/{seed.slug_p}/in/{CITY}"
+
+    # The intent+city URL family is built by the same apex-anchored templates.
+    links = page_p["internalLinks"]
+    assert links["mainProductPage"] == f"https://udyogconnect.in/products/{seed.slug_p}"
+    for link in links["relatedIntents"]:
+        assert link["url"].startswith("https://udyogconnect.in/products/"), f"intent link not apex: {link['url']}"
+        assert "www." not in link["url"], f"intent link carries a www host: {link['url']}"

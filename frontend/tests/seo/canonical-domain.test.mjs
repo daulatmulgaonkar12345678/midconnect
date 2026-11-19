@@ -9,6 +9,7 @@ import Module from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(here, 'dist');
@@ -246,5 +247,151 @@ test('root layout openGraph URLs resolve against the apex origin', () => {
         assert.equal(resolved.origin, APEX, `openGraph image resolved to ${resolved.origin}`);
       }
     }
+  }
+});
+
+// ---- Batch 2: product & city canonical + og:url emission (stale-payload safety) ----
+//
+// Production evidence (2026-11-19): /products/<slug>/in/pune served a stale
+// www canonical + og:url while the live backend payload already returned apex
+// URLs — the Next fetch cache (`next: { revalidate: 3600 }`) kept serving a
+// payload captured before the backend apex switch, and the emission point
+// trusted the payload's absolute URL verbatim. These tests pin the emission
+// guarantee: whatever origin the payload carries, canonical and og:url MUST
+// be the apex origin, preserve the payload's path, and agree exactly.
+
+const productLayout = require(path.join(dist, 'app', 'products', '[slug]', '(main)', 'layout.js'));
+const cityPage = require(path.join(dist, 'app', 'products', '[slug]', 'in', '[city]', 'page.js'));
+const intentCityPage = require(path.join(dist, 'app', 'products', '[slug]', '[intent]', 'in', '[city]', 'page.js'));
+const { canonicalSelfUrl } = require(path.join(dist, 'lib', 'siteUrl.js'));
+
+const SEO_PAYLOAD = (canonicalUrl) => ({
+  productName: 'ABB Contactor',
+  seoTitle: 'ABB Contactor Price in India (2026) | UdyogConnect',
+  seoDescription: 'Compare verified ABB Contactor sellers.',
+  canonicalUrl,
+  categoryName: 'Contactors',
+});
+
+const withPayloads = async (payloads, run) => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    for (const [suffix, payload] of Object.entries(payloads)) {
+      if (url.includes(suffix)) {
+        return { ok: true, json: async () => (typeof payload === 'function' ? payload(url) : payload) };
+      }
+    }
+    return { ok: false, json: async () => ({}) };
+  };
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = original;
+  }
+};
+
+const params = (o) => Promise.resolve(o);
+
+test('canonicalSelfUrl re-anchors legacy www payload URLs on the apex origin', () => {
+  assert.equal(canonicalSelfUrl('https://www.udyogconnect.in/products/abb-contactor', '/products/x'), `${APEX}/products/abb-contactor`);
+  assert.equal(canonicalSelfUrl(`${APEX}/products/abb-contactor`, '/products/x'), `${APEX}/products/abb-contactor`);
+  assert.equal(canonicalSelfUrl('/products/abb-contactor', '/products/x'), `${APEX}/products/abb-contactor`);
+  assert.equal(canonicalSelfUrl(undefined, '/products/abb-contactor'), `${APEX}/products/abb-contactor`);
+  assert.equal(canonicalSelfUrl(null, '/products/abb-contactor/in/pune'), `${APEX}/products/abb-contactor/in/pune`);
+  assert.equal(canonicalSelfUrl('', '/products/x'), `${APEX}/products/x`);
+  assert.equal(canonicalSelfUrl('https://example.com/products/abb-contactor', '/products/x'), `${APEX}/products/x`);
+  assert.equal(canonicalSelfUrl('//www.udyogconnect.in/products/x', '/products/x'), `${APEX}/products/x`);
+});
+
+test('product canonical + og:url re-anchor a stale www payload on the apex origin', async () => {
+  await withPayloads({
+    '/api/products/abb-contactor/seo': SEO_PAYLOAD('https://www.udyogconnect.in/products/abb-contactor'),
+  }, async () => {
+    const meta = await productLayout.generateMetadata({ params: params({ slug: 'abb-contactor' }) });
+    assert.equal(meta.alternates.canonical, `${APEX}/products/abb-contactor`);
+    assert.equal(meta.openGraph.url, meta.alternates.canonical);
+    assert.ok(!JSON.stringify(meta).includes('www.udyogconnect'));
+  });
+});
+
+test('product canonical + og:url keep an apex payload unchanged (path preserved)', async () => {
+  await withPayloads({
+    '/api/products/abb-contactor/seo': SEO_PAYLOAD(`${APEX}/products/abb-contactor`),
+  }, async () => {
+    const meta = await productLayout.generateMetadata({ params: params({ slug: 'abb-contactor' }) });
+    assert.equal(meta.alternates.canonical, `${APEX}/products/abb-contactor`);
+    assert.equal(meta.openGraph.url, meta.alternates.canonical);
+  });
+});
+
+test('product canonical falls back to the apex route path when the payload omits canonicalUrl', async () => {
+  await withPayloads({
+    '/api/products/abb-contactor/seo': SEO_PAYLOAD(undefined),
+  }, async () => {
+    const meta = await productLayout.generateMetadata({ params: params({ slug: 'abb-contactor' }) });
+    assert.equal(meta.alternates.canonical, `${APEX}/products/abb-contactor`);
+    assert.equal(meta.openGraph.url, meta.alternates.canonical);
+  });
+});
+
+const CITY_PAYLOAD = (pageUrl) => ({
+  product: { name: 'ABB Contactor', slug: 'abb-contactor' },
+  city: { name: 'Mumbai', slug: 'mumbai' },
+  seo: { title: 'ABB Contactor in Mumbai | UdyogConnect', description: 'd', pageUrl },
+});
+
+test('city page canonical + og:url re-anchor a stale www payload on the apex origin', async () => {
+  await withPayloads({
+    '/api/products/abb-contactor/city/mumbai': CITY_PAYLOAD('https://www.udyogconnect.in/products/abb-contactor/in/mumbai'),
+  }, async () => {
+    const meta = await cityPage.generateMetadata({ params: params({ slug: 'abb-contactor', city: 'mumbai' }) });
+    assert.equal(meta.alternates.canonical, `${APEX}/products/abb-contactor/in/mumbai`);
+    assert.equal(meta.openGraph.url, meta.alternates.canonical);
+    assert.ok(!JSON.stringify(meta).includes('www.udyogconnect'));
+  });
+});
+
+test('city page canonical falls back to the apex route path when the payload omits pageUrl', async () => {
+  await withPayloads({
+    '/api/products/abb-contactor/city/mumbai': { product: { name: 'ABB Contactor' }, city: { name: 'Mumbai' }, seo: { title: 't' } },
+  }, async () => {
+    const meta = await cityPage.generateMetadata({ params: params({ slug: 'abb-contactor', city: 'mumbai' }) });
+    assert.equal(meta.alternates.canonical, `${APEX}/products/abb-contactor/in/mumbai`);
+    assert.equal(meta.openGraph.url, meta.alternates.canonical);
+  });
+});
+
+test('intent+city canonical + og:url re-anchor a stale www payload on the apex origin', async () => {
+  await withPayloads({
+    '/api/products/abb-contactor/city/mumbai': (url) => ({
+      product: { name: 'ABB Contactor', slug: 'abb-contactor' },
+      city: { name: 'Mumbai', slug: 'mumbai' },
+      seo: {
+        title: 't',
+        description: 'd',
+        pageUrl: url.includes('intent=price')
+          ? 'https://www.udyogconnect.in/products/abb-contactor/price/in/mumbai'
+          : 'https://www.udyogconnect.in/products/abb-contactor/in/mumbai',
+      },
+    }),
+  }, async () => {
+    const meta = await intentCityPage.generateMetadata({ params: params({ slug: 'abb-contactor', intent: 'price', city: 'mumbai' }) });
+    assert.equal(meta.alternates.canonical, `${APEX}/products/abb-contactor/price/in/mumbai`);
+    assert.equal(meta.openGraph.url, meta.alternates.canonical);
+    assert.ok(!JSON.stringify(meta).includes('www.udyogconnect'));
+  });
+});
+
+test('emission modules route canonical/og:url through canonicalSelfUrl (source-level guard)', () => {
+  for (const rel of [
+    'src/app/products/[slug]/(main)/layout.tsx',
+    'src/app/products/[slug]/in/[city]/page.tsx',
+    'src/app/products/[slug]/[intent]/in/[city]/page.tsx',
+  ]) {
+    const src = fs.readFileSync(path.join(here, '..', '..', rel), 'utf8');
+    assert.ok(src.includes('canonicalSelfUrl('), `emission must normalize via canonicalSelfUrl: ${rel}`);
+    assert.ok(!src.includes('canonical: seoData.canonicalUrl'), `raw payload canonical emitted: ${rel}`);
+    assert.ok(!src.includes('const pageUrl = data.seo?.pageUrl'), `raw payload page URL emitted: ${rel}`);
   }
 });

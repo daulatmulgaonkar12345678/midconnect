@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { fetchCityData, renderCityPage } from '@/lib/cityPageRenderer';
+import { canonicalSelfUrl } from '@/lib/siteUrl';
 
 interface CityPageProps {
   params: Promise<{ slug: string; city: string }>;
@@ -11,7 +12,13 @@ export async function generateMetadata({ params }: CityPageProps): Promise<Metad
   const data = await fetchCityData(slug, city);
   if (!data) return { title: 'Product Not Found | UdyogConnect', robots: { index: false, follow: false } };
 
-  const pageUrl = data.seo?.pageUrl || data.seo?.cityPageUrl;
+  // Batch 2: re-anchor the payload's absolute page URL on the approved apex
+  // origin — cached city payloads fetched before the backend apex switch can
+  // still carry the www host until their revalidation window expires.
+  const pageUrl = canonicalSelfUrl(
+    data.seo?.pageUrl || data.seo?.cityPageUrl,
+    `/products/${slug}/in/${city}`,
+  );
   return {
     title: data.seo?.title || `${data.product?.name} in ${city} | UdyogConnect`,
     description: data.seo?.description,
