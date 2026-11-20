@@ -73,7 +73,7 @@ async function withFetch(stub, fn) {
 
 // ---------- fetchProductSeoPayload (server-side data path) ----------
 
-test('fetchProductSeoPayload hits the public /seo endpoint with the ISR cache policy', async () => {
+test('fetchProductSeoPayload hits the public /seo endpoint with the no-store cache policy', async () => {
   let capturedUrl = '';
   let capturedInit = null;
   const result = await withFetch(
@@ -85,7 +85,7 @@ test('fetchProductSeoPayload hits the public /seo endpoint with the ISR cache po
     () => fetchProductSeoPayload(SLUG),
   );
   assert.equal(capturedUrl, `http://127.0.0.1:3999/api/products/${SLUG}/seo`);
-  assert.deepEqual(capturedInit.next, { revalidate: 3600 });
+  assert.equal(capturedInit.cache, 'no-store');
   assert.equal(result.notFound, false);
   assert.equal(result.payload.productName, FIXTURE.productName);
   assert.equal(result.payload.seoDescription, FIXTURE.seoDescription);

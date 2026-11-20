@@ -66,7 +66,7 @@ export async function fetchProductSeoPayload(
 
   try {
     const response = await fetch(`${API_URL}/api/products/${slug}/seo`, {
-      next: { revalidate: 3600 },
+      cache: 'no-store',
     });
     // Definitive backend answer: this slug resolves to no product.
     if (response.status === 404) return { payload: null, notFound: true };
