@@ -1,20 +1,28 @@
 """
-TOKEN-BASED SLUG RESOLVER SERVICE
-==================================
-Enterprise-grade, order-independent URL slug resolution.
+DETERMINISTIC SLUG RESOLVER SERVICE
+===================================
+Resolves a URL identifier to a product using explicit mappings only
+(Batch 5, 2026-11-19 — SEO integrity fix).
 
-This service solves the problem of:
-- Partial slugs: "abc" should match "abc-power-tools-supplier-india"
-- Word order variations: "hand-tools-abc" should match "abc-hand-tools-supplier-india"
-- City/state additions: "abc-tools-mumbai" should still match the base product
-- Typo tolerance: Uses token matching instead of exact matching
+Resolution order (each step is a deterministic mapping; no similarity or
+keyword matching anywhere):
+1. Exact slug match — no redirect needed
+2. Case-normalized slug match (slugs are stored lowercase) — redirect to canonical
+3. ObjectId match (24-hex legacy /product/{id} URLs) — redirect to canonical
+4. Explicit legacy mappings: legacySlugs / legacyIds fields — redirect to canonical
 
-ALGORITHM:
-1. Tokenize input slug into words (split by hyphen/space)
-2. Remove common suffixes (supplier, india, buy, online)
-3. Query products where ALL tokens exist in product name/slug
-4. Rank by match quality (exact > partial)
-5. Return best match with redirect info
+Anything else is NOT a product address and resolves to None, so callers
+return HTTP 404. The previous token-based fuzzy matching (partial slugs,
+word-order tolerance, ANY-token fallback) was removed: it let invalid URLs
+resolve to unrelated products (e.g. a random slug surfacing "Notebooks"
+via a single shared token), which is an SEO integrity defect. City, state,
+stop-word tolerance and prefix matching are gone with it; legitimate
+legacy addresses are covered by the explicit legacySlugs/legacyIds
+mappings and ObjectId redirects instead.
+
+Note: resolve_category_slug below retains its own legacy token matching;
+it serves only the enterprise category resolver endpoint and is intentionally
+untouched by the Batch 5 product-slug fix.
 """
 
 import re
@@ -27,13 +35,11 @@ logger = logging.getLogger("slug_resolver_service")
 
 class SlugResolverService:
     """
-    Token-based, order-independent slug resolver.
-    
-    Features:
-    - Order-independent matching ("abc-xyz" matches "xyz-abc")
-    - Partial slug support ("abc" matches "abc-tools-supplier")
-    - City/state tolerance (ignores location tokens)
-    - Weighted scoring for best match
+    Deterministic product slug resolver (exact, case-normalized, ObjectId,
+    or explicit legacy mapping — never fuzzy).
+
+    - Invalid or unrelated slugs resolve to None (callers return HTTP 404)
+    - Legacy ObjectId URLs and legacySlugs/legacyIds redirect to canonical
     """
     
     # Common suffixes to strip from search (not meaningful for matching)
@@ -108,73 +114,14 @@ class SlugResolverService:
         
         return meaningful_tokens
     
-    def calculate_match_score(
-        self, 
-        search_tokens: List[str], 
-        product_tokens: List[str],
-        product_name: str = ""
-    ) -> float:
-        """
-        Calculate match score between search tokens and product.
-        
-        Scoring:
-        - +10 points for each matching token
-        - +20 bonus if ALL search tokens match
-        - +15 bonus if name starts with first search token
-        - +5 bonus if exact token order match
-        
-        Returns score (0-100+, higher is better)
-        """
-        if not search_tokens or not product_tokens:
-            return 0.0
-        
-        score = 0.0
-        matched_tokens = 0
-        
-        # Count matching tokens
-        for token in search_tokens:
-            # Check exact match
-            if token in product_tokens:
-                score += 10
-                matched_tokens += 1
-            else:
-                # Check partial match (prefix)
-                for pt in product_tokens:
-                    if pt.startswith(token) or token.startswith(pt):
-                        score += 5
-                        matched_tokens += 1
-                        break
-        
-        # Bonus: All tokens matched
-        if matched_tokens >= len(search_tokens):
-            score += 20
-        
-        # Bonus: Product name starts with first token
-        if search_tokens and product_name:
-            name_lower = product_name.lower()
-            if name_lower.startswith(search_tokens[0]):
-                score += 15
-        
-        # Bonus: Token order matches (partial)
-        if len(search_tokens) >= 2:
-            joined_search = '-'.join(search_tokens)
-            joined_product = '-'.join(product_tokens)
-            if joined_search in joined_product:
-                score += 5
-        
-        # Penalty: Too many unmatched search tokens
-        unmatched = len(search_tokens) - matched_tokens
-        score -= unmatched * 5
-        
-        return max(0, score)
-    
+
     async def resolve_slug(
         self, 
         identifier: str,
         return_all_matches: bool = False
     ) -> Tuple[Optional[Dict], bool, Optional[str], List[Dict]]:
         """
-        Resolve a URL slug to a product using token-based matching.
+        Resolve a URL identifier to a product using deterministic matching only.
         
         Args:
             identifier: The URL slug (e.g., "abc-power-tools-hand-tools")
@@ -186,7 +133,11 @@ class SlugResolverService:
         Matching Priority:
         1. Exact slug match (no redirect needed)
         2. ObjectId match (redirect to canonical)
-        3. Token-based match (redirect to canonical)
+        3. Explicit legacy mapping (legacySlugs / legacyIds) - redirect to canonical
+        4. Case-normalized slug match (redirect to canonical)
+
+        No token, prefix, or ANY-token fallback matching exists; identifiers
+        that map to no product return None so callers raise HTTP 404.
         """
         if not identifier:
             return None, False, None, []
@@ -200,6 +151,18 @@ class SlugResolverService:
         )
         if exact_match:
             return exact_match, False, exact_match.get("slug"), [exact_match]
+
+        # === Priority 1b: Case-normalized exact match ===
+        # Slugs are stored lowercase; accept e.g. "MOTOR-SUPPLIER-INDIA" and
+        # point it at the canonical slug (deterministic: slugs are unique).
+        if decoded != decoded.lower():
+            normalized_match = await self.db.products.find_one(
+                {"slug": {"$regex": "^" + re.escape(decoded) + "$", "$options": "i"}},
+                {"_id": 1, "name": 1, "slug": 1, "seoTitle": 1, "seoDescription": 1}
+            )
+            if normalized_match:
+                canonical = normalized_match.get("slug")
+                return normalized_match, True, canonical, [normalized_match]
         
         # === Priority 2: ObjectId match ===
         if len(decoded) == 24:
@@ -227,88 +190,13 @@ class SlugResolverService:
             canonical = legacy_match.get("slug")
             return legacy_match, True, canonical, [legacy_match]
         
-        # === Priority 4: Token-based fuzzy matching ===
-        search_tokens = self.tokenize_slug(decoded)
-        
-        if not search_tokens:
-            # No meaningful tokens - can't match
-            return None, False, None, []
-        
-        # Build regex patterns for token matching
-        # Each token should appear somewhere in name or slug
-        regex_conditions = []
-        for token in search_tokens:
-            # Match token as whole word or part of hyphenated word
-            pattern = f"(^|[-\\s]){re.escape(token)}"
-            regex_conditions.append({
-                "$or": [
-                    {"slug": {"$regex": pattern, "$options": "i"}},
-                    {"name": {"$regex": pattern, "$options": "i"}},
-                    {"searchAliases": {"$regex": pattern, "$options": "i"}}
-                ]
-            })
-        
-        # Query: Product must match ALL tokens (AND logic)
-        if len(regex_conditions) == 1:
-            query = regex_conditions[0]
-        else:
-            query = {"$and": regex_conditions}
-        
-        # Fetch potential matches
-        cursor = self.db.products.find(
-            query,
-            {"_id": 1, "name": 1, "slug": 1, "seoTitle": 1, "seoDescription": 1}
-        ).limit(20)
-        
-        candidates = await cursor.to_list(20)
-        
-        if not candidates:
-            # Try fallback: Match ANY token (more lenient)
-            if len(regex_conditions) > 1:
-                fallback_query = {"$or": regex_conditions}
-                cursor = self.db.products.find(
-                    fallback_query,
-                    {"_id": 1, "name": 1, "slug": 1, "seoTitle": 1, "seoDescription": 1}
-                ).limit(10)
-                candidates = await cursor.to_list(10)
-        
-        if not candidates:
-            return None, False, None, []
-        
-        # Score and rank candidates
-        scored_candidates = []
-        for candidate in candidates:
-            product_slug = candidate.get("slug", "")
-            product_name = candidate.get("name", "")
-            product_tokens = self.tokenize_slug(product_slug) + self.tokenize_slug(product_name)
-            
-            score = self.calculate_match_score(
-                search_tokens, 
-                list(set(product_tokens)),
-                product_name
-            )
-            
-            scored_candidates.append({
-                "product": candidate,
-                "score": score
-            })
-        
-        # Sort by score descending
-        scored_candidates.sort(key=lambda x: x["score"], reverse=True)
-        
-        # Best match
-        best = scored_candidates[0]
-        best_product = best["product"]
-        canonical_slug = best_product.get("slug")
-        
-        # Redirect needed if slug doesn't match exactly
-        needs_redirect = decoded != canonical_slug
-        
-        if return_all_matches:
-            all_matches = [sc["product"] for sc in scored_candidates]
-            return best_product, needs_redirect, canonical_slug, all_matches
-        
-        return best_product, needs_redirect, canonical_slug, [best_product]
+        # === Batch 5 (2026-11-19): no fallback matching ===
+        # Token/prefix/ANY-token fuzzy matching was removed: it let invalid
+        # URLs resolve to unrelated products via a single shared token or a
+        # prefix hit. A valid product address is exactly one of: canonical
+        # slug (case-insensitive), ObjectId, or an explicit legacySlugs /
+        # legacyIds mapping. Everything else is not a product address.
+        return None, False, None, []
     
     async def resolve_category_slug(
         self, 

@@ -8,6 +8,10 @@ import { fetchProductSeoPayload, type ProductSeoPayload } from '@/lib/productSeo
 // `next: { revalidate: 3600 }` cache policy, null on failure) so the page
 // shell can fetch the identical payload for the server-rendered hero without
 // a second upstream call (request memoization dedupes within a render).
+// Batch 5 (2026-11-19): the helper result is `{ payload, notFound }`; the
+// page shell owns the 404 boundary for definitive backend 404s, and this
+// layout reads `.payload` only — transient unavailability keeps the existing
+// default-metadata fallback (payload null).
 
 // Static Organization schema — SSR, single instance
 const ORGANIZATION_SCHEMA = {
@@ -40,7 +44,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const seoData: ProductSeoPayload | null = await fetchProductSeoPayload(slug);
+  const seoData: ProductSeoPayload | null = (await fetchProductSeoPayload(slug)).payload;
   if (!seoData || !seoData.seoTitle) return getDefaultMetadata();
   // Batch 2: re-anchor the payload's absolute canonical URL on the approved
   // apex origin. A cached payload fetched before the backend switched from
@@ -97,7 +101,7 @@ export default async function MainProductLayout({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const seoData = await fetchProductSeoPayload(slug);
+  const seoData = (await fetchProductSeoPayload(slug)).payload;
 
   return (
     <>

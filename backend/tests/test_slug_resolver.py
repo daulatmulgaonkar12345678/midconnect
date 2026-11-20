@@ -1,265 +1,253 @@
 """
-TOKEN-BASED SLUG RESOLVER SERVICE TESTS
-=======================================
-Tests for the enterprise-grade, order-independent URL slug resolution.
+DETERMINISTIC SLUG RESOLVER TESTS (Batch 5, 2026-11-19)
+=======================================================
+Contract tests for SlugResolverService.resolve_slug after the Batch 5 fix:
 
-Test Coverage:
-1. Partial slugs: "motor" should match "industrial-electric-motor-5hp-test-category-supplier-india"
-2. Word order variations: "motor-electric" should match "electric-motor-xxx"
-3. City names ignored: "motor-mumbai" should still find the product
-4. Stop words filtered: "buy-motor-online" should work
-5. Exact slug match returns no redirect
-6. All enterprise endpoints use the resolver (enterprise, facets, filter, detail, seo)
+Valid product addresses (resolve):
+1. Exact canonical slug — no redirect
+2. Case-normalized canonical slug — redirect to canonical
+3. ObjectId (24-hex legacy URL) — redirect to canonical
+4. Explicit legacySlugs / legacyIds mapping — redirect to canonical
+
+Invalid / unrelated identifiers (must NOT resolve — callers return 404):
+- random garbage
+- a single shared/common token of a product (the old ANY-token fallback defect)
+- a prefix hit on another product's token (e.g. "notebook" -> "Notebooks")
+- tokens mixed from several products
+- stop-word-only slugs
+- city-suffixed canonical slugs (city tolerance removed)
+- product names typed as slugs
+
+These are pure unit tests against an in-memory fake of the three Mongo
+operations the resolver uses (no network, no database). Database-backed and
+HTTP-route coverage lives in tests/regression/test_slug_resolver_deterministic.py.
+
+The legacy live-URL assertions in this file previously pinned the REMOVED
+token-based fuzzy matching (partial slugs, word-order, city tolerance,
+ANY-token fallback) — the exact behavior Batch 5 outlaws; they were replaced
+by the deterministic contract below.
 """
 
+import asyncio
+import re
+from typing import Any, Dict, List, Optional
+
 import pytest
-import requests
-import os
-import json
+from bson import ObjectId
 
-# API URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://seo-scaling-hub.preview.emergentagent.com')
+import os as _os
+import sys as _sys
 
-# Test product data
-TEST_PRODUCT_SLUG = "industrial-electric-motor-5hp-test-category-supplier-india"
-TEST_PRODUCT_NAME = "Industrial Electric Motor 5HP"
+_BACKEND = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")
+_sys.path.insert(0, _BACKEND)
+from services.slug_resolver_service import SlugResolverService
 
+CANONICAL_SLUG = "vfd-vfd-plc-hmi-control-equipments-supplier-india"
+CANONICAL_NAME = "VFD"
+PRODUCT_ID = ObjectId("6a44cd478b430643bfad1873")
+LEGACY_ID = "507f1f77bcf86cd799439011"
+LEGACY_SLUG = "vfd-old-name-supplier-india"
 
-class TestSlugResolverService:
-    """Tests for the SlugResolverService token-based matching"""
-    
-    def test_partial_slug_motor_matches(self):
-        """Partial slug 'motor' should match the test product"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/motor")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["product"]["name"] == TEST_PRODUCT_NAME
-        assert data["redirect"]["needed"] == True, "Partial slug should require redirect"
-        assert data["redirect"]["canonicalSlug"] == TEST_PRODUCT_SLUG
-    
-    def test_word_order_independence_motor_electric(self):
-        """Word order 'motor-electric' should match 'electric-motor' in product name"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/motor-electric")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == True
-    
-    def test_word_order_independence_industrial_motor(self):
-        """Word order 'industrial-motor' should match 'industrial-electric-motor'"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/industrial-motor")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == True
-    
-    def test_city_name_ignored_mumbai(self):
-        """City name 'mumbai' in slug should be ignored - 'motor-mumbai' matches"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/motor-mumbai")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == True
-    
-    def test_city_name_ignored_delhi(self):
-        """City name 'delhi' in slug should be ignored - 'electric-motor-delhi' matches"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/electric-motor-delhi")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == True
-    
-    def test_stop_words_filtered_buy_online(self):
-        """Stop words 'buy' and 'online' should be filtered - 'buy-motor-online' matches"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/buy-motor-online")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == True
-    
-    def test_stop_words_filtered_supplier_india(self):
-        """Stop words 'supplier' and 'india' should be filtered"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/motor-supplier-india")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == True
-    
-    def test_exact_slug_no_redirect(self):
-        """Exact slug match should return redirect.needed = False"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/{TEST_PRODUCT_SLUG}")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == False, "Exact slug should NOT require redirect"
-        assert data["redirect"]["canonicalSlug"] == TEST_PRODUCT_SLUG
-    
-    def test_combined_partial_city_stopwords(self):
-        """Combined test: partial + city + stop words all work together"""
-        # 'buy-industrial-motor-bangalore-online' should match
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/buy-industrial-motor-bangalore-online")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert data["redirect"]["needed"] == True
+NOTEBOOKS_SLUG = "notebooks-office-supplies-supplier-india"
+NOTEBOOKS_NAME = "Notebooks"
+
+PRODUCTS = [
+    {
+        "_id": PRODUCT_ID,
+        "name": CANONICAL_NAME,
+        "slug": CANONICAL_SLUG,
+        "seoTitle": "Compare VFD Prices in India (2026) | UdyogConnect",
+        "seoDescription": "Variable frequency drives for smooth motor speed control",
+        "legacySlugs": [LEGACY_SLUG],
+        "legacyIds": [LEGACY_ID],
+    },
+    {
+        "_id": ObjectId(),
+        "name": NOTEBOOKS_NAME,
+        "slug": NOTEBOOKS_SLUG,
+        "seoTitle": "Notebooks",
+        "seoDescription": "Notebooks",
+    },
+]
+
+PROJECTION = {"_id": 1, "name": 1, "slug": 1, "seoTitle": 1, "seoDescription": 1}
 
 
-class TestEnterpriseEndpointsWithResolver:
-    """Tests that all enterprise endpoints use the slug resolver correctly"""
-    
-    def test_enterprise_endpoint_with_partial_slug(self):
-        """/products/{slug}/enterprise should work with partial slug"""
-        response = requests.get(f"{BASE_URL}/api/products/motor/enterprise")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert data["product"]["name"] == TEST_PRODUCT_NAME
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
-        assert "sellers" in data
-        assert data["redirect"]["needed"] == True
-        assert data["redirect"]["canonicalSlug"] == TEST_PRODUCT_SLUG
-    
-    def test_enterprise_endpoint_redirect_info(self):
-        """Enterprise endpoint should include redirect info for frontend"""
-        response = requests.get(f"{BASE_URL}/api/products/motor-mumbai/enterprise")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert "redirect" in data
-        assert data["redirect"]["needed"] == True
-        assert data["redirect"]["canonicalSlug"] == TEST_PRODUCT_SLUG
-        assert "canonicalUrl" in data["redirect"]
-    
-    def test_facets_endpoint_with_partial_slug(self):
-        """/products/{slug}/facets should work with partial slug"""
-        response = requests.get(f"{BASE_URL}/api/products/motor-electric/facets")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert "facets" in data
-        assert data["totalListings"] >= 0
-    
-    def test_filter_endpoint_with_partial_slug(self):
-        """/products/{slug}/filter should work with partial slug"""
-        response = requests.post(
-            f"{BASE_URL}/api/products/motor-mumbai/filter",
-            json={"page": 1, "limit": 10}
+def _match(doc: Dict[str, Any], cond: Dict[str, Any]) -> bool:
+    for key, expected in cond.items():
+        if key == "$or":
+            if not any(_match(doc, sub) for sub in expected):
+                return False
+        elif isinstance(expected, dict) and "$regex" in expected:
+            flags = re.IGNORECASE if "i" in expected.get("$options", "") else 0
+            actual = doc.get(key)
+            if not isinstance(actual, str) or not re.search(expected["$regex"], actual, flags):
+                return False
+        else:
+            actual = doc.get(key)
+            if isinstance(actual, list):
+                # Mongo: scalar query matches an array field if any element equals it
+                if expected not in actual:
+                    return False
+            elif actual != expected:
+                return False
+    return True
+
+
+class FakeCollection:
+    """Just enough Mongo surface for resolve_slug: find_one / find().limit().to_list()."""
+
+    def __init__(self, docs: List[Dict[str, Any]]):
+        self.docs = docs
+
+    def _filtered(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return [d for d in self.docs if _match(d, query)]
+
+    async def find_one(self, query, projection=None):
+        matches = self._filtered(query)
+        return dict(matches[0]) if matches else None
+
+    def find(self, query, projection=None):
+        outer = self
+
+        class Cursor:
+            def limit(self, _n):
+                return self
+
+            async def to_list(self, _n):
+                return [dict(d) for d in outer._filtered(query)]
+
+        return Cursor()
+
+
+class FakeDB:
+    def __init__(self, products: List[Dict[str, Any]]):
+        self.products = FakeCollection(products)
+
+
+def _resolver() -> SlugResolverService:
+    return SlugResolverService(FakeDB([dict(p) for p in PRODUCTS]))
+
+
+def _resolve(identifier: str, **kwargs):
+    return asyncio.run(_resolver().resolve_slug(identifier, **kwargs))
+
+
+# ----------------------------- valid slugs -----------------------------
+
+class TestValidSlugs:
+    def test_exact_canonical_slug_resolves_without_redirect(self):
+        product, needs_redirect, canonical, all_matches = _resolve(CANONICAL_SLUG)
+        assert product is not None
+        assert product["slug"] == CANONICAL_SLUG
+        assert product["name"] == CANONICAL_NAME
+        assert needs_redirect is False
+        assert canonical == CANONICAL_SLUG
+        assert len(all_matches) == 1
+
+    def test_case_normalized_slug_resolves_with_redirect_to_canonical(self):
+        product, needs_redirect, canonical, _ = _resolve(CANONICAL_SLUG.upper())
+        assert product is not None
+        assert product["slug"] == CANONICAL_SLUG
+        assert needs_redirect is True
+        assert canonical == CANONICAL_SLUG
+
+    def test_legacy_slug_redirects_to_canonical(self):
+        product, needs_redirect, canonical, _ = _resolve(LEGACY_SLUG)
+        assert product is not None
+        assert product["slug"] == CANONICAL_SLUG
+        assert needs_redirect is True
+        assert canonical == CANONICAL_SLUG
+
+    def test_legacy_id_redirects_to_canonical(self):
+        product, needs_redirect, canonical, _ = _resolve(LEGACY_ID)
+        assert product is not None
+        assert product["slug"] == CANONICAL_SLUG
+        assert needs_redirect is True
+        assert canonical == CANONICAL_SLUG
+
+    def test_objectid_url_redirects_to_canonical(self):
+        product, needs_redirect, canonical, _ = _resolve(str(PRODUCT_ID))
+        assert product is not None
+        assert product["slug"] == CANONICAL_SLUG
+        assert needs_redirect is True
+        assert canonical == CANONICAL_SLUG
+
+    def test_surrounding_whitespace_is_stripped(self):
+        product, needs_redirect, canonical, _ = _resolve(f"  {CANONICAL_SLUG}  ")
+        assert product is not None
+        assert needs_redirect is False
+        assert canonical == CANONICAL_SLUG
+
+    def test_return_all_matches_reports_the_single_deterministic_match(self):
+        product, _, _, all_matches = _resolve(CANONICAL_SLUG, return_all_matches=True)
+        assert product is not None
+        assert [p["slug"] for p in all_matches] == [CANONICAL_SLUG]
+
+    def test_second_product_exact_slug_resolves_to_itself(self):
+        product, needs_redirect, canonical, _ = _resolve(NOTEBOOKS_SLUG)
+        assert product is not None
+        assert product["slug"] == NOTEBOOKS_SLUG
+        assert needs_redirect is False
+        assert canonical == NOTEBOOKS_SLUG
+
+
+# ----------------------------- invalid slugs -----------------------------
+
+class TestInvalidSlugs:
+    def test_random_garbage_slug_returns_none(self):
+        product, needs_redirect, canonical, all_matches = _resolve(
+            "xyzzy-plugh-zorkmidconnect-42"
         )
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert "results" in data
-        assert "total" in data
-    
-    def test_seo_endpoint_with_partial_slug(self):
-        """/products/{slug}/seo should work with partial slug and include redirect info"""
-        response = requests.get(f"{BASE_URL}/api/products/motor/seo")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        assert "seoTitle" in data
-        assert "seoDescription" in data
-        # SEO endpoint should also indicate redirect for canonical URL
-        assert data.get("redirect", {}).get("needed") == True
-    
-    def test_product_detail_endpoint_with_partial_slug(self):
-        """/products/detail/{slug} should work with partial slug"""
-        response = requests.get(f"{BASE_URL}/api/products/detail/motor")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        
-        data = response.json()
-        # Product detail returns flat structure with slug at top level
-        assert "slug" in data, f"Expected 'slug' in response, got keys: {list(data.keys())[:10]}"
-        assert data["slug"] == TEST_PRODUCT_SLUG
-        assert "productName" in data
-        # Check redirect info
-        assert data.get("redirect", {}).get("needed") == True
+        assert product is None
+        assert needs_redirect is False
+        assert canonical is None
+        assert all_matches == []
+
+    def test_single_common_token_does_not_select_a_product(self):
+        # "vfd" is a token of the VFD product's name/slug but not a slug:
+        # the old resolver resolved it via token matching; it must now 404.
+        assert _resolve("vfd")[0] is None
+
+    def test_prefix_hit_on_another_product_token_does_not_resolve(self):
+        # "notebook" prefix-matches "Notebooks"; the old ANY-token fallback
+        # returned the unrelated Notebooks product. Regression for the exact
+        # reported defect (invalid URL -> HTTP 200 Notebooks page).
+        assert _resolve("notebook")[0] is None
+        assert _resolve("notebook-xyzzyq-plugh")[0] is None
+
+    def test_tokens_from_unrelated_products_do_not_merge(self):
+        assert _resolve("vfd-notebooks-supplier-india")[0] is None
+
+    def test_stop_word_only_slug_returns_none(self):
+        assert _resolve("buy-online-best-supplier-india")[0] is None
+
+    def test_city_suffixed_canonical_slug_returns_none(self):
+        # City tolerance was part of the removed fuzzy matching; canonical
+        # city pages live on /products/{slug}/in/{city}, not on mutated slugs.
+        assert _resolve(f"{CANONICAL_SLUG}-mumbai")[0] is None
+
+    def test_product_name_typed_as_slug_returns_none(self):
+        assert _resolve("vfd plc hmi control equipments")[0] is None
+        assert _resolve("notebooks office supplies")[0] is None
+
+    def test_unknown_slug_of_similar_shape_returns_none(self):
+        assert _resolve("vfd-vfd-plc-hmi-control-equipments-supplier-indy")[0] is None
+
+    def test_empty_identifier_returns_none(self):
+        assert _resolve("")[0] is None
 
 
-class TestSlugResolverEdgeCases:
-    """Edge cases and error handling for the slug resolver"""
-    
-    def test_nonexistent_slug_returns_404(self):
-        """Slug that doesn't match any product should return 404"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/xyznonexistent123")
-        
-        assert response.status_code == 404, f"Expected 404 for nonexistent slug, got {response.status_code}"
-    
-    def test_empty_after_stop_word_filtering(self):
-        """Slug with only stop words should return 404 (no meaningful tokens)"""
-        # 'buy-online-supplier-india' - all stop words, should have no meaningful tokens
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/buy-online-supplier-india")
-        
-        # This could be 404 if no tokens remain, or could match if there's a fallback
-        # The important thing is it doesn't crash
-        assert response.status_code in [200, 404], f"Expected 200 or 404, got {response.status_code}"
-    
-    def test_special_characters_handled(self):
-        """Special characters in URL should be handled gracefully"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/motor%20electric")
-        
-        # URL-encoded space should work
-        assert response.status_code in [200, 404]
-    
-    def test_case_insensitivity(self):
-        """Slug matching should be case-insensitive"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/MOTOR")
-        
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-        
-        data = response.json()
-        assert data["product"]["slug"] == TEST_PRODUCT_SLUG
+# ----------------------------- integration regression -----------------------------
 
-
-class TestCanonicalURLs:
-    """Tests for canonical URL generation"""
-    
-    def test_canonical_url_format(self):
-        """Canonical URL should follow the correct format"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/motor")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        canonical_url = data["redirect"]["canonicalUrl"]
-        
-        assert canonical_url.startswith("https://udyogconnect.in/products/")
-        assert canonical_url.endswith(TEST_PRODUCT_SLUG)
-    
-    def test_canonical_url_not_needed_for_exact_match(self):
-        """Canonical URL should still be present even when redirect not needed"""
-        response = requests.get(f"{BASE_URL}/api/enterprise/resolve/product/{TEST_PRODUCT_SLUG}")
-        
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["redirect"]["needed"] == False
-        assert data["redirect"]["canonicalUrl"] is not None
-
-
-# Run with: pytest /app/backend/tests/test_slug_resolver.py -v --tb=short --junitxml=/app/test_reports/pytest/slug_resolver_results.xml
+class TestUnresolvedInvalidSlugs:
+    def test_invalid_slug_never_returns_a_product_payload(self):
+        for bad in (
+            "vfd",
+            "notebook",
+            "buy-online-best-supplier-india",
+            "xyzzy-plugh-zorkmidconnect-42",
+            f"{CANONICAL_SLUG}-mumbai",
+        ):
+            product, _, _, _ = _resolve(bad)
+            assert product is None, f"invalid slug unexpectedly resolved: {bad}"

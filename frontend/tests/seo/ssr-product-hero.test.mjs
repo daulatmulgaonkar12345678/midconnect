@@ -76,7 +76,7 @@ async function withFetch(stub, fn) {
 test('fetchProductSeoPayload hits the public /seo endpoint with the ISR cache policy', async () => {
   let capturedUrl = '';
   let capturedInit = null;
-  const payload = await withFetch(
+  const result = await withFetch(
     (url, init) => {
       capturedUrl = String(url);
       capturedInit = init;
@@ -86,34 +86,45 @@ test('fetchProductSeoPayload hits the public /seo endpoint with the ISR cache po
   );
   assert.equal(capturedUrl, `http://127.0.0.1:3999/api/products/${SLUG}/seo`);
   assert.deepEqual(capturedInit.next, { revalidate: 3600 });
-  assert.equal(payload.productName, FIXTURE.productName);
-  assert.equal(payload.seoDescription, FIXTURE.seoDescription);
+  assert.equal(result.notFound, false);
+  assert.equal(result.payload.productName, FIXTURE.productName);
+  assert.equal(result.payload.seoDescription, FIXTURE.seoDescription);
 });
 
-test('legacy ObjectId slugs never hit the API and return null', async () => {
+test('legacy ObjectId slugs never hit the API and are not a definitive 404', async () => {
   let calls = 0;
-  const payload = await withFetch(
+  const result = await withFetch(
     () => { calls += 1; return { ok: true, json: async () => FIXTURE }; },
     () => fetchProductSeoPayload('6a44cd478b430643bfad1873'),
   );
   assert.equal(calls, 0);
-  assert.equal(payload, null);
+  assert.equal(result.payload, null);
+  assert.equal(result.notFound, false);
 });
 
-test('non-ok /seo responses degrade to null (fallback behavior preserved)', async () => {
-  const payload = await withFetch(
+test('definitive backend 404 flags the slug as not found (Batch 5: page renders the 404 boundary)', async () => {
+  const result = await withFetch(
     () => ({ ok: false, status: 404, json: async () => ({}) }),
     () => fetchProductSeoPayload(SLUG),
   );
-  assert.equal(payload, null);
+  assert.equal(result.payload, null);
+  assert.equal(result.notFound, true);
 });
 
-test('fetch failures degrade to null (page must never 500 on backend outage)', async () => {
-  const payload = await withFetch(
+test('non-404 failures stay transient (notFound false, fallback behavior preserved)', async () => {
+  const serverError = await withFetch(
+    () => ({ ok: false, status: 503, json: async () => ({}) }),
+    () => fetchProductSeoPayload(SLUG),
+  );
+  assert.equal(serverError.payload, null);
+  assert.equal(serverError.notFound, false);
+
+  const thrown = await withFetch(
     () => { throw new Error('backend down'); },
     () => fetchProductSeoPayload(SLUG),
   );
-  assert.equal(payload, null);
+  assert.equal(thrown.payload, null);
+  assert.equal(thrown.notFound, false);
 });
 
 // ---------- ProductSeoHero (initial-HTML content) ----------
