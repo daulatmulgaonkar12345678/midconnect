@@ -21,13 +21,6 @@ const SUPPORTED_INTENTS = ['price', 'suppliers'] as const;
 // Google recommends ≤ 50 000 URLs per sitemap. We self-cap much lower for crawl efficiency.
 const MAX_URLS = 45000;
 
-// Simple slugify for categories/products that don't have a stored slug.
-const slugify = (s: string): string =>
-  (s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-
 interface Category {
   _id: string;
   name: string;
@@ -127,21 +120,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ? categoriesData
     : categoriesData.categories || [];
 
-  // Use stored slug when available, otherwise slugify the name
-  // (prod DB currently stores slug=null for all categories — we still emit URLs).
-  categoryPages = categories
-    .filter((c) => c.name && c.name.length > 0)
-    .map((category) => {
-      const slug = (category.slug && category.slug.length > 0)
-        ? category.slug
-        : slugify(category.name);
-      return {
-        url: `${SITE_URL}/categories/${slug}`,
-        lastModified: toDateOnly(category.updatedAt),
-        changeFrequency: 'weekly' as const,
-        priority: 0.7,
-      };
-    });
+  // Batch 6 final remediation (owner correction 7): category sitemap entries
+  // use ONLY persisted canonical slugs. No fallback slug is generated from the
+  // category name here — a guessed name-slug would not resolve once
+  // /categories/{slug} answers 404 for unknown slugs.
+  const categoriesWithSlugs = categories.filter(
+    (category): category is Category & { slug: string } =>
+      typeof category.slug === 'string' && category.slug.length > 0
+  );
+  const categoriesMissingSlug = categories.length - categoriesWithSlugs.length;
+  if (categoriesMissingSlug > 0) {
+    console.warn(
+      `[sitemap] ${categoriesMissingSlug}/${categories.length} categories have no persisted slug and were omitted (run V20 backfill)`
+    );
+  }
+  categoryPages = categoriesWithSlugs.map((category) => ({
+    url: `${SITE_URL}/categories/${category.slug}`,
+    lastModified: toDateOnly(category.updatedAt),
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
 
   console.log(`[sitemap] Categories added: ${categoryPages.length}/${categories.length}`);
 

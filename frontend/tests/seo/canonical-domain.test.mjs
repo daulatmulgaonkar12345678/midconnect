@@ -41,6 +41,11 @@ const apiData = new Map([
     ],
   }],
   ['/api/categories', {
+    // Batch 6 contract: `slug` is the persisted canonical slug. 'Industrial
+    // Pumps' deliberately has NO persisted slug and must be OMITTED from the
+    // sitemap — the sitemap never generates a fallback slug from the name
+    // (a guessed name-slug would not resolve once /categories/{slug}
+    // answers 404 for unknown slugs).
     categories: [
       { name: 'Circuit Breakers', slug: 'circuit-breakers' },
       { name: 'Industrial Pumps' },
@@ -95,10 +100,25 @@ test('product URLs use the apex domain', async () => {
   assert.ok(all.includes(`${APEX}/products/abb-contactor`), `missing product URL in: ${all.join(', ')}`);
 });
 
-test('category URLs use the apex domain (stored slug and slugified fallback)', async () => {
+test('category URLs use the apex domain (persisted slug only; slugless omitted)', async () => {
   const all = await urls();
-  assert.ok(all.includes(`${APEX}/categories/circuit-breakers`));
-  assert.ok(all.includes(`${APEX}/categories/industrial-pumps`));
+  // Category WITH a persisted canonical slug is emitted on the apex domain.
+  assert.ok(
+    all.includes(`${APEX}/categories/circuit-breakers`),
+    `persisted-slug category missing: ${all.join(', ')}`,
+  );
+  // Category WITHOUT a persisted slug is omitted entirely: the sitemap no
+  // longer generates an independent fallback slug from the category name
+  // (Batch 6 correction 7).
+  assert.ok(
+    !all.includes(`${APEX}/categories/industrial-pumps`),
+    'name-based fallback slug must not be generated (Batch 6 correction 7)',
+  );
+  assert.deepEqual(
+    all.filter((u) => u.startsWith(`${APEX}/categories/`)),
+    [`${APEX}/categories/circuit-breakers`],
+    'only categories with a persisted canonical slug may appear in the sitemap',
+  );
 });
 
 test('city and intent URLs use the apex domain', async () => {

@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { getPublicCategories, getProducts } from '@/lib/api';
 import Link from 'next/link';
 import { Package, Users, ArrowRight, ArrowLeft, Shield, Star } from 'lucide-react';
@@ -37,6 +37,10 @@ function isObjectId(str: string): boolean {
 }
 
 // Generate static params using slugs
+// NOTE (owner revision 5): dynamicParams defaults to true and is NOT set to
+// false, so categories added after deployment (e.g. after the V20 slug
+// backfill) still resolve correctly at request time even though they were not
+// prerendered by this function.
 export async function generateStaticParams() {
   try {
     const categories = await getPublicCategories();
@@ -59,7 +63,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   
   try {
     const categories = await getPublicCategories();
-    const category = categories.find((c) => c.slug === slug || c._id === slug);
+    // Batch 6 final remediation (correction 6): match slugs case-insensitively.
+    const category = categories.find(
+      (c) => (c.slug || '').toLowerCase() === slug.toLowerCase() || c._id === slug
+    );
     
     if (category) {
       const title = `Buy ${category.name} Online | Verified Suppliers India | UdyogConnect`;
@@ -102,7 +109,11 @@ export default async function CategoryPage({ params }: Props) {
   let categories: PublicCategory[] = [];
   let category: PublicCategory | undefined;
   let products: ProductWithSellers[] = [];
-  let canonicalSlug = slug;
+  // Batch 6 final remediation (correction 4): Next.js redirect helpers abort
+  // rendering by THROWING a control-flow error. Redirect targets are only
+  // resolved inside try/catch below; the redirect itself is always invoked
+  // OUTSIDE any try/catch, so a catch block can never swallow it.
+  let redirectTarget: string | null = null;
 
   // Fetch public categories first (this works on all environments)
   try {
@@ -117,9 +128,9 @@ export default async function CategoryPage({ params }: Props) {
     // Try to find category by _id in the fetched categories list
     category = categories.find((c) => c._id === slug);
     
-    // If found and has a slug, redirect to canonical URL
+    // If found and has a slug, redirect to the canonical URL
     if (category?.slug && category.slug !== slug) {
-      redirect(`/categories/${category.slug}`);
+      redirectTarget = category.slug;
     }
     
     // If not found in categories list, try the enterprise resolver (if available)
@@ -130,12 +141,18 @@ export default async function CategoryPage({ params }: Props) {
           signal: AbortSignal.timeout(5000) // 5 second timeout
         });
         
+        // Batch 6 final remediation: validate the HTTP response BEFORE
+        // parsing JSON — a non-2xx body is not resolver data.
         if (resolverResponse.ok) {
           const resolverData = await resolverResponse.json();
           
-          // Redirect if needed
-          if (resolverData.redirect?.needed && resolverData.redirect?.canonicalSlug) {
-            redirect(`/categories/${resolverData.redirect.canonicalSlug}`);
+          // Batch 6 final review (correction 1): redirect ONLY when the
+          // canonical slug differs from the requested slug. When the resolver
+          // returns the category for the very slug in the URL, the page must
+          // RENDER it — setting redirectTarget as well would 308 the page to
+          // its own address forever (canonical self-redirect loop).
+          if (resolverData.category?.slug && resolverData.category.slug !== slug) {
+            redirectTarget = resolverData.category.slug;
           }
           
           if (resolverData.category) {
@@ -146,23 +163,27 @@ export default async function CategoryPage({ params }: Props) {
               productCount: 0,
               listingCount: 0
             };
-            canonicalSlug = resolverData.category.slug || slug;
           }
         }
       } catch (resolverError) {
-        // Re-throw redirect errors (they're special in Next.js)
-        if (resolverError instanceof Error && resolverError.message.includes('NEXT_REDIRECT')) {
-          throw resolverError;
-        }
         console.error('Resolver lookup failed (fallback to direct lookup):', resolverError);
       }
     }
-    
-    canonicalSlug = category?.slug || slug;
   } else {
-    // Find by slug (preferred method)
-    category = categories.find((c) => c.slug === slug);
-    canonicalSlug = slug;
+    // Batch 6 final remediation (correction 6): slugs are stored lowercase.
+    // Matching is normalized so any casing of the canonical slug resolves,
+    // and noncanonical casing is redirected to the canonical slug.
+    const normalizedSlug = slug.toLowerCase();
+    category = categories.find((c) => (c.slug || '').toLowerCase() === normalizedSlug);
+    if (category?.slug && category.slug !== slug) {
+      redirectTarget = category.slug;
+    }
+  }
+
+  // Corrections 4 & 6: canonicalizing redirects (308) to the persisted
+  // canonical slug — invoked strictly outside try/catch.
+  if (redirectTarget) {
+    permanentRedirect(`/categories/${redirectTarget}`);
   }
 
   // If category found, update with full data and get products
@@ -182,28 +203,10 @@ export default async function CategoryPage({ params }: Props) {
     }
   }
 
-  // If category not found
+  // Batch 6: an unknown category address is a genuine 404 (never a soft-404
+  // HTML page rendered with HTTP 200).
   if (!category) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-100">
-          <div className="bg-blue-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Package className="h-10 w-10 text-blue-500" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-3">Category Not Found</h3>
-          <p className="text-gray-500 mb-6 max-w-md mx-auto">
-            This category doesn't exist or has no active products.
-          </p>
-          <Link
-            href="/products"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Browse All Products
-          </Link>
-        </div>
-      </div>
-    );
+    notFound();
   }
 
   return (

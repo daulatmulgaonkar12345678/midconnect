@@ -20,9 +20,10 @@ stop-word tolerance and prefix matching are gone with it; legitimate
 legacy addresses are covered by the explicit legacySlugs/legacyIds
 mappings and ObjectId redirects instead.
 
-Note: resolve_category_slug below retains its own legacy token matching;
-it serves only the enterprise category resolver endpoint and is intentionally
-untouched by the Batch 5 product-slug fix.
+Note: Batch 6 (2026-11-20) also made resolve_category_slug deterministic:
+exact slug, case-normalized slug, ObjectId, and explicit legacySlugs/legacyIds
+only — the legacy ANY-token matching was removed for the same SEO integrity
+reason as products.
 """
 
 import re
@@ -203,22 +204,49 @@ class SlugResolverService:
         identifier: str
     ) -> Tuple[Optional[Dict], bool, Optional[str]]:
         """
-        Resolve category slug with token matching.
+        Resolve a category identifier deterministically (Batch 6, 2026-11-20).
+
+        Resolution order (explicit mappings only; no similarity or keyword
+        matching anywhere):
+        1. Exact slug match — no redirect needed
+        2. Case-normalized slug match — redirect to canonical
+        3. ObjectId match (legacy /category/{id} URLs) — redirect to canonical
+        4. Explicit legacy mappings: legacySlugs / legacyIds — redirect to
+           canonical slug (redirect target may be None while slugs are not
+           yet backfilled; callers must never emit a redirect with a null
+           target and must instead serve the page directly or 404)
+
+        Anything else is NOT a category address and resolves to None, so
+        callers return HTTP 404. The previous ANY-token regex matching over
+        slug/name was removed: it let arbitrary invalid slugs resolve to
+        unrelated categories (first candidate wins), the same defect Batch 5
+        fixed for products.
         """
         if not identifier:
             return None, False, None
         
         decoded = identifier.strip()
         
-        # Exact match
+        # === Exact slug match ===
         exact = await self.db.categories.find_one(
             {"slug": decoded},
             {"_id": 1, "name": 1, "slug": 1}
         )
         if exact:
             return exact, False, exact.get("slug")
-        
-        # ObjectId match
+
+        # === Case-normalized exact match ===
+        # Slugs are stored lowercase; accept e.g. "Cleaning-Products" and
+        # point it at the canonical slug (deterministic: slugs are unique).
+        if decoded != decoded.lower():
+            normalized = await self.db.categories.find_one(
+                {"slug": {"$regex": "^" + re.escape(decoded) + "$", "$options": "i"}},
+                {"_id": 1, "name": 1, "slug": 1}
+            )
+            if normalized:
+                return normalized, True, normalized.get("slug")
+
+        # === ObjectId match ===
         if len(decoded) == 24:
             try:
                 oid = ObjectId(decoded)
@@ -230,39 +258,24 @@ class SlugResolverService:
                     return oid_match, True, oid_match.get("slug")
             except Exception:
                 pass
-        
-        # Token-based matching for categories
-        search_tokens = self.tokenize_slug(decoded)
-        
-        if not search_tokens:
-            return None, False, None
-        
-        # Match any token
-        regex_conditions = []
-        for token in search_tokens:
-            pattern = f"(^|[-\\s]){re.escape(token)}"
-            regex_conditions.append({
-                "$or": [
-                    {"slug": {"$regex": pattern, "$options": "i"}},
-                    {"name": {"$regex": pattern, "$options": "i"}}
-                ]
-            })
-        
-        query = {"$or": regex_conditions} if regex_conditions else {}
-        
-        cursor = self.db.categories.find(
-            query,
+
+        # === Legacy slug/ID lookup ===
+        legacy = await self.db.categories.find_one(
+            {"$or": [
+                {"legacySlugs": decoded},
+                {"legacyIds": decoded}
+            ]},
             {"_id": 1, "name": 1, "slug": 1}
-        ).limit(10)
-        
-        candidates = await cursor.to_list(10)
-        
-        if not candidates:
-            return None, False, None
-        
-        # Simple scoring - first match is usually best for categories
-        best = candidates[0]
-        return best, True, best.get("slug")
+        )
+        if legacy:
+            return legacy, True, legacy.get("slug")
+
+        # === Batch 6 (2026-11-20): no fallback matching ===
+        # ANY-token regex matching over slug/name was removed: it resolved
+        # arbitrary invalid slugs to unrelated categories. A valid category
+        # address is exactly one of: canonical slug (case-insensitive),
+        # ObjectId, or an explicit legacySlugs / legacyIds mapping.
+        return None, False, None
 
 
 # Factory function

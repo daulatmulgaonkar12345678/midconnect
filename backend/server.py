@@ -21,6 +21,7 @@ import math
 import base64
 import re
 import asyncio
+from pymongo.errors import DuplicateKeyError
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -5523,6 +5524,7 @@ async def get_product_seo_data(product_identifier: str):
         "slug": product_slug,
         "categoryName": category_name,
         "categorySlug": category_slug,
+        "categoryId": str(category_id) if category_id else None,
         "seoTitle": seo_title,
         "seoDescription": seo_description,
         "seoContent": seo_content,
@@ -8149,6 +8151,45 @@ async def admin_list_categories(
     
     return {"categories": serialized_categories, "total": len(serialized_categories)}
 
+def _category_slugify(name: str) -> str:
+    """Batch 6: canonical category slug from name (same rules as V4/V20)."""
+    slug = (name or "").lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    return slug.strip("-")
+
+
+async def _generate_unique_category_slug(
+    base_name: str, doc_id: ObjectId, exclude_id: Optional[ObjectId] = None
+) -> str:
+    """Deterministic uniqueness: slugify(name), then -2, -3, ... on collision.
+
+    Batch 6 final remediation:
+    - Correction 1: the empty/ObjectId-like fallback is derived from the
+      category's own ObjectId ("category-<last 8 hex>"), not a random UUID,
+      so slug generation is deterministic and reproducible.
+    - Correction 2: `exclude_id` excludes the category being renamed from
+      the collision check, so a rename whose name slugifies to the
+      category's own current slug is not falsely treated as a collision.
+    - Never produces an ObjectId-like slug (24 hex chars): the "category-"
+      prefix guarantees it, so /categories/{slug} cannot be ambiguous with
+      legacy /categories/{ObjectId} addresses.
+    """
+    base = _category_slugify(base_name)
+    if not base or re.fullmatch(r"[0-9a-f]{24}", base):
+        base = f"category-{str(doc_id)[-8:]}"
+    candidate = base
+    counter = 2
+    collision_query = {"slug": candidate}
+    if exclude_id is not None:
+        collision_query["_id"] = {"$ne": exclude_id}
+    while await db.categories.find_one(collision_query, {"_id": 1}):
+        candidate = f"{base}-{counter}"
+        counter += 1
+        collision_query["slug"] = candidate
+    return candidate
+
+
 @api_router.post("/admin/categories")
 async def admin_create_category(
     category: AdminCategoryCreate,
@@ -8161,9 +8202,16 @@ async def admin_create_category(
         raise HTTPException(status_code=400, detail="Category with this name already exists")
     
     now = datetime.now(timezone.utc)
+    # Batch 6: assign a unique canonical slug at creation time so the category
+    # is immediately addressable at /categories/{slug}.
+    # Batch 6 final remediation: the document _id is generated first so the
+    # slug fallback (if ever needed) is deterministic and ID-based.
+    category_oid = ObjectId()
+    assigned_slug = await _generate_unique_category_slug(category.name, category_oid)
     category_doc = {
-        "_id": ObjectId(),
+        "_id": category_oid,
         "name": category.name,
+        "slug": assigned_slug,
         "description": category.description,
         "imageUrl": category.imageUrl,  # SSOT: camelCase - Firebase URL
         "displayOrder": category.displayOrder or 0,  # SSOT: camelCase
@@ -8173,7 +8221,21 @@ async def admin_create_category(
         "updatedAt": now
     }
     
-    await db.categories.insert_one(category_doc)
+    # Batch 6 final remediation (correction 3): a concurrent create can claim
+    # the same slug between the uniqueness probe and this write, and the
+    # unique sparse slug index then rejects the insert. Retry once with a
+    # freshly derived deterministic slug; answer 409 if that is taken too.
+    try:
+        await db.categories.insert_one(category_doc)
+    except DuplicateKeyError:
+        category_doc["_id"] = ObjectId()
+        category_doc["slug"] = await _generate_unique_category_slug(
+            category.name, category_doc["_id"]
+        )
+        try:
+            await db.categories.insert_one(category_doc)
+        except DuplicateKeyError:
+            raise HTTPException(status_code=409, detail="Category slug conflict; please retry")
     
     # Safe serialization
     serialized = serialize_mongo_doc(category_doc)
@@ -8193,16 +8255,30 @@ async def admin_update_category(
         raise HTTPException(status_code=404, detail="Category not found")
     
     update_data = {"updatedAt": datetime.now(timezone.utc)}  # SSOT: camelCase
+    renamed_from_slug = None  # Batch 6: set when a rename moves the canonical slug
     
-    if updates.name is not None:
+    if updates.name is not None and updates.name != existing.get("name"):
         # Check for duplicate name
         dup = await db.categories.find_one({
             "_id": {"$ne": ObjectId(category_id)},
-            "name": {"$regex": f"^{updates.name}$", "$options": "i"}
+            "name": {"$regex": f"^{re.escape(updates.name)}$", "$options": "i"}
         })
         if dup:
             raise HTTPException(status_code=400, detail="Category with this name already exists")
         update_data["name"] = updates.name
+        # Batch 6 (owner revision 4): rename preserves the old slug as an
+        # explicit legacy mapping and moves the canonical slug to the new
+        # name-derived slug, so old /categories/{old-slug} URLs redirect to
+        # the current canonical address (never orphaned).
+        renamed_from_slug = existing.get("slug")
+        # Batch 6 final remediation (correction 2): the collision check must
+        # exclude the category being renamed, so a rename whose name slugifies
+        # to the category's own current slug keeps that slug instead of
+        # spuriously moving to a "-2" variant.
+        new_slug = await _generate_unique_category_slug(
+            updates.name, ObjectId(category_id), exclude_id=ObjectId(category_id)
+        )
+        update_data["slug"] = new_slug
     
     if updates.description is not None:
         update_data["description"] = updates.description
@@ -8213,7 +8289,25 @@ async def admin_update_category(
     if updates.categoryType is not None:
         update_data["categoryType"] = updates.categoryType  # standard or raw_material
     
-    await db.categories.update_one({"_id": ObjectId(category_id)}, {"$set": update_data})
+    # Batch 6 final remediation (correction 3): the rename write can still hit
+    # the unique slug index if a concurrent request claimed the derived slug
+    # between the pre-check and this update — answer 409 instead of an
+    # unhandled 500. The legacy mapping is only recorded after the rename
+    # itself succeeded, so a failed rename leaves no partial legacySlugs state.
+    # Batch 6 final review (correction 5): the canonical slug change and the
+    # legacy slug preservation are ONE atomic MongoDB update — $set and
+    # $addToSet are composed into a single update document, applied together
+    # or not at all, so no partial rename state (new slug without its legacy
+    # mapping, or the reverse) can ever be observed. Conflict handling is
+    # unchanged: a concurrent write that claims the derived slug first still
+    # fails the unique slug index and answers 409.
+    rename_update = {"$set": update_data}
+    if renamed_from_slug and renamed_from_slug != update_data.get("slug"):
+        rename_update["$addToSet"] = {"legacySlugs": renamed_from_slug}
+    try:
+        await db.categories.update_one({"_id": ObjectId(category_id)}, rename_update)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Category slug conflict; please retry")
     
     updated = await db.categories.find_one({"_id": ObjectId(category_id)})
     serialized = serialize_mongo_doc(updated)
@@ -13059,7 +13153,7 @@ async def resolve_category_endpoint(identifier: str):
     decoded = unquote(identifier)
     resolver = create_slug_resolver(db)
     
-    # Use the token-based resolver for categories
+    # Use the deterministic resolver for categories (Batch 6)
     category, needs_redirect, canonical_slug = await resolver.resolve_category_slug(decoded)
     
     if not category:
@@ -13070,13 +13164,17 @@ async def resolve_category_endpoint(identifier: str):
                 category = await db.categories.find_one({"_id": oid})
                 if category:
                     canonical_slug = category.get("slug")
-                    needs_redirect = decoded != canonical_slug if canonical_slug else False
+                    needs_redirect = bool(canonical_slug) and decoded != canonical_slug
             except Exception:
                 pass
     
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     
+    # Batch 6: never advertise a redirect to a null target — a category
+    # without a backfilled slug is served as-is (no ambiguous redirect).
+    if not canonical_slug:
+        needs_redirect = False
     return {
         "category": {
             "_id": str(category["_id"]),
