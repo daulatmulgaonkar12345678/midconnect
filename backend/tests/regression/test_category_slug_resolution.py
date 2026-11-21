@@ -783,7 +783,7 @@ def test_v20_apply_conflicts_reported_and_index_deferred(tmp_path, monkeypatch):
             client.close()
 
     rc, indexes, doc = _run(go())
-    assert rc == 0
+    assert rc == 3, "skipped conflicts + deferred index are INCOMPLETE (exit 3), not success"
     assert doc["slug"] is None, "conflicting document must be left untouched by this run"
     assert v20.INDEX_NAME not in indexes, (
         "index creation must be DEFERRED while documents still hold null slugs"
@@ -1003,7 +1003,7 @@ def test_v20_rollback_write_is_conditional_on_assigned_slug_at_write_time(tmp_pa
             client.close()
 
     rc, raced, ok = _run(go())
-    assert rc == 0
+    assert rc == 3, "a skipped conflict makes the rollback INCOMPLETE (exit 3), not success"
     assert raced["slug"] == f"{tag}-raced", (
         "the concurrent write between the read and the rollback write must win"
     )

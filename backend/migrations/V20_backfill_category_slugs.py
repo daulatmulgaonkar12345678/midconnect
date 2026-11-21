@@ -95,6 +95,7 @@ SLUG RULES:
 RUN (dry-run first, always):
     python migrations/V20_backfill_category_slugs.py
     python migrations/V20_backfill_category_slugs.py --apply
+    python migrations/V20_backfill_category_slugs.py --verify   (read-only post-migration check)
 """
 
 import asyncio
@@ -188,6 +189,15 @@ def generate_unique_slug(base_name: str, taken: set, doc_id: str) -> str:
     return final
 
 
+# Exit codes: 0 = complete (or dry-run report), 2 = blocked/fail-closed,
+# 3 = INCOMPLETE: the run stopped short of a complete migration (deferred
+# index, skipped conflicts, partial state). Incomplete runs never report
+# success to the operator or to CI.
+EXIT_OK = 0
+EXIT_BLOCKED = 2
+EXIT_INCOMPLETE = 3
+
+
 class MigrationBlocked(RuntimeError):
     """Fail-closed precondition failure (correction 9): the migration refuses
     to touch data when the environment is not exactly as expected."""
@@ -201,7 +211,9 @@ class InvalidExistingSlugs(MigrationBlocked):
 # Finding 3: options reported by index_information() that do NOT change what
 # the index covers or does (server bookkeeping); everything else must be
 # explicitly understood or the verification fails closed.
-_BENIGN_INDEX_OPTIONS = frozenset({"key", "v", "background", "ns"})
+# 'name' is the index's own label. The live server did not report it in the
+# probe, but some drivers/servers may; it changes neither coverage nor behaviour.
+_BENIGN_INDEX_OPTIONS = frozenset({"key", "v", "background", "ns", "name"})
 # Finding 3: options that WOULD change the index's semantics. The V20
 # contract is an unconditional unique sparse single-key index — none of
 # these may be present on idx_categories_slug_unique.
@@ -633,7 +645,8 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
                   f"generated); creating the unique index {INDEX_NAME} over "
                   "duplicate nulls would fail with E11000. Re-run V20 once "
                   "the writes settle; the index is created on a clean pass.")
-            return 0
+            print("INCOMPLETE: index not created; exit 3 (success NOT claimed).")
+            return EXIT_INCOMPLETE
         backup_path = write_and_validate_backup([], index_status)
         print(f"Backup written and validated: {backup_path} "
               "(0 document records; index provenance recorded)")
@@ -687,7 +700,7 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
             print(f"PARTIAL STATE: backup {backup_path!r}; {stats['updated']} "
                   f"slug(s) backfilled; {len(stats['conflicts'])} conflict(s); "
                   f"index {INDEX_NAME!r} NOT created; success NOT claimed.")
-            return 0
+            return EXIT_INCOMPLETE
         created = await create_slug_index_guarded(
             db, backup_path, backfilled=stats["updated"],
             conflicts=len(stats["conflicts"]),
@@ -695,7 +708,12 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
         print(f"Index check ({INDEX_NAME}): {created}")
 
     print(f"Rollback with: python migrations/{os.path.basename(__file__)} --rollback --backup {backup_path}")
-    return 0
+    if stats["conflicts"]:
+        # Skipped conflicts mean planned categories did not receive their slug:
+        # the migration is incomplete even though the index may now exist.
+        print(f"INCOMPLETE: {len(stats['conflicts'])} planned slug(s) not applied; exit 3.")
+        return EXIT_INCOMPLETE
+    return EXIT_OK
 
 
 def _load_and_validate_rollback_backup(backup_path: str):
@@ -1033,17 +1051,135 @@ async def do_rollback(db, backup_path: str) -> int:
         print(f"  [RESTORED] {doc.get('name')!r} {label}")
     print(f"Rollback complete: {restored} restored, {conflicts} conflict(s) skipped "
           "safely; legacySlugs/legacyIds preserved.")
-    return 0
+    if conflicts:
+        print(f"INCOMPLETE: {conflicts} document(s) NOT restored; exit 3.")
+        return EXIT_INCOMPLETE
+    return EXIT_OK
+
+
+POST_VERIFY_EXPECTED_COUNT = len(EXPECTED_SLUGS)  # 9 categories expected
+
+
+def evaluate_post_migration(rows, index_info) -> dict:
+    """Post-migration verification logic. Pure: no database access.
+
+    rows: category documents with _id, name and the stored slug field
+    (None when missing). index_info: index_information() of the categories
+    collection, or None. Every check is evaluated and reported; data problems
+    are returned as failures, never raised. report['passed'] is True only when
+    every check holds.
+    """
+    failures = []
+    mapping = []
+    rows = list(rows)
+    if len(rows) != POST_VERIFY_EXPECTED_COUNT:
+        failures.append(
+            f"category count is {len(rows)}; expected {POST_VERIFY_EXPECTED_COUNT}"
+        )
+    slug_owners = {}
+    for row in rows:
+        cid = str(row.get("_id"))
+        name = row.get("name")
+        slug = row.get("slug")
+        mapping.append({"_id": cid, "name": name, "slug": slug})
+        if not isinstance(slug, str) or slug.strip() == "":
+            failures.append(f"{cid} ({name!r}): slug missing, null or blank ({slug!r})")
+            continue
+        if not SLUG_FORMAT_RE.fullmatch(slug) or is_objectid_like(slug):
+            failures.append(
+                f"{cid} ({name!r}): slug {slug!r} is not a valid URL slug "
+                "(lowercase a-z/0-9 words joined by single hyphens, not ObjectId-like)"
+            )
+            continue
+        slug_owners.setdefault(slug, []).append(cid)
+    for slug, owners in sorted(slug_owners.items()):
+        if len(owners) > 1:
+            failures.append(f"slug {slug!r} is not unique (held by {', '.join(owners)})")
+    found = set(slug_owners)
+    expected_found = sorted(EXPECTED_SLUGS & found)
+    expected_missing = sorted(EXPECTED_SLUGS - found)
+    unexpected = sorted(found - EXPECTED_SLUGS)
+    for slug in expected_missing:
+        failures.append(f"expected category slug {slug!r} is not held by any category")
+    for slug in unexpected:
+        failures.append(f"slug {slug!r} is not one of the {POST_VERIFY_EXPECTED_COUNT} expected categories")
+    if not index_info or INDEX_NAME not in index_info:
+        failures.append(f"unique sparse index {INDEX_NAME!r} is missing")
+        index_status = "missing"
+    else:
+        problems = describe_index_incompatibilities(index_info[INDEX_NAME])
+        for problem in problems:
+            failures.append(f"index {INDEX_NAME!r}: {problem}")
+        index_status = "compatible" if not problems else "incompatible"
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "count": len(rows),
+        "mapping": mapping,
+        "expected_found": expected_found,
+        "expected_missing": expected_missing,
+        "unexpected": unexpected,
+        "index_status": index_status,
+    }
+
+
+async def verify_post_migration(db) -> dict:
+    """Read-only: load every category and the index definition, then evaluate."""
+    rows = [
+        doc async for doc in
+        db.categories.find({}, {"_id": 1, "name": 1, "slug": 1}).sort("_id", 1)
+    ]
+    index_info = await db.categories.index_information()
+    return evaluate_post_migration(rows, index_info)
+
+
+def report_post_migration(report) -> None:
+    print("\nPOST-MIGRATION VERIFICATION (read-only, no writes)")
+    print(f"  categories: {report['count']} (expected {POST_VERIFY_EXPECTED_COUNT})")
+    print(f"  unique sparse index {INDEX_NAME!r}: {report['index_status']}")
+    print(f"  expected categories accounted for: "
+          f"{len(report['expected_found'])}/{POST_VERIFY_EXPECTED_COUNT}")
+    print("  slug mapping report:")
+    for item in sorted(report["mapping"], key=lambda m: str(m["name"])):
+        print(f"    {item['name']!r} -> {item['slug']!r}  (_id={item['_id']})")
+    for failure in report["failures"]:
+        print(f"  [FAIL] {failure}")
+    print("RESULT: PASS" if report["passed"] else "RESULT: FAIL")
+
+
+async def run_verify() -> int:
+    mongo_url = os.getenv("MONGO_URL")
+    db_name = os.getenv("DB_NAME", "midconnect").strip()
+    if not mongo_url:
+        print("MONGO_URL not set — aborting (no DB touched).")
+        return 2
+    client = AsyncIOMotorClient(mongo_url.strip())
+    try:
+        report = await verify_post_migration(client[db_name])
+    finally:
+        client.close()
+    report_post_migration(report)
+    return 0 if report["passed"] else 2
 
 
 def main():
     apply = "--apply" in sys.argv
+    verify = "--verify" in sys.argv
     rollback_path = None
     if "--rollback" in sys.argv:
         idx = sys.argv.index("--backup") if "--backup" in sys.argv else -1
         rollback_path = sys.argv[idx + 1] if idx != -1 and idx + 1 < len(sys.argv) else None
         if not rollback_path:
             print("--rollback requires --backup <path>")
+            return 2
+    if verify:
+        if apply or rollback_path:
+            print("--verify is read-only and cannot be combined with --apply or --rollback")
+            return 2
+        try:
+            return asyncio.run(run_verify())
+        except MigrationBlocked as exc:
+            print(f"\nMIGRATION V20 VERIFY BLOCKED (exit 2): {exc}")
             return 2
     try:
         return asyncio.run(run_migration(apply=apply, rollback_path=rollback_path))
