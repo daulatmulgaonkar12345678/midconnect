@@ -109,7 +109,7 @@ from uuid import uuid4
 from bson import ObjectId
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 load_dotenv()
 
@@ -273,6 +273,28 @@ def describe_index_incompatibilities(info: dict) -> list:
     return problems
 
 
+def find_slug_index(index_info: dict):
+    """Find exactly one slug-related index, independent of its name."""
+    candidates = []
+    for name, info in (index_info or {}).items():
+        key = [tuple(kv) for kv in (info.get("key") or [])]
+        if name == INDEX_NAME or any(field == "slug" for field, _ in key):
+            candidates.append((name, info))
+
+    if not candidates:
+        return None, None, []
+
+    if len(candidates) > 1:
+        names = sorted(name for name, _ in candidates)
+        return None, None, [
+            f"multiple slug-related indexes found: {names!r}; "
+            "cannot safely choose one"
+        ]
+
+    name, info = candidates[0]
+    return name, info, describe_index_incompatibilities(info)
+
+
 async def verify_slug_index(db, create: bool) -> dict:
     """Verify idx_categories_slug_unique is EXACTLY: key=[('slug', 1)],
     unique=True, sparse=True — with NO extra option that changes index
@@ -288,29 +310,48 @@ async def verify_slug_index(db, create: bool) -> dict:
     runs — even when the migration plan is empty.
     """
     indexes = await db.categories.index_information()
-    info = indexes.get(INDEX_NAME)
-    if info:
-        problems = describe_index_incompatibilities(info)
+    actual_name, info, problems = find_slug_index(indexes)
+
+    if actual_name is not None:
         if problems:
             raise MigrationBlocked(
-                f"FAIL-CLOSED (finding 3): existing index {INDEX_NAME!r} is "
-                "incompatible with the V20 contract (expected exactly "
+                f"FAIL-CLOSED (finding 3): existing slug index {actual_name!r} "
+                "is incompatible with the V20 contract (expected exactly "
                 "key=[('slug', 1)], unique=True, sparse=True, no semantic "
                 "extras). Detected: " + "; ".join(problems) + ". No data was "
-                "written; the index was NOT dropped or replaced automatically "
-                "— inspect and resolve it manually before running V20."
+                "written; the index was NOT dropped or replaced automatically."
             )
         key = [tuple(kv) for kv in (info.get("key") or [])]
-        return {"exists": True, "key": key,
-                "unique": bool(info.get("unique")),
-                "sparse": bool(info.get("sparse")),
-                "action": "verified"}
+        return {
+            "exists": True,
+            "key": key,
+            "unique": bool(info.get("unique")),
+            "sparse": bool(info.get("sparse")),
+            "actual_name": actual_name,
+            "action": "verified",
+        }
+
+    if problems:
+        raise MigrationBlocked(
+            "FAIL-CLOSED: " + "; ".join(problems)
+            + ". No data was written."
+        )
+
     if create:
         await db.categories.create_index(
             [("slug", 1)], unique=True, sparse=True, name=INDEX_NAME
         )
-        return {"exists": False, "action": "created (apply mode)"}
-    return {"exists": False, "action": "missing (dry-run: --apply would create it)"}
+        return {
+            "exists": False,
+            "actual_name": INDEX_NAME,
+            "action": "created (apply mode)",
+        }
+
+    return {
+        "exists": False,
+        "actual_name": None,
+        "action": "missing (dry-run: --apply would create it)",
+    }
 
 
 async def build_slug_plan(db):
@@ -416,17 +457,30 @@ def write_and_validate_backup(backup_records, index_status) -> str:
         "_meta": {
             "kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
             "index_name": INDEX_NAME,
+            "index_actual_name": (
+                index_status.get("actual_name")
+                or (INDEX_NAME if index_status.get("exists") else None)
+            ),
             "index_existed_before_v20": bool(index_status.get("exists")),
             "index_created_by_v20": not bool(index_status.get("exists")),
             "created_at_utc": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
         }
     }
     payload = [meta] + list(backup_records)
-    backup_path, fd = _open_backup_file_exclusively()
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
-    with open(backup_path, encoding="utf-8") as f:
-        validated = json.load(f)
+    # Exit-code contract: a backup that cannot be created or read back is a
+    # precondition failure BEFORE any database write (exit 2). I/O and JSON
+    # errors are therefore converted to MigrationBlocked, never a traceback.
+    try:
+        backup_path, fd = _open_backup_file_exclusively()
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+        with open(backup_path, encoding="utf-8") as f:
+            validated = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise MigrationBlocked(
+            f"Backup creation/validation failed ({exc}). No database write was "
+            "made; any partially written backup file is kept, never deleted."
+        )
     if validated != payload:
         raise MigrationBlocked(
             "Backup validation failed: the written backup does not read back "
@@ -608,8 +662,12 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
                 "proceed because the intended unique-slug integrity cannot be "
                 "established."
             )
-        print("Dry-run note: --apply would fail closed on these duplicates "
-              "(correction 6); nothing was written.")
+        # Exit-code contract: a duplicate pre-existing slug is exit 2 in every
+        # mode. Dry-run still writes nothing, but reports the failure honestly
+        # rather than returning success for a migration --apply would refuse.
+        print("DRY-RUN BLOCKED (exit 2): --apply would fail closed on these "
+              "duplicates (correction 6); nothing was written.")
+        return 2
 
     if not plan:
         # Finding 2: an EMPTY migration plan does NOT skip index validation.
@@ -674,7 +732,14 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
           f"({len(backup_records)} exact slug states)")
 
     # ---- 2. Conditional writes with conflict detection (blocker 3) ----
-    stats = await apply_slug_writes(db, plan)
+    try:
+        stats = await apply_slug_writes(db, plan)
+    except Exception as exc:
+        # The backup exists, so the state is partial, not blocked: exit 3.
+        print(f"\nINCOMPLETE (exit 3): backfill write failed part-way ({exc}). "
+              f"Backup {backup_path!r} holds the exact pre-V20 state. Rerun V20 "
+              "(idempotent) or roll back with --rollback.")
+        return EXIT_INCOMPLETE
     print(f"\nApplied: {stats['updated']} categories updated.")
     for conflict in stats["conflicts"]:
         print(f"  [CONFLICT] _id={conflict['_id']} name={conflict.get('name')!r}: "
@@ -701,10 +766,16 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
                   f"slug(s) backfilled; {len(stats['conflicts'])} conflict(s); "
                   f"index {INDEX_NAME!r} NOT created; success NOT claimed.")
             return EXIT_INCOMPLETE
-        created = await create_slug_index_guarded(
-            db, backup_path, backfilled=stats["updated"],
-            conflicts=len(stats["conflicts"]),
-        )
+        # Exit-code contract: slugs were already written by this point, so an
+        # index failure is an INCOMPLETE migration (exit 3), not a block.
+        try:
+            created = await create_slug_index_guarded(
+                db, backup_path, backfilled=stats["updated"],
+                conflicts=len(stats["conflicts"]),
+            )
+        except MigrationBlocked as exc:
+            print(f"\nINCOMPLETE (exit 3): index creation failed after backfill: {exc}")
+            return EXIT_INCOMPLETE
         print(f"Index check ({INDEX_NAME}): {created}")
 
     print(f"Rollback with: python migrations/{os.path.basename(__file__)} --rollback --backup {backup_path}")
@@ -786,6 +857,12 @@ def _load_and_validate_rollback_backup(backup_path: str):
                 f"FAIL-CLOSED (finding 1): backup record {_id} has a "
                 f"non-string, non-null slug {rec_slug!r}. Nothing was mutated."
             )
+        if rec.get("slug_field_present") is False and rec_slug is not None:
+            raise MigrationBlocked(
+                f"FAIL-CLOSED (rollback review): backup record {_id} says the "
+                f"slug field was absent but records slug {rec_slug!r}; the "
+                "record is internally inconsistent. Nothing was mutated."
+            )
         if _id in seen_ids:
             raise MigrationBlocked(
                 f"FAIL-CLOSED (finding 1): duplicate backup record for _id "
@@ -806,6 +883,14 @@ def _load_and_validate_rollback_backup(backup_path: str):
                 f"{meta.get('index_name')!r} does not belong to "
                 f"{INDEX_NAME!r}. Nothing was mutated."
             )
+        actual_name = meta.get("index_actual_name")
+        if actual_name is not None and (
+            not isinstance(actual_name, str) or not actual_name.strip()
+        ):
+            raise MigrationBlocked(
+                "FAIL-CLOSED: backup _meta.index_actual_name must be a "
+                "non-empty string or null. Nothing was mutated."
+            )
         created = meta.get("index_created_by_v20")
         existed = meta.get("index_existed_before_v20")
         if not isinstance(created, bool) or not isinstance(existed, bool):
@@ -813,13 +898,27 @@ def _load_and_validate_rollback_backup(backup_path: str):
                 "FAIL-CLOSED (finding 1): backup _meta index provenance flags "
                 "must both be booleans. Nothing was mutated."
             )
-        if created and existed:
+        if created == existed:
             raise MigrationBlocked(
-                "FAIL-CLOSED (finding 1): backup _meta claims the index both "
-                "existed before V20 and was created by V20 — inconsistent "
-                "provenance. Nothing was mutated."
+                "FAIL-CLOSED (finding 1): backup _meta must claim exactly "
+                "one of index_created_by_v20 and index_existed_before_v20. "
+                "Nothing was mutated."
+            )
+        if created and actual_name not in (None, INDEX_NAME):
+            raise MigrationBlocked(
+                "FAIL-CLOSED: a V20-created index must use the reserved "
+                f"name {INDEX_NAME!r}, not {actual_name!r}. Nothing was mutated."
             )
     return meta, docs
+
+
+def _already_restored(doc, current) -> bool:
+    """Rollback rerun safety: True when the live document is already in its
+    exact pre-V20 state (so a previous rollback run restored it). Such a
+    document is a no-op, not a conflict."""
+    if doc.get("slug_field_present"):
+        return "slug" in current and current["slug"] == doc.get("slug")
+    return "slug" not in current
 
 
 async def do_rollback(db, backup_path: str) -> int:
@@ -888,10 +987,13 @@ async def do_rollback(db, backup_path: str) -> int:
             continue
         assigned_slug = doc["assigned_slug"]
         current_slug = current.get("slug")
-        if current_slug != assigned_slug:
-            preflight_conflicts.append((doc, current_slug))
+        if current_slug == assigned_slug:
+            planned.append((doc, cat_id, "RESTORE"))
             continue
-        planned.append((doc, cat_id, "RESTORE"))
+        if _already_restored(doc, current):
+            planned.append((doc, cat_id, "ALREADY"))
+            continue
+        preflight_conflicts.append((doc, current_slug))
     if preflight_conflicts:
         for doc, current_slug in preflight_conflicts:
             print(f"  [CONFLICT] {doc.get('name')!r} ({doc['_id']}): current slug "
@@ -907,13 +1009,29 @@ async def do_rollback(db, backup_path: str) -> int:
 
     # ---- Index plan from the recorded provenance (read-only) ----
     index_info = await db.categories.index_information()
-    index_exists = INDEX_NAME in index_info
+    # V2 backups created before index_actual_name existed fall back to the
+    # historical INDEX_NAME. New backups preserve the exact MongoDB name.
+    actual_index_name = (
+        (meta.get("index_actual_name") if meta else None) or INDEX_NAME
+    )
+    index_exists = actual_index_name in index_info
     plan_drop_index = False
+
+    if meta and meta.get("index_existed_before_v20") and not index_exists:
+        print(
+            f"  FAIL-CLOSED: pre-existing index {actual_index_name!r} "
+            "recorded in the backup is missing. Refusing to restore documents "
+            "without its original unique-index protection; nothing was modified."
+        )
+        return 2
+
     if index_exists and v20_created:
         # Finding 3 (reused): drop the index only if it still matches EXACTLY
         # the definition V20 creates — a differently-shaped index under the
         # V20 name is not V20's index and is never dropped automatically.
-        problems = describe_index_incompatibilities(index_info.get(INDEX_NAME) or {})
+        problems = describe_index_incompatibilities(
+            index_info.get(actual_index_name) or {}
+        )
         if problems:
             print(f"  FAIL-CLOSED (finding 1): the index {INDEX_NAME} is "
                   "recorded as created by V20 but no longer matches the "
@@ -933,10 +1051,17 @@ async def do_rollback(db, backup_path: str) -> int:
             if action == "RESTORE"
             and d.get("slug_field_present") and not (d.get("slug") or "")
         ]
+        # Documents already in their pre-V20 state that hold an explicit
+        # null/empty slug also occupy the unique sparse index.
+        already_empty = sum(
+            1 for (d, _cid, action) in planned
+            if action == "ALREADY"
+            and d.get("slug_field_present") and not (d.get("slug") or "")
+        )
         other_empty = await db.categories.count_documents(
             {"slug": {"$in": [None, ""]}, "_id": {"$nin": planned_ids}}
         )
-        if len(null_restores) + other_empty > 1:
+        if len(null_restores) + already_empty + other_empty > 1:
             print(
                 f"  FAIL-CLOSED: {INDEX_NAME} existed before V20 and is NOT "
                 f"dropped, but this rollback would restore {len(null_restores)} "
@@ -949,7 +1074,7 @@ async def do_rollback(db, backup_path: str) -> int:
             return 2
         restored_values = {}
         for (d, _cid, action) in planned:
-            if (action == "RESTORE" and d.get("slug_field_present")
+            if (action in ("RESTORE", "ALREADY") and d.get("slug_field_present")
                     and isinstance(d.get("slug"), str) and d["slug"]):
                 restored_values.setdefault(d["slug"], []).append(str(d["_id"]))
         dupe_problems = []
@@ -989,21 +1114,31 @@ async def do_rollback(db, backup_path: str) -> int:
         # preflight above validated every document state and conflict
         # (finding 1: no mutation precedes a validated plan).
         try:
-            await db.categories.drop_index(INDEX_NAME)
+            await db.categories.drop_index(actual_index_name)
         except Exception as exc:
             print(f"  FAIL-CLOSED: the index {INDEX_NAME} was created by V20 but "
                   f"could not be dropped ({exc}). No document was modified; "
                   "drop it manually and re-run the rollback.")
             return 2
-        print(f"  [INDEX] dropped {INDEX_NAME} (created by V20; the pre-V20 "
+        print(f"  [INDEX] dropped {actual_index_name} (created by V20; the pre-V20 "
               "state had no index)")
 
     restored = 0
+    already = 0
     conflicts = 0
     for doc, cat_id, action in planned:
         if action == "MISSING":
-            print(f"  [MISS] {doc['_id']} not found — skipped (a concurrent "
-                  "deletion is never resurrected)")
+            # A deleted category cannot be restored: it is NOT restored, so the
+            # rollback is reported as incomplete (never claimed as full).
+            print(f"  [MISS] {doc['_id']} not found — NOT restored (deleted "
+                  "after V20; never resurrected)")
+            conflicts += 1
+            continue
+        if action == "ALREADY":
+            # Rerun safety: a previous rollback run already restored this
+            # document; nothing is written.
+            already += 1
+            print(f"  [ALREADY] {doc.get('name')!r} already in its pre-V20 state — no write")
             continue
         assigned_slug = doc["assigned_slug"]
         had_field = bool(doc.get("slug_field_present"))
@@ -1035,6 +1170,13 @@ async def do_rollback(db, backup_path: str) -> int:
                   "already holds the original slug) — skipped untouched")
             conflicts += 1
             continue
+        except PyMongoError as exc:
+            # Partial-rollback reporting: a failed write leaves this document
+            # unrestored (never overwritten) and the run reports exit 3.
+            print(f"  [CONFLICT] {doc.get('name')!r} ({doc['_id']}): restore write "
+                  f"failed ({exc}) — not restored, nothing overwritten")
+            conflicts += 1
+            continue
         if res.matched_count != 1:
             current_again = await db.categories.find_one(
                 {"_id": cat_id}, {"slug": 1}
@@ -1049,15 +1191,20 @@ async def do_rollback(db, backup_path: str) -> int:
             print(f"  [NOTE] {doc.get('name')!r}: already in the exact pre-V20 "
                   "state (no-op write)")
         print(f"  [RESTORED] {doc.get('name')!r} {label}")
-    print(f"Rollback complete: {restored} restored, {conflicts} conflict(s) skipped "
-          "safely; legacySlugs/legacyIds preserved.")
+    print(f"Rollback pass: {restored} restored, {already} already in pre-V20 "
+          f"state, {conflicts} not restored (conflict or deleted); "
+          "legacySlugs/legacyIds preserved.")
     if conflicts:
-        print(f"INCOMPLETE: {conflicts} document(s) NOT restored; exit 3.")
+        print(f"INCOMPLETE: {conflicts} document(s) NOT restored; exit 3. "
+              "Rerunning rollback with the same backup is safe: restored "
+              "documents are skipped.")
         return EXIT_INCOMPLETE
     return EXIT_OK
 
 
-POST_VERIFY_EXPECTED_COUNT = len(EXPECTED_SLUGS)  # 9 categories expected
+# The collection is verified in full: its size is NOT compared against a fixed
+# number. The nine EXPECTED_SLUGS are mandatory public slugs; any other category
+# is accepted when its slug is valid and unique.
 
 
 def evaluate_post_migration(rows, index_info) -> dict:
@@ -1072,49 +1219,59 @@ def evaluate_post_migration(rows, index_info) -> dict:
     failures = []
     mapping = []
     rows = list(rows)
-    if len(rows) != POST_VERIFY_EXPECTED_COUNT:
-        failures.append(
-            f"category count is {len(rows)}; expected {POST_VERIFY_EXPECTED_COUNT}"
-        )
     slug_owners = {}
+    invalid_count = 0
     for row in rows:
         cid = str(row.get("_id"))
         name = row.get("name")
         slug = row.get("slug")
         mapping.append({"_id": cid, "name": name, "slug": slug})
         if not isinstance(slug, str) or slug.strip() == "":
+            invalid_count += 1
             failures.append(f"{cid} ({name!r}): slug missing, null or blank ({slug!r})")
             continue
         if not SLUG_FORMAT_RE.fullmatch(slug) or is_objectid_like(slug):
+            invalid_count += 1
             failures.append(
                 f"{cid} ({name!r}): slug {slug!r} is not a valid URL slug "
                 "(lowercase a-z/0-9 words joined by single hyphens, not ObjectId-like)"
             )
             continue
         slug_owners.setdefault(slug, []).append(cid)
+    duplicate_slugs = []
     for slug, owners in sorted(slug_owners.items()):
         if len(owners) > 1:
+            duplicate_slugs.append(slug)
             failures.append(f"slug {slug!r} is not unique (held by {', '.join(owners)})")
     found = set(slug_owners)
     expected_found = sorted(EXPECTED_SLUGS & found)
     expected_missing = sorted(EXPECTED_SLUGS - found)
+    # Additional valid unique slugs are accepted; they are reported, not failed.
     unexpected = sorted(found - EXPECTED_SLUGS)
     for slug in expected_missing:
-        failures.append(f"expected category slug {slug!r} is not held by any category")
-    for slug in unexpected:
-        failures.append(f"slug {slug!r} is not one of the {POST_VERIFY_EXPECTED_COUNT} expected categories")
-    if not index_info or INDEX_NAME not in index_info:
-        failures.append(f"unique sparse index {INDEX_NAME!r} is missing")
+        failures.append(f"required public category slug {slug!r} is not held by any category")
+    valid_count = len(rows) - invalid_count
+    actual_name, actual_info, index_problems = find_slug_index(index_info)
+    if actual_name is None and not index_problems:
+        failures.append(
+            f"unique sparse slug index is missing (expected {INDEX_NAME!r} "
+            "or another index on the slug key)"
+        )
         index_status = "missing"
+    elif index_problems:
+        for problem in index_problems:
+            failures.append(f"slug index: {problem}")
+        index_status = "incompatible"
     else:
-        problems = describe_index_incompatibilities(index_info[INDEX_NAME])
-        for problem in problems:
-            failures.append(f"index {INDEX_NAME!r}: {problem}")
-        index_status = "compatible" if not problems else "incompatible"
+        index_status = "compatible"
     return {
         "passed": not failures,
         "failures": failures,
         "count": len(rows),
+        "valid_count": valid_count,
+        "unique_count": len(found),
+        "duplicate_count": len(duplicate_slugs),
+        "invalid_count": invalid_count,
         "mapping": mapping,
         "expected_found": expected_found,
         "expected_missing": expected_missing,
@@ -1135,10 +1292,15 @@ async def verify_post_migration(db) -> dict:
 
 def report_post_migration(report) -> None:
     print("\nPOST-MIGRATION VERIFICATION (read-only, no writes)")
-    print(f"  categories: {report['count']} (expected {POST_VERIFY_EXPECTED_COUNT})")
+    print(f"  total categories checked: {report['count']}")
+    print(f"  categories with valid slugs: {report['valid_count']}")
+    print(f"  unique slug count: {report['unique_count']}")
+    print(f"  required public slugs found: "
+          f"{len(report['expected_found'])}/{len(EXPECTED_SLUGS)}")
+    print(f"  additional valid category slugs: {len(report['unexpected'])}")
+    print(f"  duplicate slug count: {report['duplicate_count']}")
+    print(f"  missing or invalid slug count: {report['invalid_count']}")
     print(f"  unique sparse index {INDEX_NAME!r}: {report['index_status']}")
-    print(f"  expected categories accounted for: "
-          f"{len(report['expected_found'])}/{POST_VERIFY_EXPECTED_COUNT}")
     print("  slug mapping report:")
     for item in sorted(report["mapping"], key=lambda m: str(m["name"])):
         print(f"    {item['name']!r} -> {item['slug']!r}  (_id={item['_id']})")
