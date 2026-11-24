@@ -1338,7 +1338,7 @@ def test_v20_fails_closed_on_preexisting_duplicate_slugs(tmp_path, monkeypatch):
     assert by_id[null_id]["slug"] is None, "no backfill write happened before the abort"
 
 
-def test_v20_dry_run_reports_duplicates_without_failing(tmp_path, monkeypatch):
+def test_v20_dry_run_reports_duplicates_and_exits_2(tmp_path, monkeypatch):
     """Final-review correction 6: dry-run stays the default — it REPORTS
     pre-existing duplicates (so the operator sees them in the report) and
     still writes nothing, raises nothing, and creates no index."""
@@ -1371,7 +1371,7 @@ def test_v20_dry_run_reports_duplicates_without_failing(tmp_path, monkeypatch):
             client.close()
 
     rc, indexes, docs = _run(go())
-    assert rc == 0
+    assert rc == 2, "a dry-run that --apply would refuse must report exit 2"
     assert v20.INDEX_NAME not in indexes
     assert _glob.glob(str(tmp_path / "*.json")) == []
     assert all(d["slug"] == f"dry-dup-{tag}" for d in docs)
