@@ -1,0 +1,88 @@
+name: V20 MongoDB Integration Tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v20-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports:
+          - 27117:27017
+
+    env:
+      PHASE1_TEST_MONGO_URL: mongodb://127.0.0.1:27117
+      PHASE1_TEST_DB_NAME: midconnect_phase1_test
+      ENVIRONMENT: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      - name: Wait for MongoDB
+        run: |
+          python - <<'PY'
+          import time
+          from pymongo import MongoClient
+
+          client = MongoClient(
+              "mongodb://127.0.0.1:27117",
+              serverSelectionTimeoutMS=1000,
+          )
+
+          for attempt in range(30):
+              try:
+                  client.admin.command("ping")
+                  print("Disposable MongoDB is ready.")
+                  break
+              except Exception:
+                  if attempt == 29:
+                      raise
+                  time.sleep(2)
+          finally:
+              client.close()
+          PY
+
+      - name: Verify disposable database target
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, "backend/tests")
+          from phase1_db_guard import validate_test_target
+
+          validate_test_target(
+              os.environ["PHASE1_TEST_MONGO_URL"],
+              os.environ["PHASE1_TEST_DB_NAME"],
+          )
+          print("Database safety guard passed.")
+          PY
+
+      - name: Run V20 regression suite
+        run: |
+          python -m pytest \
+            backend/tests/regression/test_category_slug_resolution.py \
+            backend/tests/regression/test_v20_post_verification.py \
+            backend/tests/regression/test_v20_coverage_gaps.py \
+            backend/tests/regression/test_v20_exit_codes.py \
+            backend/tests/regression/test_v20_isolation.py \
+            -q -rs
