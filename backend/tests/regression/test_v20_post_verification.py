@@ -252,7 +252,7 @@ def test_rollback_rerun_is_idempotent_and_exits_zero(tmp_path):
     iso_name = DB_NAME + "_" + uuid.uuid4().hex[:8]
     validate_test_target(URL, iso_name)
     a_id, b_id = ObjectId(), ObjectId()
-    backup = _rollback_backup(tmp_path / "rerun.json", [
+    backup = _rollback_backup(tmp_path / "rerun.json", index_created=True, docs=[
         {"_id": str(a_id), "name": "A", "slug": None, "slug_field_present": False,
          "assigned_slug": "rerun-a"},
         {"_id": str(b_id), "name": "B", "slug": "legacy-b", "slug_field_present": True,
@@ -263,6 +263,12 @@ def test_rollback_rerun_is_idempotent_and_exits_zero(tmp_path):
         client = AsyncIOMotorClient(URL, serverSelectionTimeoutMS=5000)
         db = client[iso_name]
         try:
+            await db.categories.create_index(
+                [("slug", 1)],
+                unique=True,
+                sparse=True,
+                name=v20.INDEX_NAME,
+            )
             await db.categories.insert_many([
                 {"_id": a_id, "name": "A", "slug": "rerun-a"},
                 {"_id": b_id, "name": "B", "slug": "rerun-b"},
@@ -298,7 +304,7 @@ def test_rollback_with_deleted_category_is_incomplete_exit_3(tmp_path):
     iso_name = DB_NAME + "_" + uuid.uuid4().hex[:8]
     validate_test_target(URL, iso_name)
     kept_id, gone_id = ObjectId(), ObjectId()
-    backup = _rollback_backup(tmp_path / "deleted.json", [
+    backup = _rollback_backup(tmp_path / "deleted.json", index_created=True, docs=[
         {"_id": str(kept_id), "name": "Kept", "slug": None, "slug_field_present": True,
          "assigned_slug": "del-kept"},
         {"_id": str(gone_id), "name": "Gone", "slug": None, "slug_field_present": True,
@@ -309,6 +315,12 @@ def test_rollback_with_deleted_category_is_incomplete_exit_3(tmp_path):
         client = AsyncIOMotorClient(URL, serverSelectionTimeoutMS=5000)
         db = client[iso_name]
         try:
+            await db.categories.create_index(
+                [("slug", 1)],
+                unique=True,
+                sparse=True,
+                name=v20.INDEX_NAME,
+            )
             await db.categories.insert_one({"_id": kept_id, "name": "Kept", "slug": "del-kept"})
             rc = await v20.do_rollback(db, backup)
             kept = await db.categories.find_one({"_id": kept_id})
@@ -457,7 +469,7 @@ def test_rollback_write_error_mid_run_is_incomplete_and_rerun_recovers(tmp_path,
     iso_name = DB_NAME + "_" + uuid.uuid4().hex[:8]
     validate_test_target(URL, iso_name)
     first, failing = ObjectId(), ObjectId()
-    backup = _rollback_backup(tmp_path / "partial.json", [
+    backup = _rollback_backup(tmp_path / "partial.json", index_created=True, docs=[
         {"_id": str(first), "name": "First", "slug": "orig-first", "slug_field_present": True,
          "assigned_slug": "pw-first"},
         {"_id": str(failing), "name": "Failing", "slug": "orig-failing", "slug_field_present": True,
@@ -476,6 +488,12 @@ def test_rollback_write_error_mid_run_is_incomplete_and_rerun_recovers(tmp_path,
         client = AsyncIOMotorClient(URL, serverSelectionTimeoutMS=5000)
         db = client[iso_name]
         try:
+            await db.categories.create_index(
+                [("slug", 1)],
+                unique=True,
+                sparse=True,
+                name=v20.INDEX_NAME,
+            )
             await db.categories.insert_many([
                 {"_id": first, "name": "First", "slug": "pw-first"},
                 {"_id": failing, "name": "Failing", "slug": "pw-failing"},

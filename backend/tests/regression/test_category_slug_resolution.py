@@ -46,7 +46,9 @@ from phase1_db_guard import validate_test_target
 URL = os.getenv("PHASE1_TEST_MONGO_URL")
 DB_NAME = os.getenv("PHASE1_TEST_DB_NAME")
 
-pytestmark = pytest.mark.skipif(
+# Applied per test (not module-wide) so the pure source-inspection tests
+# below run without a database.
+_DB_REQUIRED = pytest.mark.skipif(
     not (URL and DB_NAME),
     reason="PHASE1_TEST_MONGO_URL / PHASE1_TEST_DB_NAME not set (disposable DB required)",
 )
@@ -174,6 +176,7 @@ def seeded(base_url):
 
 # ------------------- service level: deterministic resolver -------------------
 
+@_DB_REQUIRED
 def test_category_exact_slug_no_redirect(seeded):
     async def go():
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -191,6 +194,7 @@ def test_category_exact_slug_no_redirect(seeded):
     assert canonical == seeded["slug"]
 
 
+@_DB_REQUIRED
 def test_category_case_normalized_slug_redirects(seeded):
     async def go():
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -208,6 +212,7 @@ def test_category_case_normalized_slug_redirects(seeded):
     assert canonical == seeded["slug"]
 
 
+@_DB_REQUIRED
 def test_category_objectid_redirects_to_slug(seeded):
     async def go():
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -226,6 +231,7 @@ def test_category_objectid_redirects_to_slug(seeded):
     assert canonical == seeded["slug"]
 
 
+@_DB_REQUIRED
 def test_category_objectid_with_null_slug_has_no_redirect_target(seeded):
     """ObjectId resolves the category but slug is null: needs_redirect stays
     True with a None target at resolver level; the ENDPOINT must suppress it."""
@@ -244,6 +250,7 @@ def test_category_objectid_with_null_slug_has_no_redirect_target(seeded):
     assert canonical is None
 
 
+@_DB_REQUIRED
 def test_category_legacy_slug_and_id_redirect(seeded):
     async def go():
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -262,6 +269,7 @@ def test_category_legacy_slug_and_id_redirect(seeded):
     assert c_id is not None and r_id is True and t_id == seeded["slug"]
 
 
+@_DB_REQUIRED
 def test_category_invalid_tokeny_slugs_resolve_to_none(seeded):
     """Batch 6 core assertion: no ANY-token fallback. Tokens from one category
     must never surface the other category (the exact defect reported in
@@ -291,6 +299,7 @@ def test_category_invalid_tokeny_slugs_resolve_to_none(seeded):
 
 # ------------------- HTTP level: enterprise resolve endpoint -------------------
 
+@_DB_REQUIRED
 def test_resolve_endpoint_contract(base_url, seeded):
     import requests
     base = base_url
@@ -510,6 +519,7 @@ def test_server_handles_unique_index_collisions_on_create_and_rename():
 
 # ------------------- resolver identifier normalization (correction 6) -------------------
 
+@_DB_REQUIRED
 def test_category_identifier_is_trimmed_and_case_normalized(seeded):
     """Correction 6: surrounding whitespace is stripped and noncanonical
     casing resolves to the canonical slug with needs_redirect=True."""
@@ -532,6 +542,7 @@ def test_category_identifier_is_trimmed_and_case_normalized(seeded):
 # ------------------- V20: corrections 8, 9, 10 (real disposable DB) -------------------
 
 
+@_DB_REQUIRED
 def test_v20_build_slug_plan_processes_full_collection_without_cap():
     """Correction 8: 1010 newly inserted uncapped categories are ALL planned
     (the old implementation stopped at 1000 documents), in stable _id order."""
@@ -569,6 +580,7 @@ def test_v20_build_slug_plan_processes_full_collection_without_cap():
     assert all(r["slug_field_present"] is False and r["slug"] is None for r in tagged_records)
 
 
+@_DB_REQUIRED
 def test_v20_verify_slug_index_fails_closed_on_malformed_index():
     """Correction 9: an existing index under the V20 name with the wrong
     definition aborts BEFORE any data write."""
@@ -604,6 +616,7 @@ def test_v20_verify_slug_index_fails_closed_on_malformed_index():
     assert "FAIL-CLOSED" in str(raised)
 
 
+@_DB_REQUIRED
 def test_v20_rollback_restores_exact_slug_field_state(tmp_path):
     """Correction 10: field-absent docs are restored to field-ABSENT ($unset,
     not an injected null); slug=null docs are restored to null; the assigned
@@ -664,6 +677,7 @@ def test_v20_rollback_restores_exact_slug_field_state(tmp_path):
 # ------------------- V20 safety blockers 1-4 (Batch 6, 2026-11-20) -------------------
 
 
+@_DB_REQUIRED
 def test_v20_apply_backup_writes_then_index_creation(tmp_path, monkeypatch):
     """Blockers 1 & 2: the backup is written and validated BEFORE any database
     mutation, and the unique sparse index is created LAST.
@@ -734,6 +748,7 @@ def test_v20_apply_backup_writes_then_index_creation(tmp_path, monkeypatch):
     assert None not in slugs and "" not in slugs
 
 
+@_DB_REQUIRED
 def test_v20_apply_conflicts_reported_and_index_deferred(tmp_path, monkeypatch):
     """Blocker 3 (run level): a concurrent slug population after plan
     generation is reported as a conflict, the concurrent value wins, and the
@@ -790,6 +805,7 @@ def test_v20_apply_conflicts_reported_and_index_deferred(tmp_path, monkeypatch):
     )
 
 
+@_DB_REQUIRED
 def test_v20_conditional_write_never_overwrites_concurrent_slug():
     """Blocker 3 (helper level): apply_slug_writes matches only documents whose
     slug is still missing/null/empty; a slug populated after plan generation
@@ -838,6 +854,7 @@ def test_v20_conditional_write_never_overwrites_concurrent_slug():
     assert absent["slug"] == f"{tag}-absent", "still-null/missing docs are planned"
 
 
+@_DB_REQUIRED
 def test_v20_rollback_skips_slug_changed_after_v20(tmp_path):
     """Blocker 4 + finding 1 (HIGH): a slug changed after V20 is a BLOCKING
     rollback conflict. The preflight detects it BEFORE any mutation and aborts
@@ -917,6 +934,7 @@ def test_v20_rollback_skips_slug_changed_after_v20(tmp_path):
 # ------------------- Batch 6 final review corrections 2-4 & 6 (2026-11-20) -------------------
 
 
+@_DB_REQUIRED
 def test_v20_rollback_write_is_conditional_on_assigned_slug_at_write_time(tmp_path):
     """Final-review correction 2: the restoration update is conditional AT THE
     MOMENT OF THE WRITE — its filter matches only slug == assigned_slug. A
@@ -1033,13 +1051,23 @@ def test_v20_rollback_guard_and_index_provenance_are_structural():
     assert rollback_src.index("index_created_by_v20") < rollback_src.index(
         "for doc in docs"
     ), "index provenance must be decided BEFORE any restore write"
-    assert "drop_index(INDEX_NAME)" in rollback_src
+    assert 'meta.get("index_actual_name")' in rollback_src, (
+        "rollback must resolve the index from the recorded actual name"
+    )
+    assert "drop_index(actual_index_name)" in rollback_src, (
+        "rollback must drop the recorded actual index name, not a hard-coded one"
+    )
+    assert "drop_index(INDEX_NAME)" not in rollback_src, (
+        "rollback must never drop the hard-coded name on the production path"
+    )
+    assert "if plan_drop_index" in rollback_src and "index_created_by_v20" in rollback_src
     assert "existed before V20" in rollback_src
     assert "FAIL-CLOSED" in rollback_src, (
         "multiple null restores under a pre-existing unique index must fail closed"
     )
 
 
+@_DB_REQUIRED
 def test_v20_rollback_drops_v20_created_index_before_restoring_nulls(tmp_path):
     """Final-review correction 3: the backup records that V20 created the
     index; rollback drops it BEFORE restoring, so several original slug=null
@@ -1114,6 +1142,7 @@ def test_v20_rollback_drops_v20_created_index_before_restoring_nulls(tmp_path):
         assert s in d.get("legacySlugs", []), "the assigned slug stays addressable"
 
 
+@_DB_REQUIRED
 def test_v20_rollback_never_drops_preexisting_index_and_fails_closed(tmp_path):
     """Final-review correction 3: an index that existed BEFORE V20 is never
     dropped. A rollback that would restore several explicit null slugs under
@@ -1178,6 +1207,7 @@ def test_v20_rollback_never_drops_preexisting_index_and_fails_closed(tmp_path):
         assert s not in (d.get("legacySlugs") or []), "no partial rollback state"
 
 
+@_DB_REQUIRED
 def test_v20_rollback_preserves_preexisting_index_for_single_null_restore(tmp_path):
     """Final-review correction 3: with a pre-existing unique sparse index, a
     rollback that restores exactly ONE explicit null (and nothing else holds
@@ -1278,6 +1308,7 @@ def test_v20_backup_file_creation_never_overwrites_existing_backup(tmp_path, mon
     assert len(_glob.glob(str(tmp_path / "*.json"))) == 2
 
 
+@_DB_REQUIRED
 def test_v20_fails_closed_on_preexisting_duplicate_slugs(tmp_path, monkeypatch):
     """Final-review correction 6: duplicate non-empty slugs already present in
     the collection are detected BEFORE any mutation; --apply refuses to run
@@ -1338,6 +1369,7 @@ def test_v20_fails_closed_on_preexisting_duplicate_slugs(tmp_path, monkeypatch):
     assert by_id[null_id]["slug"] is None, "no backfill write happened before the abort"
 
 
+@_DB_REQUIRED
 def test_v20_dry_run_reports_duplicates_and_exits_2(tmp_path, monkeypatch):
     """Final-review correction 6: dry-run stays the default — it REPORTS
     pre-existing duplicates (so the operator sees them in the report) and
@@ -1400,6 +1432,7 @@ def test_v20_duplicate_slug_scan_runs_before_backup_and_writes():
 # ------------------- Final review round 2: findings 1-3 (2026-11-20) -------------------
 
 
+@_DB_REQUIRED
 def test_v20_rollback_preflight_failure_leaves_database_untouched(tmp_path):
     """Finding 1 (HIGH): the rollback builds and validates its COMPLETE plan
     BEFORE any mutation. The backup says V20 created the index (the pre-finding-1
@@ -1496,6 +1529,7 @@ def test_v20_rollback_preflight_failure_leaves_database_untouched(tmp_path):
     )
 
 
+@_DB_REQUIRED
 def test_v20_rollback_fails_closed_on_invalid_backup_structure(tmp_path):
     """Finding 1: the backup is STRUCTURALLY validated before any database
     access. Non-object records, records without _id, invalid ObjectIds,
@@ -1583,6 +1617,7 @@ def test_v20_rollback_fails_closed_on_invalid_backup_structure(tmp_path):
         assert index_present is False, f"{label!r}: no index may be dropped"
 
 
+@_DB_REQUIRED
 def test_v20_rollback_fails_closed_when_restored_state_violates_unique_index(tmp_path):
     """Finding 1: the preflight validates index constraints against the ENTIRE
     planned restored state — not just null restores. Two blocking shapes:
@@ -1681,6 +1716,7 @@ def test_v20_rollback_fails_closed_when_restored_state_violates_unique_index(tmp
     assert all(not (d.get("legacySlugs") or []) for d in docs)
 
 
+@_DB_REQUIRED
 def test_v20_verify_slug_index_rejects_incompatible_semantic_options():
     """Finding 3: EVERY semantic index option is validated. An existing
     idx_categories_slug_unique carrying collation, expireAfterSeconds (TTL)
@@ -1749,6 +1785,7 @@ def test_v20_verify_slug_index_rejects_incompatible_semantic_options():
     assert status["exists"] is True and status["action"] == "verified"
 
 
+@_DB_REQUIRED
 def test_v20_empty_plan_still_reconciles_index(tmp_path, monkeypatch):
     """Finding 2: an empty migration plan (every category already has a slug)
     does NOT skip index validation. Dry-run stays strictly read-only (no
@@ -1879,7 +1916,7 @@ def test_v20_rollback_preflight_precedes_every_mutation_structurally():
     preflight_at = rollback_src.index("PREFLIGHT (finding 1)")
     abort_at = rollback_src.index("FAIL-CLOSED (finding 1)")
     execute_at = rollback_src.index("EXECUTE (mutations begin ONLY here)")
-    drop_at = rollback_src.index("await db.categories.drop_index(INDEX_NAME)")
+    drop_at = rollback_src.index("await db.categories.drop_index(actual_index_name)")
     restore_write_at = rollback_src.index('{"_id": cat_id, "slug": assigned_slug}')
     assert loader_at < preflight_at < execute_at < drop_at, (
         "backup validation and the read-only preflight must precede any mutation"
