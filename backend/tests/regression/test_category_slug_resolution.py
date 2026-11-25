@@ -46,6 +46,25 @@ from phase1_db_guard import validate_test_target
 URL = os.getenv("PHASE1_TEST_MONGO_URL")
 DB_NAME = os.getenv("PHASE1_TEST_DB_NAME")
 
+
+
+def _approved_target():
+    """Round 3: the disposable (host, port, db) triple this file targets, for the
+    migration's approved-target policy. Only the disposable test instance."""
+    from urllib.parse import urlparse
+    parsed = urlparse(URL or "")
+    return (parsed.hostname, parsed.port or 27017, DB_NAME)
+
+
+def _scope_out_public_slug_gate(monkeypatch, v20):
+    """These legacy fixtures predate the P2 expected-public-slug rule and carry no
+    nine public categories. The P2 gate is covered by test_v20_safety_round3.py;
+    here it is neutralised so each test keeps asserting only its own behaviour.
+    Fixture data is unchanged."""
+    async def _no_slug_failures(db, plan):
+        return []
+    monkeypatch.setattr(v20, "check_expected_public_slugs", _no_slug_failures)
+
 # Applied per test (not module-wide) so the pure source-inspection tests
 # below run without a database.
 _DB_REQUIRED = pytest.mark.skipif(
@@ -393,7 +412,7 @@ def test_v20_defaults_to_dry_run(monkeypatch, tmp_path):
 
     applied = {"value": None}
 
-    async def fake_run(apply, rollback_path=None):
+    async def fake_run(apply, rollback_path=None, **_kwargs):
         applied["value"] = apply
         return 0
 
@@ -402,7 +421,8 @@ def test_v20_defaults_to_dry_run(monkeypatch, tmp_path):
     v20.main()
     assert applied["value"] is False
 
-    monkeypatch.setattr(v20.sys, "argv", ["V20_backfill_category_slugs.py", "--apply"])
+    monkeypatch.setattr(v20.sys, "argv", ["V20_backfill_category_slugs.py", "--apply",
+                                          "--confirm-apply", "midconnect_phase1_test_stub"])
     v20.main()
     assert applied["value"] is True
 
@@ -618,13 +638,19 @@ def test_v20_verify_slug_index_fails_closed_on_malformed_index():
 
 @_DB_REQUIRED
 def test_v20_rollback_restores_exact_slug_field_state(tmp_path):
-    """Correction 10: field-absent docs are restored to field-ABSENT ($unset,
-    not an injected null); slug=null docs are restored to null; the assigned
-    slugs survive in legacySlugs; pre-existing legacy data is untouched."""
+    """EXACT rollback: slug AND legacySlugs are restored to their exact
+    pre-V20 field-presence state and values.
+
+    Covers: slug absent / present-null; legacySlugs absent / empty / populated
+    (order preserved, no normalisation); legacyIds and unrelated fields
+    untouched; the V20-assigned slug is NOT added to legacySlugs; a malformed
+    backup is refused before any write; and a rerun is a no-op.
+    """
     import json as _json
     from migrations.V20_backfill_category_slugs import do_rollback
     tag = "b6v20rb-" + uuid.uuid4().hex[:8]
-    absent_id, null_id = ObjectId(), ObjectId()
+    absent_id, null_id, empty_id, pop_id = ObjectId(), ObjectId(), ObjectId(), ObjectId()
+    pop_legacy = ["zeta-legacy", "alpha-legacy", "mid-legacy", "alpha-legacy"]  # order + duplicate kept
 
     async def go():
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -632,46 +658,113 @@ def test_v20_rollback_restores_exact_slug_field_state(tmp_path):
         client = AsyncIOMotorClient(URL, serverSelectionTimeoutMS=5000)
         db = client[DB_NAME]
         try:
-            # Order-independence: this rollback targets a collection WITHOUT
-            # the unique index (correction 3 covers index-aware rollbacks);
-            # drop any index another test may have left behind.
             from migrations.V20_backfill_category_slugs import INDEX_NAME as _IDX
             try:
                 await db.categories.drop_index(_IDX)
             except Exception:
                 pass
+            legacy_ids = [ObjectId(), ObjectId()]
+            # The backup claims the unique slug index PRE-EXISTED V20, so it must
+            # exist for the provenance to be consistent (fail-closed otherwise).
+            await db.categories.create_index(
+                [("slug", 1)], unique=True, sparse=True, name=_IDX
+            )
             await db.categories.insert_many([
-                {"_id": absent_id, "tag": tag, "name": "Rollback Absent", "isActive": True,
-                 "legacySlugs": ["pre-existing-legacy"]},
+                # slug absent, legacySlugs absent
+                {"_id": absent_id, "tag": tag, "name": "Rollback Absent",
+                 "isActive": True, "legacyIds": legacy_ids, "sortOrder": 7},
+                # slug null, legacySlugs absent
                 {"_id": null_id, "tag": tag, "name": "Rollback Null", "slug": None,
                  "isActive": True},
+                # slug absent, legacySlugs present but EMPTY
+                {"_id": empty_id, "tag": tag, "name": "Rollback Empty",
+                 "isActive": True, "legacySlugs": []},
+                # slug absent, legacySlugs populated
+                {"_id": pop_id, "tag": tag, "name": "Rollback Populated",
+                 "isActive": True, "legacySlugs": list(pop_legacy)},
             ])
-            # Simulate exactly what the migration applied ($set slug only).
-            await db.categories.update_one({"_id": absent_id}, {"$set": {"slug": "rollback-absent"}})
-            await db.categories.update_one({"_id": null_id}, {"$set": {"slug": "rollback-null"}})
+            # Simulate exactly what V20 applied: $set slug only (never legacySlugs).
+            await db.categories.update_one({"_id": absent_id}, {"$set": {"slug": "rb-absent"}})
+            await db.categories.update_one({"_id": null_id}, {"$set": {"slug": "rb-null"}})
+            await db.categories.update_one({"_id": empty_id}, {"$set": {"slug": "rb-empty"}})
+            await db.categories.update_one({"_id": pop_id}, {"$set": {"slug": "rb-pop"}})
+            pre = {str(d["_id"]): d for d in await db.categories.find({"tag": tag}).to_list(10)}
+
+            def rec(_id, name, slug_present, slug, legacy_present, legacy, assigned):
+                r = {"_id": str(_id), "name": name, "slug": slug,
+                     "slug_field_present": slug_present, "assigned_slug": assigned,
+                     "legacySlugs_field_present": legacy_present}
+                if legacy_present:
+                    r["legacySlugs"] = legacy
+                return r
+
             backup = [
-                {"_id": str(absent_id), "name": "Rollback Absent", "slug": None,
-                 "slug_field_present": False, "assigned_slug": "rollback-absent"},
-                {"_id": str(null_id), "name": "Rollback Null", "slug": None,
-                 "slug_field_present": True, "assigned_slug": "rollback-null"},
+                rec(absent_id, "Rollback Absent", False, None, False, None, "rb-absent"),
+                rec(null_id, "Rollback Null", True, None, False, None, "rb-null"),
+                rec(empty_id, "Rollback Empty", False, None, True, [], "rb-empty"),
+                rec(pop_id, "Rollback Populated", False, None, True, list(pop_legacy), "rb-pop"),
             ]
-            backup_path = tmp_path / "v20_rollback_test.json"
-            backup_path.write_text(_json.dumps(backup), encoding="utf-8")
+            backup_path = tmp_path / "v20_rollback_exact.json"
+            meta = {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
+                              "index_name": _IDX, "index_actual_name": None,
+                              "index_existed_before_v20": True,
+                              "index_created_by_v20": False,
+                              "created_at_utc": "20260101T000000Z"}}
+            backup_path.write_text(_json.dumps([meta] + backup), encoding="utf-8")
+
+            # Malformed legacySlugs (non-array) is refused before ANY write.
+            bad_path = tmp_path / "v20_rollback_bad.json"
+            bad = [dict(backup[3], legacySlugs="not-an-array")]
+            bad_path.write_text(_json.dumps([meta] + bad), encoding="utf-8")
+            from migrations.V20_backfill_category_slugs import MigrationBlocked
+            try:
+                await do_rollback(db, str(bad_path))
+                bad_rc = None
+            except MigrationBlocked as exc:
+                bad_rc = ("blocked", str(exc))
+            after_bad = {str(d["_id"]): d for d in await db.categories.find({"tag": tag}).to_list(10)}
+
             rc = await do_rollback(db, str(backup_path))
-            absent = await db.categories.find_one({"_id": absent_id})
-            nulled = await db.categories.find_one({"_id": null_id})
-            return rc, absent, nulled
+            post = {str(d["_id"]): d for d in await db.categories.find({"tag": tag}).to_list(10)}
+            # Rerun (partial-rollback safety): already restored -> no-op, rc 0.
+            rc2 = await do_rollback(db, str(backup_path))
+            rerun = {str(d["_id"]): d for d in await db.categories.find({"tag": tag}).to_list(10)}
+            return pre, bad_rc, after_bad, rc, post, rc2, rerun
         finally:
             await db.categories.delete_many({"tag": tag})
             client.close()
 
-    rc, absent, nulled = _run(go())
-    assert rc == 0
-    assert "slug" not in absent, "field-absent category must be restored to field-ABSENT"
-    assert nulled["slug"] is None, "slug=null category must be restored to null"
-    assert "rollback-absent" in absent.get("legacySlugs", [])
-    assert "pre-existing-legacy" in absent.get("legacySlugs", [])
-    assert "rollback-null" in nulled.get("legacySlugs", [])
+    pre, bad_rc, after_bad, rc, post, rc2, rerun = _run(go())
+    key = {n: str(i) for n, i in [("absent", absent_id), ("null", null_id),
+                                  ("empty", empty_id), ("pop", pop_id)]}
+
+    # Malformed legacySlugs: refused (fail closed) and nothing was written.
+    assert bad_rc is not None and bad_rc[0] == "blocked", (
+        "a malformed legacySlugs backup must be refused (MigrationBlocked), not rolled back"
+    )
+    assert "FAIL-CLOSED" in bad_rc[1]
+    assert after_bad == pre, "a malformed backup must not write anything"
+
+    assert rc == 0 and rc2 == 0
+    a, n, e, p = post[key["absent"]], post[key["null"]], post[key["empty"]], post[key["pop"]]
+    # slug: absent stays absent; null stays explicit null (never injected).
+    assert "slug" not in a
+    assert "slug" in n and n["slug"] is None
+    # legacySlugs: absent -> absent; empty -> empty; populated -> exact array, order.
+    assert "legacySlugs" not in a and "legacySlugs" not in n
+    assert e.get("legacySlugs") == [] and "legacySlugs" in e
+    assert p["legacySlugs"] == pop_legacy
+    # The V20-assigned slug is never added to legacySlugs.
+    for doc in (a, n, e, p):
+        assert "rb-absent" not in doc.get("legacySlugs", [])
+        assert "rb-null" not in doc.get("legacySlugs", [])
+        assert "rb-pop" not in doc.get("legacySlugs", [])
+    # legacyIds and unrelated fields are unchanged.
+    assert a["legacyIds"] == pre[key["absent"]]["legacyIds"]
+    assert a["sortOrder"] == 7 and a["isActive"] is True
+    assert p["isActive"] is True and p["name"] == "Rollback Populated"
+    # Rerun leaves the exact restored state untouched.
+    assert rerun == post
 
 
 # ------------------- V20 safety blockers 1-4 (Batch 6, 2026-11-20) -------------------
@@ -711,8 +804,10 @@ def test_v20_apply_backup_writes_then_index_creation(tmp_path, monkeypatch):
             ])
             monkeypatch.setenv("MONGO_URL", URL)
             monkeypatch.setenv("DB_NAME", DB_NAME)
+            monkeypatch.setattr(v20, "APPROVED_TARGETS", frozenset({_approved_target()}))
+            _scope_out_public_slug_gate(monkeypatch, v20)
             monkeypatch.setattr(v20, "BACKUP_DIR", str(tmp_path))
-            rc = await v20.run_migration(apply=True)
+            rc = await v20.run_migration(apply=True, confirm_db=DB_NAME)
             indexes = await db.categories.index_information()
             docs = await db.categories.find({"tag": tag}).sort("_id", 1).to_list(10)
             backup_files = _glob.glob(str(tmp_path / "*.json"))
@@ -772,6 +867,8 @@ def test_v20_apply_conflicts_reported_and_index_deferred(tmp_path, monkeypatch):
             )
             monkeypatch.setenv("MONGO_URL", URL)
             monkeypatch.setenv("DB_NAME", DB_NAME)
+            monkeypatch.setattr(v20, "APPROVED_TARGETS", frozenset({_approved_target()}))
+            _scope_out_public_slug_gate(monkeypatch, v20)
             monkeypatch.setattr(v20, "BACKUP_DIR", str(tmp_path))
 
             async def conflicting_writes(_db, _plan):
@@ -785,7 +882,7 @@ def test_v20_apply_conflicts_reported_and_index_deferred(tmp_path, monkeypatch):
                 }]}
 
             monkeypatch.setattr(v20, "apply_slug_writes", conflicting_writes)
-            rc = await v20.run_migration(apply=True)
+            rc = await v20.run_migration(apply=True, confirm_db=DB_NAME)
             indexes = await db.categories.index_information()
             doc = await db.categories.find_one({"_id": doc_id})
             return rc, indexes, doc
@@ -900,9 +997,9 @@ def test_v20_rollback_skips_slug_changed_after_v20(tmp_path):
             )
             backup = [
                 {"_id": str(conflict_id), "name": "Rollback Conflict", "slug": None,
-                 "slug_field_present": True, "assigned_slug": "v20-assigned"},
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": "v20-assigned"},
                 {"_id": str(ok_id), "name": "Rollback Untouched", "slug": None,
-                 "slug_field_present": True, "assigned_slug": "v20-assigned-ok"},
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": "v20-assigned-ok"},
             ]
             backup_path = tmp_path / "v20_rollback_conflict.json"
             backup_path.write_text(_json.dumps(backup), encoding="utf-8")
@@ -1002,9 +1099,9 @@ def test_v20_rollback_write_is_conditional_on_assigned_slug_at_write_time(tmp_pa
 
             backup = [
                 {"_id": str(race_id), "name": "TOCTOU Race", "slug": None,
-                 "slug_field_present": True, "assigned_slug": race_slug},
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": race_slug},
                 {"_id": str(ok_id), "name": "TOCTOU Untouched", "slug": None,
-                 "slug_field_present": True, "assigned_slug": "v20-assigned-ok"},
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": "v20-assigned-ok"},
             ]
             backup_path = tmp_path / "v20_toctou.json"
             backup_path.write_text(_json.dumps(backup), encoding="utf-8")
@@ -1029,7 +1126,8 @@ def test_v20_rollback_write_is_conditional_on_assigned_slug_at_write_time(tmp_pa
         "a write-time conflict must not pollute legacySlugs"
     )
     assert ok["slug"] is None, "unraced documents in the same backup still restore"
-    assert "v20-assigned-ok" in ok.get("legacySlugs", [])
+    assert "legacySlugs" not in ok, "exact rollback: legacySlugs absent before V20 stays absent"
+    assert "v20-assigned-ok" not in (ok.get("legacySlugs") or [])
 
 
 def test_v20_rollback_guard_and_index_provenance_are_structural():
@@ -1042,8 +1140,9 @@ def test_v20_rollback_guard_and_index_provenance_are_structural():
         _BACKEND, "migrations", "V20_backfill_category_slugs.py"
     ), encoding="utf-8").read()
     rollback_src = src[src.index("async def do_rollback"):]
-    assert '{"_id": cat_id, "slug": assigned_slug}' in rollback_src, (
-        "the restore write must be conditional on the assigned slug at write time"
+    assert '{"_id": cat_id, "slug": assigned_slug, **legacy_filter}' in rollback_src, (
+        "the restore write must be conditional on the assigned slug and the "
+        "V20 legacySlugs state at write time"
     )
     assert "res.matched_count" in rollback_src
     assert "res.modified_count" in rollback_src
@@ -1104,13 +1203,13 @@ def test_v20_rollback_drops_v20_created_index_before_restoring_nulls(tmp_path):
             )
             await db.categories.create_index([("tag", 1)], name=unrelated)
             backup = [
-                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
                            "index_name": v20.INDEX_NAME,
                            "index_existed_before_v20": False,
                            "index_created_by_v20": True}},
             ] + [
                 {"_id": str(i), "name": f"Idx {tag} {n}", "slug": None,
-                 "slug_field_present": True, "assigned_slug": s}
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": s}
                 for n, (i, s) in enumerate(zip(ids, assigned))
             ]
             backup_path = tmp_path / "v20_idxdrop.json"
@@ -1139,7 +1238,7 @@ def test_v20_rollback_drops_v20_created_index_before_restoring_nulls(tmp_path):
         assert d["slug"] is None, (
             "multiple original null slugs must be restored without E11000"
         )
-        assert s in d.get("legacySlugs", []), "the assigned slug stays addressable"
+        assert s not in (d.get("legacySlugs") or []), "exact rollback never adds the V20-assigned slug to legacySlugs"
 
 
 @_DB_REQUIRED
@@ -1174,13 +1273,13 @@ def test_v20_rollback_never_drops_preexisting_index_and_fails_closed(tmp_path):
             )
             await db.categories.create_index([("tag", 1)], name=unrelated)
             backup = [
-                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
                            "index_name": v20.INDEX_NAME,
                            "index_existed_before_v20": True,
                            "index_created_by_v20": False}},
             ] + [
                 {"_id": str(i), "name": f"Keep {tag} {n}", "slug": None,
-                 "slug_field_present": True, "assigned_slug": s}
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": s}
                 for n, (i, s) in enumerate(zip(ids, assigned))
             ]
             backup_path = tmp_path / "v20_idxkeep.json"
@@ -1233,12 +1332,12 @@ def test_v20_rollback_preserves_preexisting_index_for_single_null_restore(tmp_pa
                 [("slug", 1)], unique=True, sparse=True, name=v20.INDEX_NAME
             )
             backup = [
-                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
                            "index_name": v20.INDEX_NAME,
                            "index_existed_before_v20": True,
                            "index_created_by_v20": False}},
                 {"_id": str(doc_id), "name": f"One {tag}", "slug": None,
-                 "slug_field_present": True, "assigned_slug": assigned},
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": assigned},
             ]
             backup_path = tmp_path / "v20_idxone.json"
             backup_path.write_text(_json.dumps(backup), encoding="utf-8")
@@ -1258,7 +1357,10 @@ def test_v20_rollback_preserves_preexisting_index_for_single_null_restore(tmp_pa
     assert rc == 0
     assert v20.INDEX_NAME in indexes, "a pre-existing index must be preserved"
     assert doc["slug"] is None
-    assert assigned in doc.get("legacySlugs", [])
+    assert assigned not in (doc.get("legacySlugs") or []), (
+        "exact rollback never adds the V20-assigned slug to legacySlugs"
+    )
+    assert "legacySlugs" not in doc, "legacySlugs absent before V20 stays absent"
 
 
 def test_v20_backup_file_creation_never_overwrites_existing_backup(tmp_path, monkeypatch):
@@ -1283,13 +1385,13 @@ def test_v20_backup_file_creation_never_overwrites_existing_backup(tmp_path, mon
     monkeypatch.setattr(v20, "datetime", FixedDatetime)
 
     records_a = [{"_id": str(ObjectId()), "name": "Collision A", "slug": None,
-                  "slug_field_present": True, "assigned_slug": "collision-a"}]
+                  "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": "collision-a"}]
     first = v20.write_and_validate_backup(records_a, {"exists": False})
     assert first.endswith("V20_categories_20261120T120000Z.json")
 
     # Second run in the SAME fixed second: the deterministic name now exists.
     records_b = [{"_id": str(ObjectId()), "name": "Collision B", "slug": None,
-                  "slug_field_present": False, "assigned_slug": "collision-b"}]
+                  "slug_field_present": False, "legacySlugs_field_present": False, "assigned_slug": "collision-b"}]
     second = v20.write_and_validate_backup(records_b, {"exists": True})
 
     assert second != first, "an existing backup must never be replaced"
@@ -1309,7 +1411,7 @@ def test_v20_backup_file_creation_never_overwrites_existing_backup(tmp_path, mon
 
 
 @_DB_REQUIRED
-def test_v20_fails_closed_on_preexisting_duplicate_slugs(tmp_path, monkeypatch):
+def test_v20_fails_closed_on_preexisting_duplicate_slugs(tmp_path, monkeypatch, capsys):
     """Final-review correction 6: duplicate non-empty slugs already present in
     the collection are detected BEFORE any mutation; --apply refuses to run
     (fail closed): no backfill write, no backup file, no index creation, and
@@ -1339,12 +1441,16 @@ def test_v20_fails_closed_on_preexisting_duplicate_slugs(tmp_path, monkeypatch):
             ])
             monkeypatch.setenv("MONGO_URL", URL)
             monkeypatch.setenv("DB_NAME", DB_NAME)
+            monkeypatch.setattr(v20, "APPROVED_TARGETS", frozenset({_approved_target()}))
+            _scope_out_public_slug_gate(monkeypatch, v20)
             monkeypatch.setattr(v20, "BACKUP_DIR", str(tmp_path))
             raised = None
             try:
-                await v20.run_migration(apply=True)
+                rc = await v20.run_migration(apply=True, confirm_db=DB_NAME)
             except MigrationBlocked as exc:
                 raised = exc
+            else:
+                raised = rc  # round 3: pre-write blocks return exit 2
             indexes = await db.categories.index_information()
             docs = await db.categories.find({"tag": tag}).sort("_id", 1).to_list(10)
             return raised, indexes, docs
@@ -1357,8 +1463,10 @@ def test_v20_fails_closed_on_preexisting_duplicate_slugs(tmp_path, monkeypatch):
             client.close()
 
     raised, indexes, docs = _run(go())
+    out = capsys.readouterr().out
     assert raised is not None, "--apply must fail closed on duplicate pre-existing slugs"
-    assert "FAIL-CLOSED" in str(raised) and "duplicate" in str(raised).lower()
+    assert raised == 2, "--apply must fail closed (exit 2) on duplicate pre-existing slugs"
+    assert "FAIL-CLOSED" in out and "duplicate" in out.lower()
     assert v20.INDEX_NAME not in indexes, "no index may be created by a failed-closed run"
     assert _glob.glob(str(tmp_path / "*.json")) == [], (
         "no backup may be written by a failed-closed run"
@@ -1393,6 +1501,8 @@ def test_v20_dry_run_reports_duplicates_and_exits_2(tmp_path, monkeypatch):
             ])
             monkeypatch.setenv("MONGO_URL", URL)
             monkeypatch.setenv("DB_NAME", DB_NAME)
+            monkeypatch.setattr(v20, "APPROVED_TARGETS", frozenset({_approved_target()}))
+            _scope_out_public_slug_gate(monkeypatch, v20)
             monkeypatch.setattr(v20, "BACKUP_DIR", str(tmp_path))
             rc = await v20.run_migration(apply=False)
             indexes = await db.categories.index_information()
@@ -1480,14 +1590,14 @@ def test_v20_rollback_preflight_failure_leaves_database_untouched(tmp_path):
                 [("slug", 1)], unique=True, sparse=True, name=v20.INDEX_NAME)
             await db.categories.create_index([("tag", 1)], name=unrelated)
             backup = [
-                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+                {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
                            "index_name": v20.INDEX_NAME,
                            "index_existed_before_v20": False,
                            "index_created_by_v20": True}},
                 {"_id": str(conflict_id), "name": "PF Conflict", "slug": None,
-                 "slug_field_present": True, "assigned_slug": assigned_conflict},
+                 "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": assigned_conflict},
                 {"_id": str(restorable_id), "name": "PF Restorable",
-                 "slug": original_restorable, "slug_field_present": True,
+                 "slug": original_restorable, "slug_field_present": True, "legacySlugs_field_present": False,
                  "assigned_slug": assigned_restorable},
             ]
             backup_path = tmp_path / "v20_preflight_abort.json"
@@ -1544,21 +1654,21 @@ def test_v20_rollback_fails_closed_on_invalid_backup_structure(tmp_path):
     assigned = f"struct-assigned-{tag}"
 
     valid = {"_id": str(doc_id), "name": "Struct Valid", "slug": None,
-             "slug_field_present": True, "assigned_slug": assigned}
-    foreign_meta = {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+             "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": assigned}
+    foreign_meta = {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
                     "index_name": INDEX_NAME,
                     "index_existed_before_v20": True,
                     "index_created_by_v20": False}
     cases = [
         ("non-object record", [valid, "not-an-object"]),
         ("record without _id", [{"name": "n", "slug": None,
-                                 "slug_field_present": True,
+                                 "slug_field_present": True, "legacySlugs_field_present": False,
                                  "assigned_slug": "x"}]),
         ("invalid ObjectId", [{"_id": "zz-not-hex24", "slug": None,
-                               "slug_field_present": True,
+                               "slug_field_present": True, "legacySlugs_field_present": False,
                                "assigned_slug": "x"}]),
         ("missing assigned_slug", [{"_id": str(doc_id), "name": "n",
-                                    "slug": None, "slug_field_present": True}]),
+                                    "slug": None, "slug_field_present": True, "legacySlugs_field_present": False}]),
         ("missing slug_field_present", [{"_id": str(doc_id), "slug": None,
                                          "assigned_slug": assigned}]),
         ("duplicate _id", [valid, dict(valid)]),
@@ -1630,7 +1740,7 @@ def test_v20_rollback_fails_closed_when_restored_state_violates_unique_index(tmp
     tag = "b6v20rstate-" + uuid.uuid4().hex[:8]
 
     def _meta():
-        return {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+        return {"_meta": {"kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
                           "index_name": v20.INDEX_NAME,
                           "index_existed_before_v20": True,
                           "index_created_by_v20": False}}
@@ -1650,7 +1760,7 @@ def test_v20_rollback_fails_closed_when_restored_state_violates_unique_index(tmp
                 [("slug", 1)], unique=True, sparse=True, name=v20.INDEX_NAME)
             backup = [_meta(), {
                 "_id": str(doc_a), "name": "RS A", "slug": f"{tag}-shared",
-                "slug_field_present": True, "assigned_slug": f"{tag}-a"}]
+                "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": f"{tag}-a"}]
             path = tmp_path / "v20_rstate_outside.json"
             path.write_text(_json.dumps(backup), encoding="utf-8")
             rc = await do_rollback(db, str(path))
@@ -1680,10 +1790,10 @@ def test_v20_rollback_fails_closed_when_restored_state_violates_unique_index(tmp
                 [("slug", 1)], unique=True, sparse=True, name=v20.INDEX_NAME)
             backup = [_meta(),
                       {"_id": str(doc_a), "name": "RS A2",
-                       "slug": f"{tag}-shared2", "slug_field_present": True,
+                       "slug": f"{tag}-shared2", "slug_field_present": True, "legacySlugs_field_present": False,
                        "assigned_slug": f"{tag}-a2"},
                       {"_id": str(doc_b), "name": "RS B2",
-                       "slug": f"{tag}-shared2", "slug_field_present": True,
+                       "slug": f"{tag}-shared2", "slug_field_present": True, "legacySlugs_field_present": False,
                        "assigned_slug": f"{tag}-b2"}]
             path = tmp_path / "v20_rstate_within.json"
             path.write_text(_json.dumps(backup), encoding="utf-8")
@@ -1786,7 +1896,7 @@ def test_v20_verify_slug_index_rejects_incompatible_semantic_options():
 
 
 @_DB_REQUIRED
-def test_v20_empty_plan_still_reconciles_index(tmp_path, monkeypatch):
+def test_v20_empty_plan_still_reconciles_index(tmp_path, monkeypatch, capsys):
     """Finding 2: an empty migration plan (every category already has a slug)
     does NOT skip index validation. Dry-run stays strictly read-only (no
     index, no backup). Apply mode creates the missing index AFTER the
@@ -1814,6 +1924,8 @@ def test_v20_empty_plan_still_reconciles_index(tmp_path, monkeypatch):
                 pass
             monkeypatch.setenv("MONGO_URL", URL)
             monkeypatch.setenv("DB_NAME", DB_NAME)
+            monkeypatch.setattr(v20, "APPROVED_TARGETS", frozenset({_approved_target()}))
+            _scope_out_public_slug_gate(monkeypatch, v20)
             monkeypatch.setattr(v20, "BACKUP_DIR", str(tmp_path))
 
             # Phase 4 first (no index yet): empty plan + duplicate slugs
@@ -1826,7 +1938,7 @@ def test_v20_empty_plan_still_reconciles_index(tmp_path, monkeypatch):
             ])
             raised = None
             try:
-                await v20.run_migration(apply=True)
+                raised = await v20.run_migration(apply=True, confirm_db=DB_NAME)
             except MigrationBlocked as exc:
                 raised = exc
             dup_indexes = await db.categories.index_information()
@@ -1844,14 +1956,14 @@ def test_v20_empty_plan_still_reconciles_index(tmp_path, monkeypatch):
 
             # Phase 2: empty plan, index missing, apply — reconcile it
             # (backup-first, preconditions validated).
-            rc2 = await v20.run_migration(apply=True)
+            rc2 = await v20.run_migration(apply=True, confirm_db=DB_NAME)
             indexes2 = await db.categories.index_information()
             backups2 = sorted(_glob.glob(str(tmp_path / "*.json")))
             doc_a_after = await db.categories.find_one({"_id": doc_a})
 
             # Phase 3: empty plan, index already present — nothing to do,
             # no additional backup.
-            rc3 = await v20.run_migration(apply=True)
+            rc3 = await v20.run_migration(apply=True, confirm_db=DB_NAME)
             indexes3 = await db.categories.index_information()
             backups3 = _glob.glob(str(tmp_path / "*.json"))
             return (raised, dup_indexes, dup_backups, dup_docs,
@@ -1872,8 +1984,10 @@ def test_v20_empty_plan_still_reconciles_index(tmp_path, monkeypatch):
      rc3, indexes3, backups3) = _run(go())
 
     # Phase 4: duplicates fail closed even though nothing needs backfilling.
+    out = capsys.readouterr().out
     assert raised is not None, "duplicates must fail closed on an empty plan"
-    assert "FAIL-CLOSED" in str(raised)
+    assert raised == 2, "duplicates must fail closed (exit 2) on an empty plan"
+    assert "FAIL-CLOSED" in out and "duplicate" in out.lower()
     assert v20.INDEX_NAME not in dup_indexes, "no index may be created"
     assert dup_backups == [], "no backup may be written by the failed run"
     assert all(d["slug"] == f"{tag}-dup" for d in dup_docs), "slugs untouched"
@@ -1917,7 +2031,7 @@ def test_v20_rollback_preflight_precedes_every_mutation_structurally():
     abort_at = rollback_src.index("FAIL-CLOSED (finding 1)")
     execute_at = rollback_src.index("EXECUTE (mutations begin ONLY here)")
     drop_at = rollback_src.index("await db.categories.drop_index(actual_index_name)")
-    restore_write_at = rollback_src.index('{"_id": cat_id, "slug": assigned_slug}')
+    restore_write_at = rollback_src.index('{"_id": cat_id, "slug": assigned_slug, **legacy_filter}')
     assert loader_at < preflight_at < execute_at < drop_at, (
         "backup validation and the read-only preflight must precede any mutation"
     )

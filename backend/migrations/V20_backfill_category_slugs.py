@@ -77,12 +77,14 @@ SAFETY (Batch 6 blockers 1-4 + final-review corrections 2-4 & 6):
   before any backfill write, backup or index creation, existing non-empty
   slugs are scanned for duplicates; duplicates are reported and --apply
   refuses to proceed (dry-run reports them and still writes nothing).
-- ROLLBACK RESTORES EXACT STATE: the backup records, per category, the
-  pre-migration `slug` value AND whether the field existed
-  (slug_field_present). Rollback $sets the original value back (null stays
-  null) or $unsets the field when it was absent — it never injects a null
-  where the field did not exist. Rollback NEVER removes pre-existing
-  legacySlugs / legacyIds data and never uses a blanket $unset. Run:
+- ROLLBACK RESTORES EXACT STATE (owner-approved exact rollback): the backup
+  records, per category, the pre-migration `slug` AND `legacySlugs` state,
+  including whether each field existed. Rollback restores both exactly:
+  an absent field is $unset, a present field is $set to the recorded value
+  (null stays null; an array is restored with its order and duplicates).
+  The slug V20 assigned is never added to legacySlugs. legacyIds and unrelated
+  fields are never written by rollback. Backups in the old V2 format have no
+  legacySlugs state and are refused, never guessed. Run:
       python migrations/V20_backfill_category_slugs.py --rollback --backup migrations/backups/V20_categories_<ts>.json
 
 SLUG RULES:
@@ -107,14 +109,22 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from bson import ObjectId
-from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from urllib.parse import urlparse
 
-load_dotenv()
+# Round 3 (P1): no implicit .env loading. The target must be supplied in the
+# process environment explicitly, so a stray .env cannot select a database.
 
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups")
 INDEX_NAME = "idx_categories_slug_unique"
+
+# Round 3 (P1): operator-approved target policy. Empty by default, so every run
+# fails closed until the operator approves an exact (host, port, database) triple.
+# Production names are always refused, even if someone adds them to the policy.
+APPROVED_TARGETS = frozenset()  # e.g. {("127.0.0.1", 27117, "midconnect_v20_disposable")}
+FORBIDDEN_DB_NAMES = frozenset({"b2b_marketplace", "midconnect", "admin", "config", "local"})
+
 
 # Expected production mapping (name -> slug) from the hosted sitemap at
 # baseline 09bc2fc. Used only to annotate the dry-run report; generation
@@ -130,6 +140,31 @@ EXPECTED_SLUGS = {
     "solar-equipment-panels",
     "vfd-plc-hmi-control-equipments",
 }
+
+
+# Backup format V3 (exact rollback): each record also captures the ORIGINAL
+# legacySlugs state. V2 backups lack that state and are refused by rollback.
+BACKUP_KIND = "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3"
+
+
+def original_legacy_slugs_problem(cat):
+    """Return None when the document's legacySlugs can be recorded exactly.
+
+    Absent is recorded as absent; an array of strings (possibly empty) is
+    recorded verbatim. Anything else (null, a scalar, an array holding
+    non-string entries) cannot be restored exactly, so the migration refuses
+    to back it up and performs no write (fail closed, nothing guessed).
+    """
+    if "legacySlugs" not in cat:
+        return None
+    value = cat["legacySlugs"]
+    if not isinstance(value, list):
+        return (f"legacySlugs is {type(value).__name__}, not an array; its "
+                "original state cannot be recorded exactly (fail-closed)")
+    if not all(isinstance(item, str) for item in value):
+        return ("legacySlugs holds a non-string entry; its original state "
+                "cannot be recorded exactly (fail-closed)")
+    return None
 
 
 def slugify(name: str) -> str:
@@ -201,6 +236,22 @@ EXIT_INCOMPLETE = 3
 class MigrationBlocked(RuntimeError):
     """Fail-closed precondition failure (correction 9): the migration refuses
     to touch data when the environment is not exactly as expected."""
+
+
+# Round 3 (P4): set immediately before the first database write of a run, so
+# the exception classifier can tell a pre-write block (exit 2) from a failure
+# after writes may have happened (exit 3).
+_MUTATION = {"started": False}
+
+
+def _mark_mutation_started():
+    _MUTATION["started"] = True
+
+
+class TargetRefused(MigrationBlocked):
+    """Round 3 (P1): raised before any MongoDB client is created when the
+    target database is not explicitly approved, or the confirmation does not
+    name the exact target. Maps to exit 2 (no database touched)."""
 
 
 class InvalidExistingSlugs(MigrationBlocked):
@@ -371,14 +422,18 @@ async def build_slug_plan(db):
     plan = []
     backup_records = []
     invalid = []
-    async for cat in db.categories.find({}, {"_id": 1, "name": 1, "slug": 1}).sort("_id", 1):
+    async for cat in db.categories.find({}, {"_id": 1, "name": 1, "slug": 1, "legacySlugs": 1}).sort("_id", 1):
         name = cat.get("name", "")
         existing = cat.get("slug")
         # F2: every existing value is validated, not just truthy ones. Invalid
         # values are collected and reported; the migration then fails closed.
         state = validate_existing_slug(existing) if "slug" in cat else "BACKFILL"
         if state == "BACKFILL":
-            pass
+            legacy_problem = original_legacy_slugs_problem(cat)
+            if legacy_problem:
+                invalid.append({"_id": str(cat["_id"]), "name": name,
+                                "slug": existing, "reason": legacy_problem})
+                continue
         elif state == "VALID":
             print(f"  [SKIP] {name!r} - already has valid slug: {existing}")
             continue
@@ -391,7 +446,7 @@ async def build_slug_plan(db):
         note = "" if matches_expected else "  (NOTE: differs from hosted-sitemap slug)"
         print(f"  [PLAN] {name!r} -> {new_slug}{note}")
         plan.append({"_id": str(cat["_id"]), "name": name, "slug": new_slug})
-        backup_records.append({
+        record = {
             "_id": str(cat["_id"]),
             "name": name,
             "slug": existing,
@@ -399,7 +454,13 @@ async def build_slug_plan(db):
             # Blocker 4: rollback proves the current slug is still the one V20
             # assigned before it restores anything.
             "assigned_slug": new_slug,
-        })
+            # V3 (exact rollback): the ORIGINAL legacySlugs state. V20 never
+            # writes legacySlugs, so this is also the state rollback restores.
+            "legacySlugs_field_present": "legacySlugs" in cat,
+        }
+        if "legacySlugs" in cat:
+            record["legacySlugs"] = list(cat["legacySlugs"])
+        backup_records.append(record)
     if invalid:
         raise InvalidExistingSlugs(report_invalid_slugs(invalid))
     return plan, backup_records
@@ -455,7 +516,7 @@ def write_and_validate_backup(backup_records, index_status) -> str:
     can treat the unique index safely (correction 3)."""
     meta = {
         "_meta": {
-            "kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+            "kind": BACKUP_KIND,
             "index_name": INDEX_NAME,
             "index_actual_name": (
                 index_status.get("actual_name")
@@ -474,6 +535,10 @@ def write_and_validate_backup(backup_records, index_status) -> str:
         backup_path, fd = _open_backup_file_exclusively()
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
+            f.flush()
+            # Round 3 (P6): the backup must be durable on disk before it is
+            # considered validated and before any database write may follow.
+            os.fsync(f.fileno())
         with open(backup_path, encoding="utf-8") as f:
             validated = json.load(f)
     except (OSError, ValueError) as exc:
@@ -600,7 +665,7 @@ async def create_slug_index_guarded(db, backup_path: str, backfilled: int, confl
             "before unique-index creation; the index was NOT created and "
             "success is NOT claimed. " + partial
         )
-    remaining = await db.categories.count_documents({"slug": {"$in": [None, ""]}})
+    remaining = await db.categories.count_documents({"slug": {"$exists": True, "$in": [None, ""]}})
     if remaining:
         raise MigrationBlocked(
             f"DEFERRED (F1): {remaining} category document(s) hold a null/empty "
@@ -622,14 +687,136 @@ async def create_slug_index_guarded(db, backup_path: str, backfilled: int, confl
         )
 
 
-async def run_migration(apply: bool, rollback_path: str = None) -> int:
-    mongo_url = os.getenv("MONGO_URL")
-    db_name = os.getenv("DB_NAME", "midconnect").strip()
+def resolve_target(env=None) -> tuple:
+    """Round 3 (P1): fail-closed target resolution. Returns (host, port, db_name).
+
+    Pure: reads only the given environment mapping, never prints the URL and
+    never creates a client. Refuses (TargetRefused) when MONGO_URL or DB_NAME
+    is missing or empty, when DB_NAME is a production name, or when the exact
+    (host, port, db_name) triple is not in APPROVED_TARGETS.
+    """
+    env = os.environ if env is None else env
+    mongo_url = (env.get("MONGO_URL") or "").strip()
     if not mongo_url:
-        print("MONGO_URL not set — aborting (no DB touched).")
-        return 2
-    client = AsyncIOMotorClient(mongo_url.strip())
+        raise TargetRefused("MONGO_URL is not set; no database target was resolved.")
+    raw_db = env.get("DB_NAME")
+    if raw_db is None or not raw_db.strip():
+        raise TargetRefused(
+            "DB_NAME must be set explicitly and non-empty (no implicit default)."
+        )
+    db_name = raw_db.strip()
+    if db_name in FORBIDDEN_DB_NAMES:
+        raise TargetRefused(f"database name {db_name!r} is a protected name and is refused.")
+    try:
+        parsed = urlparse(mongo_url)
+        host = parsed.hostname
+        port = parsed.port or 27017
+    except ValueError:
+        raise TargetRefused("MONGO_URL could not be parsed; no connection attempted.")
+    if not host:
+        raise TargetRefused("MONGO_URL has no host; no connection attempted.")
+    if (host, port, db_name) not in APPROVED_TARGETS:
+        raise TargetRefused(
+            f"target host/port/database ({host}:{port}/{db_name}) is not in the "
+            "operator-approved APPROVED_TARGETS policy; refusing before connecting."
+        )
+    return host, port, db_name
+
+
+def require_confirmation(mode: str, db_name: str, confirm) -> None:
+    """Round 3 (P1): --apply and --rollback each require their own explicit
+    confirmation that names the exact target database, e.g.
+    `--confirm-apply <db_name>` or `--confirm-rollback <db_name>`."""
+    if mode not in ("apply", "rollback"):
+        raise TargetRefused(f"unknown mode {mode!r}")
+    if confirm != db_name:
+        raise TargetRefused(
+            f"{mode} requires --confirm-{mode} with the exact target database name "
+            f"({db_name!r}); the confirmation is missing or does not match. Nothing was touched."
+        )
+
+
+def evaluate_expected_public_slugs(rows, final_slugs) -> list:
+    """Round 3 (P2): pure check that every required public slug is reachable.
+
+    rows: iterable of {"_id", "name"}; final_slugs: {str(_id): slug} as it
+    WILL be after the planned writes. For each of the nine EXPECTED_SLUGS
+    returns a failure string unless exactly one category's name slugifies to
+    it AND exactly one category holds it, and that holder is that same
+    category. An earlier _id or a duplicate name would otherwise take the
+    public URL and push the intended category to a -N suffix.
+    """
+    rows = [dict(r) for r in rows]
+    failures = []
+    for expected in sorted(EXPECTED_SLUGS):
+        same_name = [r for r in rows if slugify(r.get("name") or "") == expected]
+        holders = sorted(cid for cid, s in final_slugs.items() if s == expected)
+        if len(same_name) != 1:
+            names = [f"{r.get('name')!r}({r.get('_id')})" for r in same_name] or ["none"]
+            failures.append(
+                f"public slug {expected!r}: {len(same_name)} categories have a name "
+                f"that slugifies to it ({', '.join(names)}); exactly one is required"
+            )
+            continue
+        owner = str(same_name[0]["_id"])
+        if not holders:
+            failures.append(f"public slug {expected!r} would be held by no category")
+        elif holders != [owner]:
+            failures.append(
+                f"public slug {expected!r} would be held by {', '.join(holders)} "
+                f"instead of {owner} (earlier _id or duplicate name takes the URL)"
+            )
+    return failures
+
+
+async def check_expected_public_slugs(db, plan) -> list:
+    """Round 3 (P2): read-only. Builds the post-plan slug map from the live
+    collection and returns evaluate_expected_public_slugs() failures."""
+    rows = await db.categories.find({}, {"_id": 1, "name": 1, "slug": 1}).to_list(None)
+    planned = {item["_id"]: item["slug"] for item in plan}
+    final = {}
+    for row in rows:
+        cid = str(row["_id"])
+        if cid in planned:
+            final[cid] = planned[cid]
+        elif isinstance(row.get("slug"), str) and validate_existing_slug(row["slug"]) == "VALID":
+            final[cid] = row["slug"]
+    return evaluate_expected_public_slugs(rows, final)
+
+
+async def run_migration(apply: bool, rollback_path: str = None, confirm_db: str = None) -> int:
+    try:
+        host, port, db_name = resolve_target()
+        if apply:
+            require_confirmation("apply", db_name, confirm_db)
+        if rollback_path:
+            require_confirmation("rollback", db_name, confirm_db)
+    except TargetRefused as exc:
+        print(f"TARGET REFUSED (exit 2): {exc}")
+        return EXIT_BLOCKED
+    mongo_url = os.environ["MONGO_URL"].strip()
+    client = AsyncIOMotorClient(mongo_url)
+    _MUTATION["started"] = False
+    try:
+        return await _run_migration_with_client(client, db_name, apply, rollback_path, host, port)
+    except (MigrationBlocked, PyMongoError, Exception) as exc:
+        # Round 3 (P4): classify, never escape as exit 1. Before the first
+        # database write this is a block (2); after a write may have happened
+        # it is an incomplete run (3).
+        label = type(exc).__name__
+        if _MUTATION["started"]:
+            print(f"\nINCOMPLETE (exit 3): {label} after database writes may have "
+                  f"started: {exc}. Inspect the backup and re-run or roll back.")
+            return EXIT_INCOMPLETE
+        print(f"\nBLOCKED (exit 2): {label} before any database mutation: {exc}")
+        return EXIT_BLOCKED
+    finally:
+        client.close()
+
+
+async def _run_migration_with_client(client, db_name, apply, rollback_path, host, port) -> int:
     db = client[db_name]
+    print(f"TARGET: {host}:{port}/{db_name} (approved)")
 
     print("=" * 60)
     print("MIGRATION V20: Backfill Category Slugs")
@@ -669,6 +856,24 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
               "duplicates (correction 6); nothing was written.")
         return 2
 
+    # ---- Round 3 (P2): the nine mandatory public slugs must be reachable
+    # after the plan. Read-only; in dry-run it reports and exits 2, in apply it
+    # refuses before any backup or write.
+    slug_failures = await check_expected_public_slugs(db, plan)
+    if slug_failures:
+        print("EXPECTED PUBLIC SLUG MISMATCH (P2): the planned mapping would not "
+              "satisfy the required public URLs:")
+        for failure in slug_failures:
+            print(f"  [FAIL] {failure}")
+        if apply:
+            raise MigrationBlocked(
+                f"{len(slug_failures)} expected public slug(s) not satisfied. "
+                "No backup, backfill or index write was made."
+            )
+        print("DRY-RUN BLOCKED (exit 2): the plan does not satisfy the expected "
+              "public slugs; nothing was written.")
+        return EXIT_BLOCKED
+
     if not plan:
         # Finding 2: an EMPTY migration plan does NOT skip index validation.
         # The read-only index verification above already ran (and failed
@@ -695,7 +900,7 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
         # slug since the plan was generated, and creating a unique sparse
         # index over duplicate nulls would fail with E11000.
         remaining = await db.categories.count_documents(
-            {"slug": {"$in": [None, ""]}}
+            {"slug": {"$exists": True, "$in": [None, ""]}}
         )
         if remaining:
             print(f"DEFERRED: {remaining} category document(s) hold a "
@@ -706,6 +911,7 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
             print("INCOMPLETE: index not created; exit 3 (success NOT claimed).")
             return EXIT_INCOMPLETE
         backup_path = write_and_validate_backup([], index_status)
+        _mark_mutation_started()
         print(f"Backup written and validated: {backup_path} "
               "(0 document records; index provenance recorded)")
         created = await create_slug_index_guarded(db, backup_path, backfilled=0)
@@ -733,6 +939,7 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
 
     # ---- 2. Conditional writes with conflict detection (blocker 3) ----
     try:
+        _mark_mutation_started()
         stats = await apply_slug_writes(db, plan)
     except Exception as exc:
         # The backup exists, so the state is partial, not blocked: exit 3.
@@ -754,7 +961,7 @@ async def run_migration(apply: bool, rollback_path: str = None) -> int:
     # ---- 3. Index creation LAST (blockers 1 & 2, F1) ----
     if index_status.get("exists") is False:
         remaining = await db.categories.count_documents(
-            {"slug": {"$in": [None, ""]}}
+            {"slug": {"$exists": True, "$in": [None, ""]}}
         )
         if remaining:
             print(f"DEFERRED: {remaining} category document(s) still hold a "
@@ -868,14 +1075,40 @@ def _load_and_validate_rollback_backup(backup_path: str):
                 f"FAIL-CLOSED (finding 1): duplicate backup record for _id "
                 f"{_id}. Nothing was mutated."
             )
+        # V3 (exact rollback): the original legacySlugs state must be recorded.
+        # A V2 record (or any record lacking it) cannot be restored exactly, so
+        # it is refused before any database access. Nothing is guessed.
+        legacy_present = rec.get("legacySlugs_field_present")
+        if not isinstance(legacy_present, bool):
+            raise MigrationBlocked(
+                f"FAIL-CLOSED (exact rollback): backup record {_id} has no "
+                "legacySlugs_field_present flag (V2 backups cannot be restored "
+                "exactly). Nothing was mutated."
+            )
+        if legacy_present:
+            original_legacy = rec.get("legacySlugs")
+            if not isinstance(original_legacy, list) or not all(
+                isinstance(item, str) for item in original_legacy
+            ):
+                raise MigrationBlocked(
+                    f"FAIL-CLOSED (exact rollback): backup record {_id} has a "
+                    "legacySlugs value that is not an array of strings. Nothing "
+                    "was mutated."
+                )
+        elif "legacySlugs" in rec:
+            raise MigrationBlocked(
+                f"FAIL-CLOSED (exact rollback): backup record {_id} records "
+                "legacySlugs although it was absent before V20. Nothing was "
+                "mutated."
+            )
         seen_ids.add(_id)
         docs.append(rec)
     if meta is not None:
-        if meta.get("kind") != "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2":
+        if meta.get("kind") != BACKUP_KIND:
             raise MigrationBlocked(
                 "FAIL-CLOSED (finding 1): backup _meta.kind "
-                f"{meta.get('kind')!r} is not this migration's backup format "
-                "('V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2'). Nothing was mutated."
+                f"{meta.get('kind')!r} is not this migration's exact-rollback "
+                f"backup format ({BACKUP_KIND!r}). Nothing was mutated."
             )
         if meta.get("index_name") != INDEX_NAME:
             raise MigrationBlocked(
@@ -912,13 +1145,31 @@ def _load_and_validate_rollback_backup(backup_path: str):
     return meta, docs
 
 
+_ABSENT = object()
+
+
+def _legacy_matches_v20_state(doc, current_legacy) -> bool:
+    """True when legacySlugs is still the exact state V20 left behind, i.e.
+    the state the backup recorded. Any later change is a conflict."""
+    if doc.get("legacySlugs_field_present"):
+        return isinstance(current_legacy, list) and current_legacy == doc.get("legacySlugs")
+    return current_legacy is _ABSENT
+
+
 def _already_restored(doc, current) -> bool:
     """Rollback rerun safety: True when the live document is already in its
     exact pre-V20 state (so a previous rollback run restored it). Such a
     document is a no-op, not a conflict."""
-    if doc.get("slug_field_present"):
-        return "slug" in current and current["slug"] == doc.get("slug")
-    return "slug" not in current
+    slug_ok = (
+        ("slug" in current and current["slug"] == doc.get("slug"))
+        if doc.get("slug_field_present") else ("slug" not in current)
+    )
+    legacy_current = current.get("legacySlugs", _ABSENT)
+    if doc.get("legacySlugs_field_present"):
+        legacy_ok = isinstance(legacy_current, list) and legacy_current == doc.get("legacySlugs")
+    else:
+        legacy_ok = legacy_current is _ABSENT
+    return slug_ok and legacy_ok
 
 
 async def do_rollback(db, backup_path: str) -> int:
@@ -954,9 +1205,18 @@ async def do_rollback(db, backup_path: str) -> int:
     (restoring several explicit null slugs under the unique sparse index
     would fail mid-rollback with E11000); an index that existed before V20 is
     never dropped, and unrelated indexes are preserved.
-    The slug the migration assigned is preserved in legacySlugs (data is
-    never destroyed, owner revision 3); pre-existing legacySlugs/legacyIds
-    entries are never removed.
+    EXACT ROLLBACK (owner-approved): the rollback restores the EXACT
+    pre-migration state of BOTH slug and legacySlugs. slug: field absent ->
+    $unset; present (including null/"") -> $set to the recorded value.
+    legacySlugs: absent before V20 -> $unset; present -> $set to the recorded
+    array, preserving content and order. The slug V20 assigned is never added
+    to legacySlugs (V20 does not write legacySlugs, so nothing it assigned
+    must be removed from there). legacyIds and unrelated fields are never
+    written by rollback.
+    INDEX-DROP WINDOW (round 3 reassessment): the index V20 created is dropped
+    only after the preflight passes and before restore writes; a drop failure
+    aborts with exit 2 and no document mutated; concurrent writes are still
+    guarded by the conditional filter on the assigned slug.
     """
     if not os.path.exists(backup_path):
         print(f"Backup file not found: {backup_path} — aborting.")
@@ -981,13 +1241,14 @@ async def do_rollback(db, backup_path: str) -> int:
     preflight_conflicts = []
     for doc in docs:
         cat_id = ObjectId(doc["_id"])
-        current = await db.categories.find_one({"_id": cat_id}, {"slug": 1})
+        current = await db.categories.find_one({"_id": cat_id}, {"slug": 1, "legacySlugs": 1})
         if not current:
             planned.append((doc, cat_id, "MISSING"))
             continue
         assigned_slug = doc["assigned_slug"]
         current_slug = current.get("slug")
-        if current_slug == assigned_slug:
+        current_legacy = current.get("legacySlugs", _ABSENT)
+        if current_slug == assigned_slug and _legacy_matches_v20_state(doc, current_legacy):
             planned.append((doc, cat_id, "RESTORE"))
             continue
         if _already_restored(doc, current):
@@ -1059,7 +1320,7 @@ async def do_rollback(db, backup_path: str) -> int:
             and d.get("slug_field_present") and not (d.get("slug") or "")
         )
         other_empty = await db.categories.count_documents(
-            {"slug": {"$in": [None, ""]}, "_id": {"$nin": planned_ids}}
+            {"slug": {"$exists": True, "$in": [None, ""]}, "_id": {"$nin": planned_ids}}
         )
         if len(null_restores) + already_empty + other_empty > 1:
             print(
@@ -1105,6 +1366,7 @@ async def do_rollback(db, backup_path: str) -> int:
               "preflight (finding 1)")
 
     # ============ EXECUTE (mutations begin ONLY here) ============
+    _mark_mutation_started()
     if plan_drop_index:
         # V20 created this index; the true pre-V20 state had none. Drop it
         # BEFORE restoring original null/missing slugs — a unique sparse
@@ -1152,17 +1414,24 @@ async def do_rollback(db, backup_path: str) -> int:
             # Exact original state: the slug field did not exist.
             update = {"$unset": {"slug": ""}}
             label = "slug -> <field removed>"
-        if assigned_slug and assigned_slug != prev_slug:
-            # Keep the assigned slug addressable (never destroy data).
-            update["$addToSet"] = {"legacySlugs": assigned_slug}
+        if doc.get("legacySlugs_field_present"):
+            # Exact original state: restore the recorded array verbatim.
+            update.setdefault("$set", {})["legacySlugs"] = list(doc.get("legacySlugs") or [])
+        else:
+            # Exact original state: the legacySlugs field did not exist.
+            update.setdefault("$unset", {})["legacySlugs"] = ""
         # Correction 2: conditional AT THE MOMENT OF THE WRITE — the filter
-        # only matches the document while its slug is still exactly the one
-        # V20 assigned. A slug changed between the read above and this write
-        # matches nothing (matched_count == 0): the concurrent value is never
-        # overwritten and the conflict is reported.
+        # matches only while the slug is still the one V20 assigned AND
+        # legacySlugs is still the state V20 left (the recorded state, or
+        # absent). A change landing after the preflight matches nothing
+        # (matched_count == 0): the concurrent value is never overwritten.
+        if doc.get("legacySlugs_field_present"):
+            legacy_filter = {"legacySlugs": doc.get("legacySlugs")}
+        else:
+            legacy_filter = {"legacySlugs": {"$exists": False}}
         try:
             res = await db.categories.update_one(
-                {"_id": cat_id, "slug": assigned_slug}, update
+                {"_id": cat_id, "slug": assigned_slug, **legacy_filter}, update
             )
         except DuplicateKeyError:
             print(f"  [CONFLICT] {doc.get('name')!r} ({doc['_id']}): restore "
@@ -1310,46 +1579,95 @@ def report_post_migration(report) -> None:
 
 
 async def run_verify() -> int:
-    mongo_url = os.getenv("MONGO_URL")
-    db_name = os.getenv("DB_NAME", "midconnect").strip()
-    if not mongo_url:
-        print("MONGO_URL not set — aborting (no DB touched).")
-        return 2
-    client = AsyncIOMotorClient(mongo_url.strip())
+    try:
+        host, port, db_name = resolve_target()
+    except TargetRefused as exc:
+        print(f"TARGET REFUSED (exit 2): {exc}")
+        return EXIT_BLOCKED
+    client = AsyncIOMotorClient(os.environ["MONGO_URL"].strip())
     try:
         report = await verify_post_migration(client[db_name])
     finally:
         client.close()
     report_post_migration(report)
-    return 0 if report["passed"] else 2
+    return EXIT_OK if report["passed"] else EXIT_BLOCKED
+
+
+def _parse_args(argv):
+    """Round 3 (P1): strict CLI parsing. Returns (mode, rollback_path, confirm)
+    or raises TargetRefused on any conflicting or unknown argument.
+    mode is one of: dry-run, apply, rollback, verify."""
+    known = {"--apply", "--verify", "--rollback", "--backup", "--confirm-apply", "--confirm-rollback"}
+    i = 1
+    flags = set()
+    values = {}
+    while i < len(argv):
+        tok = argv[i]
+        if tok not in known:
+            raise TargetRefused(f"unknown argument {tok!r}")
+        if tok in ("--backup", "--confirm-apply", "--confirm-rollback"):
+            if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                raise TargetRefused(f"{tok} requires a value")
+            if tok in values:
+                raise TargetRefused(f"{tok} given more than once")
+            values[tok] = argv[i + 1]
+            i += 2
+            continue
+        if tok in flags:
+            raise TargetRefused(f"{tok} given more than once")
+        flags.add(tok)
+        i += 1
+    apply = "--apply" in flags
+    verify = "--verify" in flags
+    rollback = "--rollback" in flags
+    if apply and rollback:
+        raise TargetRefused("--apply and --rollback cannot be combined")
+    if verify and (apply or rollback):
+        raise TargetRefused("--verify is read-only and cannot be combined with --apply or --rollback")
+    if rollback and "--backup" not in values:
+        raise TargetRefused("--rollback requires --backup <path>")
+    if "--backup" in values and not rollback:
+        raise TargetRefused("--backup is only valid with --rollback")
+    if "--confirm-apply" in values and not apply:
+        raise TargetRefused("--confirm-apply is only valid with --apply")
+    if "--confirm-rollback" in values and not rollback:
+        raise TargetRefused("--confirm-rollback is only valid with --rollback")
+    if apply and "--confirm-apply" not in values:
+        raise TargetRefused("--apply requires --confirm-apply <exact DB_NAME>")
+    if rollback and "--confirm-rollback" not in values:
+        raise TargetRefused("--rollback requires --confirm-rollback <exact DB_NAME>")
+    if verify:
+        return "verify", None, None
+    if rollback:
+        return "rollback", values["--backup"], values["--confirm-rollback"]
+    if apply:
+        return "apply", None, values["--confirm-apply"]
+    return "dry-run", None, None
 
 
 def main():
-    apply = "--apply" in sys.argv
-    verify = "--verify" in sys.argv
-    rollback_path = None
-    if "--rollback" in sys.argv:
-        idx = sys.argv.index("--backup") if "--backup" in sys.argv else -1
-        rollback_path = sys.argv[idx + 1] if idx != -1 and idx + 1 < len(sys.argv) else None
-        if not rollback_path:
-            print("--rollback requires --backup <path>")
-            return 2
-    if verify:
-        if apply or rollback_path:
-            print("--verify is read-only and cannot be combined with --apply or --rollback")
-            return 2
+    try:
+        mode, rollback_path, confirm = _parse_args(sys.argv)
+    except TargetRefused as exc:
+        print(f"ARGUMENTS REFUSED (exit 2): {exc}")
+        return EXIT_BLOCKED
+    if mode == "verify":
         try:
             return asyncio.run(run_verify())
         except MigrationBlocked as exc:
             print(f"\nMIGRATION V20 VERIFY BLOCKED (exit 2): {exc}")
-            return 2
+            return EXIT_BLOCKED
+        except Exception as exc:
+            print(f"\nMIGRATION V20 VERIFY INCOMPLETE (exit 3): {type(exc).__name__}: {exc}")
+            return EXIT_INCOMPLETE
     try:
-        return asyncio.run(run_migration(apply=apply, rollback_path=rollback_path))
+        return asyncio.run(run_migration(
+            apply=(mode == "apply"), rollback_path=rollback_path, confirm_db=confirm))
     except MigrationBlocked as exc:
         # F1/F2: fail-closed. The report above (or in the message) states what
         # was and was not changed; success is never claimed.
         print(f"\nMIGRATION V20 BLOCKED (exit 2): {exc}")
-        return 2
+        return EXIT_BLOCKED
 
 
 if __name__ == "__main__":

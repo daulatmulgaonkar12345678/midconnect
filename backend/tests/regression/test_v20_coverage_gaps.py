@@ -54,6 +54,26 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+_NINE_PUBLIC = [
+    ("cleaning-products", "Cleaning Products"),
+    ("electrical-equipment-supplies", "Electrical Equipment & Supplies"),
+    ("electronics-it-industrial-automation", "Electronics IT Industrial Automation"),
+    ("lights-lighting-accessories", "Lights Lighting Accessories"),
+    ("metals-industrial-raw-materials", "Metals Industrial Raw Materials"),
+    ("panel-meters-and-accessories", "Panel Meters and Accessories"),
+    ("safety-products", "Safety Products"),
+    ("solar-equipment-panels", "Solar Equipment Panels"),
+    ("vfd-plc-hmi-control-equipments", "VFD PLC HMI Control Equipments"),
+]
+
+
+def _approved(iso_name):
+    """Round 3: the (host, port, db) triple of the disposable target, for the gate."""
+    from urllib.parse import urlparse
+    parsed = urlparse(URL)
+    return (parsed.hostname, parsed.port or 27017, iso_name)
+
+
 def test_rollback_restores_original_empty_string_slug(tmp_path):
     """An original slug of "" (field present) must be restored to exactly "",
     not to null and not removed. The V20-assigned slug is kept in legacySlugs."""
@@ -78,7 +98,7 @@ def test_rollback_restores_original_empty_string_slug(tmp_path):
                 "_id": str(doc_id),
                 "name": f"Rb Empty {tag}",
                 "slug": "",
-                "slug_field_present": True,
+                "slug_field_present": True, "legacySlugs_field_present": False,
                 "assigned_slug": f"rb-empty-{tag}",
             }]
             backup_path = tmp_path / "v20_rb_empty.json"
@@ -96,7 +116,8 @@ def test_rollback_restores_original_empty_string_slug(tmp_path):
     assert type(doc["slug"]) is str and doc["slug"] == "", (
         f"original empty string must be restored exactly, got {doc['slug']!r}"
     )
-    assert f"rb-empty-{tag}" in doc.get("legacySlugs", [])
+    assert f"rb-empty-{tag}" not in (doc.get("legacySlugs") or []), "exact rollback never adds the V20-assigned slug to legacySlugs"
+    assert "legacySlugs" not in doc, "legacySlugs absent before V20 stays absent"
 
 
 def test_empty_string_slug_after_apply_blocks_unique_sparse_index(tmp_path):
@@ -146,14 +167,22 @@ def test_successful_apply_preserves_existing_valid_slugs(tmp_path, monkeypatch):
         client = AsyncIOMotorClient(URL, serverSelectionTimeoutMS=5000)
         db = client[iso_name]
         try:
-            await db.categories.insert_many([
+            # Round 3 (P2): the nine mandatory public categories already hold
+            # their public slugs, so the public-slug check passes; only the
+            # two fixture categories below are under test.
+            public = [{"_id": ObjectId(), "tag": tag, "name": n, "slug": s}
+                      for s, n in _NINE_PUBLIC]
+            await db.categories.insert_many(public + [
                 {"_id": valid_id, "tag": tag, "name": f"Keep Valid {tag}", "slug": valid_slug},
                 {"_id": missing_id, "tag": tag, "name": f"Keep Missing {tag}", "slug": None},
             ])
             monkeypatch.setenv("MONGO_URL", URL)
             monkeypatch.setenv("DB_NAME", iso_name)
             monkeypatch.setattr(v20, "BACKUP_DIR", str(tmp_path))
-            rc = await v20.run_migration(apply=True)
+            # Round 3: approve exactly this generated disposable target and
+            # pass the exact apply confirmation for it.
+            monkeypatch.setattr(v20, "APPROVED_TARGETS", frozenset({_approved(iso_name)}))
+            rc = await v20.run_migration(apply=True, confirm_db=iso_name)
             valid_doc = await db.categories.find_one({"_id": valid_id})
             missing_doc = await db.categories.find_one({"_id": missing_id})
             backups = glob.glob(str(tmp_path / "*.json"))
@@ -200,6 +229,7 @@ def test_dry_run_blocked_prints_exact_message_and_writes_nothing(tmp_path, monke
             monkeypatch.setenv("MONGO_URL", URL)
             monkeypatch.setenv("DB_NAME", iso_name)
             monkeypatch.setattr(v20, "BACKUP_DIR", str(tmp_path))
+            monkeypatch.setattr(v20, "APPROVED_TARGETS", frozenset({_approved(iso_name)}))
             rc = await v20.run_migration(apply=False)
             after_docs = await db.categories.find({}).sort("_id", 1).to_list(None)
             after_indexes = await db.categories.index_information()

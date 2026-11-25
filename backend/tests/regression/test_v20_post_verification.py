@@ -229,7 +229,7 @@ def test_post_verify_db_is_read_only_and_reports_real_state():
 def _rollback_backup(path, docs, index_created=False):
     import json
     meta = {"_meta": {
-        "kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V2",
+        "kind": "V20_BACKFILL_CATEGORY_SLUGS_BACKUP_V3",
         "index_name": v20.INDEX_NAME,
         "index_existed_before_v20": not index_created,
         "index_created_by_v20": index_created,
@@ -253,9 +253,9 @@ def test_rollback_rerun_is_idempotent_and_exits_zero(tmp_path):
     validate_test_target(URL, iso_name)
     a_id, b_id = ObjectId(), ObjectId()
     backup = _rollback_backup(tmp_path / "rerun.json", index_created=True, docs=[
-        {"_id": str(a_id), "name": "A", "slug": None, "slug_field_present": False,
+        {"_id": str(a_id), "name": "A", "slug": None, "slug_field_present": False, "legacySlugs_field_present": False,
          "assigned_slug": "rerun-a"},
-        {"_id": str(b_id), "name": "B", "slug": "legacy-b", "slug_field_present": True,
+        {"_id": str(b_id), "name": "B", "slug": "legacy-b", "slug_field_present": True, "legacySlugs_field_present": False,
          "assigned_slug": "rerun-b"},
     ])
 
@@ -305,9 +305,9 @@ def test_rollback_with_deleted_category_is_incomplete_exit_3(tmp_path):
     validate_test_target(URL, iso_name)
     kept_id, gone_id = ObjectId(), ObjectId()
     backup = _rollback_backup(tmp_path / "deleted.json", index_created=True, docs=[
-        {"_id": str(kept_id), "name": "Kept", "slug": None, "slug_field_present": True,
+        {"_id": str(kept_id), "name": "Kept", "slug": None, "slug_field_present": True, "legacySlugs_field_present": False,
          "assigned_slug": "del-kept"},
-        {"_id": str(gone_id), "name": "Gone", "slug": None, "slug_field_present": True,
+        {"_id": str(gone_id), "name": "Gone", "slug": None, "slug_field_present": True, "legacySlugs_field_present": False,
          "assigned_slug": "del-gone"},
     ])
 
@@ -337,7 +337,7 @@ def test_rollback_with_deleted_category_is_incomplete_exit_3(tmp_path):
 def test_backup_rejects_absent_field_with_non_null_slug(tmp_path):
     """Pure: an inconsistent record is rejected before any database access."""
     backup = _rollback_backup(tmp_path / "bad.json", [
-        {"_id": str(ObjectId()), "name": "X", "slug": "stale", "slug_field_present": False,
+        {"_id": str(ObjectId()), "name": "X", "slug": "stale", "slug_field_present": False, "legacySlugs_field_present": False,
          "assigned_slug": "x-slug"},
     ])
     with pytest.raises(v20.MigrationBlocked):
@@ -346,10 +346,11 @@ def test_backup_rejects_absent_field_with_non_null_slug(tmp_path):
 
 def test_main_preserves_exit_code_from_rollback(monkeypatch, tmp_path):
     """Deterministic: main() returns the exit code of run_migration unchanged."""
-    async def fake_run(apply, rollback_path=None):
+    async def fake_run(apply, rollback_path=None, **_kwargs):
         return v20.EXIT_INCOMPLETE
     monkeypatch.setattr(v20, "run_migration", fake_run)
-    monkeypatch.setattr(v20.sys, "argv", ["V20.py", "--rollback", "--backup", str(tmp_path / "b.json")])
+    monkeypatch.setattr(v20.sys, "argv", ["V20.py", "--rollback", "--backup", str(tmp_path / "b.json"),
+                                          "--confirm-rollback", "midconnect_phase1_test_stub"])
     assert v20.main() == 3
 
 
@@ -413,11 +414,11 @@ def test_rollback_missing_field_docs_do_not_count_as_nulls_under_preexisting_ind
     validate_test_target(URL, iso_name)
     absent_a, absent_b, null_c = ObjectId(), ObjectId(), ObjectId()
     records = [
-        {"_id": str(absent_a), "name": "AbsA", "slug": None, "slug_field_present": False,
+        {"_id": str(absent_a), "name": "AbsA", "slug": None, "slug_field_present": False, "legacySlugs_field_present": False,
          "assigned_slug": "abs-a"},
-        {"_id": str(absent_b), "name": "AbsB", "slug": None, "slug_field_present": False,
+        {"_id": str(absent_b), "name": "AbsB", "slug": None, "slug_field_present": False, "legacySlugs_field_present": False,
          "assigned_slug": "abs-b"},
-        {"_id": str(null_c), "name": "NullC", "slug": None, "slug_field_present": True,
+        {"_id": str(null_c), "name": "NullC", "slug": None, "slug_field_present": True, "legacySlugs_field_present": False,
          "assigned_slug": "null-c"},
     ]
     # Index existed before V20 (not created by V20): provenance keeps it.
@@ -470,9 +471,9 @@ def test_rollback_write_error_mid_run_is_incomplete_and_rerun_recovers(tmp_path,
     validate_test_target(URL, iso_name)
     first, failing = ObjectId(), ObjectId()
     backup = _rollback_backup(tmp_path / "partial.json", index_created=True, docs=[
-        {"_id": str(first), "name": "First", "slug": "orig-first", "slug_field_present": True,
+        {"_id": str(first), "name": "First", "slug": "orig-first", "slug_field_present": True, "legacySlugs_field_present": False,
          "assigned_slug": "pw-first"},
-        {"_id": str(failing), "name": "Failing", "slug": "orig-failing", "slug_field_present": True,
+        {"_id": str(failing), "name": "Failing", "slug": "orig-failing", "slug_field_present": True, "legacySlugs_field_present": False,
          "assigned_slug": "pw-failing"},
     ])
     real_update = AsyncIOMotorCollection.update_one

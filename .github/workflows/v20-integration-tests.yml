@@ -65,4 +65,8 @@ jobs:
             backend/tests/regression/test_v20_coverage_gaps.py \
             backend/tests/regression/test_v20_exit_codes.py \
             backend/tests/regression/test_v20_isolation.py \
+            backend/tests/regression/test_v20_exact_rollback_pure.py \
+            backend/tests/regression/test_v20_rollback_drop_failure.py \
+            backend/tests/regression/test_v20_safety_round3.py \
+            backend/tests/regression/test_v20_rollback_legacy_race.py \
             -q -rs

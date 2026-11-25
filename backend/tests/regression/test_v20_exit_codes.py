@@ -26,14 +26,54 @@ from migrations.V20_backfill_category_slugs import (  # noqa: E402
 )
 
 
+# Round 3 (P2): one category per mandatory public slug, named so that
+# slugify(name) == the slug. Used so the exit-code branches are reached.
+_NINE_NAMES = [
+    "Cleaning Products",
+    "Electrical Equipment & Supplies",
+    "Electronics IT Industrial Automation",
+    "Lights Lighting Accessories",
+    "Metals Industrial Raw Materials",
+    "Panel Meters and Accessories",
+    "Safety Products",
+    "Solar Equipment Panels",
+    "VFD PLC HMI Control Equipments",
+]
+
+
+_NINE_SLUGS = [
+    "cleaning-products",
+    "electrical-equipment-supplies",
+    "electronics-it-industrial-automation",
+    "lights-lighting-accessories",
+    "metals-industrial-raw-materials",
+    "panel-meters-and-accessories",
+    "safety-products",
+    "solar-equipment-panels",
+    "vfd-plc-hmi-control-equipments",
+]
+
+
+class _Cursor:
+    def __init__(self, rows):
+        self._rows = rows
+
+    async def to_list(self, _length):
+        return list(self._rows)
+
+
 class _Categories:
-    """Stub collection: only the count used by run_migration's null check."""
+    """Stub collection: only the reads run_migration performs before a write."""
 
     def __init__(self, state):
         self._state = state
 
     async def count_documents(self, _query):
         return self._state["remaining_null"]
+
+    def find(self, _query=None, _projection=None):
+        # Round 3 (P2): the public-slug check reads every category.
+        return _Cursor(list(self._state["public_rows"]))
 
 
 class _Db:
@@ -62,7 +102,11 @@ def harness(monkeypatch, tmp_path):
         "index": {},
         "plan": [{"_id": "a" * 24, "name": "A", "slug": "a"}],
         "backup_records": [{"_id": "a" * 24, "name": "A", "slug": None,
-                            "slug_field_present": True, "assigned_slug": "a"}],
+                            "slug_field_present": True, "legacySlugs_field_present": False, "assigned_slug": "a"}],
+        # Round 3 (P2): the public-slug check runs before any write. The plan
+        # plus the untouched categories must satisfy all nine EXPECTED_SLUGS.
+        "public_rows": [{"_id": f"{i:024x}", "name": n, "slug": slug}
+                        for i, (n, slug) in enumerate(zip(_NINE_NAMES, _NINE_SLUGS), start=1)],
         "dupes": [],
         "stats": {"updated": 1, "conflicts": []},
         "remaining_null": 0,
@@ -93,6 +137,9 @@ def harness(monkeypatch, tmp_path):
 
     monkeypatch.setenv("MONGO_URL", "mongodb://127.0.0.1:1/unused-by-stub")
     monkeypatch.setenv("DB_NAME", "midconnect_phase1_test_stub")
+    # Round 3: the stub target must be explicitly approved to pass the gate.
+    monkeypatch.setattr(v20, "APPROVED_TARGETS",
+                        frozenset({("127.0.0.1", 1, "midconnect_phase1_test_stub")}))
     monkeypatch.setattr(v20, "AsyncIOMotorClient", lambda *_a, **_k: _FakeClient(state))
     monkeypatch.setattr(v20, "verify_slug_index", fake_verify_slug_index)
     monkeypatch.setattr(v20, "build_slug_plan", fake_build_slug_plan)
@@ -104,7 +151,8 @@ def harness(monkeypatch, tmp_path):
 
 
 def _run(apply=True):
-    return asyncio.run(v20.run_migration(apply=apply))
+    return asyncio.run(v20.run_migration(
+        apply=apply, confirm_db="midconnect_phase1_test_stub" if apply else None))
 
 
 # ---------------- exit 0 ----------------
@@ -135,16 +183,14 @@ def test_invalid_existing_slug_exits_2(harness, monkeypatch):
         raise v20.InvalidExistingSlugs("FAIL-CLOSED (F2): invalid slug")
 
     monkeypatch.setattr(v20, "build_slug_plan", invalid_plan)
-    with pytest.raises(MigrationBlocked):
-        _run(apply=True)
+    assert _run(apply=True) == 2
     assert calls["writes"] == 0
 
 
 def test_duplicate_existing_slug_exits_2(harness):
     state, calls = harness
     state["dupes"] = [{"slug": "dup", "count": 2, "ids": ["x", "y"], "names": ["X", "Y"]}]
-    with pytest.raises(MigrationBlocked):
-        _run(apply=True)
+    assert _run(apply=True) == 2
     assert calls["writes"] == 0
 
 
@@ -156,8 +202,7 @@ def test_backup_creation_failure_exits_2(harness, monkeypatch):
         raise OSError("disk full")
 
     monkeypatch.setattr(v20, "_open_backup_file_exclusively", failing_open)
-    with pytest.raises(MigrationBlocked, match="creation/validation failed"):
-        _run(apply=True)
+    assert _run(apply=True) == 2
     assert calls["writes"] == 0, "no write may happen without a validated backup"
 
 
@@ -176,16 +221,15 @@ def test_backup_validation_failure_exits_2(harness, monkeypatch):
         return real_open(path, mode, *a, **k)
 
     monkeypatch.setattr(v20, "open", tamper_on_readback, raising=False)
-    with pytest.raises(MigrationBlocked, match="does not read back identically"):
-        _run(apply=True)
+    assert _run(apply=True) == 2
     assert calls["writes"] == 0
 
 
 def test_main_maps_migration_blocked_to_exit_2(monkeypatch):
-    async def fake_run(apply, rollback_path=None):
+    async def fake_run(apply, rollback_path=None, **_kwargs):
         raise MigrationBlocked("blocked before mutation")
     monkeypatch.setattr(v20, "run_migration", fake_run)
-    monkeypatch.setattr(v20.sys, "argv", ["V20.py", "--apply"])
+    monkeypatch.setattr(v20.sys, "argv", ["V20.py", "--apply", "--confirm-apply", "midconnect_phase1_test_stub"])
     assert v20.main() == 2
 
 
@@ -230,10 +274,10 @@ def test_backfill_write_failure_exits_3(harness, monkeypatch):
 
 @pytest.mark.parametrize("code", [EXIT_OK, 2, EXIT_INCOMPLETE])
 def test_main_returns_run_migration_code_unchanged(monkeypatch, code):
-    async def fake_run(apply, rollback_path=None):
+    async def fake_run(apply, rollback_path=None, **_kwargs):
         return code
     monkeypatch.setattr(v20, "run_migration", fake_run)
-    monkeypatch.setattr(v20.sys, "argv", ["V20.py", "--apply"])
+    monkeypatch.setattr(v20.sys, "argv", ["V20.py", "--apply", "--confirm-apply", "midconnect_phase1_test_stub"])
     assert v20.main() == code
 
 
