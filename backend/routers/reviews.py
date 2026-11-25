@@ -371,7 +371,7 @@ def create_reviews_router(db, get_current_user):
                     profile = seller.get("profile", {})
                     seller_profile = {
                         "_id": str(seller["_id"]),
-                        "businessName": profile.get("businessName") or seller.get("businessName") or "Verified Seller",
+                        "businessName": profile.get("businessName") or seller.get("businessName") or "Seller",
                         "city": profile.get("city") or seller.get("city"),
                         "state": profile.get("state") or seller.get("state"),
                         "badgeType": seller.get("badgeType", "none"),
@@ -385,7 +385,7 @@ def create_reviews_router(db, get_current_user):
                     if seller:
                         seller_profile = {
                             "_id": str(seller["_id"]),
-                            "businessName": seller.get("businessName") or "Verified Seller",
+                            "businessName": seller.get("businessName") or "Seller",
                             "city": seller.get("city"),
                             "state": seller.get("state"),
                             "badgeType": seller.get("badgeType", "none"),
@@ -400,7 +400,7 @@ def create_reviews_router(db, get_current_user):
         if not seller_profile:
             seller_profile = {
                 "_id": str(seller_id) if seller_id else None,
-                "businessName": "Verified Seller",
+                "businessName": "Seller",
                 "city": None,
                 "state": None,
                 "badgeType": "none",

@@ -120,7 +120,15 @@ export default function SellerCard({
               <h3 className="font-semibold text-gray-900 truncate" data-testid="seller-name">
                 {seller.companyName}
               </h3>
-              <BadgeCheck className="h-4 w-4 text-blue-500 flex-shrink-0" />
+              {seller.gstVerified === true && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 flex-shrink-0"
+                  data-testid="gst-verified-badge"
+                >
+                  <BadgeCheck className="h-4 w-4 text-blue-500" />
+                  GST Verified
+                </span>
+              )}
             </div>
             {/* Location: City, State */}
             <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500">

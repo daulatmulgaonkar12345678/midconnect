@@ -230,8 +230,9 @@ def create_enterprise_product_router(db):
                         "$sellerData.profile.businessName", 
                         "$sellerData.businessName",
                         "$legacySellerData.businessName",
-                        "Verified Seller"
+                        "Seller"
                     ]},
+                    "gstVerified": {"$eq": [{"$ifNull": ["$sellerData.gst.verified", False]}, True]},
                     "city": {"$ifNull": ["$sellerData.profile.city", "$legacySellerData.city"]},
                     "state": {"$ifNull": ["$sellerData.profile.state", "$legacySellerData.state"]},
                     "badgeType": {"$ifNull": ["$sellerData.badgeType", "$legacySellerData.badgeType", "none"]},
@@ -295,7 +296,8 @@ def create_enterprise_product_router(db):
                 "listingId": str(listing["_id"]),
                 "sellerId": str(listing["sellerId"]),
                 "variantId": str(listing.get("variantId")) if listing.get("variantId") else None,
-                "companyName": seller_profile.get("businessName") or "Verified Seller",
+                "companyName": seller_profile.get("businessName") or "Seller",
+                "gstVerified": seller_profile.get("gstVerified") is True,
                 "location": f"{seller_profile.get('city', '')}, {seller_profile.get('state', '')}".strip(", ") or "India",
                 "city": seller_profile.get("city"),
                 "state": seller_profile.get("state"),
@@ -547,18 +549,19 @@ def create_enterprise_product_router(db):
             # Primary lookup: users collection
             users = await db.users.find(
                 {"_id": {"$in": seller_ids}},
-                {"profile.businessName": 1, "profile.city": 1, "profile.state": 1, "badgeType": 1, "sellerSlug": 1}
+                {"profile.businessName": 1, "profile.city": 1, "profile.state": 1, "badgeType": 1, "sellerSlug": 1, "gst.verified": 1}
             ).to_list(None)
             
             found_ids = set()
             for s in users:
                 profile = s.get("profile", {})
                 seller_profiles[str(s["_id"])] = {
-                    "businessName": profile.get("businessName") or "Verified Seller",
+                    "businessName": profile.get("businessName") or "Seller",
                     "city": profile.get("city"),
                     "state": profile.get("state"),
                     "badgeType": s.get("badgeType", "none"),
-                    "sellerSlug": s.get("sellerSlug")
+                    "sellerSlug": s.get("sellerSlug"),
+                    "gstVerified": (s.get("gst") or {}).get("verified") is True
                 }
                 found_ids.add(s["_id"])
             
@@ -570,21 +573,24 @@ def create_enterprise_product_router(db):
                     {"_id": {"$in": missing_ids}},
                     {"businessName": 1, "city": 1, "state": 1, "badgeType": 1, "sellerSlug": 1}
                 ).to_list(None)
+                # Legacy sellers collection carries no canonical gst.verified: default False
                 for s in legacy_sellers:
                     sid_str = str(s["_id"])
                     seller_profiles[sid_str] = {
-                        "businessName": s.get("businessName") or "Verified Seller",
+                        "businessName": s.get("businessName") or "Seller",
                         "city": s.get("city"),
                         "state": s.get("state"),
                         "badgeType": s.get("badgeType", "none"),
-                        "sellerSlug": s.get("sellerSlug")
+                        "sellerSlug": s.get("sellerSlug"),
+                        "gstVerified": False
                     }
         
         # Enrich results with seller data
         for r in results:
             sid = str(r.get("sellerId", ""))
-            seller_data = seller_profiles.get(sid, {"businessName": "Verified Seller", "badgeType": "none"})
-            r["companyName"] = seller_data.get("businessName", "Verified Seller")
+            seller_data = seller_profiles.get(sid, {"businessName": "Seller", "badgeType": "none", "gstVerified": False})
+            r["companyName"] = seller_data.get("businessName", "Seller")
+            r["gstVerified"] = seller_data.get("gstVerified") is True
             r["badgeType"] = seller_data.get("badgeType", "none")
             r["city"] = seller_data.get("city")
             r["state"] = seller_data.get("state")
@@ -765,7 +771,8 @@ def create_enterprise_product_router(db):
                 "listingId": listing.get("_id") or listing.get("listingId"),
                 "sellerId": listing["sellerId"],
                 "variantId": listing.get("variantId"),
-                "companyName": listing.get("companyName", "Verified Seller"),  # Phase 2: Seller name
+                "companyName": listing.get("companyName", "Seller"),  # Phase 2: Seller name
+                "gstVerified": listing.get("gstVerified") is True,  # canonical gst.verified only
                 "city": listing.get("city"),  # Phase 2: City
                 "state": listing.get("state"),  # Phase 2: State
                 "location": f"{listing.get('city') or ''}, {listing.get('state') or ''}".strip(", ") or "India",

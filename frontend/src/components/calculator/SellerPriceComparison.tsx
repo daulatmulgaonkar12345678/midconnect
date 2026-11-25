@@ -21,6 +21,7 @@ export interface RawMaterialSeller {
   sellerName: string;
   companyName?: string;
   sellerBadge?: string;
+  gstVerified?: boolean;  // Canonical GST verification (users.gst.verified === true only)
   rate_per_kg: number;
   rate?: number;
   rate_per_unit?: number;
@@ -67,6 +68,15 @@ export function SellerPriceCard({ seller, totalWeight, onInquiry }: SellerPriceC
             {seller.sellerBadge === 'choice' && (
               <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                 <Star className="h-3 w-3" /> Choice
+              </span>
+            )}
+            {seller.gstVerified === true && (
+              <span
+                className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                data-testid="gst-verified-badge"
+              >
+                <BadgeCheck className="h-3 w-3" />
+                GST Verified
               </span>
             )}
           </div>

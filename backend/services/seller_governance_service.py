@@ -70,7 +70,7 @@ class SellerGovernanceService:
                 "statusReason": 1,
                 "statusUpdatedAt": 1,
                 "warnings": 1,
-                "gst.isVerified": 1
+                "gst.verified": 1
             }
         )
         
@@ -84,7 +84,7 @@ class SellerGovernanceService:
             "updatedAt": seller.get("statusUpdatedAt"),
             "warnings": seller.get("warnings", []),
             "warningCount": len(seller.get("warnings", [])),
-            "isGstVerified": seller.get("gst", {}).get("isVerified", False)
+            "isGstVerified": (seller.get("gst") or {}).get("verified") is True
         }
     
     async def can_accept_lead(self, seller_id: ObjectId) -> Dict[str, Any]:

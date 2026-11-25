@@ -45,6 +45,18 @@ function UdyogConnectBadge({ badgeType }: { badgeType?: string }) {
   return null;
 }
 
+function GstVerifiedBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded border border-blue-200"
+      data-testid="gst-verified-badge"
+    >
+      <BadgeCheck className="h-3 w-3" />
+      GST Verified
+    </span>
+  );
+}
+
 function SellerRoleBadge({ role }: { role: string }) {
   const roleConfig: Record<string, { bg: string; text: string; label: string }> = {
     manufacturer: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Manufacturer' },
@@ -57,7 +69,7 @@ function SellerRoleBadge({ role }: { role: string }) {
   
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-1 ${config.bg} ${config.text} text-xs font-medium rounded`}>
-      <BadgeCheck className="h-3 w-3" />
+      <Building2 className="h-3 w-3" />
       {config.label}
     </span>
   );
@@ -239,15 +251,16 @@ export default function StandardSellerCard({
                   className="font-semibold text-gray-900 hover:text-blue-600 transition-colors relative group"
                   data-testid="seller-name"
                 >
-                  {seller.companyName || 'Verified Seller'}
+                  {seller.companyName || 'Seller'}
                   <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-blue-600 group-hover:w-full transition-all duration-300" />
                 </Link>
               ) : (
                 <span className="font-semibold text-gray-900" data-testid="seller-name">
-                  {seller.companyName || 'Verified Seller'}
+                  {seller.companyName || 'Seller'}
                 </span>
               )}
               <SellerRoleBadge role={seller.sellerRole} />
+              {seller.gstVerified === true && <GstVerifiedBadge />}
             </div>
             <div className="flex items-center gap-1 text-sm text-gray-500" data-testid="seller-location">
               <MapPin className="h-4 w-4" />

@@ -307,8 +307,9 @@ def create_raw_material_router(db, require_admin, require_verified_seller=None):
                 "sellerName": {"$ifNull": [
                     "$seller.profile.businessName",
                     "$seller.businessName",
-                    "Verified Seller"
+                    "Seller"
                 ]},
+                "gstVerified": {"$eq": [{"$ifNull": ["$seller.gst.verified", False]}, True]},
                 "sellerBadge": "$seller.badgeType"
             }}
         ]
@@ -319,7 +320,8 @@ def create_raw_material_router(db, require_admin, require_verified_seller=None):
             {
                 "listingId": str(l["_id"]),
                 "sellerId": str(l["sellerId"]),
-                "sellerName": l.get("sellerName", "Verified Seller"),
+                "sellerName": l.get("sellerName", "Seller"),
+                "gstVerified": l.get("gstVerified") is True,
                 "sellerBadge": l.get("sellerBadge"),
                 "rate_per_kg": l.get("rate_per_kg"),
                 "material_supported": l.get("material_supported"),

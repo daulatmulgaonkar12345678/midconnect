@@ -5173,7 +5173,7 @@ async def get_product_with_sellers(product_identifier: str):
             seller = await db.users.find_one({"_id": seller_id})
             if seller:
                 seller_info = {
-                    "businessName": seller.get("businessName", "Verified Seller"),
+                    "businessName": seller.get("businessName", "Seller"),
                     "city": seller.get("city"),
                     "state": seller.get("state"),
                     "badgeType": seller.get("badgeType", "none")
@@ -5203,7 +5203,7 @@ async def get_product_with_sellers(product_identifier: str):
         sellers.append({
             "listingId": str(listing["_id"]),
             "sellerId": seller_id_str,
-            "companyName": seller_info.get("businessName", "Verified Seller") if seller_info else "Verified Seller",
+            "companyName": seller_info.get("businessName", "Seller") if seller_info else "Seller",
             "location": f"{seller_info.get('city', '')}, {seller_info.get('state', '')}" if seller_info else "India",
             "badgeType": seller_info.get("badgeType", "none") if seller_info else "none",
             "moq": listing.get("moq", 1),
@@ -7377,7 +7377,7 @@ async def get_buyer_inquiries(
                     profile = seller.get("profile") or {}
                     
                     seller_info = {
-                        "businessName": profile.get("businessName") or seller.get("businessName") or "Verified Seller",
+                        "businessName": profile.get("businessName") or seller.get("businessName") or "Seller",
                         "city": profile.get("city") or seller.get("city"),
                         "state": profile.get("state") or seller.get("state")
                     }
@@ -9717,7 +9717,7 @@ async def admin_list_users(
                 user.get("gstNumber")
             ),
             "status": gst_obj.get("status") or user.get("gstStatus") or user.get("gstStatus"),
-            "verified": gst_obj.get("verified") or business.get("gstVerified", False),
+            "verified": gst_obj.get("verified") is True,
         }
         
         # Build response object - support both camelCase and snake_case field names
@@ -9871,7 +9871,7 @@ async def admin_get_user_detail(
             user.get("gstNumber")
         ),
         "status": gst_obj.get("status") or user.get("gstStatus") or user.get("gstStatus"),
-        "verified": gst_obj.get("verified") or business.get("gstVerified", False),
+        "verified": gst_obj.get("verified") is True,
     }
     
     # Build response - support both naming conventions
@@ -12564,7 +12564,7 @@ async def admin_get_sellers(
         query,
         {
             "_id": 1, "businessName": 1, "email": 1, "phone": 1,
-            "gstNumber": 1, "gstVerified": 1, "badgeType": 1,
+            "gstNumber": 1, "gst.verified": 1, "badgeType": 1,
             "city": 1, "state": 1, "createdAt": 1, "status": 1
         }
     ).sort("createdAt", -1).skip(skip).limit(limit)
@@ -12579,7 +12579,7 @@ async def admin_get_sellers(
                 "email": s.get("email", ""),
                 "phone": s.get("phone", ""),
                 "gstNumber": s.get("gstNumber", ""),
-                "gstVerified": s.get("gstVerified", False),
+                "gstVerified": (s.get("gst") or {}).get("verified") is True,
                 "badgeType": s.get("badgeType", "none"),
                 "city": s.get("city", ""),
                 "state": s.get("state", ""),

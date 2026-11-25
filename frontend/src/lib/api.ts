@@ -1999,6 +1999,7 @@ export interface EnterpriseProductSeller {
   state?: string;
   sellerRole: string;
   sellerSlug?: string;  // Seller catalog page slug
+  gstVerified?: boolean;  // Canonical GST verification (users.gst.verified === true only)
   badgeType?: 'none' | 'choice' | 'trusted';  // UdyogConnect seller badge
   searchableAttributes: Record<string, string | number>;
   attributeLabels: Record<string, string>;

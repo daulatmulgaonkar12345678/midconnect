@@ -37,7 +37,7 @@ interface Seller {
   moq?: number;
   leadTime?: number;
   stock?: number;
-  isVerified?: boolean;
+  gstVerified?: boolean;  // Canonical GST verification (users.gst.verified === true only)
   rating?: number;
   city?: string;
   state?: string;
@@ -91,8 +91,14 @@ export default function RawMaterialSellerCard({
               <span className="font-semibold text-gray-900">
                 {seller.businessName || seller.sellerName || 'Seller'}
               </span>
-              {seller.isVerified && (
-                <BadgeCheck className="h-4 w-4 text-blue-500" />
+              {seller.gstVerified === true && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700"
+                  data-testid="gst-verified-badge"
+                >
+                  <BadgeCheck className="h-4 w-4 text-blue-500" />
+                  GST Verified
+                </span>
               )}
             </div>
           </div>

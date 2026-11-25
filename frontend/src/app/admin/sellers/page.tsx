@@ -245,12 +245,12 @@ export default function AdminSellersPage() {
                         {seller.gstNumber ? (
                           <div>
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                              seller.gstVerified
+                              seller.gstVerified === true
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-yellow-100 text-yellow-800'
                             }`}>
-                              {seller.gstVerified && <BadgeCheck className="h-3 w-3" />}
-                              {seller.gstVerified ? 'Verified' : 'Pending'}
+                              {seller.gstVerified === true && <BadgeCheck className="h-3 w-3" />}
+                              {seller.gstVerified === true ? 'Verified' : 'Pending'}
                             </span>
                             <p className="text-xs text-gray-400 mt-1 font-mono">{seller.gstNumber}</p>
                           </div>

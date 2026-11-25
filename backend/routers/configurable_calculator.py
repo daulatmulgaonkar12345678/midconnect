@@ -975,7 +975,7 @@ def create_configurable_calculator_router(db):
             sellers.append({
                 "_id": str(listing["_id"]),
                 "sellerId": str(listing["sellerId"]),
-                "sellerName": seller_info.get("companyName") or "Verified Seller",
+                "sellerName": seller_info.get("companyName") or "Seller",
                 "companyName": seller_info.get("companyName"),
                 "city": seller_info.get("city"),
                 "state": seller_info.get("state"),

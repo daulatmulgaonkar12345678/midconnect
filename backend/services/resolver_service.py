@@ -320,7 +320,7 @@ class EnterpriseResolver:
                         "images": {"$slice": ["$images", 3]},
                         "searchableAttributes": 1,
                         "specifications": 1,
-                        "companyName": {"$ifNull": ["$seller.profile.businessName", "Verified Seller"]},
+                        "companyName": {"$ifNull": ["$seller.profile.businessName", "Seller"]},
                         "city": "$seller.profile.city",
                         "state": "$seller.profile.state",
                         "badgeType": {"$ifNull": ["$seller.badgeType", "none"]},

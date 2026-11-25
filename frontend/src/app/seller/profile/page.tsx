@@ -51,7 +51,17 @@ export default function SellerProfilePage() {
     );
   }
 
-  const isVerified = profile?.gst?.status === 'verified' || profile?.gst?.verified || profile?.isEmailVerified;
+  // GST verification is canonical gst.verified === true only; email verification is independent.
+  const isGstVerified = profile?.gst?.verified === true;
+  const gstStatus = profile?.gst?.status;
+
+  const gstDisplayStatus = isGstVerified
+    ? 'GST Verified'
+    : gstStatus === 'rejected'
+      ? 'GST Rejected'
+      : profile?.gst?.number
+        ? 'GST Pending'
+        : 'GST Not Submitted';
 
   // Get profile data - it's nested in profile.profile
   const profileData = profile?.profile;
@@ -99,17 +109,17 @@ export default function SellerProfilePage() {
                       Seller
                     </span>
                   )}
-                  {isVerified ? (
-                    <span className="px-2 py-1 bg-blue-400 text-white text-xs font-medium rounded-full flex items-center gap-1">
-                      <Shield className="h-3 w-3" />
-                      Verified
-                    </span>
-                  ) : (
-                    <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-medium rounded-full flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      Pending Verification
-                    </span>
-                  )}
+                  {isGstVerified ? (
+  <span className="px-2 py-1 bg-blue-400 text-white text-xs font-medium rounded-full flex items-center gap-1">
+    <Shield className="h-3 w-3" />
+    GST Verified
+  </span>
+) : (
+  <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-medium rounded-full flex items-center gap-1">
+    <AlertCircle className="h-3 w-3" />
+    {gstDisplayStatus}
+  </span>
+)}
                 </div>
               </div>
             </div>

@@ -393,7 +393,7 @@ def init_seller_catalog_routes(app_db):
                 "email": seller.get("email"),
                 "enterpriseEstablishmentYear": seller.get("enterpriseEstablishmentYear"),
                 "platformRegistrationYear": seller.get("platformRegistrationYear"),
-                "gstVerified": seller.get("gst", {}).get("verified", False),
+                "gstVerified": seller.get("gst", {}).get("verified") is True,
                 "badgeType": seller.get("badgeType"),
                 "rating": rating_data
             },

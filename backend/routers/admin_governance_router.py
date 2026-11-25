@@ -277,7 +277,7 @@ def create_admin_governance_router(db, require_admin):
         
         Effects:
         - GST marked as verified
-        - "Verified Seller" badge enabled
+        - GST verified flag set (gst.verified = true)
         - Ranking boost applied
         """
         try:
@@ -291,11 +291,12 @@ def create_admin_governance_router(db, require_admin):
         result = await db.users.update_one(
             {"_id": seller_oid, "roles": "seller"},
             {"$set": {
-                "gst.isVerified": True,
+                "gst.verified": True,
+                "gst.status": "verified",
                 "gst.verifiedAt": now,
-                "gst.verifiedBy": current_user["_id"],
-                "gst.status": "approved"
-            }}
+                "gst.verifiedBy": current_user["_id"]
+            },
+            "$unset": {"gst.isVerified": ""}}
         )
         
         if result.modified_count == 0:
@@ -337,12 +338,13 @@ def create_admin_governance_router(db, require_admin):
         result = await db.users.update_one(
             {"_id": seller_oid, "roles": "seller"},
             {"$set": {
-                "gst.isVerified": False,
+                "gst.verified": False,
                 "gst.status": "rejected",
                 "gst.rejectedAt": now,
                 "gst.rejectedBy": current_user["_id"],
                 "gst.rejectionReason": request.reason
-            }}
+            },
+            "$unset": {"gst.isVerified": ""}}
         )
         
         if result.modified_count == 0:
@@ -376,8 +378,8 @@ def create_admin_governance_router(db, require_admin):
         sellers = await db.users.find({
             "roles": "seller",
             "gst.number": {"$exists": True},
-            "gst.isVerified": {"$ne": True},
-            "gst.status": {"$nin": ["rejected"]}
+            "gst.verified": {"$ne": True},
+            "gst.status": {"$nin": ["rejected", "verified"]}
         }).limit(limit).to_list(limit)
         
         return {
